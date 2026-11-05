@@ -15,10 +15,11 @@ export async function GET(){
  try{
   const {accountId}=await workAccount({allowUnacknowledged:true});
   const [rows,course]=await Promise.all([
-   db<unknown[]>(`icash_workspace_walkthroughs?account_id=eq.${accountId}&version=eq.${walkthroughVersion}&select=step,state&limit=1`),
+   db<{step:number;state:string;course_opened_at:string|null}[]>(`icash_workspace_walkthroughs?account_id=eq.${accountId}&version=eq.${walkthroughVersion}&select=step,state,course_opened_at&limit=1`),
    readCourseProgress(accountId).catch(()=>null),
   ]);
-  return Response.json({tour:walkthroughState.parse(rows[0]??{step:0,state:'new'}),course},{headers});
+  const row=rows[0];
+  return Response.json({tour:walkthroughState.parse(row?{step:row.step,state:row.state}:{step:0,state:'new'}),course,courseOpened:!!row?.course_opened_at},{headers});
  }catch(error){return failure(error);}
 }
 export async function POST(req:Request){
@@ -29,6 +30,10 @@ export async function POST(req:Request){
   let value:unknown;try{value=JSON.parse(raw);}catch{return Response.json({error:'Invalid walkthrough progress.'},{status:400,headers});}
   const parsed=walkthroughInput.safeParse(value);if(!parsed.success)return Response.json({error:'Invalid walkthrough progress.'},{status:400,headers});
   await limitRequest(req,'workspace-walkthrough',accountId,40,60);
+  if('action' in parsed.data){
+   await db('rpc/icash_mark_course_opened','POST',{p_account:accountId,p_user:userId});
+   return Response.json({courseOpened:true},{headers});
+  }
   const tour=walkthroughState.parse(await db('rpc/icash_save_workspace_walkthrough','POST',{p_account:accountId,p_user:userId,p_step:parsed.data.step,p_state:parsed.data.state}));
   return Response.json({tour},{headers});
  }catch(error){return failure(error);}

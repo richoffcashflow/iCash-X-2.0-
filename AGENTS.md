@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 5, 2026 the owner requested removing the course prompt after a user opens the course. Persist account-bound course discovery separately from actual playback. Hide the reminder and automatic walkthrough after discovery or recorded playback; preserve permanent Training course links and explicit walkthrough replay. Opening a course never marks it watched, accepts terms or starts work. See docs/workspace-guidance-and-course.md.
+
 - On November 5, 2026 the owner requested reviewing actual support answers and fixing reported product bugs. Keep financial amounts/ARV separate from work-credit questions, preserve mixed software/billing complaints and persistent manual takeover, and use the actual voice and conversation controls. Machine greetings are not seller responses; retain genuine human turns, source-word opt-outs, original call/cost evidence and the optimized SQL response fast path. Validate both SQL predecessors and anonymized multi-turn replies; do not send retrospective customer messages. See docs/support-reply-audit-2026-11-05.md.
 
 - On November 4, 2026 the owner requested free playback of the completed custom voice. Keep the VIP Play control usable with zero work credits and a paused bot; cover the one short generation as a platform expense and reuse its private saved audio. Bind claims and playback to the signed-in account and exact clone, preserve provider verification and rejected/unknown request receipts, and never regenerate unknown attempts or change customer funds/live voice selection. See docs/custom-voice-preview.md; paid development tests remain disabled.
