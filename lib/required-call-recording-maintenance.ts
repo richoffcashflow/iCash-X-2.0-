@@ -9,7 +9,7 @@ import {object,sha,sid,type RecordingRow} from './required-call-recording.ts';
 import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {recordingReceipt,finalRecordingPayload,recordingTransition,recordingStopToken,type RecordingDb} from './required-call-recording-service.ts';
 /** Cleanup is intentionally independent of launch flags, customer balance, and bot pause. */
-export async function maintainRecordings(db:RecordingDb,provider:RecordingProviders,env:RecordingEnv,options:{signal?:AbortSignal}={}){
+export async function maintainRecordings(db:RecordingDb,provider:RecordingProviders,env:RecordingEnv,options:{signal?:AbortSignal;drain?:boolean}={}){
  const result={deleted:0,reconciled:0,held:0};
  let handoffInspected=false,missingCallInspected=false,failed=false;
  const finish=(row:RecordingRow,kind:string,outcome:string,payload:Record<string,unknown>)=>db<RecordingRow|null>('rpc/icash_finish_call_recording_work','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_kind:kind,p_lease_token:row[kind==='delete'?'deletion_lease_token':'reconcile_lease_token'],p_outcome:outcome,p_payload:payload});
@@ -181,25 +181,31 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    result.held++;
   }
  };
- // The former serial three-row batch fell behind ordinary call volume. Keep
- // the original per-row handling and leases, with at most three active rows.
- // A shared provider deadline stops new reads; independent DB writes preserve
- // receipts/retry holds, and already-required call termination remains bounded.
+ // Refill only after the previous twelve original receipts have finished. The
+ // authenticated maintenance route drains at most four batches inside its one
+ // shared deadline. Keep three active rows and claim retention deletions once.
+ // This increases recovery throughput without increasing concurrent provider
+ // reads, renewing leases, or replaying any original call.
  if(options.signal?.aborted)return result;
  const deletions=await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'delete',p_limit:5,p_lease_seconds:120});
- const recordings=options.signal?.aborted?[]:await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'reconcile',p_limit:12,p_lease_seconds:120});
- const work=[...deletions.map(row=>({row,kind:'delete',run:remove})),...recordings.map(row=>({row,kind:'reconcile',run:reconcile}))];
- let cursor=0;
- await Promise.all(Array.from({length:Math.min(3,work.length)},async()=>{
-  while(cursor<work.length){
-   const task=work[cursor++];
-   try{
-    if(options.signal?.aborted){
-     await finish(task.row,task.kind,'retry',{reason:'maintenance_deadline_reached'});result.held++;
-    }else await task.run(task.row);
-   }catch{failed=true;}
-  }
- }));
+ for(let batch=0;batch<(options.drain?4:1);batch++){
+  const recordings=options.signal?.aborted?[]:await db<RecordingRow[]>('rpc/icash_claim_call_recording_work','POST',{p_kind:'reconcile',p_limit:12,p_lease_seconds:120});
+  const work=[...(batch===0?deletions:[]).map(row=>({row,kind:'delete',run:remove})),...recordings.map(row=>({row,kind:'reconcile',run:reconcile}))];
+  let cursor=0;
+  await Promise.all(Array.from({length:Math.min(3,work.length)},async()=>{
+   while(cursor<work.length){
+    const task=work[cursor++];
+    try{
+     if(options.signal?.aborted){
+      await finish(task.row,task.kind,'retry',{reason:'maintenance_deadline_reached'});result.held++;
+     }else await task.run(task.row);
+    }catch{failed=true;}
+   }
+  }));
+  // Failed persistence is an infrastructure failure, not permission to acquire
+  // more leases. A partial batch has exhausted the presently due queue.
+  if(failed||options.signal?.aborted||recordings.length<12)break;
+ }
  // An infrastructure failure remains visible after unrelated leased rows finish.
  if(failed)throw Error('RECORDING_MAINTENANCE_INCOMPLETE');
  return result;
