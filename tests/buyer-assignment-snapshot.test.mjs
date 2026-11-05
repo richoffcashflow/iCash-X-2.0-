@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {loadService,databaseAdapter} from './helpers/simulated-journey-services.mjs';
 import {signingTermsHash} from '../lib/signing-policy.ts';
@@ -9,7 +9,8 @@ const fn=(p,name)=>{const text=read(p),start=text.indexOf('create function publi
 const pg=await PGlite.create(),q=(s,p=[])=>pg.query(s,p),one=async(s,p=[])=>Object.values((await q(s,p)).rows[0])[0];
 const id='00000000-0000-4000-8000-000000000006',account='00000000-0000-4000-8000-000000000002';
 const patch=read('config/buyer-assignment-terms-snapshot.sql');
-assert.equal(patch,read('supabase/migrations/20261105165145_buyer_assignment_terms_snapshot.sql'));
+const migrations=readdirSync('supabase/migrations').filter(p=>p.endsWith('_buyer_assignment_terms_snapshot.sql'));
+assert.equal(migrations.length,1);assert.equal(patch,read('supabase/migrations/'+migrations[0]));
 globalThis.fetch=async()=>{throw Error('NETWORK DISABLED');};
 try{
  await pg.exec(read('tests/helpers/buyer-assignment-snapshot-fixture.sql'));

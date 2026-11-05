@@ -66,6 +66,16 @@ admission conditions, permissions, ownership and search path. The added
 the new application, which refuses an assignment claim without its snapshot.
 The expected resulting definition hash is `8fd1f8fc78b3ba9e7e5829c4cdebf652`.
 
+Installed through the production migration ledger on November 5 at 17:16 UTC as
+`20261105171614_buyer_assignment_terms_snapshot`. Readback matches that function
+hash, the unchanged wrapper hash `5b5d19fb16b775e6c9f8b97e06d12c74`, and the prior
+owner, service-only privileges, search path, security mode and volatility. Ledger
+SQL is byte-identical to this file (MD5 `710daf82b1847f515b397a6a07b695cb`). The
+CLI-created file was renamed to the observed installed ledger version. Native
+claim/edit races passed in Reliability run `42071557916`, job `127400552593`;
+all 788 local suites and TypeScript passed. These receipts verify the database
+prerequisite, not application deployment or a customer closing.
+
 Never run a blanket database push. Inspect the exact production function and
 migration receipt, then verify the exact-main checks and production deployment.
 Application rollback remains compatible with the additive database field; do not
