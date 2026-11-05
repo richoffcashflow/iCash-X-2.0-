@@ -2,14 +2,14 @@ import {automaticOfferGuardrailMatches,automaticOfferPolicy} from './automatic-o
 import {canonical,object,recordingAgentMatches,sha,type RecordingReview} from './required-call-recording.ts';
 
 type Diagnostic={observedHash:string|null;failedChecks:string[];matchingRemovalPath:string|null;matchingRemovalKind:'optional_null'|'disabled_boolean'|'zero_numeric'|null;checkedCandidates:number;bounded:boolean};
-const cooldownMs=60_000,maxBytes=65_536,maxNodes=1_500,maxCandidates=64,budgetMs=750;
+const cooldownMs=60_000,maxBytes=262_144,maxNodes=6_000,maxCandidates=64,budgetMs=750;
 const excluded=/^(?:__proto__|constructor|prototype)$|secret|token|password|credential|authorization|api_key|phone|header|dynamic_variable|placeholder|metadata|data_collection|webhook|^sk_/i;
 // These are provider configuration containers, not caller-defined maps. Values,
 // array members, prompts, tool schemas and credential containers never leave here.
 const containers=new Set(['conversation_config','platform_settings','platform_settings.overrides','platform_settings.overrides.conversation_config_override','platform_settings.overrides.conversation_config_override.agent','platform_settings.overrides.conversation_config_override.agent.prompt','platform_settings.overrides.conversation_config_override.tts','platform_settings.overrides.conversation_config_override.turn','platform_settings.overrides.conversation_config_override.asr','platform_settings.overrides.conversation_config_override.conversation','conversation_config.asr','conversation_config.tts','conversation_config.turn','conversation_config.conversation','conversation_config.agent','conversation_config.agent.prompt','conversation_config.agent.prompt.built_in_tools','platform_settings.privacy','platform_settings.privacy.user_memory','platform_settings.widget','platform_settings.call_limits','platform_settings.queueing_config']);
 const knownDefaults=new Set(['record_voice','enable_auth','bursting_enabled','enabled','max_duration_seconds','clone_strength','pvc_strength','noisy_environment_detection','identity_challenge','encrypt_conversations','mobile_fullscreen','accept_unverified_identities','summary_schedule','transcript_speech_sync_enabled']);
 function shapeBounded(value:unknown,depth=0,count={n:0},seen=new Set<object>()):boolean{
- if(++count.n>maxNodes||depth>12)return false;
+ if(++count.n>maxNodes||depth>32)return false;
  if(value===null||typeof value!=='object')return true;
  if(seen.has(value))return false;seen.add(value);
  const result=Object.values(value).every(child=>shapeBounded(child,depth+1,count,seen));seen.delete(value);return result;
@@ -30,14 +30,20 @@ export function createVoiceApprovalDiagnostics(now:()=>number=()=>performance.no
  return (review:RecordingReview,raw:unknown):Diagnostic|null=>{
   const started=now();if(started<nextAt)return null;nextAt=started+cooldownMs;
   try{
-   if(!shapeBounded(raw))return {observedHash:null,failedChecks:['diagnostic_shape_bound'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:true};
-   const a=object(raw),snapshot={conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
+   const source=object(raw),a={agent_id:source.agent_id,branch_id:source.branch_id,main_branch_id:source.main_branch_id,version_id:source.version_id,
+    conversation_config:source.conversation_config,platform_settings:source.platform_settings,workflow:source.workflow??null,procedures:source.procedures??null};
+   const snapshot={conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow,procedures:a.procedures};
+   // Inspect exactly the configuration projected by the unchanged validator.
+   // Unrelated provider response metadata cannot hide the failed identity or
+   // privacy check. Deeper tool schemas remain bounded; no values are logged.
+   const failedInvariants=invariants(review,a);
+   if(!shapeBounded(snapshot))return {observedHash:null,failedChecks:['diagnostic_shape_bound',...failedInvariants],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:true};
    const encoded=JSON.stringify(snapshot);
    if(Buffer.byteLength(encoded)>maxBytes)return {observedHash:null,failedChecks:['diagnostic_size_bound'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:true};
    const observedHash=sha(JSON.stringify(canonical(snapshot))),key=review.configHash+':'+observedHash;
    const state=seen.get(key)??{cursor:0,done:false};if(state.done)return null;
    seen.set(key,state);if(seen.size>32)seen.delete(seen.keys().next().value!);
-   const failedChecks=invariants(review,a),result:Diagnostic={observedHash,failedChecks:failedChecks.length?failedChecks:['approved_configuration_fingerprint'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:false};
+   const failedChecks=failedInvariants,result:Diagnostic={observedHash,failedChecks:failedChecks.length?failedChecks:['approved_configuration_fingerprint'],matchingRemovalPath:null,matchingRemovalKind:null,checkedCandidates:0,bounded:false};
    // Never probe a response with changed identity, tools, policy or call controls.
    if(failedChecks.length){state.done=true;return result;}
    const candidates:string[][]=[];

@@ -90,6 +90,19 @@ export function recordingConfigHashMatches(configHash:string,snapshot:Record<str
   const previousPlatform={...platform},previousBuiltins={...builtins};delete previousPlatform.app_connectors;delete previousBuiltins.ask_teammate;
   snapshots.push({...snapshot,platform_settings:previousPlatform,conversation_config:{...config,agent:{...agent,prompt:{...prompt,built_in_tools:previousBuiltins}}}});
  }
+ // November 5 serialized an empty avatar and a disabled reasoning override
+ // together on the unchanged reviewed version. Remove only this exact pair,
+ // then require the complete original fingerprint. No active reasoning,
+ // avatar, prompt, identity or approval setting is ignored or rewritten.
+ for(const value of [...snapshots]){
+  const config=object(value.conversation_config),platform=object(value.platform_settings),overrides=object(platform.overrides);
+  const overrideConfig=object(overrides.conversation_config_override),overrideAgent=object(overrideConfig.agent),overridePrompt=object(overrideAgent.prompt);
+  if(!Object.hasOwn(config,'avatar')||config.avatar!==null
+   ||!Object.hasOwn(overridePrompt,'reasoning_effort')||overridePrompt.reasoning_effort!==false)continue;
+  const previousConfig={...config},previousPrompt={...overridePrompt};delete previousConfig.avatar;delete previousPrompt.reasoning_effort;
+  snapshots.push({...value,conversation_config:previousConfig,platform_settings:{...platform,overrides:{...overrides,
+   conversation_config_override:{...overrideConfig,agent:{...overrideAgent,prompt:previousPrompt}}}}});
+ }
  for(const value of [...snapshots]){const withoutNoise=recordingDisabledNoiseSnapshot(value);if(withoutNoise)snapshots.push(withoutNoise);}
  for(const value of [...snapshots]){
   const renamed=recordingRenamedDisabledTtsSnapshot(value);
