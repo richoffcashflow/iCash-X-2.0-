@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 from threading import Barrier
 
@@ -112,6 +113,27 @@ def run():
     fanout = lambda p: sum(n.get('Rows Removed by Join Filter',0)*n.get('Actual Loops',1) for n in walk(p['Plan']))
     print(f"Measured UNION candidate: {before_plan['Execution Time']}ms -> {after_plan['Execution Time']}ms; join-filter rows {fanout(before_plan)} -> {fanout(after_plan)}; shared hits {before_plan['Plan']['Shared Hit Blocks']} -> {after_plan['Plan']['Shared Hit Blocks']}.")
     # Retire fixture accounts to focus contention on one recipient across sources.
+    if '--capacity-snapshot' in sys.argv:
+        # Real current wrappers over deterministic holds; no live providers.
+        definitions = json.loads((ROOT/'tests/fixtures/voice-recovery-capacity-before.json').read_text())
+        sql((ROOT/'tests/fixtures/voice-recovery-capacity-setup.sql').read_text())
+        for name in ['voice_capacity_from_snapshot','voice_capacity_snapshot','icash_voice_capacity_available','voice_queue_slot_from_snapshot','icash_voice_queue_slot_open']:
+            sql(next(d['definition'] for d in definitions if d['proname'] == name))
+        sql('grant select on all tables in schema public,icash_recording_private to service_role;grant usage,select on all sequences in schema public to service_role;')
+        def measured_recovery():
+            return sql("begin;select setval('fixture_capacity_scans',1,false);"+RECOVER+'reset role;select last_value from fixture_capacity_scans;'+recovered_state()+'rollback;').splitlines()[1:]
+        capacity_before = measured_recovery()
+        assert capacity_before[0] == '6' and int(capacity_before[1]) >= 12, capacity_before
+        current_metadata,current_evidence = metadata(),evidence()
+        capacity_patch = (ROOT/'config/voice-recovery-capacity-snapshot.sql').read_text()
+        capacity_versions = list((ROOT/'supabase/migrations').glob('*_voice_recovery_capacity_snapshot.sql'))
+        assert len(capacity_versions) == 1 and capacity_versions[0].read_text() == capacity_patch
+        sql(capacity_patch)
+        capacity_after = measured_recovery()
+        assert capacity_after[0] == capacity_before[0] and capacity_after[2:] == capacity_before[2:]
+        assert capacity_after[1] == '1', capacity_after
+        assert metadata() == current_metadata and evidence() == current_evidence
+        print(f'Configuration recovery hold scans: {capacity_before[1]} -> {capacity_after[1]}; exact recovered jobs and audit match.')
     sql("update public.icash_accounts set bot_paused=true;select public.fixture_configuration_seed(20,1,false,'shared-recipient');select public.fixture_configuration_seed(21,1,true,'shared-recipient');")
     race_evidence = evidence()
     barrier = Barrier(24)
@@ -147,6 +169,24 @@ def run():
     assert sql(RECOVER) == '0'
     locker.stdin.write('rollback;\\q\n');locker.stdin.flush();locker.wait(timeout=5)
     assert sql(RECOVER) == '1'
+    if '--capacity-snapshot' in sys.argv:
+        # The snapshot must be captured after the existing admission lock.
+        sql("select public.fixture_configuration_seed(50,1,false,'late-recipient');")
+        locker = subprocess.Popen(fixture.CMD,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1,env=fixture.ENV)
+        locker.stdin.write("begin;do $$begin perform 1 from public.icash_operating_budget where id=1 for update;end$$;select 'capacity-locked';\n")
+        locker.stdin.flush();fixture.wait_for_marker(locker,'capacity-locked')
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(sql,"set application_name='capacity-recovery-contender';"+RECOVER)
+            deadline = time.monotonic()+5
+            while sql("select exists(select 1 from pg_stat_activity where application_name='capacity-recovery-contender' and wait_event_type='Lock');") != 't':
+                assert time.monotonic() < deadline
+                time.sleep(0.02)
+            locker.stdin.write("insert into public.fixture_holds values('late-incoming',public.fixture_configuration_id(51,0),'agent_fixture','late-recipient');commit;\\q\n")
+            locker.stdin.flush();locker.wait(timeout=5)
+            assert pending.result() == '0'
+        assert sql("select state from public.icash_voice_jobs where id=public.fixture_configuration_id(50,1);") == 'held'
+        assert sql("select public.icash_voice_capacity_available(public.fixture_configuration_id(50,0),'agent_fixture','fresh-operation','late-recipient',false);") == 'f'
+        print('PASS capacity snapshot: one scan per batch, 24 competing recoveries, committed Pause/new occupied recipient, SKIP LOCKED, unchanged final fresh capacity.')
     print('PASS configuration target lookup: actual production function/UNION, 6 accounts/3,600 contacts+jobs+tickets, exact multiset and real update/audit equivalence; 24 competing claims, cross-source recipient exclusion, committed Pause and SKIP LOCKED; original tickets, wallets and money evidence unchanged. No providers.')
 
 
