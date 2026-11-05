@@ -107,6 +107,11 @@ export async function testSellerCallbackRouting(f){
   await db.exec(f.fn('config/seller-no-emd.sql','icash_recorded_reception_property_context').replace('public.icash_recorded_reception_property_context(','public.icash_reception_context_before_payoff('));
   await db.exec('create or replace function public.icash_recorded_reception_property_context(p_id uuid,p_nonce_hash text) returns jsonb language sql as $$select public.icash_reception_context_before_payoff(p_id,p_nonce_hash)$$;');
   await db.exec(read('config/receipt-only-seller-callbacks.sql'));
+  if(process.env.RECEPTION_OWNER_SELF_CALLBACKS==='1'){
+   await db.exec(`create table icash_owner_buyer_tests(id uuid,account_id uuid,deal_id uuid,owner_user_id uuid,thread_id uuid,sender text,phone text,revoked_at timestamptz);
+    create table icash_signing_envelopes(account_id uuid,deal_id uuid,kind text,test_mode boolean,state text,terms jsonb);`);
+   await db.exec(read('config/owner-self-callback-history.sql'));
+  }
   const businessPhones=['+14154208230','+16195364770'];
   const receiptScenario=(name,run)=>scenario('receipt-only '+name,async source=>{
    await q('insert into icash_business_voice_numbers(phone,outbound_enabled,forwarding_ready) values($1,true,true),($2,true,true)',businessPhones);
@@ -237,5 +242,6 @@ export async function testSellerCallbackRouting(f){
   for(const role of ['anon','authenticated'])for(const name of ['manual_seller_source(uuid,uuid,text)','call_candidates(text,text)','call_role_conflict(text)','thread_candidates(text,text)','call_context(icash_recorded_reception_private.sessions)']){
    assert.equal(await val('select has_function_privilege($1,$2,\'execute\')',[role,'icash_callback_private.'+name]),false,'Private callback helper '+name+' denies '+role);
   }
+  if(process.env.RECEPTION_OWNER_SELF_CALLBACKS==='1')await (await import('./owner-self-callback-fixture.mjs')).testOwnerSelfCallbacks({...f,receiptScenario,id,customer,second,transition});
  }
 }
