@@ -37,6 +37,49 @@ const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82
 const representations=[[false,false],[true,false],[false,true],[true,true]];
 const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
 
+test('November 5 empty avatar and disabled reasoning override preserve the exact original approval',()=>{
+ for(const olderDefaults of [false,true]){
+  const pair=olderDefaults?renamedVoiceFixture():{old:fixture(),current:fixture()};
+  for(const a of [pair.old,pair.current])a.conversation_config.agent.prompt.built_in_tools={end_call:null};
+  const review=reviewFor(pair.old),current=pair.current;
+  if(olderDefaults){
+   current.conversation_config.agent.prompt.built_in_tools.ask_teammate=null;
+   current.platform_settings.app_connectors={enabled:false};
+   current.conversation_config.agent.prompt.built_in_tools.identity_challenge=null;
+   current.platform_settings.privacy.encrypt_conversations=false;
+  }
+  current.conversation_config.avatar=null;
+  current.platform_settings.overrides.conversation_config_override.agent.prompt.reasoning_effort=false;
+  const saved=structuredClone({review,current}),incoming=a=>({...a,workflow:null,procedures:null});
+  const incomingHash=sha(JSON.stringify(canonical(incoming(pair.old))));
+  assert.equal(recordingAgentMatches(review,current),true);
+  assert.equal(recordingConfigHashMatches(incomingHash,incoming(current)),true);
+  assert.deepEqual({review,current},saved,'never mutate evidence or stored approvals');
+  assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
+  assert.equal(recordingAgentMatches(reviewFor(current),pair.old),false,'never add defaults to reconstruct a newer approval');
+  for(const mutate of [
+   a=>delete a.conversation_config.avatar,
+   ...[false,{},[],{enabled:false},'avatar_fixture'].map(value=>a=>a.conversation_config.avatar=value),
+   a=>delete a.platform_settings.overrides.conversation_config_override.agent.prompt.reasoning_effort,
+   ...[true,null,0,'false',{},[]].map(value=>a=>a.platform_settings.overrides.conversation_config_override.agent.prompt.reasoning_effort=value),
+   a=>a.conversation_config.agent.prompt.reasoning_effort='high',
+   a=>a.platform_settings.overrides.conversation_config_override.agent.prompt.unknown=false,
+   a=>a.conversation_config.agent.prompt.prompt+=' changed',
+   a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+   a=>a.platform_settings.privacy.record_voice=true,
+   a=>a.platform_settings.auth.enable_auth=false,
+   a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',
+  ]){
+   const changed=structuredClone(current);mutate(changed);
+   assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());
+   assert.equal(recordingConfigHashMatches(incomingHash,incoming(changed)),false,mutate.toString());
+  }
+ }
+ const explicit=fixture();explicit.conversation_config.avatar={id:'fixture'};
+ explicit.platform_settings.overrides.conversation_config_override.agent.prompt.reasoning_effort=true;
+ assert.equal(recordingAgentMatches(reviewFor(explicit),explicit),true,'unchanged explicitly reviewed configurations remain exact');
+});
+
 test('November inactive teammate and connector defaults preserve only the complete original approval',()=>{
  for(const olderDefaults of [false,true]){
   const pair=olderDefaults?renamedVoiceFixture():{old:fixture(),current:fixture()};

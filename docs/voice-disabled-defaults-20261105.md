@@ -1,0 +1,9 @@
+# Voice provider defaults — November 5, 2026
+
+Ordinary calls stopped before reservation or dialing with `production_agent_review_required`. The immutable private `outbound_config_review_20261010_3d8b6ac23e81` observation, captured at 11:47 UTC, retained the same reviewed agent, branch and version. Structural checks, the exact seller prompt and the external tool checks passed. Comparing its redacted configuration to November 4's `outbound_config_review_20261010_8c0c60eee444` found two additions: `conversation_config.avatar: null` and `platform_settings.overrides.conversation_config_override.agent.prompt.reasoning_effort: false`.
+
+The shared incoming/outgoing comparator can reconstruct the previous representation only when both exact inactive defaults are present together. It still requires the entire remaining provider configuration to reproduce the complete original saved hash, unchanged identity and all existing independent controls. Partial, active, malformed or unrelated changes remain blocked. The redacted comparison identifies a candidate cause; equality of hidden configuration is established only by the live complete-hash check.
+
+Offline regressions reproduce the original rejection, validate both incoming/outgoing comparison and composition with previous provider defaults, and reject changed prompts, tools, privacy, identity and arbitrary extra fields. Evidence and approvals remain immutable. No provider settings, stored approval hash, customer funds or contact authority change. No paid tests or historical calls are replayed.
+
+Release after the preceding bounded scheduler repair, exact-head Reliability checks and matching production deployment. Confirm the ordinary production configuration match and actual call receipts separately. The existing bounded recovery may resume only never-admitted jobs with exact original evidence; unknown operations and customer Pause remain held.
