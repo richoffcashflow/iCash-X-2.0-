@@ -43,17 +43,19 @@ assert.equal((await fixture(null,undefined,false,{},'wrong_identity')).result.st
 console.log('PASS actual server/service: final live/capture/receipts/review races stop before carrier dial, stop-tool review fails closed, ready direct-entry path dials once and leaves recording authorization to its bound callback');
 // Abort the real server's provider deadline at exact boundaries. No sleeps,
 // provider traffic or production data: only receipt writes may outlive it.
-async function deadlineFixture(scenario){
+async function deadlineFixture(scenario,purpose='callback'){
  const env={ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'synthetic-provider-token-only',ELEVENLABS_API_KEY:'synthetic-only'};
- const caller=new AbortController(),timers=[],events=[],diagnostics=[];let providerSignal,dialCount=0,claimed=false;
+ const caller=new AbortController(),timers=[],events=[],diagnostics=[];let providerSignal,dialCount=0,claimed=false,elapsed=0;
  const row={id,account_id:accountId,operation_key:operationKey,provider_account_sid:ac,call_sid:null,state:'consent_pending',to_phone:'+12125550102',from_phone:review.fromPhone,max_total_seconds:600};
- const timerApi={any:signals=>AbortSignal.any(signals),timeout:ms=>{const controller=new AbortController();timers.push({ms,controller});return controller.signal;}};
+ const timerApi={any:signals=>AbortSignal.any(signals),timeout:ms=>{const controller=new AbortController();timers.push({ms,dueAt:elapsed+ms,controller});return controller.signal;}};
+ const advance=ms=>{elapsed+=ms;for(const timer of timers)if(elapsed>=timer.dueAt)timer.controller.abort(new DOMException('Synthetic timeout','TimeoutError'));};
  const expire=()=>timers[0].controller.abort(new DOMException('Synthetic timeout','TimeoutError'));
  const db=async(path,_method,body,signal)=>{
   signal.throwIfAborted();const action=path==='rpc/icash_create_direct_recorded_call'?'create':body.p_action;events.push(action);
-  if(action==='create'){assert.equal(signal,providerSignal);if(scenario==='after_create')expire();return structuredClone(row);}
+  if(action==='create'){assert.equal(signal,providerSignal);if(scenario==='after_create')expire();if(scenario==='slow_claim')advance(3000);return structuredClone(row);}
   if(action==='claim_dial'){
    assert.equal(signal,providerSignal);claimed=true;
+   if(scenario==='slow_claim'){advance(9000);signal.throwIfAborted();}
    if(['after_claim','claim_response_lost'].includes(scenario))expire();
    if(scenario==='claim_response_lost')throw providerSignal.reason;
    return structuredClone(row);
@@ -65,7 +67,7 @@ async function deadlineFixture(scenario){
   if(action==='dial_unknown')assert.equal(claimed,true);
   return structuredClone(row);
  };
- const provider={agent:async()=>{providerSignal.throwIfAborted();events.push('agent');return agent;},tool:async()=>{providerSignal.throwIfAborted();events.push('tool');return tool;},dial:async()=>{
+ const provider={agent:async()=>{providerSignal.throwIfAborted();events.push('agent');if(scenario==='slow_claim')advance(3000);return agent;},tool:async()=>{providerSignal.throwIfAborted();events.push('tool');if(scenario==='slow_claim')advance(1000);return tool;},dial:async()=>{
   providerSignal.throwIfAborted();events.push('dial');dialCount++;
   if(['dial_timeout','result_after_deadline'].includes(scenario))expire();
   if(scenario==='dial_timeout')throw providerSignal.reason;
@@ -75,26 +77,33 @@ async function deadlineFixture(scenario){
  if(scenario==='already_aborted')caller.abort();
  const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:(_env,_fetch,signal)=>{providerSignal=signal;return provider;},readRecordingReview,recordingService,process:{env},AbortSignal:timerApi});
  const warn=console.warn;console.warn=(name,payload)=>diagnostics.push({name,payload});
- let result;try{result=await recordingServer(caller.signal).dispatch({accountId,operationKey,principal:'Synthetic Principal',assistantName:'Alex',firstMessage:'Synthetic greeting',prompt:'Synthetic prompt',strategyKey:'cash_interest'});}finally{console.warn=warn;}
- assert.equal(timers[0].ms,12000);assert(timers.slice(1).every(t=>t.ms===8000));
+ let result;try{result=await recordingServer(caller.signal,purpose).dispatch({accountId,operationKey,principal:'Synthetic Principal',assistantName:'Alex',firstMessage:'Synthetic greeting',prompt:'Synthetic prompt',strategyKey:'cash_interest'});}finally{console.warn=warn;}
+ assert.equal(timers[0].ms,purpose==='dispatch'?45000:12000);assert(timers.slice(1).every(t=>t.ms===8000));
  assert(dialCount<=1,'No provider retry after any timeout or failed receipt write');
  assert(!JSON.stringify(diagnostics).includes(row.to_phone));assert(!JSON.stringify(diagnostics).includes(env.TWILIO_AUTH_TOKEN));
  return {result,events,diagnostics,dialCount,row};
 }
+for(const purpose of ['callback','dispatch']){
 for(const scenario of ['already_aborted','after_create','after_claim']){
- const f=await deadlineFixture(scenario);assert.equal(f.result.status,'recording_release_required');assert.equal(f.dialCount,0);
+ const f=await deadlineFixture(scenario,purpose);assert.equal(f.result.status,'recording_release_required');assert.equal(f.dialCount,0);
  if(scenario==='already_aborted')assert.deepEqual(f.events,[]);
  if(scenario==='after_create')assert(!f.events.includes('claim_dial'));
 }
 for(const scenario of ['claim_response_lost','dial_timeout']){
- const f=await deadlineFixture(scenario);assert.equal(f.result.status,'recording_dial_unknown_no_retry');assert.equal(f.events.at(-1),'dial_unknown');
+ const f=await deadlineFixture(scenario,purpose);assert.equal(f.result.status,'recording_dial_unknown_no_retry');assert.equal(f.events.at(-1),'dial_unknown');
  assert.equal(f.dialCount,scenario==='dial_timeout'?1:0);assert.equal(f.row.call_sid,null);
  assert.deepEqual(f.diagnostics,[{name:'recording_dispatch_held',payload:{stage:scenario==='dial_timeout'?'dial':'dial_claim',recordingId:id,reason:'deadline_exceeded',holdSaved:true}}]);
 }
 for(const scenario of ['result_after_deadline','result_after_disconnect']){
- const f=await deadlineFixture(scenario);assert.equal(f.result.status,'recording_consent_pending');assert.equal(f.events.at(-1),'bind_call');assert.equal(f.row.call_sid,ca);assert.equal(f.dialCount,1);assert.deepEqual(f.diagnostics,[]);
+ const f=await deadlineFixture(scenario,purpose);assert.equal(f.result.status,'recording_consent_pending');assert.equal(f.events.at(-1),'bind_call');assert.equal(f.row.call_sid,ca);assert.equal(f.dialCount,1);assert.deepEqual(f.diagnostics,[]);
 }
-const failedReceipt=await deadlineFixture('receipt_write_failed');assert.equal(failedReceipt.result.status,'recording_dial_unknown_no_retry');assert.equal(failedReceipt.dialCount,1);assert.equal(failedReceipt.row.call_sid,null);assert.equal(failedReceipt.diagnostics[0].payload.holdSaved,false);assert.equal(failedReceipt.diagnostics[0].payload.stage,'bind_call');
+const failedReceipt=await deadlineFixture('receipt_write_failed',purpose);assert.equal(failedReceipt.result.status,'recording_dial_unknown_no_retry');assert.equal(failedReceipt.dialCount,1);assert.equal(failedReceipt.row.call_sid,null);assert.equal(failedReceipt.diagnostics[0].payload.holdSaved,false);assert.equal(failedReceipt.diagnostics[0].payload.stage,'bind_call');
+}
+const tooShort=await deadlineFixture('slow_claim');
+assert.equal(tooShort.result.status,'recording_dial_unknown_no_retry');assert.equal(tooShort.dialCount,0,'Reproduces a committed claim stranded by the original 12-second total budget');
+const boundedDispatch=await deadlineFixture('slow_claim','dispatch');
+assert.equal(boundedDispatch.result.status,'recording_consent_pending');assert.equal(boundedDispatch.dialCount,1);assert.equal(boundedDispatch.row.call_sid,ca);assert.deepEqual(boundedDispatch.diagnostics,[]);
+console.log('PASS actual server/service: sequential bounded review/admission plus a nine-second claim can dial once within the dispatch budget; callback budget, expiry/disconnect and independent receipt persistence remain bounded.');
 console.log('PASS actual server/service: expired admission never dials, ambiguous claim retains hold, confirmed results and timeout holds use bounded independent writes, failed writes never retry the provider');
 // Admission-only guards must not disable receipt settlement for past calls.
 const {settleReviewedReception}=await import('../lib/general-reception-settlement.ts');

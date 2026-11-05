@@ -2,8 +2,11 @@ import {db} from '@/lib/stripe-test';
 import {createRecordingProviders} from './required-call-recording-provider.ts';
 import {readRecordingReview} from './required-call-recording.ts';
 import {recordingService} from './required-call-recording-service.ts';
-export function recordingServer(signal?:AbortSignal){
- const env={...process.env},deadline=AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(12000)]);
+export function recordingServer(signal?:AbortSignal,purpose:'callback'|'dispatch'='callback'){
+ // Outgoing setup includes provider review, recording admission and the one-use
+ // dial claim. Its total budget must allow those sequential bounded operations;
+ // callbacks keep their short response budget. Per-request limits stay intact.
+ const env={...process.env},deadline=AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(purpose==='dispatch'?45000:12000)]);
  return recordingService(env,{
   db:(path,method,body)=>db(path,method,body,deadline),
   // A provider timeout or caller disconnect must not also cancel saving its
