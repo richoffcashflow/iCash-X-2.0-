@@ -45,6 +45,7 @@ export async function coordinateTitleOpening(accountId:string,dealId:string){
  if(!contact)return {status:'verified_title_contact_required'};
  const job=await db<{id:string;state:string}>('rpc/icash_prepare_title_request','POST',{p_account:accountId,p_deal:dealId});
  if(job.state==='sent')return {status:'title_request_already_sent'};
- if(job.state!=='ready')return {status:'title_delivery_needs_reconciliation'};
+ // This is an existing hold, not an email attempted by the current batch.
+ if(job.state!=='ready')return {status:'title_request_already_held'};
  return dispatchTitleRequest(accountId,job.id);
 }

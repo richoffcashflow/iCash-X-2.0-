@@ -5,12 +5,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 let state='ready',allow=true,sends=0,timeout=false,records=[],assignments=[],payload=null;
-const db=async(path,method,body)=>{records.push({path,method,body});if(path.startsWith('icash_signing_envelopes'))return assignments;if(method==='PATCH'){state=body.state;return [];}if(path==='rpc/icash_claim_title_request_snapshot'){assert.deepEqual(body.p_expected,{accountId:'account',dealId:'deal',purchaseEnvelopeId:'purchase',recipient:'escrow@example.invalid',propertyAddress:'Fixture',rateId:'rate',verifiedUntil:'2099-01-01'});if(allow)state='dispatching';return allow;}return [{id:'job',account_id:'account',deal_id:'deal',purchase_envelope_id:'purchase',recipient:'escrow@example.invalid',property_address:'Fixture',rate_id:'rate',verified_until:'2099-01-01',state}];};
+const db=async(path,method,body)=>{records.push({path,method,body});if(path.startsWith('icash_title_followup_settings'))return [{enabled:true}];if(path.startsWith('icash_title_contacts'))return [{email:'escrow@example.invalid'}];if(path==='rpc/icash_prepare_title_request')return {id:'job',state};if(path.startsWith('icash_signing_envelopes'))return assignments;if(method==='PATCH'){state=body.state;return [];}if(path==='rpc/icash_claim_title_request_snapshot'){assert.deepEqual(body.p_expected,{accountId:'account',dealId:'deal',purchaseEnvelopeId:'purchase',recipient:'escrow@example.invalid',propertyAddress:'Fixture',rateId:'rate',verifiedUntil:'2099-01-01'});if(allow)state='dispatching';return allow;}return [{id:'job',account_id:'account',deal_id:'deal',purchase_envelope_id:'purchase',recipient:'escrow@example.invalid',property_address:'Fixture',rate_id:'rate',verified_until:'2099-01-01',state}];};
 globalThis.__title={closingPayoutNote,titleConfirmationInstructions,db,reserveOperation:async()=>{},completedSigningPdf:async()=>new Uint8Array([1,2,3]).buffer};
 const realFetch=globalThis.fetch;globalThis.fetch=async(_url,options)=>{payload=JSON.parse(options.body);sends++;if(timeout)throw Error('timeout');return {ok:true,json:async()=>({id:'email_fixture'})};};
 process.env.ICASH_TITLE_REPLY_EMAIL='reply@example.invalid';process.env.RESEND_API_KEY='fixture';process.env.RESEND_RECEIVING_WEBHOOK_SECRET='fixture';process.env.ICASH_TITLE_FROM_EMAIL='fixture@example.invalid';
 let source=ts.transpileModule(readFileSync('lib/title-service.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
-const {dispatchTitleRequest}=await import('data:text/javascript;base64,'+Buffer.from('const {closingPayoutNote,titleConfirmationInstructions,db,reserveOperation,completedSigningPdf}=globalThis.__title;\n'+source).toString('base64'));
+const {dispatchTitleRequest,coordinateTitleOpening}=await import('data:text/javascript;base64,'+Buffer.from('const {closingPayoutNote,titleConfirmationInstructions,db,reserveOperation,completedSigningPdf}=globalThis.__title;\n'+source).toString('base64'));
 delete process.env.RESEND_RECEIVING_WEBHOOK_SECRET;
 assert.equal((await dispatchTitleRequest('account','job')).status,'title_configuration_required');assert.equal(sends,0);
 process.env.RESEND_RECEIVING_WEBHOOK_SECRET='fixture';
@@ -25,5 +25,11 @@ assert.match(payload.text,/buyer-paid closing costs/);
 assert(records.some(r=>r.path.includes('account_id=eq.account&deal_id=eq.deal&kind=eq.assignment&state=eq.completed&test_mode=eq.false')));
 state='ready';assignments=[{id:'assignment'},{id:'conflicting'}];const before=sends;
 assert.equal((await dispatchTitleRequest('account','job')).status,'title_assignment_review_required');assert.equal(sends,before);
+for(const [savedState,status] of [['sent','title_request_already_sent'],['needs_review','title_request_already_held'],['dispatching','title_request_already_held']]){
+ state=savedState;records=[];
+ assert.equal((await coordinateTitleOpening('account','deal')).status,status);
+ assert.equal(sends,before,'existing title states never resend');
+ assert(!records.some(r=>r.path.startsWith('icash_signing_envelopes')),'no new email package for an existing title job');
+}
 globalThis.fetch=realFetch;delete globalThis.__title;delete process.env.RESEND_API_KEY;delete process.env.RESEND_RECEIVING_WEBHOOK_SECRET;delete process.env.ICASH_TITLE_FROM_EMAIL;
 console.log('Title delivery: claim gate, no replay, ambiguous delivery hold, no fabricated closing status passed. No emails sent.');

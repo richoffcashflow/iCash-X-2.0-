@@ -24,7 +24,8 @@ export async function dispatchTitleUpdate(accountId:string,taskId:string){
    if(!details)throw Error('Payment preference requires review');
   }else throw Error('Unknown update');
  }catch{
-  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.issued`,'PATCH',{email_state:'needs_review',state:'needs_review',updated_at:new Date().toISOString()});
+  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.issued`,'PATCH',{email_state:'needs_review',updated_at:new Date().toISOString()});
+  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.needs_review&state=eq.scheduled`,'PATCH',{state:'needs_review',updated_at:new Date().toISOString()});
   return {status:'title_followup_needs_reconciliation'};
  }
  let job:{requestId:string;recipient:string;address:string}|null;
@@ -39,7 +40,10 @@ export async function dispatchTitleUpdate(accountId:string,taskId:string){
   return {status:'title_followup_sent'};
  }catch{
   // Never resend a possibly accepted email after a timeout or lost database response.
-  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.dispatching`,'PATCH',{email_state:'needs_review',state:'needs_review',updated_at:new Date().toISOString()});
+  // Receipt uncertainty and task state are separate: a late failure cannot undo
+  // a cancellation, dismissal or completion recorded while provider I/O ran.
+  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.dispatching`,'PATCH',{email_state:'needs_review',updated_at:new Date().toISOString()});
+  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.needs_review&state=eq.scheduled`,'PATCH',{state:'needs_review',updated_at:new Date().toISOString()});
   return {status:'title_followup_needs_reconciliation'};
  }
 }
