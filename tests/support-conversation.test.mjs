@@ -116,7 +116,9 @@ try{
  const generic=async()=>{leadCalls++;return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'To get a client, focus on marketing your services clearly, networking in relevant communities, and delivering quality work. What type of service or product are you offering?',answered:false})}}]});};
  const firstClient=await replyToSupport(leadsContext,generic);assert.match(firstClient.reply,/bot finds and works eligible seller leads automatically/);assert.equal(leadCalls,0,'Known course flow cannot be replaced by generic model advice');
  assert.equal((await replyToSupport({...leadsContext,allowAI:false},generic)).reply,firstClient.reply,'Interrupted/replayed requests retain course guidance');
- for(const question of ['How do I use Take over?','How do I use my custom voice?','How do I view a new lead?']){
+ const takeover=await replyToSupport({...leadsContext,messages:[user('How do I use Take over?')]},generic);
+ assert.match(takeover.reply,/stays under your control until you choose Return to bot/);assert.equal(takeover.ai,false,'Verified takeover behavior is answered without paid model use');
+ for(const question of ['How do I use my custom voice?','How do I view a new lead?']){
   const feature=await replyToSupport({...leadsContext,messages:[user(question)]},async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Fixture feature-specific answer.',answered:false})}}]}));
   assert.equal(feature.reply,'Fixture feature-specific answer.','Specific feature questions must reach course-grounded conversation, not generic onboarding');
  }
@@ -136,7 +138,7 @@ try{
  }
  assert.equal((await replyToSupport({...context,messages:[user('Are my test credits usable?')]},modelReply('Test credits do not fund live work.',false))).ai,true,'An explicit test-credit question can still be answered honestly');
  const complete=await replyToSupport({...leadsContext,messages:[user('What is Take over?')]},modelReply('Take over pauses new automatic work on that property so you can handle it yourself.',true));
- assert.equal(complete.status,'resolved');assert.equal(complete.reply,'Take over pauses new automatic work on that property so you can handle it yourself.');
+ assert.equal(complete.status,'open');assert.match(complete.reply,/pauses new automatic work on that property/);assert.equal(complete.ai,false);
  const unresolvedSideQuestion={kind:'account',messages:[user('The bot is not working'),assistant('I haven’t confirmed a fix.'),user('What is Take over?')],evidence:unrelatedChecks};
  const sideAnswer=await replyToSupport(unresolvedSideQuestion,modelReply('Take over pauses new automatic work on that property so you can handle it yourself.',true));
  assert.equal(sideAnswer.reply,complete.reply);assert.equal(sideAnswer.status,'open','A model answer to a side question must not close the earlier problem');

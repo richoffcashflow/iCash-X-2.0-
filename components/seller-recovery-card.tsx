@@ -15,7 +15,7 @@ export function SellerRecoveryCard({item,onResolved,onOpen}:{item:SellerRecovery
  if(item.review_reason==='contact_checks_expired')return null;
  return <article data-unsaved-draft={resolution.trim()?'true':undefined}><p>{next[item.reason]??'Review the unanswered question and the seller conversation. Record a resolution only after you have completed the follow-up.'}</p>
  {item.quote&&<blockquote className="reply-quote">{item.quote}</blockquote>}
- {onOpen&&<button type="button" className="attention-open" onClick={onOpen}>Open property</button>}
+ {onOpen&&<button type="button" className="attention-open" onClick={onOpen}>Open conversation</button>}
  <div className="review-form">
  <label htmlFor={`recovery-${item.id}`}>Resolution note (not sent to the seller)</label>
  <textarea id={`recovery-${item.id}`} aria-describedby={`recovery-help-${item.id}`} value={resolution} maxLength={2000} rows={3} onChange={e=>setResolution(e.target.value)} placeholder="Record the answer or completed follow-up."/>

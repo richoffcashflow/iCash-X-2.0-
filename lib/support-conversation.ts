@@ -17,6 +17,7 @@ import {supportProductClarification} from './support-product-clarifications.ts';
 import {supportPurchaseHelp,supportPaidAccessReply,supportVipPurchaseReply} from './support-purchase-help.ts';
 import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
+import {supportInboxGuidance} from './support-inbox-guidance.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean};
@@ -38,9 +39,10 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   const simple=removeRepeatedSupportQuestions(reply,context.messages);
   return {reply:simple,status:simple!==reply&&status!=='resolved'?'open':status,ai:false};
  };
- if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in|got in|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
+ if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in(?=[.!]|$|\s+now\b)|got in(?=[.!]|$|\s+now\b)|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(question.trim()))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Understood.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
+ const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status);
  const vipPurchase=supportVipPurchaseReply(context);if(vipPurchase)return {...vipPurchase,status:vipPurchase.status==='resolved'&&earlierSupportProblem(context)?'open':vipPurchase.status};
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
@@ -139,6 +141,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 /** Recovery runs separately with fixed account-bound operations. The model only explains verified results. */
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportTechnicalFallback(context);
+ if(supportInboxGuidance(context))return fallback;
  const latest=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
  if(/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(latest.trim())&&!fallback.reply.includes('?'))return fallback;
  if(supportCheckoutReply(context)||supportIdentityReply(context))return fallback;

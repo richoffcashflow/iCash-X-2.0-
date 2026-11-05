@@ -3,7 +3,7 @@ export const supportLeadImportPolicy='Customer accounts cannot add, upload or im
 
 export function supportLeadImportQuestion(text:string){
  const match=text.match(/\b(?:add|adding|upload(?:ing)?|import(?:ing)?|enter(?:ing)?|bring(?:ing)?|put(?:ting)? in|post(?:ing)?|creat(?:e|ing))\b.{0,55}?\b(?:leads?|listings?|propert(?:y|ies)|seller lists?|csv)\b|\b(?:my|our|own) (?:leads?|seller lists?)\b.{0,40}\b(?:add|upload|import|enter|bring|put)\b/i)?.[0];
- return !!match&&!/\b(?:photos?|pictures?|images?|videos?|contracts?|agreements?|receipts?|notes?|phone numbers?)\b/i.test(match);
+ return !!match&&!/\b(?:photos?|pictures?|images?|videos?|contracts?|agreements?|receipts?|notes?|phone numbers?|money|credits?|dollars)\b|\$\s*\d/i.test(match);
 }
 
 export function supportMissingSellerContactQuestion(text:string){

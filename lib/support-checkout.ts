@@ -31,7 +31,7 @@ export function supportCheckoutReply(context:SupportContext):SupportReply|null{
 
 export function supportIdentityReply(context:SupportContext):string|null{
  const latest=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
- if(!/\b(?:you (?:already )?(?:have|know|see)|what (?:account|email)|which (?:account|email)|why.{0,25}ask.{0,25}(?:email|account))\b/i.test(latest))return null;
+ if(!/\b(?:you (?:already )?(?:have|know|see)\s+(?:(?:my|the|this|that)\s+)?(?:email|account|identity)|what (?:account|email)|which (?:account|email)|why.{0,25}ask.{0,25}(?:email|account))\b/i.test(latest))return null;
  if(context.kind==='account')return 'This chat is connected to your signed-in account, so you don’t need to send your email again. I’ll use the account details and conversation already attached here.';
  if(context.contactKnown)return 'The email you entered is already attached to this conversation, so you don’t need to send it again. Email verification is still required before opening private account details.';
  return null;
