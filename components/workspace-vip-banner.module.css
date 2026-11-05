@@ -1,0 +1,14 @@
+.banner{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:20px;margin:0 0 26px;padding:25px 28px;border:1px solid #caa24d;border-radius:16px;background:radial-gradient(ellipse at top right,#fff8dd 0,transparent 55%),linear-gradient(115deg,#f8e8b8,#dfb95f);color:#241b0c;box-shadow:0 8px 24px #77531a12;box-sizing:border-box}
+.banner .icon{display:grid;place-items:center;width:52px;height:52px;border:1px solid #96702355;border-radius:14px;background:#fff8;color:#684a14}
+.banner .copy{min-width:0}
+.banner .eyebrow{display:block;margin:0 0 7px;font-size:10px;line-height:1.4;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;color:#684a14}
+.banner h2{margin:0;color:#241b0c;font-size:clamp(19px,2.1vw,26px);line-height:1.2;font-weight:800;letter-spacing:-.65px;text-wrap:balance}
+.banner p{display:flex;flex-wrap:wrap;gap:3px 14px;margin:10px 0 0;font-size:12px;line-height:1.6;letter-spacing:0;color:#4e3b1a;text-align:left}
+.banner p strong{font-weight:800;color:#36260e}
+.banner .cta{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:50px;max-width:100%;margin:0;padding:14px 20px;border:1px solid #19160e;border-radius:10px;background:#19160e;color:#fff7e2;font:inherit;font-size:14px;line-height:1.4;font-weight:750;text-align:center;text-decoration:none;white-space:nowrap;cursor:pointer;box-sizing:border-box;box-shadow:0 4px 10px #241b0c18}
+.banner .cta svg{flex:none}
+.banner .cta:hover:not(:disabled){background:#352a17}
+.banner .cta:disabled{opacity:.55;cursor:wait}
+.banner .cta:focus-visible{outline:3px solid #684a14;outline-offset:4px}
+@media(max-width:900px){.banner{grid-template-columns:minmax(0,1fr) auto;gap:18px;padding:22px}.banner .icon{display:none}.banner h2{font-size:22px}.banner p{display:grid;gap:2px}}
+@media(max-width:600px){.banner{grid-template-columns:minmax(0,1fr);gap:18px;padding:20px;margin-bottom:20px;border-radius:14px}.banner h2{font-size:23px}.banner .cta{width:100%;min-height:48px;font-size:15px}.banner p{font-size:12px}}
