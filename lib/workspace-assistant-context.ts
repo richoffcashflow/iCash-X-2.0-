@@ -1,3 +1,4 @@
+import {assistantDealContext} from './workspace-assistant-deal-context';
 import {db} from '@/lib/stripe-test';
 import {validActivityReport,type ActivityDays} from './activity-report';
 import {currentBotActivity} from './bot-activity';
@@ -31,9 +32,12 @@ export async function workspaceAssistantContext(accountId:string,timezone:string
   db<{screening_id:string;summary:string|null}[]>(`icash_live_conversations?account_id=eq.${accountId}&screening_id=in.(${ids})&state=eq.complete&party=eq.seller&select=screening_id,summary:result->>summary&order=completed_at.desc&limit=12`)
  ]):[[],[]];
  const envelopes=deals.length?await db<{deal_id:string;kind:string;state:string;test_mode:boolean}[]>(`icash_signing_envelopes?account_id=eq.${accountId}&deal_id=in.(${deals.map(d=>d.id).join(',')})&select=deal_id,kind,state,test_mode`):[];
+ const focusedId=screeningId??(properties.length===1?properties[0].id:null);
+ const focused=properties.find(p=>p.id===focusedId),focusedDeal=deals.find(d=>d.screening_id===focusedId);
+ const coach=focused&&focusedDeal?await assistantDealContext(accountId,focused.id,focused.result.property.propertyId,focusedDeal.id):undefined;
  const activity=currentBotActivity({paused:accounts[0].bot_paused,tickets,screening,progress});
  return {checkedAt:activity.checkedAt,report,paused:accounts[0].bot_paused,balanceCents:Math.max(0,wallets[0].balance_cents-wallets[0].reserved_cents),task:activity.label,active:activity.active,needsYou:attention.some(rows=>rows.length>0),selectedId:screeningId??(address&&properties.length===1?properties[0].id:null),hasMore:allProperties.length>6,properties:properties.map(p=>{
   const view=propertyAnalysisView(p.result),deal=deals.find(d=>d.screening_id===p.id),summary=dealCardSummary(deal,envelopes);
-  return {id:p.id,address:p.result.property.address,offer:analysisMoney(view.cashOfferCeilingCents),arv:analysisMoney(view.arvCents),repairs:analysisMoney(view.repairs.baselineCents),fee:analysisMoney(view.calculation?.feeCents??null),currentCalculation:!!view.calculation,stage:summary?.status??'Property researched',next:summary?.nextAction??'Review the numbers and confirm the seller’s interest, price, and repair needs.',summary:conversations.find(c=>c.screening_id===p.id&&c.summary)?.summary?.slice(0,700)??null,practice:p.result.property.propertyId.startsWith('practice_')||deal?.terms.practice===true};
+  return {...(p.id===focusedId&&coach?{coach}:{}),id:p.id,address:p.result.property.address,offer:analysisMoney(view.cashOfferCeilingCents),arv:analysisMoney(view.arvCents),repairs:analysisMoney(view.repairs.baselineCents),fee:analysisMoney(view.calculation?.feeCents??null),currentCalculation:!!view.calculation,stage:summary?.status??'Property researched',next:summary?.nextAction??'Review the numbers and confirm the seller’s interest, price, and repair needs.',summary:conversations.find(c=>c.screening_id===p.id&&c.summary)?.summary?.slice(0,700)??null,practice:p.result.property.propertyId.startsWith('practice_')||deal?.terms.practice===true};
  })};
 }

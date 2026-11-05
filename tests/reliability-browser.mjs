@@ -1,5 +1,6 @@
 // Built application + intercepted API responses. No credentials or live providers.
 import assert from 'node:assert/strict';
+import {verifyAssistantCoach} from './workspace-assistant-browser.mjs';
 import {spawn,execFileSync} from 'node:child_process';
 import {once} from 'node:events';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
@@ -90,6 +91,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='admin-outreach'){await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);continue;}
    if(process.env.BROWSER_SCENARIOS==='conversation'){await verifyConversationInbox(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='close-conversion'){await verifyCloseConversions(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='ask-ai'){await verifyAssistantCoach(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace-layout'){await verifyWorkspaceLayout(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='support-coaching'){await verifySupportCoaching(browser,base,options,name);continue;}
@@ -207,6 +209,7 @@ try{
    assert.deepEqual(errors,[]);assert.equal(external,0,'No external requests during the fixture');
    console.log(`PASS ${name}: owner reports and aggregate experience → incident detail → refresh failure → recovery → private data cleared on denied access.`);
    await context.close();
+   await verifyAssistantCoach(browser,base,options,name);
    await verifyWorkspace(browser,base,options,name);
    await verifyWorkspaceLayout(browser,base,options,name);
    await verifyConversationInbox(browser,base,options,name);

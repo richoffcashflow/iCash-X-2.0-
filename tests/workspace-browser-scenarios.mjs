@@ -80,7 +80,7 @@ export async function verifyWorkspace(browser,base,options,name){
   }
   if(url.pathname==='/api/work/assistant'&&request.method()==='POST'){
    assert(vip,'Only verified VIP can submit an assistant question');const body=request.postDataJSON();assistantWrites.push(body);
-   return route.fulfill({json:{id:`fixture-reply-${assistantWrites.length}`,question:body.question,state:'completed',created_at:new Date().toISOString(),answer:{text:'Fixture reply for this property.',actions:[],checkedAt:new Date().toISOString()}}});
+   return route.fulfill({json:{id:`fixture-reply-${assistantWrites.length}`,question:body.question,state:'completed',created_at:new Date().toISOString(),answer:{propertyId:body.screeningId,text:'Fixture reply for this property.',actions:[],checkedAt:new Date().toISOString()}}});
   }
   if(url.pathname==='/api/work/deal-recovery'&&request.method()==='POST'){
    const body=request.postDataJSON();recoveryWrites.push(body);assert.equal(body.confirmed,true);assert.equal(body.minimumFeeCents,800000);assert.equal(body.termsHash,'a'.repeat(32));return route.fulfill({json:{saved:true,recovery:recoveryFixture}});
@@ -321,7 +321,7 @@ export async function verifyWorkspace(browser,base,options,name){
   const ask=collapsed.getByRole('button',{name:/^Ask AI about /});await ask.waitFor();assert.equal(await ask.getAttribute('data-vip'),'true');
   assert(await ask.evaluate(node=>{const b=node.getBoundingClientRect(),card=node.closest('.live-property').getBoundingClientRect();return b.height>=44&&b.left>=card.left&&b.right<=Math.min(innerWidth,card.right)+1;}),'Ask AI is visible and fits the collapsed card');
   await ask.click();const assistant=page.getByRole('dialog',{name:'Ask AI Bot',exact:true});await assistant.waitFor();
-  await assistant.getByText('What would you like to know?',{exact:true}).waitFor();
+  await assistant.getByText('Let’s move your deal forward.',{exact:true}).waitFor();
   assert.equal(assistantWrites.length,0,'Opening Ask AI does not send a paid question');
   assert.match(await assistant.locator('.assistant-property-context').innerText(),/Example/,'The selected deal stays attached');
   await assistant.getByRole('textbox',{name:'Ask AI Bot',exact:true}).fill('What is the next step for this deal?');await assistant.getByRole('button',{name:'Send question',exact:true}).click();

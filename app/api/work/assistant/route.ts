@@ -1,3 +1,4 @@
+import {coachedAnswer} from '@/lib/workspace-assistant-coach';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
@@ -39,11 +40,11 @@ export async function POST(req:Request){
   if(!started.fresh){if(started.state==='error')return NextResponse.json({error:'This reply could not finish. Please send the question again.'},{status:409,headers});return NextResponse.json({id:started.id,question,answer:started.answer,state:started.state,created_at:started.createdAt},{status:started.answer?200:202,headers});}
   const [context,history]=await Promise.all([workspaceAssistantContext(accountId,i.timezone,question,i.screeningId),db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}&archived_at=is.null&state=eq.complete&select=id,question,answer,state,created_at&order=created_at.desc&limit=4`)]);
   await db(`icash_workspace_questions?account_id=eq.${accountId}&id=eq.${savedId}&state=eq.pending`,'PATCH',{context_snapshot:context});
-  const routed=await routeWorkspaceQuestion(question,context,history.reverse().map(h=>({question:h.question,propertyId:h.answer?.propertyId??null})),fetch,{
+  const routed=await routeWorkspaceQuestion(question,context,history.reverse().map(h=>({question:h.question,propertyId:h.answer?.propertyId??null,answer:h.answer})),fetch,{
    before:async()=>{try{return await db<boolean>('rpc/icash_reserve_question','POST',{p_account:accountId,p_question:savedId,p_model:process.env.ICASH_SUPPORT_AI_MODEL});}catch{throw Error('QUESTION_CREDITS_REQUIRED');}},
    after:async receipt=>{const u=receipt.usage as {prompt_tokens?:number;completion_tokens?:number;prompt_tokens_details?:{cached_tokens?:number}}|null;await db('rpc/icash_settle_question','POST',{p_account:accountId,p_question:savedId,p_provider:receipt.providerId,p_input:u?.prompt_tokens??null,p_cached:u?.prompt_tokens_details?.cached_tokens??0,p_output:u?.completion_tokens??null});}
   });
-  const answer=answerWorkspaceQuestion(routed.intent,context,routed.propertyId);
+  const answer=routed.coaching?coachedAnswer(routed.coaching,context,routed.propertyId):answerWorkspaceQuestion(routed.intent,context,routed.propertyId);
   const [saved]=await db<Row[]>(`icash_workspace_questions?account_id=eq.${accountId}&id=eq.${savedId}&state=eq.pending`,'PATCH',{answer,state:'complete',model:routed.model,provider_id:routed.providerId,token_usage:{usage:routed.usage,classification:routed.raw},completed_at:new Date().toISOString()});
   if(!saved)throw Error('SAVE_FAILED');
   return NextResponse.json({id:savedId,question,answer,state:'complete',created_at:started.createdAt},{headers});

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
+import {coachActions,dealCoachInstructions,coachedAnswer} from '../lib/workspace-assistant-coach.ts';
 import * as policy from '../lib/workspace-assistant-policy.ts';
 import {redactSupportQuestion} from '../lib/support-policy.ts';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -13,13 +14,13 @@ assert.match(policy.answerWorkspaceQuestion('offer',{...context,properties:[{...
 assert.equal(policy.answerWorkspaceQuestion('offer',{...context,selectedId:null},id(99)).propertyId,null,'An invented property never resolves');
 assert.match(policy.answerWorkspaceQuestion('status',context,null).text,/paused/);
 assert.match(policy.answerWorkspaceQuestion('status',{...context,paused:false,balanceCents:0},null).text,/needs credits/);
-assert.deepEqual(policy.answerWorkspaceQuestion('next',{...context,needsYou:true},null).actions,[{kind:'attention',label:'Review request'}]);
+assert.deepEqual(policy.answerWorkspaceQuestion('next',{...context,selectedId:null,needsYou:true},null).actions,[{kind:'attention',label:'Review request'}]);
 assert.deepEqual(policy.answerWorkspaceQuestion('resume',{...context,balanceCents:0},null).actions,[{kind:'funding',label:'Add money'}]);
 assert(!policy.answerWorkspaceQuestion('pause',{...context,paused:false},null).text.includes('I paused'),'A reply never claims to execute work');
 async function load(file,deps,key){globalThis[key]=deps;const s=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');return import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.'+key+';\n'+s).toString('base64'));}
-const ai=await load('lib/workspace-assistant-ai.ts',{z,...policy},'__assistantAI');
+const ai=await load('lib/workspace-assistant-ai.ts',{z,...policy,coachActions,dealCoachInstructions},'__assistantAI');
 process.env.OPENAI_API_KEY='fixture-key';process.env.ICASH_SUPPORT_AI_MODEL='fixture-model';
-let fetched=0;const fake=async(_url,options)=>{fetched++;const body=JSON.parse(options.body);assert.equal(body.store,false);assert.equal(body.tools,undefined);assert(!options.body.includes('$96,270.50'),'Classifier never generates or receives financial amounts');return Response.json({id:'fixture-completion',usage:{prompt_tokens:100,completion_tokens:20},choices:[{finish_reason:'stop',message:{content:JSON.stringify({intent:'offer',propertyId:id(99)})}}]});};
+let fetched=0;const fake=async(_url,options)=>{fetched++;const body=JSON.parse(options.body);assert.equal(body.store,false);assert.equal(body.tools,undefined);assert(options.body.includes('$96,270.50'),'Coach receives the saved estimate, not invented math');assert.equal(body.max_completion_tokens,1200);return Response.json({id:'fixture-completion',usage:{prompt_tokens:100,completion_tokens:20},choices:[{finish_reason:'stop',message:{content:JSON.stringify({intent:'offer',propertyId:id(99),coaching:null})}}]});};
 let routed=await ai.routeWorkspaceQuestion('Explain the offer',{...context,selectedId:null},[],fake);assert.equal(routed.propertyId,null);assert.equal(routed.model,'fixture-model');assert.equal(routed.usage.prompt_tokens,100);
 routed=await ai.routeWorkspaceQuestion('Pause my bot',context,[],fake);assert.equal(routed.intent,'pause');
 routed=await ai.routeWorkspaceQuestion('Explain this offer',context,[],async()=>{throw Error('fixture timeout');});assert.equal(routed.intent,'offer');assert.equal(routed.propertyId,id(5));
@@ -32,7 +33,7 @@ settlements=[];await ai.routeWorkspaceQuestion('Explain this offer',context,[],a
 delete process.env.OPENAI_API_KEY;delete process.env.ICASH_SUPPORT_AI_MODEL;
 let authorized=true,origin=true,subscription=true,vip=true,fresh=true,priorState='complete',paths=[],contextReads=0,classifications=0,rateLimited=false;
 const responseAnswer=policy.answerWorkspaceQuestion('offer',context,null);
-const deps={...policy,z,redactSupportQuestion,NextResponse:{json:(body,o={})=>({body,status:o.status??200,headers:o.headers})},allowedOrigin:()=>origin,workAccount:async options=>{assert.equal(options?.requireVip,true,'Both assistant endpoints require verified VIP');if(!authorized)throw Error('SIGN_IN_REQUIRED');if(!subscription)throw Error('SUBSCRIPTION_REQUIRED');if(!vip)throw Error('VIP_REQUIRED');return {accountId:id(1),userId:id(2)};},limitRequest:async()=>{if(rateLimited)throw Error();},workspaceAssistantContext:async account=>{contextReads++;assert.equal(account,id(1));return context;},routeWorkspaceQuestion:async()=>{classifications++;return {intent:'offer',propertyId:id(5),model:null,providerId:null,usage:null,raw:null};},db:async(path,method,body)=>{
+const deps={...policy,z,coachedAnswer,redactSupportQuestion,NextResponse:{json:(body,o={})=>({body,status:o.status??200,headers:o.headers})},allowedOrigin:()=>origin,workAccount:async options=>{assert.equal(options?.requireVip,true,'Both assistant endpoints require verified VIP');if(!authorized)throw Error('SIGN_IN_REQUIRED');if(!subscription)throw Error('SUBSCRIPTION_REQUIRED');if(!vip)throw Error('VIP_REQUIRED');return {accountId:id(1),userId:id(2)};},limitRequest:async()=>{if(rateLimited)throw Error();},workspaceAssistantContext:async account=>{contextReads++;assert.equal(account,id(1));return context;},routeWorkspaceQuestion:async()=>{classifications++;return {intent:'offer',propertyId:id(5),model:null,providerId:null,usage:null,raw:null};},db:async(path,method,body)=>{
  paths.push({path,method,body});
  if(path==='rpc/icash_begin_workspace_question'){assert.equal(body.p_account,id(1));assert.equal(body.p_user,id(2));return {id:id(3),fresh,state:priorState,answer:fresh?null:priorState==='complete'?responseAnswer:null,createdAt:context.checkedAt};}
  assert(path.includes('account_id=eq.'+id(1)),'Every history/context write is tenant scoped');
