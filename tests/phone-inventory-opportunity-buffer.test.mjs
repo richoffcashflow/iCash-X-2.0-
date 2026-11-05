@@ -58,6 +58,6 @@ try{
  await isolate(async()=>{await pg.exec("insert into icash_contact_permissions values(fixture_phone_id(1000),fixture_phone_id(1),'+12145559999',now()-interval '1 hour',null)");assert.equal(await count(),11,'Expired legacy permission is not an alternative');});
  assert.deepEqual(await evidence(),before);
  assert.equal(await one("select provolatile::text||':'||prosecdef::text from pg_proc where oid='icash_pending_opportunity_count(uuid)'::regprocedure"),'s:false');
- assert.equal(migration,read('supabase/migrations/20261104225256_phone_inventory_opportunity_buffer.sql'));
+ assert.equal(migration,read('supabase/migrations/20261105024912_phone_inventory_opportunity_buffer.sql'));
  console.log('PASS phone-inventory buffer:25→11, original unknowns retained, alternate/unprepared phones and permissions preserved, exact source/tenant proof, current claims, unchanged records/ACL and read-only service call.');
 }finally{await pg.close();}

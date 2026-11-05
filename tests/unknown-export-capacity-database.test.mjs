@@ -20,7 +20,7 @@ async function probes(c,mutate=()=>{}){
 try{
  for(const file of ['tests/fixtures/automatic-export-foundation.sql','config/owner-export-capacity-recovery.sql','supabase/migrations/20261030012215_owner_export_capacity_precision.sql','config/automatic-export-capacity.sql','config/gateway-export-capacity.sql','config/empty-export-capacity.sql','config/empty-export-immediate-capacity.sql','tests/fixtures/unknown-export-foundation.sql','tests/fixtures/unknown-export-late-foundation.sql','tests/fixtures/unknown-export-late-live-functions.sql','tests/fixtures/unknown-export-late-batch-function.sql'])await db.exec(read(file));
  const source=read('config/unknown-export-capacity.sql'),late=read('config/unknown-export-late-evidence.sql');
- const migration=read('supabase/migrations/20261104225126_unknown_export_capacity.sql');
+ const migration=read('supabase/migrations/20261105024908_unknown_export_capacity.sql');
  assert.equal(migration,source.slice(0,source.lastIndexOf('\ncommit;'))+'\n'+late.replace('\nbegin;',''));
  await db.exec(migration);
  await q("insert into icash_research_private.owner_batches(id,account_id,created_at,primary_screening) values($1,$2,now()-interval '10 minutes',$3)",[batch,account,screening]);

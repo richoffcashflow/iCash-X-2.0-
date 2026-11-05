@@ -50,10 +50,27 @@ the bounded request-concurrency check passed. The latter exercised 12
 simultaneous requests without duplicate sends, duplicate charges or account
 mismatches and retained both unknown outcomes.
 
-Native PostgreSQL concurrency tests still require the PostgreSQL 17 CI service.
-Mobile WebKit could not launch locally because its operating-system libraries
-were missing. Neither that launch failure nor Python syntax checks establish a
-passing native concurrency or mobile result. Exact-commit canonical CI,
-guarded installation, matching production releases, policy activation and
-observed customer progress remain required. No production migration,
-activation or release has been performed for this patch.
+Native PostgreSQL concurrency tests passed in canonical Reliability run
+`41956906567` for head `dcad215d6570821fbf3bacc8b8f255aaa50280b7`.
+The phone projection executed in 2.223 ms with the verified production
+`jit=off` setting; eight readers and the original two-second/one-second bounds
+passed. Mobile WebKit could not launch locally because its operating-system
+libraries were missing, so the release still requires canonical browser CI.
+
+## Staged database installation
+
+The exact guarded SQL was installed on November 5 at 02:49 UTC. Repository
+migration names match the observed database history:
+
+- `20261105024908_unknown_export_capacity.sql` (SQL MD5 `4047eb59f7578c94903fee1c7825ba8c`).
+- `20261105024912_phone_inventory_opportunity_buffer.sql` (SQL MD5 `8e26ab9d19419c825311f27f3d85703d`).
+
+Post-install checks confirmed `unknown_enabled=false`, the original shared
+export still busy, no unknown-policy review or late-evidence rows, and no
+new direct service-role table or anonymous recovery access. The affected
+phone-buffer account's projected count changed from 25 to 11. This is room
+for independent work, not proof that new work completed.
+
+Matching final-head canonical checks, production web/worker releases, policy
+activation and observed customer progress remain required. Unknown-export
+recovery has not been activated and this patch has not been released yet.
