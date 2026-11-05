@@ -3,6 +3,8 @@
 export function supportProductConflict(reply:string,question=''){
  const sentences=reply.split(/(?<=[.!?])\s+|\n+/);
  return sentences.some(sentence=>{
+  if(/\b(?:bot|automation|outreach)\b.{0,50}\b(?:will|automatically)\b.{0,40}\b(?:resume|restart|start again)\b|\b(?:resume|restart|start again)\b.{0,40}\b(?:automatically|tomorrow|morning)\b/i.test(sentence)&&/\b(?:take ?over|took over|pauses?|paused|sending messages)\b/i.test(question)&&!/\b(?:does not|doesn[’']t|will not|won[’']t|until|Return to bot)\b/i.test(sentence))return true;
+  if(/\b(?:assignment|wholesale) fee\b/i.test(sentence)&&/\b(?:cannot|can[’']t)\b.{0,25}\b(?:higher|more than|above)\b/i.test(sentence)&&/\b(?:default|target|those amounts)\b|\$(?:10|20),?000\b/i.test(sentence))return true;
   if(/\b(?:does not|doesn[’']t|cannot|can[’']t|never)\s+(?:automatically\s+)?(?:use|access|pull from|integrate with)\s+deal\s*machine\b/i.test(sentence))return true;
   if(/\b(?:credits?|usage)\b.{0,25}\bonly\b.{0,50}\b(?:calls?|texts?|contacting|reaching out|outreach)\b|\bonly (?:uses?|spends?|charges?) credits?\b.{0,50}\b(?:calls?|texts?|contacting|reaching out|outreach)\b/i.test(sentence)&&!/\b(?:research|data|property lookup)\b/i.test(sentence))return true;
   if(/\b(?:assignment|wholesale) fee\b.{0,70}\b(?:included|shown|written|listed|added)\b.{0,35}\b(?:seller|purchase) (?:agreement|contract)\b/i.test(sentence)&&!/\b(?:not|isn[’']t|never)\b/i.test(sentence))return true;

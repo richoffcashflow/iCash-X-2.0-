@@ -13,10 +13,10 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
  const version='2026-10-29T04:18:51.000Z';
  const longText='Please review this property and the seller’s requested next step. '+('LongReference'.repeat(18));
  function work(url){
-  const data=makeWorkspaceFixture({count:12,page:Number(url.searchParams.get('page')||0),attentionPage:Number(url.searchParams.get('attentionPage')||0)});
+  const data=makeWorkspaceFixture({count:12,page:Number(url.searchParams.get('page')||0),attentionPage:Number(url.searchParams.get('attentionPage')||0),screeningId:url.searchParams.get('screeningId')||''});
   Object.assign(data,{textAttention:[],contacts:[],conversations:[],propertyAttentionIds:[uuid(1)],signingConfigured:true});
   const property={screening_id:uuid(1),address:'100 Example Street, Building 2, Demo City, TX 75001'};
-  data.sellerRecovery=[1,2,3,4].map(i=>({id:uuid(8000+i),screening_id:uuid(i),address:i===1?property.address:`${i} ${longText}`,reason:'no_response',quote:i===1?'No reply to delivered question':longText,review_reason:null,updated_at:version}));
+  data.sellerRecovery=[1,2,3,9].map(i=>({id:uuid(8000+i),screening_id:uuid(i),address:i===1?property.address:`${i} ${longText}`,reason:'no_response',quote:i===1?'No reply to delivered question':longText,review_reason:null,updated_at:version}));
   if(mode==='handoff')data.handoffs=[{...property,id:uuid(9000),party:'seller',reason:'A person was requested',summary:longText,next_action:'Confirm the next step with the seller.',state:'open'}];
   if(mode==='buyer')data.viewingRequests=[{...property,id:uuid(9001),kind:'viewing',quote:longText,timezone:'America/Chicago',created_at:version}];
   if(mode==='title'||mode==='journey')data.closingTasks=[{...property,id:uuid(9002),kind:'deadline',label:'Confirm the closing date',due_date:'2026-11-12',state:'needs_review',evidence:longText,updated_at:version,...(mode==='journey'?{recovery:{journeyId:uuid(9003),blocker:{kind:'human',note:longText,revision:1,updatedAt:version}}}:{})}];
@@ -42,6 +42,11 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
   if(p==='/api/funding/status')return route.fulfill({json:{enabled:true,mode:'live',paidCents:0,needsClaim:false,packs:[]}});
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip:false,priceCents:5000,paidThrough:'2027-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/property-photo')return route.fulfill({json:{photo:null}});
+  if(p==='/api/work/messages')return route.fulfill({json:{threads:[],messages:[],calls:[],next:null,nextThread:null,firstMessage:null}});
+  if(p==='/api/work/call-history')return route.fulfill({json:{recordings:[],next:null}});
+  if(p==='/api/work/manual-call')return route.fulfill({json:{contacts:[],personalCalls:[]}});
+  if(p==='/api/work/browser-call')return route.fulfill({json:{ready:false}});
+  if(p==='/api/work/text-contact')return route.fulfill({json:{contacts:[],dealId:null,threadId:null}});
   if(p==='/api/work/progress')return route.fulfill({json:{progress:null}});
   if(p==='/api/work/assistant')return route.fulfill({json:{items:[]}});
   if(p==='/api/work/next-action')return route.fulfill({json:{offer:null,balanceCents:12500,paused:true,checkedAt:version}});
@@ -86,6 +91,13 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
   for(const width of [...new Set([options.viewport.width,320,768])]){
    await page.setViewportSize({width,height:options.viewport.height});
    await openMode('seller');
+   await attention.getByRole('button',{name:'Open conversation',exact:true}).first().click();
+   const conversation=page.getByRole('dialog');
+   await conversation.waitFor({state:'visible'});
+   assert.match(await conversation.getByRole('heading').innerText(),/Example/,'Follow-up opens the matching property conversation');
+   await conversation.getByRole('button',{name:'Calls',exact:true}).click();
+   await conversation.getByRole('button',{name:'Texts',exact:true}).click();
+   await conversation.getByRole('button',{name:'Close conversation',exact:true}).click();
    const field=attention.getByLabel('Resolution note (not sent to the seller)',{exact:true}).first();
    await fieldLayout(field);await fits('seller follow-up');
    const pages=attention.getByRole('navigation',{name:'Request pages'});
@@ -95,6 +107,11 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
    await attention.getByRole('button',{name:'Show 3 more properties',exact:true}).click();
    for(const item of await attention.locator('.attention-item').all())await item.locator(':scope > summary').click();
    await fits('expanded requests and long addresses');
+   await attention.getByRole('button',{name:'Open conversation',exact:true}).last().click();
+   await conversation.waitFor({state:'visible'});
+   assert.match(await conversation.getByRole('heading').innerText(),/108 Example/,'Off-page follow-up fetches and opens its exact property');
+   await conversation.getByRole('button',{name:'Close conversation',exact:true}).click();
+   if(!await attention.evaluate(node=>node.open))await attention.locator(':scope > summary').click();
    await field.fill('Confirmed the next step with the seller.');
    await attention.getByRole('button',{name:'Save resolution',exact:true}).first().click();
    await attention.getByRole('alert').waitFor();
