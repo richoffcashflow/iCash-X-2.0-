@@ -1,5 +1,11 @@
 # Continuous reliability
 
+The November 5 [outbound result recovery](outbound-receipt-drain-2026-11-05.md)
+addresses a measured 14–16-minute delay after calling resumed. Recording maintenance
+can refill its twelve-record batch up to four times inside the same deadline and
+three-row concurrency limit, retaining original leases, exact receipts and unknown
+holds. This is recovery capacity, not permission to replay an outbound call.
+
 The November 5 [production follow-through](reliability-followthrough-2026-11-05.md)
 records real outreach after the restored scheduler/voice release and the remaining
 account/quota findings. It also removes repeated JSON extraction and duplicate

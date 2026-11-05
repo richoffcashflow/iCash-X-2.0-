@@ -13,7 +13,7 @@ export async function POST(request:Request){
  const a=Buffer.from(header),b=Buffer.from('Bearer '+secret);
  if(a.length!==b.length||!timingSafeEqual(a,b))return new Response(null,{status:401,headers:privateHeaders});
  const deadline=AbortSignal.timeout(45000);
- try{return Response.json(await maintainRecordings(db,createRecordingProviders(process.env,fetch,deadline),process.env,{signal:deadline}),{headers:privateHeaders});}
+ try{return Response.json(await maintainRecordings(db,createRecordingProviders(process.env,fetch,deadline),process.env,{signal:deadline,drain:true}),{headers:privateHeaders});}
  catch{return Response.json({status:'recording_maintenance_needs_review'},{status:503,headers:privateHeaders});}
 }
 
