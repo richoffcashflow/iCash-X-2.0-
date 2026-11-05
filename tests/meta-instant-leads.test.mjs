@@ -116,7 +116,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_meta_leads?'))return [lead];
  if(path==='rpc/icash_meta_save_address'){assert.equal(body.p_address,address);saved=true;return {status:'received'};}
  if(path==='rpc/icash_take_dealmachine_request')return true;
- if(path==='rpc/icash_meta_claim_lookup'){if(!claimAvailable)return null;claimAvailable=false;return {id:'lead',token:'claim',address,assignmentFeeCents:1000000,sellerCostReserveCents:100000};}
+ if(path==='rpc/icash_meta_claim_lookup_admitted'){if(!claimAvailable)return null;claimAvailable=false;return {id:'lead',token:'claim',address,assignmentFeeCents:1000000,sellerCostReserveCents:100000};}
  if(path==='rpc/icash_finish_seller_lookup'){assert.equal(body.p_output.status,'qualified');complete=true;return true;}
  if(path==='rpc/icash_meta_promote_property')return {status:complete?'property_ready':'research_required'};
  if(method==='PATCH')return [];

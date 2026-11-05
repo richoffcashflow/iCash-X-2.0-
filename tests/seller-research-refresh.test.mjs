@@ -37,9 +37,19 @@ try{
  create function icash_seller_contact_evidence(uuid,uuid,uuid,text) returns jsonb language sql as $$select '{"receipt":"SIMULATION bound original receipt"}'::jsonb$$;
  create function icash_address_state(text) returns text language sql as $$select 'TX'$$;
  create function icash_research_state_allowed(text) returns boolean language sql as $$select $1='TX'$$;
+ create table icash_dealmachine_request_budget(id integer primary key);insert into icash_dealmachine_request_budget values(1);
  create function icash_take_dealmachine_request() returns boolean language sql as $$select true$$;
  create function icash_assign_seller_lead_for(uuid) returns jsonb language plpgsql as $$declare l icash_seller_intakes;begin return jsonb_build_object('complete',l.result,l.checked_at);end$$;`);
  const sql=read('config/seller-shared-research-refresh.sql');assert.equal(sql,read('supabase/migrations/20261019004330_seller_shared_research_refresh.sql'));await pg.exec(sql);
+
+ // Install the exact ordinary claim definition solely to build both versioned
+ // RPCs. This suite exercises refresh with its full existing eligibility fixture.
+ const foundation=read('tests/fixtures/owner-demo-request-foundation.sql');
+ await pg.exec(foundation.slice(foundation.indexOf('CREATE OR REPLACE FUNCTION public.icash_claim_seller_lookup_for'),foundation.indexOf('$function$;',foundation.indexOf('CREATE OR REPLACE FUNCTION public.icash_claim_seller_lookup_for'))+12));
+ await pg.exec('create table icash_meta_leads(lead_id uuid);');
+ const meta=read('config/meta-instant-leads.sql');
+ await pg.exec(meta.slice(meta.indexOf('create function public.icash_meta_claim_lookup('),meta.indexOf('-- New service-only entrypoints')));
+ await pg.exec(read('config/seller-atomic-quota-admission.sql'));
  const old=new Date(Date.now()-25*3600000).toISOString();
  const original={id:'prop_12345',fetchedAt:old,address:'123 Main St, Dallas, TX 75201',city:'Dallas',state:'TX',raw:{data:{old:true}},sellerCostReserveCents:100000};
  const result={financialCheck:{status:'eligible'},property:{propertyId:'prop_12345'},preliminarySellerCeilingCents:19000000};

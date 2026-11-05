@@ -85,7 +85,7 @@ export async function researchInstantAddress(d:Deps,id:string,options?:{liveCall
  const lead=await getInstantLead(d.db,id);if(!lead?.account_id||!lead.screening_id||lead.paused||lead.declined_at)return {status:'unavailable'};
  // The database claim serializes voice, SMS, form and worker races. A timeout
  // stays in review and cannot purchase another lookup automatically.
- const lookup=await processSellerIntake(<T>(path:string,method?:string,body?:unknown)=>d.db<T>(path==='rpc/icash_claim_seller_lookup_for'?'rpc/icash_meta_claim_lookup':path,method,body),d.env.DEALMACHINE_API_KEY,d.fetch??fetch,id,options?.liveCall?8000:15000);
+ const lookup=await processSellerIntake(<T>(path:string,method?:string,body?:unknown)=>d.db<T>(path==='rpc/icash_claim_seller_lookup_admitted_for'?'rpc/icash_meta_claim_lookup_admitted':path,method,body),d.env.DEALMACHINE_API_KEY,d.fetch??fetch,id,options?.liveCall?8000:15000);
  const promoted=await d.db<{status:string;offerReady?:boolean}>('rpc/icash_meta_promote_property','POST',{p_lead:id});
  return promoted.status==='property_ready'?promoted:lookup;
 }

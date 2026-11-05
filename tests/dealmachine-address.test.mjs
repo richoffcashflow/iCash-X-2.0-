@@ -25,7 +25,7 @@ const options={assignmentFeeCents:1000000,sellerCostReserveCents:100000};
 let claimAvailable=true,calls=0,receipt;
 const db=async(path,method,body)=>{
  if(path==='rpc/icash_take_dealmachine_request')return true;
- if(path==='rpc/icash_claim_seller_lookup_for') {assert.equal(body.p_id,'fixture-lead');if(!claimAvailable)return null;claimAvailable=false;return {id:'fixture-lead',token:'fixture-token',address:submitted,...options};}
+ if(path==='rpc/icash_claim_seller_lookup_admitted_for') {assert.equal(body.p_id,'fixture-lead');if(!claimAvailable)return null;claimAvailable=false;return {id:'fixture-lead',token:'fixture-token',address:submitted,...options};}
  if(path==='rpc/icash_finish_seller_lookup') {receipt=body.p_output;return true;}
  if(method==='PATCH')return [{id:'fixture-lead'}];
  throw Error(path);
