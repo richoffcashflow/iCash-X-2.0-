@@ -97,10 +97,14 @@ export function WorkspaceWalkthrough({openRequest,blocked,onOpenChange}:{openReq
   finally{if(mounted.current&&revision.current===sequence)setBusy(false);}
  }
  function close(){setOpen(false);void save({step:tour?.step??0,state:'dismissed'});}
- async function watchCourse(){if(await save({step:1,state:'active'})&&mounted.current)window.location.assign('/course');}
- const reminder=!visible&&tour&&['active','dismissed'].includes(tour.state);
+ async function watchCourse(){await save({step:1,state:'active'});if(mounted.current)window.location.assign('/course');}
+ const watched=course?.state==='completed',started=course?.state==='in_progress';
+ const resumeTour=tour?.state==='active'||tour?.state==='dismissed';
  return <>
-  {reminder&&!blocked&&<section className={styles.reminder} aria-label="Getting started"><div><strong>{course?.state==='completed'?'Ready for a quick tour?':'Start with the course'}</strong><p>{course?.state==='completed'?'See where everything lives in your workspace.':'Learn the steps, then explore your workspace.'}</p></div><div className={styles.reminderActions}><a href="/course">{course?.state==='completed'?'Course':'Watch course'}</a><button type="button" onClick={()=>setOpen(true)}>Continue walkthrough<ArrowRight size={15}/></button></div></section>}
+  {!visible&&!blocked&&<section className={`${styles.reminder}${watched?' '+styles.reviewed:''}`} aria-label="Getting started">
+   <div className={styles.reminderCopy}><span className={styles.kicker}>{watched?'YOUR TRAINING':'LEARN HOW TO USE ICASH X'}</span><h2>{watched?'Your course is always here.':started?'Continue your course.':'Start here: Watch the course.'}</h2><p>{watched?'Revisit the steps whenever you need a refresher.':'Learn how to set up your bot, follow your leads and move deals forward.'}</p>{started&&<p className={styles.saved}>{course.percent}% watched</p>}</div>
+   <div className={styles.reminderActions}><a href="/course"><BookOpen size={17} aria-hidden="true"/>{watched?'Revisit course':started?'Continue course':'Watch course'}<ArrowRight size={16} aria-hidden="true"/></a>{resumeTour&&<button type="button" onClick={()=>setOpen(true)}>Continue walkthrough<ArrowRight size={15} aria-hidden="true"/></button>}</div>
+  </section>}
   {!visible&&error&&<p className={styles.saveError} role="status">{error} <button type="button" disabled={busy} onClick={()=>{if(retry.current)void save(retry.current);}}>Retry</button></p>}
   {visible&&<TourDialog step={tour?.step??0} course={course} busy={busy} error={error} onMove={step=>void save({step,state:'active'})} onClose={close} onCourse={()=>void watchCourse()} onFinish={()=>{setOpen(false);void save({step:walkthroughSteps.length-1,state:'completed'});}}/>}
  </>;

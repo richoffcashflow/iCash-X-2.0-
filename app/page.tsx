@@ -176,12 +176,13 @@ export default function Home(){
  return <div className={`console-shell personalized-workspace minimal-workspace assistant-workspace icash-brand-workspace ${styles.workspace}${displayVip&&!workspaceLocked?' '+styles.vip:''}`} style={{'--bot-color':theme.color,'--bot-soft':theme.soft} as CSSProperties}>
   {!workspaceLocked&&account.vip===false&&account.vipFeatures!==true&&(account.billingModel==='membership_credits'||canSwitchPlan)&&fundingNotice?.email!==account.email&&<WorkspaceVipBanner fullWidth disabled={controlBusy||accountError} onUpgrade={()=>setReviewVip(true)}/>}
   <header className="console-header">
-   <a href="/course" id="workspace-tour-course" className="workspace-course-launcher"><BookOpen size={17} aria-hidden="true"/>Course</a>
+   <a href="/course" id="workspace-tour-course" className="workspace-course-launcher"><BookOpen size={17} aria-hidden="true"/>Training course</a>
    <div className="workspace-header-links">
     {!workspaceLocked&&<WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
     <details ref={accountMenu} className="workspace-account-menu" onBlur={event=>{if(event.relatedTarget instanceof Node&&!event.currentTarget.contains(event.relatedTarget))closeAccountMenu();}}>
      <summary id="workspace-tour-menu" aria-label="Account menu" title="Account menu"><Menu size={21} aria-hidden="true"/></summary>
      <div className="workspace-account-options">
+      <a href="/course" onClick={()=>closeAccountMenu()}>Training course</a>
       <SupportLauncher key={account.email??'account'} onMembershipChanged={membershipChanged} onOpen={()=>closeAccountMenu(true)} onClose={()=>accountMenu.current?.querySelector('summary')?.focus()}/>
       {!workspaceLocked&&<button type="button" onClick={()=>{closeAccountMenu(true);setWalkthroughRequest({email:account.email,nonce:Date.now()});}}>Take a walkthrough</button>}
       {account.isBillingOwner&&<><a href="/admin" onClick={()=>closeAccountMenu()}>Admin</a><a href="/admin/accounts" onClick={()=>closeAccountMenu()}>View accounts</a></>}

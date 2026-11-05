@@ -59,17 +59,44 @@ export async function verifyWalkthrough(browser,base,options,name){
   await tour.getByRole('button',{name:'Next',exact:true}).click();await ready('Help is always close.');
   await tour.getByRole('button',{name:'Finish walkthrough',exact:true}).click();await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
   await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');assert.equal(await tour.count(),0);assert.equal(saved.get('new').state,'completed');
+  const courseCard=page.getByRole('region',{name:'Getting started'});
+  await courseCard.getByRole('heading',{name:'Start here: Watch the course.',exact:true}).waitFor();
+  assert.equal(await courseCard.getByRole('link',{name:'Watch course',exact:true}).getAttribute('href'),'/course','Completing the tour keeps the course visible');
+  assert.equal(await page.locator('#workspace-tour-course').innerText(),'Training course');
+  assert.equal(await page.locator('#workspace-tour-course').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(23, 23, 23)');
+  for(const width of [...new Set([options.viewport.width,320])]){
+   await page.setViewportSize({width,height:options.viewport.height});
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Course card and navigation fit narrow screens');
+   const cardBox=await courseCard.boundingBox(),controls=await page.getByRole('region',{name:'Bot controls'}).boundingBox();
+   assert(cardBox.y<controls.y,'Training appears before bot controls');
+   assert((await courseCard.getByRole('link',{name:'Watch course',exact:true}).boundingBox()).height>=44);
+  }
+  await page.setViewportSize(options.viewport);
+  await page.screenshot({path:`/tmp/icash-course-discovery-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:false});
   await page.getByLabel('Account menu',{exact:true}).click();await page.getByRole('button',{name:'Take a walkthrough',exact:true}).click();await ready('First, watch the course.');
   failSave=true;await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.getByText('We couldn’t save your place.',{exact:false}).waitFor();
   failSave=false;await page.getByRole('status').filter({hasText:'We couldn’t save your place.'}).getByRole('button',{name:'Retry',exact:true}).click();await page.getByText('We couldn’t save your place.',{exact:false}).waitFor({state:'hidden'});
   await page.waitForLoadState('networkidle');account='existing';await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.waitForLoadState('networkidle');assert.equal(await tour.count(),0,'Existing users are not forced through a new guide');
+  await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();
+  course={revision:1,state:'in_progress',percent:35};await page.reload();await courseCard.getByRole('link',{name:'Continue course',exact:true}).waitFor();assert.match(await courseCard.innerText(),/35% watched/);
+  course={revision:1,state:'completed',percent:100};await page.reload();await courseCard.getByRole('link',{name:'Revisit course',exact:true}).waitFor();assert.equal(await courseCard.getByText('Start here: Watch the course.',{exact:true}).count(),0);
+  course={revision:2,state:'unrecorded',percent:null};await page.reload();await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();
   account='other-new';await page.reload();await ready('First, watch the course.');
   assert(!saved.has('other-new'),'Another account does not inherit completion');
   await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
   course={revision:1,state:'completed',percent:100};await page.reload();await page.getByRole('button',{name:'Continue walkthrough',exact:true}).click();await ready('Your course is watched.');await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
-  failLoad=true;await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await page.getByLabel('Account menu',{exact:true}).click();await page.getByRole('button',{name:'Take a walkthrough',exact:true}).click();await ready('First, watch the course.');await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');failLoad=false;
+  failLoad=true;await page.reload();await page.getByRole('region',{name:'Bot controls'}).waitFor();await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();assert(!/watched/.test(await courseCard.innerText()),'Unavailable progress never invents recorded viewing');
+  await page.getByLabel('Account menu',{exact:true}).click();assert.equal(await page.locator('.workspace-account-options').getByRole('link',{name:'Training course',exact:true}).getAttribute('href'),'/course');await page.getByRole('button',{name:'Take a walkthrough',exact:true}).click();await ready('First, watch the course.');
+  failSave=true;await tour.getByRole('button',{name:'Watch course',exact:true}).click();await page.waitForURL(base+'/course');
+  // Verify the destination finishes loading before starting the next scenario.
+  // Navigating away immediately can abort its mocked course fetch in WebKit.
+  await page.getByRole('link',{name:'Continue workspace walkthrough',exact:true}).waitFor();
+  await page.waitForLoadState('networkidle');failSave=false;failLoad=false;
+  await page.goto(base+'/');await page.getByRole('region',{name:'Bot controls'}).waitFor();
   locked=true;await page.reload();await page.getByRole('heading',{name:'Renew subscription',exact:true}).waitFor();assert.equal(await tour.count(),0);locked=false;
   acknowledged=false;await page.reload();await page.getByRole('button',{name:'I agree & open workspace',exact:true}).waitFor();assert.equal(await tour.count(),0,'The guide cannot bypass acknowledgment');
+  assert.equal(await page.getByRole('complementary',{name:'Start with the course'}).getByRole('link',{name:'Watch the course →',exact:true}).getAttribute('href'),'/course');
+  assert.equal(await page.getByRole('checkbox').isChecked(),false,'Course discovery never accepts terms');
   assert(writes.every(write=>write.path==='/api/account/walkthrough'),'The tour never funds, runs a bot, accepts terms or records course playback');
   assert.deepEqual(external,[]);assert.deepEqual(errors,[]);
   console.log(`PASS ${name}: first-entry course → tour → dismiss/resume/reload → complete/replay, account isolation, course evidence, saved-progress failure/retry, keyboard and viewport checks. No live work.`);

@@ -19,6 +19,7 @@ export function WorkspaceAcknowledgment({onAccepted,preview=false}:{onAccepted:(
   <span className="workspace-action-required">{preview?'Preview · Action required':'Action required'}</span>
   <h1 id="workspace-ack-title">{workspaceAcknowledgmentTitle}</h1>
   <p className="workspace-ack-intro">Please review this short acknowledgment before opening your workspace.</p>
+  <aside className="workspace-course-start" aria-label="Start with the course"><strong>New to iCash X? Start with the course.</strong><p>Learn how to set up your bot, follow your leads and move deals forward.</p><a href="/course">Watch the course →</a></aside>
   <div className="workspace-ack-terms">{workspaceAcknowledgmentSections.map(section=><section key={section.title}><h2>{section.title}</h2><p>{section.text}</p></section>)}</div>
   <div className="workspace-ack-links"><a href="/costs-and-disclosures" target="_blank" rel="noopener noreferrer">Full costs & disclosures</a><a href="/workspace-terms.txt" download>Save a copy</a></div>
   <label className="workspace-ack-checkbox"><input type="checkbox" checked={agreed} disabled={busy} onChange={e=>setAgreed(e.target.checked)}/><span>{workspaceAcknowledgmentConsent}</span></label>
