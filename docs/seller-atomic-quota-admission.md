@@ -2,8 +2,10 @@
 
 Initially prepared against main `71d0bf349dcef1f6db8cdd6d3c6a019976c000a7`,
 then rebased onto `3a66400111d74baac28f2cefc3adbdd0e218ff2f` with the support
-release preserved. Migration `20261105131617` was generated with Supabase CLI
-3.0.0; its SQL exactly matches the configuration file.
+release preserved. Migration was generated with Supabase CLI 3.0.0 and its SQL
+exactly matches the configuration file. After the one guarded production apply,
+the filename was aligned to the observed ledger version `20261105134032`; no
+ledger row was rewritten and the SQL was not reapplied.
 
 The minute worker invokes ordinary seller intake and shared research refresh even
 when neither has eligible work. Previously each took anonymous DealMachine quota
@@ -35,7 +37,7 @@ address path retains its separate quota admission and original zero-cost receipt
 No quota counters, windows, 60/minute or 9,800/rolling-day limits, 980-request starter
 reserve, financial balances, receipts or historical holds are rewritten. Admitted
 ordinary requests remain anonymous, as before; no ledger attribution or credit
-reconstruction is claimed. No provider requests or production writes were made.
+reconstruction is claimed. No provider requests or historical-data corrections are part of this change.
 
 ## Offline verification
 
@@ -97,8 +99,8 @@ remain covered by their existing suites.
 
 The same fixture passed offline validation with 149 rejection cases and six
 successful/duplicate paths, actual quota denials, post-quota rollback, original
-owner-demo one-use and private ACL checks. Native execution is still pending CI;
-PGlite does not establish lock behavior. Native scenarios include simultaneous
+owner-demo one-use and private ACL checks. The first exact-tree native CI run passed on November 5, 2026 at 13:24:30 UTC;
+PGlite alone does not establish lock behavior. Native scenarios include simultaneous
 seller/targeted/refresh/Meta claims, the last ordinary slot, immediate row/table
 NOWAIT refusal without debit, fresh retries after Pause/source/expiry changes,
 elapsed expiry, original control serialization, owner-demo competition and
@@ -109,10 +111,35 @@ The new names require database-before-application rollout after authorization.
 Missing RPCs fail closed, never fall back to separate claims. Old application
 instances still burn idle admissions until replaced; do not claim fixed before
 both web/worker versions and database definitions match. A web rollback can resume
-the old waste but must not change counters. No activation was attempted.
+the old waste but must not change counters. Database installation is recorded below; application rollout remains pending.
 
 Cloned bodies must be reviewed/rebased whenever a predecessor changes. Future
 changes to seller/refresh/Meta eligibility must update the corresponding admitted
 versions, not just old RPCs. Confirm exact predecessor hashes and current main/open
 work again before release. Independent review is required; earlier review caught
 and corrected a Meta adapter mismatch before publication.
+
+## Verified release progress, November 5, 2026
+
+PR #583 head `36a6210b6b88f2eea15c7b93ab074e689271cd2a` passed all five
+Reliability jobs in run 42035279739: all-tests, verify (normal production build
+and browser tests), database-contention, dependency-audit and
+seller-quota-contention. The tested merge ref and candidate have identical tree
+`6be8ec257c88a1cd6922bb2e23ee6b66d5ff77b7`. Independent review verified the
+native logs, full-predicate fixture and final concurrency scenarios.
+
+After fresh prerequisite and existing-release checks, the exact SQL was applied
+once at 13:40:32 UTC, recording ledger version `20261105134032`. Read-only
+comparison confirmed all three clone bodies exactly match the intended source
+transformations, and the untargeted wrapper matches its reviewed definition. All
+four entrypoints remain security invoker with an empty search path, executable
+by service_role and not by anon/authenticated. Original predecessor hashes are
+unchanged. No live claim RPC was invoked as a test.
+
+The repository filename and hardcoded test reference now match that observed
+ledger version. This amended head must pass full/native CI again before manual
+merge, and its exact main-push checks and web/worker rollout must pass before
+calling the repair live. The PR stays outside automatic release ownership (no
+auto-release label). Dormant installed clones do not stop older application
+instances from wasting idle admissions. Today's exhausted quota is not reset;
+actual productive recovery still depends on normal capacity availability.

@@ -21,7 +21,7 @@ try{
  const meta=read('config/meta-instant-leads.sql');
  await pg.exec(meta.slice(meta.indexOf('create function public.icash_meta_claim_lookup('),meta.indexOf('-- New service-only entrypoints')));
  const original=await val("select pg_get_functiondef('icash_claim_seller_lookup_for(uuid)'::regprocedure)");
- const sql=read('config/seller-atomic-quota-admission.sql');assert.equal(sql,read('supabase/migrations/20261105131617_seller_atomic_quota_admission.sql'));await pg.exec(sql);
+ const sql=read('config/seller-atomic-quota-admission.sql');assert.equal(sql,read('supabase/migrations/20261105134032_seller_atomic_quota_admission.sql'));await pg.exec(sql);
  assert.equal(await val("select pg_get_functiondef('icash_claim_seller_lookup_for(uuid)'::regprocedure)"),original,'old demo/Meta entrypoint untouched');
  for(const signature of ['icash_claim_seller_lookup_admitted_for(uuid)','icash_claim_seller_lookup_admitted()','icash_claim_seller_research_refresh_admitted()','icash_meta_claim_lookup_admitted(uuid)']){
   for(const role of ['anon','authenticated'])assert.equal(await val("select has_function_privilege($1,$2,'EXECUTE')",[role,signature]),false);
