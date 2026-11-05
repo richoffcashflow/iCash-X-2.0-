@@ -7,6 +7,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',uid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const pg=await PGlite.create(),q=(s,a=[])=>pg.query(s,a),one=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 try{
+ // Date-only evidence uses the report's Chicago business date across UTC midnight.
  await pg.exec(`create role anon;create role authenticated;create role service_role;
  create table icash_accounts(id uuid primary key,owner_user_id uuid);
  create table icash_funding_orders(account_id uuid,mode text,state text);
@@ -14,8 +15,8 @@ try{
  create table icash_signing_envelopes(id uuid primary key,account_id uuid,deal_id uuid,kind text,test_mode boolean,provider_id text,state text,terms_hash text,recipients jsonb,provider_evidence jsonb,created_at timestamptz default now()-interval '1 day',updated_at timestamptz default now()-interval '4 hours');
  create index icash_signing_account on icash_signing_envelopes(account_id,deal_id);
  create table icash_title_replies(id uuid primary key,account_id uuid,deal_id uuid,sender_verified boolean,received_at timestamptz default now()-interval '3 hours');
- create table icash_closing_updates(id uuid primary key,account_id uuid,deal_id uuid,reply_id uuid,kind text,created_at timestamptz default now()-interval '2 hours',effective_date date default current_date,confirmed_by uuid,confirmation_source text,amount_cents bigint);
- create table icash_proceeds_receipts(id uuid primary key,account_id uuid,deal_id uuid,closing_update_id uuid,amount_cents bigint,received_date date default current_date,confirmed_by uuid,created_at timestamptz default now()-interval '1 hour');`);
+ create table icash_closing_updates(id uuid primary key,account_id uuid,deal_id uuid,reply_id uuid,kind text,created_at timestamptz default now()-interval '2 hours',effective_date date default (now() at time zone 'America/Chicago')::date,confirmed_by uuid,confirmation_source text,amount_cents bigint);
+ create table icash_proceeds_receipts(id uuid primary key,account_id uuid,deal_id uuid,closing_update_id uuid,amount_cents bigint,received_date date default (now() at time zone 'America/Chicago')::date,confirmed_by uuid,created_at timestamptz default now()-interval '1 hour');`);
  const verifier=read('config/platform-shared-learning.sql').match(/create function public\.icash_learning_signature_verified[\s\S]*?end \$\$;/)?.[0];
  assert(verifier,'Use the actual signature verifier, including provider/envelope/terms/recipient matching');await pg.exec(verifier);
  const migration=read('config/owner-deal-outcomes.sql');
