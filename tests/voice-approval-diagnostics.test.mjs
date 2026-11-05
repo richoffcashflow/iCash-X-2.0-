@@ -55,7 +55,15 @@ for(const key of ['secret_payload','api_key','token_private','authorization','pa
  const result=createVoiceApprovalDiagnostics(()=>0)(approval,a);assert.equal(result.checkedCandidates,64);assert.equal(result.bounded,true);
  let clock=0;const timed=createVoiceApprovalDiagnostics(()=>clock+=751)(approval,a);assert.equal(timed.checkedCandidates,0);assert.equal(timed.bounded,true);
 }
-for(const mutate of [a=>a.cycle=a,a=>a.conversation_config.agent.prompt.prompt='x'.repeat(65537),a=>{let p=a;for(let i=0;i<20;i++)p=p.deep={};}]){
+{
+ const a=fixture();let node=a.conversation_config.agent.prompt;for(let i=0;i<16;i++)node=node.schema={};
+ const approval=review(a);a.platform_settings.privacy.new_disabled_feature=false;
+ assert.equal(createVoiceApprovalDiagnostics()(approval,a).matchingRemovalPath,'platform_settings.privacy.new_disabled_feature','ordinary deep provider tool schemas remain diagnosable');
+ assert.equal(recordingAgentMatches(approval,a),false,'observation never approves drift');
+ const observed=createVoiceApprovalDiagnostics()(approval,{...a,metadata:{cycle:a}});
+ assert.equal(observed.observedHash,hash(a),'unreviewed response metadata is outside the exact configuration projection');
+}
+for(const mutate of [a=>a.conversation_config.cycle=a,a=>a.conversation_config.agent.prompt.prompt='x'.repeat(262145),a=>{let p=a.conversation_config;for(let i=0;i<40;i++)p=p.deep={};},a=>{a.conversation_config.many=Array(6001).fill(null);}]){
  const a=fixture(),approval=review(a);mutate(a);const result=createVoiceApprovalDiagnostics()(approval,a);assert.equal(result.observedHash,null);assert.equal(result.bounded,true);assert.equal(result.checkedCandidates,0);
 }
 const dispatch=readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8');
