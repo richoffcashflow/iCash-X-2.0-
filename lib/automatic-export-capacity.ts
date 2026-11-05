@@ -1,7 +1,7 @@
 import {finishAdmittedDealMachineRequest,type ResearchDb} from './dealmachine-request.ts';
 
 type Probe='inventory'|'pending'|'processing';
-type Receipt={httpStatus:number|null;raw:unknown;rawText:string;headers?:{minuteRemaining:number|null;dayRemaining:number|null};outcome?:string};
+type Receipt={httpStatus:number|null;raw:unknown;rawText:string;headers?:{minuteRemaining:number|null;dayRemaining:number|null;date:string|null;age:string|null};outcome?:string};
 async function saveProbe(db:ResearchDb,reviewId:string,probe:Probe,receipt:Receipt){
  // Only the identical evidence write may be retried after acknowledgment loss.
  for(let attempt=0;attempt<2;attempt++)try{
@@ -15,7 +15,11 @@ async function readReceipt(response:Response):Promise<Receipt>{
  try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576)throw Error('CAPACITY_BODY_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>null);}
  const rawText=Buffer.concat(chunks).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
  const number=(name:string)=>{const value=response.headers.get(name);return value!==null&&/^\d{1,10}$/.test(value)?Number(value):null;};
- return {httpStatus:response.status,raw,rawText,headers:{minuteRemaining:number('X-RateLimit-Remaining'),dayRemaining:number('X-RateLimit-Day-Remaining')}};
+ // Retain original provider freshness evidence for database validation. Never
+ // replace a missing Date with our clock or an invalid Age with an absent one.
+ const date=response.headers.get('Date'),age=response.headers.get('Age');
+ if((date!==null&&date.length>128)||(age!==null&&age.length>32))throw Error('CAPACITY_HEADERS_TOO_LARGE');
+ return {httpStatus:response.status,raw,rawText,headers:{minuteRemaining:number('X-RateLimit-Remaining'),dayRemaining:number('X-RateLimit-Day-Remaining'),date,age}};
 }
 
 /** Three quota-bound FREE reads. Status filters cover an arbitrarily long export
@@ -35,7 +39,7 @@ export async function recoverAutomaticOwnerExportCapacity(db:ResearchDb,transpor
    try{
     await finishAdmittedDealMachineRequest(db,requestId,async()=>{
      const response=await transport('https://api.v2.dealmachine.com/v1/exports?limit=100&offset=0'+(probe==='inventory'?'':`&status=${probe}`),{
-      method:'GET',headers:{Authorization:`Bearer ${env.DEALMACHINE_API_KEY}`},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(15000)]),
+      method:'GET',headers:{Authorization:`Bearer ${env.DEALMACHINE_API_KEY}`,'Cache-Control':'no-cache, max-age=0'},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(15000)]),
      });
      received=await readReceipt(response);
      saved=await saveProbe(db,claim.reviewId,probe,received);

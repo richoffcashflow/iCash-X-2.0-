@@ -111,6 +111,8 @@ jobs:
         run: python3 scripts/test-seller-progress-postgres.py
       - name: Verify automatic export recovery under concurrent transactions
         run: python3 scripts/test-automatic-export-postgres.py
+      - name: Verify unknown export capacity isolation under concurrent transactions
+        run: python3 scripts/test-unknown-export-postgres.py
       - name: Verify indexed owner evidence under concurrent reads
         run: python3 scripts/test-owner-evidence-postgres.py
       - name: Verify account recovery skips busy dispatch without deadlock
@@ -127,6 +129,8 @@ jobs:
         run: python3 scripts/test-acquisition-settlement-isolation-postgres.py
       - name: Verify bounded acquisition aging across shared export waits
         run: python3 scripts/test-export-capacity-wait-fairness-postgres.py
+      - name: Verify phone inventory buffer under concurrent claim changes
+        run: python3 scripts/test-phone-inventory-buffer-postgres.py
       - name: Verify settled billing entries cannot starve receipt recovery
         run: python3 scripts/test-outbound-billing-drain-postgres.py
   dependency-audit:
