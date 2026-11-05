@@ -4,7 +4,7 @@ import {collectSupportQuality,type QualityScope} from '@/lib/support-quality';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'private, no-store'};
-export async function GET(request?:Request){
+export async function GET(request:Request){
  try{await requireTrustedOperator();const params=new URL(request?.url??'https://localhost/api/support/admin/quality').searchParams;
   const scope=params.get('scope')??'unresolved';if(!['unresolved','recent'].includes(scope))throw Error('Invalid support quality scope');
   return Response.json(await collectSupportQuality(db,new Date(),{scope:scope as QualityScope,cursor:params.get('cursor')??undefined}),{headers});}
