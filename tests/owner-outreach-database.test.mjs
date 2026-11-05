@@ -4,6 +4,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {validOwnerOutreach} from '../lib/owner-outreach.ts';
 import {acquisitionOpeners} from '../lib/deal-conversation.ts';
 import {installInterestEvidence} from './helpers/interest-evidence-fixture.mjs';
+import {verifyOutreachProjection} from './helpers/owner-outreach-projection-fixture.mjs';
 const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const sql=read('config/owner-outreach-report.sql'),owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
 assert.equal(sql,read('supabase/migrations/20261019202647_owner_outreach_report.sql'));
@@ -157,5 +158,6 @@ try{
   const saved=(await db.query("select result from icash_live_conversations where id=md5('c1')::uuid")).rows[0].result;
   assert.deepEqual(saved,original,'Read-only reporting leaves historical provider evidence intact');
  }
+ await verifyOutreachProjection(db,owner);
  console.log('PASS owner outreach database: actual receipts, response/interest/opt-out semantics, dispatch versus draft dates, source/tenant bindings, owner/test exclusion, current queues, filtering before pagination, read-only execution and private ACL.');
 }finally{await db.close();}
