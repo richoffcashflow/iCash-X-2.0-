@@ -19,6 +19,8 @@ Concurrent clicks produce one claim. Successful audio never regenerates. A timed
 - `tests/custom-voice-preview-browser.mjs` exercises desktop/mobile playback using a locally generated tone, cached replay/reopen, concurrent preparation and VIP visibility. No customer recording or paid provider test is used.
 - Existing custom-voice selection and inbound/outbound fixtures remain unchanged; playback calls neither call dispatcher.
 
-Install the additive migration `20261105042311_custom_voice_preview.sql` before releasing the endpoint, verify its service-only ACLs, then use the normal exact-commit Reliability/production gates. The existing ElevenLabs connection needs text-to-speech permission; exact-history recovery additionally uses its history read permission. A missing provider permission produces a recoverable rejection, without touching calls or customer funds. There is no provider billing-plan or overage change.
+Install the additive migration `20261105043039_custom_voice_preview.sql` before releasing the endpoint, verify its service-only ACLs, then use the normal exact-commit Reliability/production gates. The existing ElevenLabs connection needs text-to-speech permission; exact-history recovery additionally uses its history read permission. A missing provider permission produces a recoverable rejection, without touching calls or customer funds. There is no provider billing-plan or overage change.
 
 Rollback is the ordinary code rollback. Retain preview records and provider receipts; do not clear claims to force regeneration.
+
+Production schema verification: migration `20261105043039` was applied before application release. RLS is enabled; anonymous/authenticated roles cannot read preview audio or execute generation claims; service-role access is present. The cache was empty at installation and no provider generation was performed.
