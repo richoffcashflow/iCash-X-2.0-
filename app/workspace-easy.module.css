@@ -231,7 +231,9 @@
 .workspace.workspace.workspace :global(.console-header img){width:138px;height:74px}
 .workspace.workspace.workspace :global(.brand-version){font-size:19px;font-weight:750;letter-spacing:0;color:#111}
 .workspace.workspace.workspace :global(.console-main){max-width:1360px;padding:0 40px 32px;margin:0 auto}
-.workspace.workspace.workspace :global(.workspace-course-launcher){font-size:15px;color:#111;gap:10px}
+.workspace.workspace.workspace :global(.workspace-course-launcher){font-size:15px;color:#fff;background:#171717;font-weight:650;gap:10px;padding:10px 14px}
+.workspace.workspace.workspace :global(.workspace-course-launcher:hover){background:#333;color:#fff}
+.workspace.workspace.workspace :global(.workspace-course-launcher:focus-visible){outline:2px solid #171717;outline-offset:4px}
 .workspace.workspace.workspace :global(.workspace-account-menu>summary){background:#f5f5f5;border-radius:50%;color:#171717;width:48px;height:48px}
 .workspace.workspace.workspace :global(.workspace-vip-banner){grid-template-columns:34px minmax(0,1fr) auto;gap:16px;padding:12px 20px;margin:0 0 20px;border:1px solid #ead49e;border-radius:13px;background:linear-gradient(110deg,#f8e6bd,#f7e5ba 46%,#e5c388);color:#201b11}
 .workspace.workspace.workspace :global(.vip-banner-icon){width:34px;height:34px;background:none;border:0;border-radius:0;color:#a07a35}
