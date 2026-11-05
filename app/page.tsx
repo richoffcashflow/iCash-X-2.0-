@@ -1,4 +1,5 @@
 'use client';
+import type {AssistantPropertyRequest} from '@/lib/workspace-assistant-coach';
 import {useCallback,useEffect,useState,useRef,type CSSProperties} from 'react';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import dynamic from 'next/dynamic';
@@ -60,7 +61,7 @@ export default function Home(){
  const [assistantOpenRequest,setAssistantOpenRequest]=useState(0);
  const [assistantAccount,setAssistantAccount]=useState<string|null>(null);
  const [fundingSuggestion,setFundingSuggestion]=useState<{amountCents:number;reason:string}|null>(null);
- const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<{id:string;nonce:number}|null>(null);
+ const [assistantRequest,setAssistantRequest]=useState<AssistantRequest|null>(null),[propertyRequest,setPropertyRequest]=useState<AssistantPropertyRequest|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false),[preferencesOpen,setPreferencesOpen]=useState(false);
  const [cancellationOpen,setCancellationOpen]=useState(false);
  const accountMenu=useRef<HTMLDetailsElement>(null);
@@ -150,9 +151,9 @@ export default function Home(){
  }
  async function assistantAction(action:AssistantAction){
   if(action.kind==='funding'){openFunding();return;}
-  if(creditsExhausted&&action.kind!=='pause'&&action.kind!=='support'){openFunding();return;}
+  if(creditsExhausted&&action.kind==='resume'){openFunding();return;}
   if(action.kind==='pause'||action.kind==='resume'){if(!await toggleBot(action.kind))throw Error('Could not confirm the bot update. Please check its status above.');return;}
-  if(action.kind==='property'&&action.screeningId){setPropertyRequest({id:action.screeningId,nonce:Date.now()});return;}
+  if(action.kind==='property'&&action.screeningId){const nonce=Date.now();setPropertyRequest({id:action.screeningId,nonce,target:action.target,threadId:action.threadId,draft:action.draft?{...action.draft,nonce}:undefined});return;}
   if(action.kind==='attention'){const section=document.getElementById('workspace-attention');if(section){if(section instanceof HTMLDetailsElement)section.open=true;section.scrollIntoView({behavior:'smooth',block:'center'});section.focus();}else throw Error('The request list is refreshing. Check Needs you in a moment.');return;}
   if(action.kind==='support')window.location.assign('/support');
  }

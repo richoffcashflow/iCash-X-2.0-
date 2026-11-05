@@ -1,4 +1,5 @@
 'use client';
+import type {AssistantDraft} from '@/lib/workspace-assistant-coach';
 import {PrivatePhone} from '@/components/owner-phone-privacy';
 import {notifyWorkspaceChanges,subscribeWorkspaceChanges} from '@/lib/workspace-events-client';
 import {Fragment,useEffect,useRef,useState} from 'react';
@@ -12,7 +13,7 @@ import {messageSpeaker,safeLocalTime} from './workspace-view';
 type Thread={reply?:{preview:string;received_at:string;unread_count:number}|null;id:string;recipient:string;paused:boolean;manualReply?:boolean;sendReason?:string|null;name?:string;party?:string};
 type Message={author?:'bot'|'you'|'contact';id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;retryKey?:string|null;attachments?:{url:string;filename?:string}[]};
 type Data={threads:Thread[];messages:Message[];firstMessage?:Message|null;calls?:ConversationCall[];callsUnavailable?:boolean;receipt?:TextReceipt|null;threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
-export function DealMessages({dealId,initialThreadId='',contactNames={},active=true,onTakeover,historyOnly=false}:{dealId:string;historyOnly?:boolean;initialThreadId?:string;contactNames?:Record<string,string>;active?:boolean;onTakeover?:()=>void}){
+export function DealMessages({draftRequest,dealId,initialThreadId='',contactNames={},active=true,onTakeover,historyOnly=false}:{draftRequest?:AssistantDraft;dealId:string;historyOnly?:boolean;initialThreadId?:string;contactNames?:Record<string,string>;active?:boolean;onTakeover?:()=>void}){
  const [data,setData]=useState<(Data&{scope:string})|null>(null),[error,setError]=useState(''),[threadId,setThreadId]=useState(initialThreadId),[afterThread,setAfterThread]=useState(''),[page,setPage]=useState<{before:string;beforeId:string}|null>(null),[refresh,setRefresh]=useState(0),[drafts,setDrafts]=useState<Record<string,string>>({});
  const [includeCalls,setIncludeCalls]=useState(false);
  const container=useRef<HTMLDivElement>(null);
@@ -20,7 +21,7 @@ export function DealMessages({dealId,initialThreadId='',contactNames={},active=t
  const attempts=useRef<Record<string,SendAttempt>>({});
  const selectedThread=useRef(initialThreadId);
  useEffect(()=>{if(initialThreadId){setThreadId(initialThreadId);setPage(null);setAfterThread('');}},[initialThreadId]);
- const scope=JSON.stringify([dealId,threadId,afterThread,page]);
+ const scope=JSON.stringify([dealId,threadId,afterThread,page,draftRequest?.nonce??0]);
  useEffect(()=>{if(!Object.values(drafts).some(d=>d.trim()))return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[drafts]);
  useEffect(()=>{
   if(!active)return;const controller=new AbortController(),cadence=createPollCadence();let inFlight=false,timer:ReturnType<typeof setTimeout>|undefined,delay=5000;
@@ -57,6 +58,14 @@ export function DealMessages({dealId,initialThreadId='',contactNames={},active=t
   schedule();document.addEventListener('visibilitychange',schedule);log.addEventListener('scroll',schedule);window.addEventListener('resize',schedule);
   return()=>{clearTimeout(timer);document.removeEventListener('visibilitychange',schedule);log.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
  },[active,current,data,scope,error]);
+ const handledSuggestion=useRef(0);
+ const [suggestion,setSuggestion]=useState<AssistantDraft|null>(null);
+ useEffect(()=>{if(!draftRequest||draftRequest.nonce===handledSuggestion.current||!active||historyOnly||!current||current.id!==draftRequest.threadId||data?.scope!==scope||error)return;
+  handledSuggestion.current=draftRequest.nonce;
+  const unchanged=(data.messages[0]?.id??null)===draftRequest.latestMessageId;
+  if(unchanged&&!drafts[current.id]?.trim()&&!attempts.current[current.id]?.held&&!attempts.current[current.id]?.busy){setDrafts(d=>({...d,[current.id]:draftRequest.body}));setSuggestion(null);}
+  else setSuggestion(draftRequest);
+ },[draftRequest,active,historyOnly,current,data,scope,error,drafts]);
  const firstMessage=data?.scope===scope&&data.firstMessage&&!data.messages.some(m=>m.id===data.firstMessage!.id)?data.firstMessage:null;
  function choose(id:string){setThreadId(id);setPage(null);setError('');}
  return <div ref={container} className="deal-texts" data-unsaved-draft={Object.values(drafts).some(d=>d.trim())?'true':undefined}>
@@ -65,6 +74,7 @@ export function DealMessages({dealId,initialThreadId='',contactNames={},active=t
  <div className={`conversation-inbox${data?.threads.length===1&&!data.nextThread&&!afterThread?' single-contact':''}`}>
  {!!data?.threads.length&&(data.threads.length>1||data.nextThread||afterThread)&&<aside className="conversation-contacts" aria-label="Text contacts"><div className="conversation-contacts-title">Contacts</div>{data.threads.map(t=><button type="button" key={t.id} aria-pressed={(threadId||data.threadId)===t.id} onClick={()=>choose(t.id)}><span className="conversation-contact-avatar">{t.party==='buyer'?'B':'S'}</span><span><strong>{contactNames[t.recipient]??(t.party==='buyer'?'Buyer':'Seller')}</strong><small><PrivatePhone>{t.recipient}</PrivatePhone></small>{t.reply&&<><span className="conversation-contact-preview">{t.reply.preview||'Sent an attachment'}</span>{t.reply.unread_count>0&&<b className="text-unread-count">{t.reply.unread_count}</b>}</>}{drafts[t.id]?.trim()&&<em>Draft saved</em>}</span></button>)}<div className="history-pages">{afterThread&&<button onClick={()=>{setAfterThread('');setThreadId('');setPage(null);setData(null);}}>First contacts</button>}{data.nextThread&&<button onClick={()=>{setAfterThread(data.nextThread!);setThreadId('');setPage(null);setData(null);}}>More contacts</button>}</div></aside>}
  <div className="conversation-thread-pane">
+ {suggestion&&current?.id===suggestion.threadId&&<section className="assistant-draft-review" aria-label="Suggested reply"><strong>Review your suggested reply</strong><p>The conversation changed or you already have a draft. Read the latest messages before using this suggestion.</p><blockquote>{suggestion.body}</blockquote><button type="button" disabled={!!error||!active||!!attempts.current[current.id]?.busy||!!attempts.current[current.id]?.held} onClick={()=>{if(drafts[current.id]?.trim()&&!window.confirm('Replace your unsent draft with this suggested reply?'))return;setDrafts(d=>({...d,[current.id]:suggestion.body}));setSuggestion(null);}}>Use suggested reply</button><button type="button" onClick={()=>setSuggestion(null)}>Keep my draft</button></section>}
  {!current&&!error&&(!data||data.scope!==scope)&&<p className="conversation-loading" role="status">Loading conversation…</p>}
  {current&&<><div className="conversation-thread-heading"><div><strong>{contactNames[current.recipient]??(current.party==='buyer'?'Buyer':'Seller')}</strong><span><PrivatePhone>{current.recipient}</PrivatePhone></span></div><label className="conversation-call-toggle"><input type="checkbox" checked={includeCalls} onChange={e=>setIncludeCalls(e.target.checked)}/>Include calls</label></div><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest activity</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older messages</button>}</div><Conversation firstMessage={firstMessage} historyOnly={historyOnly} calls={active&&includeCalls?(data?.calls??[]).filter(c=>!c.voicemail):[]} callsUnavailable={includeCalls&&(data?.callsUnavailable??false)} onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} thread={current} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
  </div></div>
