@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 5, 2026 the owner requested 80% of Business voice capacity: 32 total calls, thirty outgoing and two incoming. Install the separate one-use provider change disabled; enable only after exact-main web and worker verification. Keep daily allowance, billing, provider burst mode, prompts, contact/credit holds and prior receipts unchanged. See docs/eighty-percent-voice-capacity.md.
+
 - On November 5, 2026 the owner supplied the course transcript and requested efficient automatic seller-to-buyer-to-title follow-through. Use anonymized scenario replays, preserve source-backed acceptance and exact accepted signing terms, and isolate prior title holds from unrelated deals. A late provider failure must not reopen a canceled task. Course demonstrations are requirements examples, not proof of live customer results; retain actual signature, deposit, title and proceeds evidence. See docs/course-funnel-reliability-2026-11-05.md.
 
 - On November 5, 2026 the owner requested removing the course prompt after a user opens the course. Persist account-bound course discovery separately from actual playback. Hide the reminder and automatic walkthrough after discovery or recorded playback; preserve permanent Training course links and explicit walkthrough replay. Opening a course never marks it watched, accepts terms or starts work. See docs/workspace-guidance-and-course.md.

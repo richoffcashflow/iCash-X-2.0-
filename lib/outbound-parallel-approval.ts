@@ -16,3 +16,13 @@ export const outboundProApproval=Object.freeze({
  previousLimit:8,limit:18,workspaceLimit:20,
  previousDailyLimit:100,dailyLimit:1000,
 });
+
+/** Owner requested 80% of the forty-call Business capacity on 2026-11-05.
+ * Thirty outgoing calls plus two incoming; daily allowance stays unchanged. */
+export const outboundEightyPercentApproval=Object.freeze({
+ agentId:outboundParallelApproval.agentId,
+ branchId:outboundParallelApproval.branchId,
+ versionId:outboundParallelApproval.versionId,
+ previousLimit:18,limit:30,workspaceLimit:32,
+ previousDailyLimit:1000,dailyLimit:1000,
+});
