@@ -24,12 +24,12 @@ def run():
     sql('revoke all on function icash_pending_opportunity_count(uuid) from public,anon,authenticated;grant execute on function icash_pending_opportunity_count(uuid),icash_operational_phone(text),icash_owner_preflight_empty(uuid,uuid,jsonb) to service_role;grant usage on schema public to service_role;grant select on all tables in schema public to service_role;')
     assert sql(COUNT) == '25'
     before = sql('select fixture_phone_evidence();')
-    metadata = sql("select proacl::text||':'||provolatile||':'||prosecdef::text from pg_proc where oid='icash_pending_opportunity_count(uuid)'::regprocedure;")
+    metadata = sql("select proacl::text||':'||provolatile::text||':'||prosecdef::text from pg_proc where oid='icash_pending_opportunity_count(uuid)'::regprocedure;")
     sql(read('config/phone-inventory-opportunity-buffer.sql'))
     assert sql(COUNT) == '11'
     assert sql('set role service_role;begin read only;'+COUNT+'commit;') == '11'
     assert sql('select fixture_phone_evidence();') == before
-    assert sql("select proacl::text||':'||provolatile||':'||prosecdef::text from pg_proc where oid='icash_pending_opportunity_count(uuid)'::regprocedure;") == metadata
+    assert sql("select proacl::text||':'||provolatile::text||':'||prosecdef::text from pg_proc where oid='icash_pending_opportunity_count(uuid)'::regprocedure;") == metadata
     for role in ('anon', 'authenticated'):
         assert sql(f"select has_function_privilege('{role}','icash_pending_opportunity_count(uuid)','execute');") == 'f'
     with ThreadPoolExecutor(max_workers=8) as pool:
