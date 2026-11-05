@@ -12,6 +12,9 @@ export async function GET(req:Request){
  const headers={'Cache-Control':'no-store'};
  if(!authorizeOutboundBilling(req,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
  const ownerDelivery=await processOwnerBuyerDelivery({db,dispatch:dispatchTextMessage},process.env).catch(()=>({status:'owner_delivery_needs_review'}));
- try{return Response.json({...await processDealJourneys({db,send:sendForSignatures,text:textPendingContract,dispatch:dispatchTextMessage,title:coordinateTitleOpening},process.env),ownerDelivery},{headers});}
+ try{
+  const result=await processDealJourneys({db,send:sendForSignatures,text:textPendingContract,dispatch:dispatchTextMessage,title:coordinateTitleOpening},process.env);
+  return Response.json({...result,ownerDelivery},{status:result.status==='journey_processing_needs_review'||ownerDelivery.status==='owner_delivery_needs_review'?503:200,headers});
+ }
  catch{return Response.json({status:'journey_processing_needs_review'},{status:503,headers});}
 }
