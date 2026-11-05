@@ -1,5 +1,13 @@
 # Continuous reliability
 
+The November 4 custom-voice preview stores a short, private sample for repeated
+playback without customer-credit usage. The actual SQL/service/route fixture
+covers account and VIP isolation, zero-balance playback, one-use generation,
+unknown outcomes and exact-history recovery. Native concurrent-click and
+desktop/mobile audio scenarios run in Reliability checks. No calls, live-voice
+selection changes or paid development demonstrations are required; see
+`custom-voice-preview.md` for rollout and retained provider receipts.
+
 The November 4 failure-isolation repair separates a known failed research job
 from a failed worker. The automation API keeps its failed HTTP outcome, original
 held ticket and operator diagnostics. Only an allowlisted provider/receipt

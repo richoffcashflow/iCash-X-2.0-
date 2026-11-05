@@ -18,6 +18,7 @@ import {verifyConversationInbox} from './conversation-inbox-browser.mjs';
 import {verifyCloseConversions} from './close-conversion-browser.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyWorkspaceLayout} from './workspace-layout-browser.mjs';
+import {verifyCustomVoicePreview} from './custom-voice-preview-browser.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
 import {verifyLegacyTrial} from './legacy-trial-browser.mjs';
@@ -92,6 +93,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='close-conversion'){await verifyCloseConversions(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace-layout'){await verifyWorkspaceLayout(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='custom-voice-preview'){await verifyCustomVoicePreview(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='support-coaching'){await verifySupportCoaching(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='walkthrough'){await verifyWalkthrough(browser,base,options,name);continue;}
@@ -110,6 +112,7 @@ try{
    await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);
    await verifyTargeting(browser,base,options,name,fixtureCookies,fixture);
    await verifyCloseConversions(browser,base,options,name);
+   await verifyCustomVoicePreview(browser,base,options,name);
    await verifyOwnerAccounts(browser,base,options,name,fixtureCookies);
    await verifyOwnerOutreach(browser,base,options,name,fixtureCookies,fixture);
    await verifyWalkthrough(browser,base,options,name);

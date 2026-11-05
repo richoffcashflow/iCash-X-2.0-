@@ -6,9 +6,33 @@ type VoiceState={state:string;enabled:boolean;vip:boolean};
 export function VipCustomVoice(){
  const fileInput=useRef<HTMLInputElement>(null),consentInput=useRef<HTMLInputElement>(null),inputId=useId(),hintId=useId();
  const [voice,setVoice]=useState<VoiceState|null>(null),[file,setFile]=useState<File|null>(null),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[sampleUrl,setSampleUrl]=useState('');const lock=useRef(false);
+ const [previewUrl,setPreviewUrl]=useState(''),[previewBusy,setPreviewBusy]=useState(false),[previewError,setPreviewError]=useState('');
+ const previewAudio=useRef<HTMLAudioElement>(null),previewObjectUrl=useRef(''),previewRequest=useRef<AbortController|null>(null);
  async function refresh(){const r=await fetch('/api/account/custom-voice',{cache:'no-store',signal:AbortSignal.timeout(30000)}),data=await r.json();if(!r.ok)throw Error(data.error);setVoice(data);}
  useEffect(()=>{let live=true;void fetch('/api/account/custom-voice',{cache:'no-store',signal:AbortSignal.timeout(30000)}).then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error);if(live)setVoice(data);}).catch(()=>{if(live)setError('Could not load your voice. Tap Refresh.');});return ()=>{live=false;};},[]);
  useEffect(()=>{if(!file){setSampleUrl('');return;}const url=URL.createObjectURL(file);setSampleUrl(url);return ()=>URL.revokeObjectURL(url);},[file]);
+ useEffect(()=>()=>{previewRequest.current?.abort();if(previewObjectUrl.current)URL.revokeObjectURL(previewObjectUrl.current);},[]);
+ useEffect(()=>{if(previewUrl)void previewAudio.current?.play().catch(()=>{/* Native controls remain available when autoplay is blocked. */});},[previewUrl]);
+ useEffect(()=>{if(voice&&(!voice.vip||voice.state!=='ready')){previewRequest.current?.abort();previewAudio.current?.pause();if(previewObjectUrl.current)URL.revokeObjectURL(previewObjectUrl.current);previewObjectUrl.current='';setPreviewUrl('');}},[voice]);
+ async function playPreview(){
+  if(lock.current)return;
+  setPreviewError('');
+  if(previewUrl&&previewAudio.current){previewAudio.current.currentTime=0;try{await previewAudio.current.play();}catch{setPreviewError('Tap play on the audio player to hear your voice.');}return;}
+  lock.current=true;setBusy(true);setPreviewBusy(true);
+  const controller=new AbortController();previewRequest.current=controller;
+  const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(110000)]);
+  const read=()=>fetch('/api/account/custom-voice/preview',{cache:'no-store',signal});
+  try{
+   let response=await read();
+   if(response.status===404||response.status===409)response=await fetch('/api/account/custom-voice/preview',{method:'POST',cache:'no-store',signal});
+   for(let i=0;response.status===202&&i<15;i++){await new Promise(resolve=>setTimeout(resolve,2000));signal.throwIfAborted();response=await read();}
+   if(response.status!==200||!response.headers.get('content-type')?.startsWith('audio/mpeg'))throw Error('Your voice preview is not ready yet. Please try again shortly.');
+   const blob=await response.blob();signal.throwIfAborted();
+   if(previewObjectUrl.current)URL.revokeObjectURL(previewObjectUrl.current);
+   previewObjectUrl.current=URL.createObjectURL(blob);setPreviewUrl(previewObjectUrl.current);
+  }catch{if(!controller.signal.aborted)setPreviewError('Could not load your voice preview. Please try again shortly.');}
+  finally{setBusy(false);setPreviewBusy(false);lock.current=false;}
+ }
  async function act(action:'upload'|'toggle'|'refresh'){
   if(lock.current)return;lock.current=true;setBusy(true);setError('');
   try{
@@ -32,7 +56,14 @@ export function VipCustomVoice(){
    <button type="submit" className={`fund-button ${styles.create}`} disabled={busy}>{busy?'Creating your voice…':'Create my voice'}</button>
   </>}
  </form>}
- {voice?.state==='ready'&&<button type="button" className="membership-payment-link" disabled={busy} onClick={()=>void act('toggle')}>{busy?'Saving…':voice.enabled?'Use standard voice':'Use my voice'}</button>}
+ {voice?.state==='ready'&&voice.vip&&<div className={styles.preview}>
+  <button type="button" className={styles.previewButton} disabled={busy} onClick={()=>void playPreview()}><span aria-hidden="true">▶</span> {previewBusy?'Preparing your voice…':'Play my cloned voice'}</button>
+  <small>No credits used. Replay anytime.</small>
+  {previewBusy&&<p role="status">Preparing your saved voice preview…</p>}
+  {previewUrl&&<audio ref={previewAudio} controls src={previewUrl} aria-label="Your cloned voice preview" onError={()=>setPreviewError('Could not play the audio. Refresh and try again.')} />}
+  {previewError&&<p className={styles.error} role="alert">{previewError}</p>}
+ </div>}
+ {voice?.state==='ready'&&<button type="button" className="membership-payment-link" disabled={busy} onClick={()=>void act('toggle')}>{busy&&!previewBusy?'Saving…':voice.enabled?'Use standard voice':'Use my voice'}</button>}
  {uploading&&<p role="status">Your voice setup is being confirmed. Your standard voice stays available in the meantime.</p>}
  {voice?.state==='verification_required'&&<p role="status">The voice provider needs additional verification. Contact Help to finish setup. Your standard voice stays active.</p>}
  {(uploading||voice?.state==='verification_required'||error||!voice)&&<button type="button" className="membership-payment-link" disabled={busy} onClick={()=>void act('refresh')}>Refresh</button>}
