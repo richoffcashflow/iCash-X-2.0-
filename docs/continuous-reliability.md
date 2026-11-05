@@ -168,3 +168,17 @@ The initial read-only snapshot was degraded, including older unresolved receipt/
 These fixes preserve the newer bounded learning release in PR #554. Deploy only after the exact release passes all Reliability checks and the matching application and worker are live. Schema changes are individually reviewed; migration-history differences are not permission for a blanket database push. Missing incoming-provider history, old unresolved costs and historical expired-contact holds remain separate evidence gaps.
 
 November 4 seller-call follow-up: [Conversation repetition](seller-conversation-repetition.md) reproduces the natural-listing-answer rejection and routine co-owner false hold, preserves existing financial holds and signer checks, and consolidates runtime delivery instructions without changing frozen provider approvals.
+
+## November 5 audit follow-up
+
+| Failure observed | Change | Evidence required for closure |
+| --- | --- | --- |
+| A seller asks to text or says they cannot talk before ownership is known; the inbound event has no reply job | [Prospective ownership clarification](initial-reply-and-journey-isolation.md) binds a bounded response to the delivered original question without inferring ownership or sale authority. | Original failure reproduction, activation/source cutoffs, actual trigger/resume/final-send guards, native concurrent duplicates, exact migration receipt. No historical outreach replay. |
+| A failed buyer message aborts the next independent message; held results are counted as sent | [Journey failure isolation](initial-reply-and-journey-isolation.md) preserves independent claims, attempt limits and unknown holds while returning truthful progress and cron failure status. | Real service/route fault matrix, duplicate/uncertain-claim protection, title eligibility fairness, late-state preservation and exact production web release. |
+
+The general automation lane still requires separate observed recovery from its
+database statement timeouts. PR #548 stages the contact-preparation optimization;
+its concurrent-index installation and production-ledger prerequisites remain
+explicit gates. A successful deploy or healthy heartbeat does not close that
+incident. Rejected unclassified messaging events also require payload-shape
+evidence before calling them lost seller replies.

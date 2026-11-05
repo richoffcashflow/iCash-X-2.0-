@@ -160,6 +160,41 @@ finally:
     resume.close()
 print('PASS native dialogue: concurrent duplicate webhooks, one clarification/dispatch, grounded next explanation and concurrent Pause; no provider or model calls.')
 
+# A text/busy acknowledgement after the real delivered ownership question must
+# make one bounded clarification without inferring ownership or replaying history.
+sql((ROOT / 'tests/fixtures/seller-initial-reply-original-context.sql').read_text() + ';')
+sql((ROOT / 'supabase/migrations/20261105074935_seller_initial_reply_clarification.sql').read_text())
+IA = '00000000-0000-4000-8000-000000000201'
+IT = '00000000-0000-4000-8000-000000000202'
+ID = '00000000-0000-4000-8000-000000000203'
+IS = '00000000-0000-4000-8000-000000000204'
+IQ = '00000000-0000-4000-8000-000000000205'
+sql(f"""update fixture_flags set conversation=false;
+insert into icash_accounts(id) values('{IA}');
+insert into icash_screening_jobs(id,account_id,snapshot,result) values('{IS}','{IA}','{{"propertyId":"{IS}"}}','{{"financialCheck":{{"status":"eligible"}}}}');
+insert into icash_deal_files(id,account_id,screening_id) values('{ID}','{IA}','{IS}');
+insert into icash_text_threads(id,account_id,deal_id,recipient) values('{IT}','{IA}','{ID}','+15550000003');
+insert into icash_sms_routes(sender,recipient,account_id) values('+15550000001','+15550000003','{IA}');
+insert into icash_text_messages(id,account_id,thread_id,direction,state,body,provider_id,created_at) values('{IQ}','{IA}','{IT}','outgoing','delivered','Is this the owner of the property?','original-question',now()-interval '1 minute');
+insert into icash_sms_seller_openings(account_id,thread_id,owner_question_id) values('{IA}','{IT}','{IQ}');""")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    list(pool.map(lambda _: sql(f"insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values('{IA}','{IT}','incoming','received','Please text me.','same-initial-reply') on conflict(event_id) do nothing;"), range(16)))
+assert sql(f"select count(*) from icash_text_ai_jobs where account_id='{IA}'") == '1'
+IJ = sql(f"select id from icash_text_ai_jobs where account_id='{IA}'")
+assert sql(f"select analysis->>'dialogueAction' from icash_text_ai_jobs where id='{IJ}'") == 'clarify_ownership'
+assert sql(f"select owner_reply_id is null from icash_sms_seller_openings where account_id='{IA}'") == 't'
+assert sql(f"select count(*) from icash_offer_authorities where account_id='{IA}'") == '0'
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    initial_resumed = list(pool.map(lambda _: json.loads(sql(f"select icash_resume_seller_text_ai('{IA}','{IJ}')")), range(16)))
+assert len({r['messageId'] for r in initial_resumed}) == 1
+IM = initial_resumed[0]['messageId']
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    initial_claims = list(pool.map(lambda _: sql(f"select icash_claim_text('{IA}','{IM}','+15550000001')"), range(16)))
+assert sum(bool(r) for r in initial_claims) == 1
+assert sql(f"select count(*) from icash_text_messages where request_key='{IJ}'") == '1'
+sql('update fixture_flags set conversation=true;')
+print('PASS native initial reply: 16 webhook deliveries, recoveries and final claims create exactly one prospective ownership clarification and no offer authority. No provider calls.')
+
 # Numeric negotiation uses the same native transaction/final-provider boundary.
 # Only the already tested pure planner is substituted with its fixture result.
 sql("drop schema if exists auth cascade; drop schema if exists icash_call_offer_private cascade; drop schema if exists icash_seller_agreement_private cascade;" + (ROOT / 'tests/helpers/seller-text-offer-fixture.sql').read_text() + (ROOT / 'tests/fixtures/seller-text-offer-original-functions.sql').read_text() + (ROOT / 'config/seller-text-offer.sql').read_text() + (ROOT / 'config/seller-offer-receipt-wait.sql').read_text() + (ROOT / 'config/seller-offer-source-prices.sql').read_text())
