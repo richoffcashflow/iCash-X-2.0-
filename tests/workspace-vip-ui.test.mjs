@@ -21,7 +21,7 @@ const props=(tree,name)=>all(tree).find(n=>n.type===component(name))?.props;
 const account={workspaceAcknowledged:true,signedIn:true,email:'admin-fixture@example.com',mode:'live',balanceCents:0,assistantName:'Fixture bot',identity:{principal:'Fixture company'},paused:true,billingModel:'membership_credits',membershipActive:true,vip:false,isBillingOwner:false};
 const regular=mount(account);let tree=regular.render();
 assert(props(tree,'WorkspaceVipBanner'),'Confirmed Standard members see the upgrade banner without needing credits');
-assert(all(tree).findIndex(n=>n.type===component('WorkspaceVipBanner'))<all(tree).findIndex(n=>n.type===component('BotRunBar')),'VIP upgrade is above the workspace controls');
+assert(all(tree).findIndex(n=>n.type===component('WorkspaceVipBanner'))<all(tree).findIndex(n=>n.type==='header'),'VIP upgrade is above the workspace menu');
 props(tree,'WorkspaceVipBanner').onUpgrade();tree=regular.render();assert.equal(props(tree,'FundingDialog').title,'Switch to VIP');assert(props(tree,'MembershipSettings').planOnly);assert.equal(props(tree,'BotRunBar').vip,false,'Opening the banner review does not grant VIP');props(tree,'FundingDialog').onClose();tree=regular.render();
 assert.equal(props(tree,'BudgetSummary').days,props(tree,'LiveWorkspace').activityDays);assert.equal(props(tree,'BudgetSummary').timezone,props(tree,'LiveWorkspace').activityTimezone);
 props(tree,'BudgetSummary').onDaysChange(7);tree=regular.render();assert.equal(props(tree,'BudgetSummary').days,7);assert.equal(props(tree,'LiveWorkspace').activityDays,7,'Selected reporting period reaches the opportunity panel without remounting work');

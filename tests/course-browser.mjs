@@ -47,10 +47,14 @@ export async function verifyCourse(browser,base,options,name){
   const pdfLink=page.getByRole('link',{name:'Download PDF',exact:true}),practice=page.getByRole('link',{name:'Open practice workspace',exact:true});
   assert((await pdfLink.boundingBox()).y<(await practice.boundingBox()).y,'Practice link is directly below the PDF');
   const downloading=page.waitForEvent('download');await pdfLink.click();const downloaded=await downloading;assert.equal(downloaded.suggestedFilename(),'iCash-X-Course-Guide.pdf');assert.deepEqual(readFileSync(await downloaded.path()),coursePdf);
-  assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).getAttribute('href'),'/?upgrade=vip');
+  assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).first().getAttribute('href'),'/?upgrade=vip');
   const vipBanner=page.getByRole('region',{name:'Upgrade to VIP',exact:true});
   assert.match(await vipBanner.innerText(),/30% off AI work \+ leads/);
-  assert((await vipBanner.boundingBox()).y<(await page.getByRole('heading',{name:'Learn it. See it. Put it to work.'}).boundingBox()).y,'VIP banner is at the top of the course');
+  await page.evaluate(()=>scrollTo(0,0));
+  assert(await vipBanner.evaluate(node=>{const b=node.getBoundingClientRect(),header=document.querySelector('header').getBoundingClientRect(),cta=node.querySelector('a').getBoundingClientRect();return Math.abs(b.top)<1&&Math.abs(b.left)<1&&Math.abs(b.width-innerWidth)<1&&b.bottom<=header.top&&b.height<=64&&cta.height>=44&&cta.left>=0&&cta.right<=innerWidth;}),'Slim VIP bar spans the very top above navigation with a usable upgrade button');
+  assert.equal(await page.getByRole('link',{name:'Upgrade to VIP',exact:true}).count(),2,'Course keeps both upgrade placements');
+  const lowerOffer=page.getByRole('region',{name:'Give your workspace the VIP upgrade.',exact:true});
+  assert((await lowerOffer.boundingBox()).y>(await practice.boundingBox()).y,'The detailed VIP offer remains below the course');
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Course fits mobile and desktop');
   await page.screenshot({path:`/tmp/icash-course-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   await practice.click();await page.getByRole('heading',{name:'See your workspace in action.'}).waitFor();assert.equal(await page.getByRole('navigation',{name:'Sample deal stages',exact:true}).getByRole('button',{name:'New lead',exact:true}).getAttribute('aria-pressed'),'true');
