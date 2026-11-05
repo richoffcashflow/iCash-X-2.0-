@@ -23,7 +23,7 @@ import {OwnerWorkspaceTabs} from '@/components/owner-workspace-tabs';
 import {OwnerPhonePrivacy} from '@/components/owner-phone-privacy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {FundingOutreachNotice} from '@/components/funding-outreach-notice';
-import {AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banner';
+import {WorkspaceVipBanner,AdminPlanToggle,type AccountPlan} from '@/components/workspace-vip-banner';
 import {setupThemes,type BotProfile} from '@/lib/bot-setup';
 // Load private workspace tools only when their signed-in controls are rendered.
 const WorkspaceWalkthrough=dynamic(()=>import('@/components/workspace-walkthrough').then(m=>m.WorkspaceWalkthrough));
@@ -201,6 +201,7 @@ export default function Home(){
    {!account?<section className="account-loading" role="status"><h1 className="sr-only">iCash X workspace</h1>{accountError?<button type="button" className="workspace-quiet" onClick={()=>void refreshAccount()}>Refresh</button>:<p>Opening your workspace…</p>}</section>:<>
     {!workspaceLocked&&<h1 className="sr-only" id="workspace-title">iCash X workspace</h1>}
     {workspaceLocked?<section className="subscription-lock" aria-label="Restore access"><h1>Renew subscription</h1><p>Your workspace is locked. Your unused credits are saved.</p><MembershipSettings locked onChanged={membershipChanged}/><button className="workspace-quiet" onClick={()=>void refreshAccount()}>Check payment</button></section>:<>
+    {account.vip===false&&account.vipFeatures!==true&&(account.billingModel==='membership_credits'||canSwitchPlan)&&fundingNotice?.email!==account.email&&<WorkspaceVipBanner disabled={controlBusy||accountError} onUpgrade={()=>setReviewVip(true)}/>}
     {controlError&&<p role="alert">{controlError}</p>}
     <WorkspaceWalkthrough key={`walkthrough:${account.email}`} openRequest={walkthroughRequest.email===account.email?walkthroughRequest.nonce:0} blocked={accountError||customizeOpen||fundingOpen||settingsOpen||preferencesOpen||cancellationOpen||reviewVip} onOpenChange={setWalkthroughOpen}/>
     <BotRunBar key={`bot:${account.email}`} hasLeads={leadPresence?.email===account.email?leadPresence?.hasLeads:undefined} botName={profile?.displayName||account.assistantName} vip={displayVip} onVip={displayVip&&!canSwitchPlan&&account.billingModel==='membership_credits'?()=>setReviewVip(true):undefined} enabled={typeof account.paused==='boolean'?!account.paused:undefined} running={botRunning} paymentRequired={account.billingModel==='membership_credits'&&!account.membershipActive} stopped={account.paused===true&&(account.balanceCents??0)>0} busy={controlBusy} stale={accountError} balanceCents={guest?undefined:account.balanceCents} hasCreditHistory={account.hasCreditHistory} canPause={account.paused===false&&((account.balanceCents??0)>0||account.billingActive===true)} principalKey={account.email} onBudget={()=>openFunding()} onPause={()=>void toggleBot('pause')} onResume={()=>void toggleBot('resume')}/>

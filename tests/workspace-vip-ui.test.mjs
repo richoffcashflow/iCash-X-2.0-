@@ -20,7 +20,9 @@ function mount(account){
 const props=(tree,name)=>all(tree).find(n=>n.type===component(name))?.props;
 const account={workspaceAcknowledged:true,signedIn:true,email:'admin-fixture@example.com',mode:'live',balanceCents:0,assistantName:'Fixture bot',identity:{principal:'Fixture company'},paused:true,billingModel:'membership_credits',membershipActive:true,vip:false,isBillingOwner:false};
 const regular=mount(account);let tree=regular.render();
-assert(!props(tree,'WorkspaceVipBanner'),'Workspace starts with bot controls');
+assert(props(tree,'WorkspaceVipBanner'),'Confirmed Standard members see the upgrade banner without needing credits');
+assert(all(tree).findIndex(n=>n.type===component('WorkspaceVipBanner'))<all(tree).findIndex(n=>n.type===component('BotRunBar')),'VIP upgrade is above the workspace controls');
+props(tree,'WorkspaceVipBanner').onUpgrade();tree=regular.render();assert.equal(props(tree,'FundingDialog').title,'Switch to VIP');assert(props(tree,'MembershipSettings').planOnly);assert.equal(props(tree,'BotRunBar').vip,false,'Opening the banner review does not grant VIP');props(tree,'FundingDialog').onClose();tree=regular.render();
 assert.equal(props(tree,'BudgetSummary').days,props(tree,'LiveWorkspace').activityDays);assert.equal(props(tree,'BudgetSummary').timezone,props(tree,'LiveWorkspace').activityTimezone);
 props(tree,'BudgetSummary').onDaysChange(7);tree=regular.render();assert.equal(props(tree,'BudgetSummary').days,7);assert.equal(props(tree,'LiveWorkspace').activityDays,7,'Selected reporting period reaches the opportunity panel without remounting work');
 const button=(root,label)=>all(root).find(n=>n.type==='button'&&text(n)===label);
@@ -40,7 +42,7 @@ assert.equal(all(tree).filter(n=>n.type==='button'&&text(n)==='Customize bot').l
 assert.equal(props(tree,'BotRunBar').onVip,undefined,'The banner replaces the duplicate non-VIP upgrade button');
 button(tree,'Explore VIP').props.onClick();tree=regular.render();assert.equal(props(tree,'FundingDialog').title,'Switch to VIP');assert(props(tree,'MembershipSettings').planOnly,'Upgrade opens the existing billing review');
 assert.equal(props(tree,'BotRunBar').vip,false,'Opening review does not grant VIP');
-regular.stale(true);assert(button(regular.render(),'Explore VIP').props.disabled);
+regular.stale(true);assert(button(regular.render(),'Explore VIP').props.disabled);assert(props(regular.render(),'WorkspaceVipBanner').disabled);
 const ownerAccount={...account,isBillingOwner:true};const owner=mount(ownerAccount);tree=owner.render();
 assert(all(tree).some(n=>n.type==='button'&&text(n)==='Switch account plan'));
 assert(!props(tree,'WorkspaceAssistant'),'Admin flag alone is not feature access');
@@ -54,7 +56,7 @@ assert(props(tree,'WorkspaceAssistant'),'Admin VIP can use the assistant');asser
 assert.equal(props(tree,'WorkspaceVipBanner'),undefined);assert.equal(props(tree,'BudgetSummary').vip,true,'Actual VIP shows the settled savings counter');assert.equal(props(tree,'BotRunBar').balanceCents,0,'Switching does not alter credits');assert.equal(props(tree,'WorkspaceConversion').hidden,false,'Admin can see useful next-step cards');
 all(tree).find(n=>n.type==='button'&&text(n).includes('Customize bot')).props.onClick();tree=owner.render();assert.equal(props(tree,'BotCustomization').vip,true,'Actual VIP exposes voice settings');
 props(tree,'FundingDialog').onClose();
-owner.account({...ownerAccount,adminPlan:'standard',vip:false,vipFeatures:false});tree=owner.render();assert.doesNotMatch(tree.props.className,/test-vip/);assert(!props(tree,'WorkspaceVipBanner'));assert(!props(tree,'WorkspaceAssistant'));assert(!props(tree,'AdminPlanToggle'));
+owner.account({...ownerAccount,adminPlan:'standard',vip:false,vipFeatures:false});tree=owner.render();assert.doesNotMatch(tree.props.className,/test-vip/);assert(props(tree,'WorkspaceVipBanner'));assert(!props(tree,'WorkspaceAssistant'));assert(!props(tree,'AdminPlanToggle'));
 button(tree,'Switch account plan').props.onClick();tree=owner.render();assert.equal(props(tree,'FundingDialog').title,'Your account plan');assert.equal(props(tree,'MembershipSettings'),undefined,'Admin switching never opens a Stripe purchase');props(tree,'FundingDialog').onClose();
 owner.account({...ownerAccount,adminPlan:'vip',vip:true,vipFeatures:true});owner.stale(true);tree=owner.render();assert(!props(tree,'AdminPlanToggle'));assert(!props(tree,'WorkspaceAssistant'));assert.equal(props(tree,'BotRunBar').vip,true,'Saved VIP appearance survives a background refresh failure');
 owner.stale(false);owner.account({...ownerAccount,adminPlan:null,vip:false,vipFeatures:false});tree=owner.render();assert(button(tree,'Switch account plan'));assert.equal(props(tree,'BotRunBar').vip,false);
@@ -68,8 +70,13 @@ props(tree,'LiveWorkspace').onOpenAssistant();tree=member.render();assert.equal(
 props(tree,'LiveWorkspace').onAsk('fixture-property','123 Fixture Lane');tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').request.screeningId,'fixture-property');assert.equal(props(tree,'WorkspaceAssistant').request.mode,'compose','Deal card opens a composer without a paid automatic question');
 member.account({...account,email:'other-vip@example.com',vip:true});tree=member.render();assert.equal(props(tree,'WorkspaceAssistant').request,null,'Property context cannot cross account identities before effect cleanup');assert.equal(props(tree,'WorkspaceAssistant').openRequest,0);
 member.account({...account,vip:false});tree=member.render();assert(!props(tree,'WorkspaceAssistant'),'Assistant unmounts when VIP entitlement is lost');
-const bannerModule={exports:{}};new Function('require','module','exports',code('components/workspace-vip-banner.tsx'))(require,bannerModule,bannerModule.exports);
+assert(!props(mount({...account,vip:undefined}).render(),'WorkspaceVipBanner'),'An unknown plan never flashes an upsell');
+assert(!props(mount({...account,vip:false,vipFeatures:true}).render(),'WorkspaceVipBanner'),'Verified feature access also hides the upsell');
+assert(!props(mount({...account,vip:true,vipFeatures:false}).render(),'WorkspaceVipBanner'),'Existing VIP is not sold again while features are unavailable');
+assert(!props(mount({...account,membershipActive:false}).render(),'WorkspaceVipBanner'),'Renewal recovery takes priority for an expired subscription');
+const bannerModule={exports:{}};new Function('require','module','exports',code('components/workspace-vip-banner.tsx'))(name=>name.endsWith('.module.css')?{__esModule:true,default:{}}:require(name),bannerModule,bannerModule.exports);
 let reviewed=0;tree=bannerModule.exports.WorkspaceVipBanner({onUpgrade(){reviewed++;}});const upgrade=all(tree).find(n=>n.type==='button');assert.equal(upgrade.props.type,'button');assert.equal(upgrade.props['aria-haspopup'],'dialog');upgrade.props.onClick();assert.equal(reviewed,1);assert.match(text(tree),/30%/);
+tree=bannerModule.exports.WorkspaceVipBanner({href:'/?upgrade=vip'});assert.equal(all(tree).find(n=>n.type==='a').props.href,'/?upgrade=vip');assert.equal(all(tree).filter(n=>n.type==='button').length,0,'Course upgrade uses the workspace review destination');
 let selected;
 for(const plan of ['standard','vip']){
  tree=bannerModule.exports.AdminPlanToggle({plan,onChange:value=>{selected=value;}});

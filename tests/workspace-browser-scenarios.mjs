@@ -329,6 +329,10 @@ export async function verifyWorkspace(browser,base,options,name){
   await assistant.getByRole('button',{name:'Explain this offer',exact:true}).click();await assistant.locator('.assistant-answer').nth(1).waitFor();assert.equal(assistantWrites[1].screeningId,assistantWrites[0].screeningId,'Suggested questions keep the deal context');
   await assistant.getByRole('button',{name:'Close',exact:true}).click();assert.equal(await collapsed.locator('.property-summary').getAttribute('aria-expanded'),'false','Asking AI does not expand or change the deal');
   vip=false;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await collapsed.locator('.property-ask-bot[data-vip="false"]').waitFor();
+  const vipBanner=page.getByRole('region',{name:'Upgrade to VIP',exact:true});assert.equal(await vipBanner.count(),0,'Funding confirmation takes priority over upgrade prompts');
+  await page.getByRole('button',{name:'Dismiss funding notice',exact:true}).click();await vipBanner.waitFor();
+  assert(await vipBanner.evaluate(node=>{const box=node.getBoundingClientRect(),bot=document.querySelector('.bot-run-centered').getBoundingClientRect();return box.bottom<=bot.top&&box.left>=0&&box.right<=innerWidth+1;}),'Standard upgrade banner is above the bot and fits the viewport');
+  await vipBanner.getByRole('button',{name:'Upgrade to VIP',exact:true}).click();await page.getByRole('dialog',{name:'Switch to VIP',exact:true}).getByRole('button',{name:'Close',exact:true}).click();
   const beforeLockedReads=apiReads.filter(path=>path==='/api/work/assistant').length;await ask.click();const vipReview=page.getByRole('dialog',{name:'Switch to VIP',exact:true});await vipReview.waitFor();
   assert.equal(await page.getByRole('dialog',{name:'Ask AI Bot',exact:true}).count(),0);assert.equal(apiReads.filter(path=>path==='/api/work/assistant').length,beforeLockedReads,'Standard review never fetches saved assistant replies');
   await vipReview.getByRole('button',{name:'Close',exact:true}).click();
@@ -340,6 +344,7 @@ export async function verifyWorkspace(browser,base,options,name){
   await paymentReview.getByRole('button',{name:'Close',exact:true}).click();await vipReview.getByRole('button',{name:'Close',exact:true}).click();
   assert(!new URL(page.url()).searchParams.has('upgrade'),'Closing review does not reopen it');
   vip=true;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await collapsed.locator('.property-ask-bot[data-vip="true"]').waitFor();
+  assert.equal(await vipBanner.count(),0,'Confirmed VIP removes the banner without a reload');
   assert.equal(await page.getByRole('dialog',{name:'Ask AI Bot',exact:true}).count(),0,'A new VIP entitlement does not reopen a prior property conversation');
   await ask.click();await assistant.waitFor();assert.equal(assistantWrites.length,2,'Upgraded account opens the deal assistant without an automatic charge');await assistant.getByRole('button',{name:'Close',exact:true}).click();
   await page.screenshot({path:`/tmp/icash-deal-ask-ai-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
