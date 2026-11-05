@@ -23,6 +23,7 @@ assert.equal(writes[0].p_limit,10,'credit metadata never changes concurrency ent
 // A real plan upgrade must refresh the exhausted snapshot through normal reads.
 // Canonical provider IDs differ from the marketing labels in older responses.
 for(const tier of ['scale_2024_08_10','growing_business']){
+ const approvedLimit=tier==='scale_2024_08_10'?30:32;
  const agents=[{agentId:'agent_outgoing',branchId:null},{agentId:'agent_incoming',branchId:'agtbrch_incoming'}];
  const reads=[],saved=[],recovered=[];
  const subscription={...base,tier,character_count:600000,character_limit:tier==='scale_2024_08_10'?1800000:6000000};
@@ -38,15 +39,15 @@ for(const tier of ['scale_2024_08_10','growing_business']){
  },get,{agentId:'agent_outgoing',branchId:'agtbrch_outgoing'},async agent=>{
   assert.equal(saved.length,1,'Verified capacity is persisted before configuration recovery');recovered.push(agent.agent_id);
  });
- assert.deepEqual(result,{status:'verified',workspaceLimit:20,agents:2});
+ assert.deepEqual(result,{status:'verified',workspaceLimit:approvedLimit,agents:2});
  assert.deepEqual(saved[0].p_agents,[{agentId:'agent_outgoing',limit:18,creditState:'available'},{agentId:'agent_incoming',limit:2,creditState:'available'}]);
- assert.equal(saved[0].p_limit,20,'An upgrade does not raise the owner-approved twenty-call ceiling');
+ assert.equal(saved[0].p_limit,approvedLimit,'Fresh plan capacity remains bounded by the owner-approved thirty-two-call ceiling');
  assert(saved[0].p_source.startsWith('provider subscription '+tier+';'));
  assert(saved[0].p_source.includes(';extra=0;overage=false;'));
  assert.deepEqual(recovered,['agent_outgoing']);
  assert.deepEqual(reads,[{path:'/v1/user/subscription',region:undefined},{path:'/v1/convai/agents/agent_outgoing?branch_id=agtbrch_outgoing',region:'global'},{path:'/v1/convai/agents/agent_incoming?branch_id=agtbrch_incoming',region:'us'}]);
  const validAgent={platform_settings:{call_limits:{agent_concurrency_limit:-1,bursting_enabled:false}}};
- assert.deepEqual(voiceCapacitySnapshot(subscription,validAgent),{workspaceLimit:20,agentLimit:20,tier});
+ assert.deepEqual(voiceCapacitySnapshot(subscription,validAgent),{workspaceLimit:approvedLimit,agentLimit:approvedLimit,tier});
 }
 for(const tier of ['enterprise','scale_2024_08_10_extra','Scale','__proto__','constructor','toString','']){
  const agent={agent_id:'agent_fixture',platform_settings:{call_limits:{agent_concurrency_limit:18,bursting_enabled:false}}};
