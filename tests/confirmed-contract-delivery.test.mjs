@@ -15,7 +15,7 @@ try{
  assert.equal(await recovery(),null,'Original recovery strands the unattempted contract text');
  assert.equal(await value('select count(*) from public.icash_operation_spend'),0);
  const patch=read('config/confirmed-contract-text-delivery.sql');
- assert.equal(patch,read('supabase/migrations/20261105061229_confirmed_contract_text_delivery.sql'));
+ assert.equal(patch,read('supabase/migrations/20261105065159_confirmed_contract_text_delivery.sql'));
  await db.exec(patch);
  assert.equal(await current(),true);
  await db.exec('begin');

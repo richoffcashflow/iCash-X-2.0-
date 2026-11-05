@@ -36,6 +36,17 @@ authorized delivery. Do not fabricate a receipt or reset an unknown send.
 Register the completed PR for automatic release after the database prerequisite
 is verified. Application/worker runtime code is unchanged.
 
+Production database prerequisite completed on November 5, 2026 after all four
+Reliability jobs passed for `5f03ff9759b8f4c63d3f5482b1291636d56b3162`.
+The migration ledger records `20261105065159_confirmed_contract_text_delivery`.
+Readback matched all three expected function hashes and retained service-role-only
+execution; the security advisory comparison found no new notices. The repository
+migration filename follows that installed version. Final-head and exact-main
+checks remain required for the normal Git-triggered application release.
+The ordinary recovery worker subsequently recorded provider acceptance of the
+original pending message using the existing envelope. Acceptance is not proof
+of handset delivery or completed signatures.
+
 Rollback: forward-replace only these two patched function bodies from their
 captured predecessors after checking for intervening changes. Retain every
 agreement, confirmation, recovery result, operation and provider receipt.
