@@ -61,8 +61,9 @@ try{
  await db.exec(read('config/opportunity-engine.sql').match(/create function public\.icash_call_has_seller_response[\s\S]*?\$\$;/)[0]);
  await db.exec(read('config/seller-response-policy.sql'));await db.exec(read('config/seller-optout-base-verbs.sql'));
  await db.exec(sql);
+ let comparePerformance=false;
  const filters={days:7,includeOwner:false,query:'',page:1,status:'all'};
- const report=async(p={})=>{const f={...filters,...p};const r=(await db.query('select public.icash_owner_outreach_report($1,$2,$3,$4,$5,$6) report',[owner,f.days,f.includeOwner,f.query,f.page,f.status])).rows[0].report;assert(validOwnerOutreach(r,f));return r;};
+ const report=async(p={})=>{const f={...filters,...p};const r=(await db.query(comparePerformance?'select public.icash_owner_outreach_report($1,$2,$3,$4,$5,$6) report,public.icash_owner_outreach_report_before_performance($1,$2,$3,$4,$5,$6) previous':'select public.icash_owner_outreach_report($1,$2,$3,$4,$5,$6) report',[owner,f.days,f.includeOwner,f.query,f.page,f.status])).rows[0];if(comparePerformance)assert.deepEqual(r.report,r.previous,'Optimized report preserves every total, row and filter');assert(validOwnerOutreach(r.report,f));return r.report;};
  await db.exec('grant select on all tables in schema public to service_role; grant execute on function public.icash_call_has_seller_response(jsonb) to service_role; begin read only; set local role service_role;');
  let r=await report();
  assert.equal(r.matchedCount,31);assert.equal(r.leads.length,25);
@@ -86,6 +87,45 @@ try{
  // Apply the full new migration against the exact deployed readers, then
  // exercise source-only call interest and receipt-bound SMS report counting.
  await installInterestEvidence(db);
+ // Match the deployed response predicate before optimizing it. Snapshot both
+ // readers so fixture changes compare complete results within the same clock.
+ await db.exec(read('supabase/migrations/20261023175907_seller_call_contact_evidence.sql').match(/create or replace function public\.icash_call_has_seller_response[\s\S]*?\$\$;/)[0]);
+ for(const signature of ['icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)','icash_call_has_seller_response(jsonb)']){
+  const {rows:[{definition}]}=await db.query('select pg_get_functiondef($1::regprocedure) definition',['public.'+signature]);
+  const name=signature.split('(')[0];await db.exec(definition.replace('public.'+name+'(', 'public.'+name+'_before_performance('));
+ }
+ const optimized=read('config/owner-outreach-report-performance.sql');
+ assert.equal(optimized,read('supabase/migrations/20261105060804_owner_outreach_report_performance.sql'));
+ await db.exec(optimized);
+ const fenced=read('config/owner-outreach-response-fence.sql');assert.equal(fenced,read('supabase/migrations/20261105061150_owner_outreach_response_fence.sql'));
+ await db.exec(fenced);
+ const deadline=read('config/owner-outreach-report-deadline.sql');assert.equal(deadline,read('supabase/migrations/20261105062111_owner_outreach_report_deadline.sql'));await db.exec(deadline);
+ assert((await db.query("select proconfig from pg_proc where oid='public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)'::regprocedure")).rows[0].proconfig.includes('statement_timeout=12s'));
+ comparePerformance=true;
+ const responseBodies=['Hello','Yes','I want to sell my house.','Please leave a message after the beep.','[silence]','123','STOP','Please leave a message after the beep. Stop calling me.','I did not say "stop calling me".',null,'',42];
+ for(const body of responseBodies)for(const role of ['user','agent']){
+  const result={transcript:[{role,message:body}]};
+  const {rows:[r]}=await db.query('select public.icash_call_has_seller_response($1) current,public.icash_call_has_seller_response_before_performance($1) previous',[result]);
+  assert.equal(r.current,r.previous,'Response classification is unchanged: '+JSON.stringify(result));
+ }
+ for(const result of [null,{}, {transcript:null},{transcript:'bad'},{transcript:[]}, {transcript:[null,{}, {role:'user'}]}]){
+  const {rows:[r]}=await db.query('select public.icash_call_has_seller_response($1) current,public.icash_call_has_seller_response_before_performance($1) previous',[result]);assert.equal(r.current,r.previous);
+ }
+ for(const state of ['complete','ready',null])for(const result of [
+  {optedOut:true,transcript:[]},
+  {transcript:[{role:'user',message:'Please leave a message after the beep.'}]},
+  {transcript:[{role:'user',message:'Please leave a message after the beep. Stop calling me.'}]},
+  {transcript:[{role:'user',message:'[silence]'}]},
+ ]){
+  await db.query("update icash_live_conversations set state=$1,result=$2 where id=md5('c1')::uuid",[state,result]);await report();
+ }
+ await db.exec("update icash_live_conversations set state='complete' where id=md5('c1')::uuid");
+ for(const status of ['all','responded','interested','queued','held'])for(const days of [1,7,30])await report({status,days});
+ await report({page:2,includeOwner:true,query:'test'});
+ const afterAcl=(await db.query(`select has_function_privilege('anon','public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)','execute') anon,has_function_privilege('authenticated','public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)','execute') authenticated,has_function_privilege('service_role','public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)','execute') service,provolatile,prosecdef from pg_proc where oid='public.icash_owner_outreach_report(uuid,integer,boolean,text,integer,text)'::regprocedure`)).rows[0];
+ assert.deepEqual(afterAcl,acl,'Optimization preserves owner report permissions and read-only execution');
+
+
  await db.exec(`
  update icash_live_conversations set result='{"interested":false,"transcript":[{"role":"agent","message":"Would you be interested in selling?"},{"role":"user","message":"Yes."}]}' where id=md5('c1')::uuid;
  delete from icash_live_conversations where id=md5('duplicate')::uuid;
