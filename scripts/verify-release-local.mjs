@@ -44,7 +44,7 @@ const suites = [
  'optin-call-now-route', 'optin-call-now-database',
  'seller-agreement-identity', 'seller-agreement-evidence', 'live-agreement-history', 'live-agreement-route',
  'seller-agreement-delivery-status', 'seller-agreement-delivery-preflight',
- 'contract-delivery-readiness-database',
+ 'contract-delivery-readiness-database', 'confirmed-contract-delivery',
  'seller-scenario-fine-tuning', 'buyer-intent-context',
  'agreement-delivery-recovery', 'seller-queue-handoff', 'seller-maintenance-recovery', 'automatic-outreach-database', 'positive-credit-admission-database', 'contact-channel-admission', 'discovery-channel-admission',
  'closing-payout-readiness-database', 'title-request-snapshot-database', 'title-service',
