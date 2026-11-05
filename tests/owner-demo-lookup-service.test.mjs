@@ -15,8 +15,8 @@ function fixture({eligible=true,ordinary=false,claimChanges={},response=()=>Resp
    if(!eligible||claimed)return null;claimed=true;
    return {id:lead,token:'fixture-token',address:'45 Fixture Ln, Dallas, TX 75201',assignmentFeeCents:1000000,sellerCostReserveCents:100000,quotaRequestId:request,demoExpiresAt:new Date(Date.now()+240000).toISOString(),noAddressFallback:true,...claimChanges};
   }
-  if(path==='rpc/icash_claim_seller_lookup_for'||path==='rpc/icash_claim_seller_lookup'){
-   assert.equal(ordinary,true,'headroom must use its existing atomic lookup claim');return null;
+  if(path==='rpc/icash_claim_seller_lookup_admitted_for'||path==='rpc/icash_claim_seller_lookup_admitted'){
+   return ordinary?null:{status:'rate_limited'};
   }
   if(path==='rpc/icash_finish_dealmachine_request'){
    finishes.push(body);assert.equal(body.p_request,request);
@@ -36,14 +36,14 @@ function fixture({eligible=true,ordinary=false,claimChanges={},response=()=>Resp
 let f=fixture();assert.equal((await f.run()).status,'property_checked');
 assert.equal(f.http.length,1);assert.equal(f.finishes[0].p_result.creditsUsed,1);assert.equal(f.writes[0].p_output.status,'qualified');
 assert.equal((await f.run()).status,'rate_limited');assert.equal(f.http.length,1,'consumed allowance cannot be replayed');
-assert(!f.calls.some(x=>x.path==='rpc/icash_claim_seller_lookup_for'));
+assert(f.calls.some(x=>x.path==='rpc/icash_claim_seller_lookup_admitted_for'));
 f=fixture({eligible:false});assert.equal((await f.run()).status,'rate_limited');assert.equal(f.http.length,0);assert.equal(f.writes.length,0);
 f=fixture();assert.equal((await processSellerIntake(f.db,'dm_sk_live_fixture',f.transport)).status,'rate_limited');
 assert.equal(f.calls.length,1,'untargeted background work never asks for owner headroom');
 f=fixture({ordinary:true});assert.equal((await f.run()).status,'idle_or_setup_required');assert(!f.calls.some(x=>x.path==='rpc/icash_claim_owner_demo_lookup'));
 f=fixture({response:()=>Response.json(unmatched)});assert.equal((await f.run()).status,'property_checked');
 assert.equal(f.http.length,1);assert.equal(f.writes[0].p_output.status,'unmatched');
-assert.equal(f.calls.filter(x=>x.path==='rpc/icash_take_dealmachine_request').length,1,'zero-credit no-match never expands the one-request exception');
+assert.equal(f.calls.filter(x=>x.path==='rpc/icash_take_dealmachine_request').length,0,'zero-credit no-match never expands the one-request exception');
 f=fixture({response:()=>Response.json({error:'limited'},{status:429,headers:{'Retry-After':'60','X-RateLimit-Limit':'70','X-RateLimit-Day-Limit':'10000','X-RateLimit-Day-Remaining':'0'}})});
 assert.equal((await f.run()).status,'lookup_requires_review');assert.equal(f.http.length,1);
 assert.equal(f.finishes[0].p_result.httpStatus,429);assert.equal(f.finishes[0].p_result.retryAfter,60);assert.equal(f.finishes[0].p_result.dayRemaining,0);

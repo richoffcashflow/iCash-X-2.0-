@@ -31,13 +31,13 @@ assert.throws(()=>qualifySellerProperty({...raw,data:[{...raw.data[0],match_warn
 assert.equal(sellerLeadCharge(1000000,100000),220);assert.equal(sellerLeadCharge(1,0),1);assert.throws(()=>sellerLeadCharge(-1,0));
 assert(validDailyBudget(1000));assert(!validDailyBudget(999));assert(!validDailyBudget(500));assert(!validDailyBudget(1000.5));assert.equal(dailyBudgetTier(500).name,'Starter');assert.equal(dailyBudgetTier(5000).name,'Growth');
 let requests=0,saved=0,claimed=false;
-const db=async(path,method,body)=>{if(path==='rpc/icash_take_dealmachine_request')return true;if(path==='rpc/icash_claim_seller_lookup'){if(claimed)return null;claimed=true;return {id:'lead',token:'one-use',address:input.address,...options};}if(path==='rpc/icash_finish_seller_lookup'){saved++;assert.equal(body.p_output.status,'qualified');return true;}throw Error(path);};
+const db=async(path,method,body)=>{if(path==='rpc/icash_take_dealmachine_request')return true;if(path==='rpc/icash_claim_seller_lookup_admitted'){if(claimed)return null;claimed=true;return {id:'lead',token:'one-use',address:input.address,...options};}if(path==='rpc/icash_finish_seller_lookup'){saved++;assert.equal(body.p_output.status,'qualified');return true;}throw Error(path);};
 assert.equal((await processSellerIntake(db,undefined)).status,'provider_not_configured');assert.equal(claimed,false);
 const transport=async(url,opts)=>{requests++;assert.equal(url,'https://api.v2.dealmachine.com/v1/enrichment/address');const body=JSON.parse(opts.body);assert.equal(body.data.length,1);assert.equal(body.contact_audience,'none');assert(!('estimate_cost' in body));return Response.json(raw);};
 assert.equal((await processSellerIntake(db,'dm_sk_live_fixture',transport)).status,'property_checked');await processSellerIntake(db,'dm_sk_live_fixture',transport);assert.equal(requests,1);assert.equal(saved,1);
 claimed=false;assert.equal((await processSellerIntake(db,'dm_sk_live_fixture',async()=>{requests++;throw Error('ambiguous provider timeout');})).status,'lookup_requires_review');await processSellerIntake(db,'dm_sk_live_fixture',transport);assert.equal(requests,2,'an ambiguous paid lookup is not retried');
 claimed=false;let targetClaim=false;
-const targeted=async(path,method,body)=>{if(path==='rpc/icash_claim_seller_lookup_for'){assert.deepEqual(body,{p_id:input.requestId});targetClaim=true;return db('rpc/icash_claim_seller_lookup',method,{});}return db(path,method,body);};
+const targeted=async(path,method,body)=>{if(path==='rpc/icash_claim_seller_lookup_admitted_for'){assert.deepEqual(body,{p_id:input.requestId});targetClaim=true;return db('rpc/icash_claim_seller_lookup_admitted',method,{});}return db(path,method,body);};
 assert.equal((await processSellerIntake(targeted,'dm_sk_live_fixture',transport,input.requestId)).status,'property_checked');assert(targetClaim);
 await processSellerIntake(targeted,'dm_sk_live_fixture',transport,input.requestId);assert.equal(requests,3,'targeted retries reuse the durable claim');
 const event={id:'event-fixture',leadId:'lead-fixture',token:'claim',name:'Lead',occurredAt:new Date(now).toISOString(),phone:'+12145550123'};

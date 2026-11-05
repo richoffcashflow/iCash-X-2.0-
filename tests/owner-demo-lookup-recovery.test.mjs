@@ -23,7 +23,8 @@ const db=async(path,method,body)=>{
   afterRead();return resultRows??(state==='received'?[structuredClone(original)]:[]);
  }
  if(path==='rpc/icash_take_dealmachine_request')return ordinary;
- if(path==='rpc/icash_claim_owner_demo_lookup'||path==='rpc/icash_claim_seller_lookup_for'){
+ if(path==='rpc/icash_claim_seller_lookup_admitted_for'&&!ordinary)return {status:'rate_limited'};
+ if(path==='rpc/icash_claim_owner_demo_lookup'||path==='rpc/icash_claim_seller_lookup_admitted_for'){
   assert.deepEqual(body,{p_id:lead});
   if(!permit||claimed)return null;
   claimed=true;state='checking';return {id:lead,token:'fixture-claim',address:'45 Fixture Lane, Dallas, TX 75201',assignmentFeeCents:1000000,sellerCostReserveCents:100000,quotaRequestId:quota,demoExpiresAt:original.expires_at,noAddressFallback:true};
@@ -40,7 +41,7 @@ assert.equal(sent,0);const receiptBefore=structuredClone(original);
 assert.equal((await recoverPendingOwnerDemoLookup(db,key,transport)).status,'rate_limited','unchanged minute/cooldown or funds denial remains authoritative');
 assert.equal(sent,0);permit=true;
 assert.deepEqual(await recoverPendingOwnerDemoLookup(db,key,transport),{status:'property_checked',leadId:lead});
-assert.equal(sent,1);assert.equal(calls.filter(c=>c.path==='rpc/icash_take_dealmachine_request').length,3,'each targeted attempt checks ordinary admission exactly once');
+assert.equal(sent,1);assert.equal(calls.filter(c=>c.path==='rpc/icash_claim_seller_lookup_admitted_for').length,3,'each targeted attempt checks ordinary admission exactly once');
 assert.deepEqual(original,receiptBefore,'no request renewal or receipt rewrite');
 assert.equal((await recoverPendingOwnerDemoLookup(db,key,transport)).status,'owner_demo_recovery_idle');assert.equal(sent,1,'completed work is not replayed');
 
@@ -68,7 +69,7 @@ assert.equal(sent,2);assert.equal((await recoverPendingOwnerDemoLookup(db,key,tr
 // demo instead of allowing an older generic backlog to consume its window.
 claimed=false;state='received';transportFails=false;ordinary=true;calls=[];
 assert.deepEqual(await recoverPendingOwnerDemoLookup(db,key,transport),{status:'property_checked',leadId:lead});
-assert.equal(calls.filter(c=>c.path==='rpc/icash_take_dealmachine_request').length,1);
-assert.equal(calls.filter(c=>c.path==='rpc/icash_claim_seller_lookup_for').length,1);
+assert.equal(calls.filter(c=>c.path==='rpc/icash_claim_seller_lookup_admitted_for').length,1);
+assert.equal(calls.filter(c=>c.path==='rpc/icash_claim_seller_lookup_admitted_for').length,1);
 assert.equal(calls.filter(c=>c.path==='rpc/icash_claim_owner_demo_lookup').length,0,'available ordinary capacity never uses headroom');
 console.log('PASS fresh owner maintenance lookup: original denied request recovers through ordinary capacity or exact headroom, bounded selection, no admission without a candidate, preserved expiry/funds/cooldown, and no unknown replay.');

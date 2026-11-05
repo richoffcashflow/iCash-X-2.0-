@@ -8,13 +8,14 @@ type Lookup={id:string;token:string;address:string;assignmentFeeCents:number;sel
  * use one alternate address format. A timeout or charged result is never replayed. */
 export async function processSellerIntake(db:SellerDb,key:string|undefined,transport:typeof fetch=fetch,leadId?:string,lookupBudgetMs=15000){
  if(!key||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(key))return {status:'provider_not_configured'};
- // Rate admission precedes the claim so local throttling cannot strand a paid hold.
- const ordinary=await db<boolean>('rpc/icash_take_dealmachine_request','POST',{});
- // The owner-only exception returns an atomically reserved lookup. It cannot
- // renew an old request or spend another customer's reserved research capacity.
+ // The versioned RPC selects an eligible exact claim and admits quota in one
+ // transaction. A missing RPC fails closed; never fall back to separate admission.
+ const admitted=await db<Lookup|{status:'rate_limited'|'admission_busy'}|null>(leadId?'rpc/icash_claim_seller_lookup_admitted_for':'rpc/icash_claim_seller_lookup_admitted','POST',leadId?{p_id:leadId}:{});
+ if(admitted&&'status' in admitted&&admitted.status==='admission_busy')return {status:'rate_limited'};
+ if(admitted&&'status' in admitted&&admitted.status!=='rate_limited')throw Error('SELLER_ADMISSION_INVALID');
+ const ordinary=!(admitted&&'status' in admitted&&admitted.status==='rate_limited');
  if(!ordinary&&!leadId)return {status:'rate_limited'};
- const claim=ordinary
-  ?await db<Lookup|null>(leadId?'rpc/icash_claim_seller_lookup_for':'rpc/icash_claim_seller_lookup','POST',leadId?{p_id:leadId}:{})
+ const claim=ordinary?admitted as Lookup|null
   :await db<Lookup|null>('rpc/icash_claim_owner_demo_lookup','POST',{p_id:leadId});
  if(!ordinary&&!claim)return {status:'rate_limited'};
  if(!claim)return {status:'idle_or_setup_required'};

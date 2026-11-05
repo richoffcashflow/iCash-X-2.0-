@@ -14,7 +14,7 @@ assert.equal(urls.length,2);assert.equal(history.records[0].result.credits_used,
 await assert.rejects(sellerLookupHistory(lead,undefined),/NOT_CONFIGURED/);
 await assert.rejects(sellerLookupHistory(lead,'dm_sk_live_fixture',async()=>Response.json({}, {status:401})),/HISTORY_HTTP_401/);
 let written;
-const db=async(path,method,body)=>{if(path==='rpc/icash_take_dealmachine_request')return true;if(path==='rpc/icash_claim_seller_lookup')return {id:'lead',token:'token',address:lead.address,assignmentFeeCents:1000000,sellerCostReserveCents:100000};if(method==='PATCH'){written={path,body};return [];}throw Error('Unexpected mutation '+path);};
+const db=async(path,method,body)=>{if(path==='rpc/icash_take_dealmachine_request')return true;if(path==='rpc/icash_claim_seller_lookup_admitted')return {id:'lead',token:'token',address:lead.address,assignmentFeeCents:1000000,sellerCostReserveCents:100000};if(method==='PATCH'){written={path,body};return [];}throw Error('Unexpected mutation '+path);};
 const raw={data:[{matched:true,dm_property_id:'prop_1',full_address:lead.address,property_type:999}],totals:{submitted:1},credits:{used:1,people:0}};
 assert.equal((await processSellerIntake(db,'dm_sk_live_fixture',async()=>Response.json(raw))).status,'lookup_requires_review');
 assert.equal(written.body.state,'review');assert.equal(written.body.result.lookupFailure.stage,'qualification');
