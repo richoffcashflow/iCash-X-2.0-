@@ -1,6 +1,6 @@
 type Database=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type AssignmentClaim={id:string;accountId:string;dealId:string;userId:string;customerEmail:string;signerName:string;email:string;phone:string};
-type SendInput={accountId:string;dealId:string;userId:string;customerEmail:string;kind:'assignment';signers:{name:string;email:string;phone:string}[];phoneLinkOnly:true};
+type AssignmentClaim={id:string;accountId:string;dealId:string;userId:string;customerEmail:string;signerName:string;email:string;phone:string;expectedTerms:unknown};
+type SendInput={accountId:string;dealId:string;userId:string;customerEmail:string;kind:'assignment';signers:{name:string;email:string;phone:string}[];phoneLinkOnly:true;expectedTerms:unknown};
 type Dependencies={db:Database;send:(input:SendInput)=>Promise<{id:string}>;text:(account:string,envelope:string,phone:string)=>Promise<{sent:boolean}>;dispatch:(account:string,message:string)=>Promise<{status:string}>;title:(account:string,deal:string)=>Promise<{status:string}>};
 
 /** No provider call is retried after uncertain completion. Transport failures
@@ -12,7 +12,7 @@ export async function processDealJourneys(d:Dependencies,env:Record<string,strin
  let ids:string[]=[];
  try{ids=await d.db<string[]>('rpc/icash_due_journeys','POST',{});}
  catch{failed('journey_selection');}
- let assignments=0,titleChecked=false;
+ let assignments=0,titleChecked=false,titleChecks=0,titleRequestsSent=0,heldTitles=0;
  for(const id of ids.slice(0,5)){
   try{
    await d.db('rpc/icash_advance_journey','POST',{p_id:id});
@@ -21,7 +21,11 @@ export async function processDealJourneys(d:Dependencies,env:Record<string,strin
     if(claim){
      assignments++;
      try{
-      const sent=await d.send({accountId:claim.accountId,dealId:claim.dealId,userId:claim.userId,customerEmail:claim.customerEmail,kind:'assignment',signers:[{name:claim.signerName,email:claim.email,phone:claim.phone}],phoneLinkOnly:true});
+      // The claim checked the buyer's accepted price/deposit under the deal lock.
+      // Carry that exact document through signing's existing hash comparison;
+      // a later customer edit must not become a new, unconfirmed buyer agreement.
+      if(!claim.expectedTerms||typeof claim.expectedTerms!=='object'||Array.isArray(claim.expectedTerms)||Object.keys(claim.expectedTerms).length===0)throw Error('Assignment terms snapshot required');
+      const sent=await d.send({accountId:claim.accountId,dealId:claim.dealId,userId:claim.userId,customerEmail:claim.customerEmail,kind:'assignment',signers:[{name:claim.signerName,email:claim.email,phone:claim.phone}],phoneLinkOnly:true,expectedTerms:claim.expectedTerms});
       await d.db(`icash_deal_journeys?id=eq.${id}&account_id=eq.${claim.accountId}&state=eq.sending`,'PATCH',{envelope_id:sent.id,state:'signing',last_progress_at:new Date().toISOString()});
       const delivery=await d.text(claim.accountId,sent.id,claim.phone);
       if(!delivery.sent)throw Error('Contract text not confirmed');
@@ -37,7 +41,18 @@ export async function processDealJourneys(d:Dependencies,env:Record<string,strin
    if(journey&&!titleChecked&&['signing','deposit_due','reserved'].includes(journey.state)){
     if(await d.db<boolean>('rpc/icash_journey_allowed','POST',{p_account:journey.account_id,p_deal:journey.deal_id})){
      titleChecked=true;
-     await d.title(journey.account_id,journey.deal_id);
+     titleChecks++;
+     const result=await d.title(journey.account_id,journey.deal_id);
+     if(result.status==='title_request_sent')titleRequestsSent++;
+     else{
+      // These results precede PDF preparation and any new provider write. Keep
+      // scanning the bounded batch without preparing multiple email packages.
+      // A previous uncertain delivery stays held but cannot block another deal.
+      const noAttempt=['title_request_already_sent','title_request_already_held','verified_title_contact_required','title_automation_paused','title_configuration_required','live_work_not_ready'];
+      if(noAttempt.includes(result.status))titleChecked=false;
+      if(result.status!=='title_request_already_sent')heldTitles++;
+      if(!['title_request_already_sent','verified_title_contact_required','title_automation_paused','title_request_held'].includes(result.status))failed('title_delivery');
+     }
     }
    }
   }catch{
@@ -65,5 +80,5 @@ export async function processDealJourneys(d:Dependencies,env:Record<string,strin
    failed('message_dispatch');
   }
  }
- return {status:failures?'journey_processing_needs_review':'journey_processed',checked:Math.min(ids.length,5),assignments,messages,messageAttempts,heldMessages,failures};
+ return {status:failures?'journey_processing_needs_review':'journey_processed',checked:Math.min(ids.length,5),assignments,messages,messageAttempts,heldMessages,titleChecks,titleRequestsSent,heldTitles,failures};
 }

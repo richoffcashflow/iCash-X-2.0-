@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 5, 2026 the owner supplied the course transcript and requested efficient automatic seller-to-buyer-to-title follow-through. Use anonymized scenario replays, preserve source-backed acceptance and exact accepted signing terms, and isolate prior title holds from unrelated deals. A late provider failure must not reopen a canceled task. Course demonstrations are requirements examples, not proof of live customer results; retain actual signature, deposit, title and proceeds evidence. See docs/course-funnel-reliability-2026-11-05.md.
+
 - On November 5, 2026 the owner requested removing the course prompt after a user opens the course. Persist account-bound course discovery separately from actual playback. Hide the reminder and automatic walkthrough after discovery or recorded playback; preserve permanent Training course links and explicit walkthrough replay. Opening a course never marks it watched, accepts terms or starts work. See docs/workspace-guidance-and-course.md.
 
 - On November 5, 2026 the owner requested reviewing actual support answers and fixing reported product bugs. Keep financial amounts/ARV separate from work-credit questions, preserve mixed software/billing complaints and persistent manual takeover, and use the actual voice and conversation controls. Machine greetings are not seller responses; retain genuine human turns, source-word opt-outs, original call/cost evidence and the optimized SQL response fast path. Validate both SQL predecessors and anonymized multi-turn replies; do not send retrospective customer messages. See docs/support-reply-audit-2026-11-05.md.

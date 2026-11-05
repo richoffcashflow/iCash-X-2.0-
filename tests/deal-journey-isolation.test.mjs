@@ -12,7 +12,7 @@ function fixture({selectionFails=false,advanceFails=false,claimFails=false,dupli
   if(path==='rpc/icash_advance_journey'){if(advanceFails&&body.p_id==='first')throw Error('PRIVATE property detail');return null;}
   if(path==='rpc/icash_claim_journey_assignment'){
    if(!assignment||body.p_id!=='first'||state!=='ready')return null;state='sending';
-   return {id:'first',accountId:'account',dealId:'deal',userId:'user',customerEmail:'user@example.invalid',signerName:'Buyer',email:'buyer@example.invalid',phone:'+12145550123'};
+   return {id:'first',accountId:'account',dealId:'deal',userId:'user',customerEmail:'user@example.invalid',signerName:'Buyer',email:'buyer@example.invalid',phone:'+12145550123',expectedTerms:{assignee:'Buyer',priceCents:9200000}};
   }
   if(path.startsWith('icash_deal_journeys?')&&method==='PATCH'){
    patches.push({path,body});

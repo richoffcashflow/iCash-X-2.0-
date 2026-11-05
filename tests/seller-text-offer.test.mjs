@@ -81,6 +81,14 @@ assert.equal(await rpc('icash_claim_seller_text_agreement',[c.a,r.j.id]),null,'o
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[c.a])).n,1);
 
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
+// A rejected delivered price must move negotiation forward through the real
+// SQL save/claim/receipt loop, without turning the next counterprice into payoff.
+const rejected=await seed();await run(rejected,'I need $210k');
+r=await run(rejected,'No');assert.equal(r.plan.action,'seller_counterprice');
+assert.equal(r.result.status,'message_delivered');assert.equal(r.progress.reason,'awaiting_seller_reply');
+r=await run(rejected,'90,000');assert.equal(r.plan.action,'cash_offer');
+assert.equal(r.plan.state.quotedPriceCents,9000000);assert.equal(r.plan.state.acceptedPriceCents,null);
+r=await run(rejected,'Yes');assert.equal(r.plan.action,'legal_name');assert.equal(r.plan.state.acceptedPriceCents,9000000);
 // A new price question reopens negotiation even after an earlier yes. It is
 // neither a legal-name answer nor acceptance of the current or requested price.
 for(const [body,asking,quoted] of [

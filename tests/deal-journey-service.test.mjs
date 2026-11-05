@@ -9,7 +9,7 @@ function fixture(fail=false){
   calls.push(path);
   if(path==='rpc/icash_due_journeys')return ['fixture'];
   if(path==='rpc/icash_advance_journey')return null;
-  if(path==='rpc/icash_claim_journey_assignment'){if(state!=='ready')return null;state='sending';return {id:'fixture',accountId:'account',dealId:'deal',userId:'owner',customerEmail:'owner@example.invalid',signerName:'Buyer',email:'buyer@example.invalid',phone:'+12145550123'};}
+  if(path==='rpc/icash_claim_journey_assignment'){if(state!=='ready')return null;state='sending';return {id:'fixture',accountId:'account',dealId:'deal',userId:'owner',customerEmail:'owner@example.invalid',signerName:'Buyer',email:'buyer@example.invalid',phone:'+12145550123',expectedTerms:{assignee:'Buyer',priceCents:9200000}};}
   if(path.startsWith('icash_deal_journeys?')&&method==='PATCH'){state=body.state;return [];}
   if(path.startsWith('icash_deal_journeys?'))return [{account_id:'account',deal_id:'deal',state}];
   if(path==='rpc/icash_journey_allowed')return true;

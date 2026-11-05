@@ -10,6 +10,7 @@ import {dealTermsSchema,type DealTerms} from './deal-documents.ts';
 import {validCalendarDate} from './document-dates.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {canonical,sha} from './required-call-recording.ts';
+import {sellerResponseDisposition} from './seller-response-policy.ts';
 
 type Message={id:string;direction:string;body:string;state:string;providerId:string|null;updatedAt?:string;action?:string;quoteRevision?:string;priceCents?:number;customerAuthored?:boolean};
 type Closing={legalName?:string;date?:string;inspection?:'yes'|'no'};
@@ -51,6 +52,13 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   if(attempts.filter(m=>m.body===body).length>=2)return review('seller_answer_unclear',`The seller has not answered: ${body} Review their exact answer or arrange an authorized call.`);
   return {kind:'message',action,body,state};
  };
+ // Keep the deterministic offer lane aligned with the source-word contact
+ // policy. A refusal is not another invitation to repeat the same cash price.
+ const disposition=sellerResponseDisposition(source.body);
+ if(disposition){
+  state.acceptedPriceCents=null;
+  return review('seller_response_'+disposition,'Preserve the seller’s exact refusal, contact restriction or review request; do not continue the offer pitch.');
+ }
  const input={action:'report_change',sellerStatement:source.body};
  const sellerPrice=callSellerPriceEvidence(transcript,input);
  if(state.textThreadId!==c.threadId){state.closing={};state.acceptedPriceCents=null;state.textThreadId=c.threadId;}
@@ -81,6 +89,10 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   if(previous?.action==='inspection'&&(unqualifiedYes(source.body)||no(source.body)))closing.inspection=no(source.body)?'no':'yes';
  }
  state.processedSource=c.sourceId;
+ if(previous?.action==='cash_offer'&&no(source.body)){
+  state.acceptedPriceCents=null;
+  return ask('seller_counterprice','What price did you have in mind?');
+ }
  if(state.pendingAskingPriceCents)return ask('clarify_gross_price','Do you mean the purchase price before any mortgage payoff, liens or closing adjustments?');
  if(/^(?:why|how).*(?:price|offer)|\b(?:too low|lowball)\b/i.test(source.body)&&state.quotedPriceCents)return ask('explain_cash_price',`The cash proposal reflects current value, repairs and holding costs. What property detail do you think the estimate is missing?`);
  if(previous?.action==='explain_cash_price'&&/\b(?:renovated|new roof|repaired|repairs?|square feet|bedrooms?|bathrooms?)\b/i.test(source.body))return ask('repair_budget','What is your estimate of the total remaining repair budget?');
