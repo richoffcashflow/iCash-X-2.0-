@@ -124,7 +124,10 @@ export async function settlePendingVoiceUsage(database:VoiceUsageDb,accountId:st
  const db:VoiceUsageDb=(path,method,body)=>{deadline.throwIfAborted();return database(path,method,body,deadline);};
  const dueBefore=new Date(Date.now()-5*60000).toISOString();
  const scope=`account_id=eq.${eq(accountId)}&state=eq.dispatched&rate_id=in.(${rateIds.map(id=>eq('"'+id+'"')).join(',')})&or=(estimate_checked_at.is.null,estimate_checked_at.lte.${eq(dueBefore)})`;
- const [spend]=await db<{operation_key:string;estimate_checked_at:string|null}[]>(`icash_operation_spend?${scope}&select=operation_key,estimate_checked_at&order=estimate_checked_at.asc.nullsfirst,operation_key.asc&limit=1`);
+ // Unconnected calls have a separate recording/carrier recovery path. Select a
+ // completed conversation before spending this account's one reconciliation slot.
+ const completedCall=`completed_call.account_id=eq.${eq(accountId)}&completed_call.state=eq.complete`;
+ const [spend]=await db<{operation_key:string;estimate_checked_at:string|null}[]>(`icash_operation_spend?${scope}&select=operation_key,estimate_checked_at,completed_call:icash_live_conversations!inner(id)&${completedCall}&order=estimate_checked_at.asc.nullsfirst,operation_key.asc&limit=1`);
  if(!spend)return summary;
  // Compare-and-set lets only one contender advance a given observed timestamp.
  // This fairness touch is not a long-lived lease; ledger retries remain idempotent.

@@ -29,13 +29,13 @@ export async function reconcileLiveConversation(accountId:string,callId:string,s
   }
  }
  const c=await elevenRequest<VoiceConversation>(`/v1/convai/conversations/${encodeURIComponent(call.conversation_id)}`,undefined,fetch,signal);
- if(policyHold){
+ if(policyHold||(call.state==='complete'&&c.status==='done')){
   if(c.conversation_id!==call.conversation_id||c.agent_id!==call.agent_id)throw Error('VOICE_ID_MISMATCH');
   // Completed metadata can outlive optional analysis/transcript retention.
   // Failed conversations still require the existing exact quota-failure proof.
   const usage=c.status==='done'?{durationSeconds:c.metadata?.call_duration_secs,providerCostUsd:c.metadata?.cost_fiat}:liveConversationResult(c,{conversationId:call.conversation_id,agentId:call.agent_id,party:call.party});
   if(usage)await recordUsage(usage.durationSeconds,usage.providerCostUsd);
-  return {status:'conversation_saved',billing:policyHold};
+  return {status:'conversation_saved',billing:policyHold??await settle()};
  }
  const result=liveConversationResult(c,{conversationId:call.conversation_id,agentId:call.agent_id,party:call.party});
  if(!result)return {status:'awaiting_conversation'};

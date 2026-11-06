@@ -16,7 +16,7 @@ async function fixture(reason,change=()=>{}){
   },
   elevenRequest:async(path,body)=>{s.reads++;assert.equal(path,'/v1/convai/conversations/'+call.conversation_id);assert.equal(body,undefined,'Recovery must be a GET');if(s.providerError)throw Error('Provider unavailable');return structuredClone(s.provider);},
   liveConversationResult,readVoiceUsagePolicies:()=>[],
-  settleBoundVoiceUsage:async()=>{s.settles++;return {status:'held',reason:s.reason};},
+  settleBoundVoiceUsage:async()=>{s.settles++;return s.settleWithReceipt&&s.observations.length?{status:'settled'}:{status:'held',reason:s.reason};},
   prepareCompletedSellerDraft:async()=>({status:'unchanged'}),
  });
  s.run=()=>service.reconcileLiveConversation(account,callId);return s;
@@ -44,4 +44,16 @@ const zero=await fixture('reviewed_policy_missing',s=>{s.provider.metadata.cost_
 const failed=await fixture('reviewed_policy_invalid',s=>{s.provider={...s.provider,status:'failed',has_user_audio:false,has_response_audio:false,transcript:[],metadata:{call_duration_secs:0,cost_fiat:null,error:{reason:'[quota_exceeded] Fixture'}}};});
 await failed.run();assert.deepEqual(failed.writes.map(p=>[p.p_provider,p.p_amount]),[['elevenlabs_duration',0]],'Quota rejection is not a zero USD receipt');
 const unavailable=await fixture('reviewed_policy_missing',s=>{s.providerError=true;});await assert.rejects(unavailable.run(),/Provider unavailable/);assert.equal(unavailable.writes.length,0);
+for(const reason of ['provider_receipt_missing','duration_missing']){
+ const s=await fixture(reason,s=>{s.settleWithReceipt=true;});
+ assert.equal((await s.run()).billing.status,'settled','Completed calls can use exact terminal billing metadata without optional analysis');
+ assert.equal(s.reads,1);assert.equal(s.settles,2);
+ assert.deepEqual(s.writes.map(p=>[p.p_provider,p.p_amount]),[['elevenlabs_duration',12],['elevenlabs',0.123456]]);
+ const missing=await fixture(reason,s=>{delete s.provider.metadata.cost_fiat;});
+ assert.equal((await missing.run()).billing.status,'held');assert(!missing.writes.some(p=>p.p_provider==='elevenlabs'));
+ const wrong=await fixture(reason,s=>{s.provider.agent_id='other';});
+ await assert.rejects(wrong.run(),/VOICE_ID_MISMATCH/);assert.equal(wrong.writes.length,0);
+ const processing=await fixture(reason,s=>{s.provider.status='processing';});
+ assert.equal((await processing.run()).status,'awaiting_conversation');assert.equal(processing.writes.length,0);
+}
 console.log('PASS late original USD capture behind historical policy holds: exact identity/source, terminal metadata, one GET, saved-evidence skip, unchanged holds and no settlement/transcript/provider writes.');
