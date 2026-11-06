@@ -7,6 +7,7 @@ export async function verifyWalkthrough(browser,base,options,name){
  let account='new',acknowledged=true,locked=false,failSave=false,failLoad=false;
  let course={revision:1,state:'unrecorded',percent:null};
  const opened=new Set();
+ const earlierAccess=new Set(['existing']);
  const saved=new Map([['existing',{step:0,state:'available'}]]);
  page.setDefaultTimeout(12000);page.on('pageerror',error=>errors.push(error.message));
  await context.route('**/*',async route=>{
@@ -20,7 +21,8 @@ export async function verifyWalkthrough(browser,base,options,name){
     if(body.action==='course_opened'){opened.add(account);return route.fulfill({json:{courseOpened:true}});}
     saved.set(account,body);return route.fulfill({json:{tour:body}});
    }
-   return route.fulfill({status:failLoad?503:200,json:failLoad?{error:'Fixture read outage'}:{tour:saved.get(account)??{step:0,state:'new'},course,courseOpened:opened.has(account)}});
+   const courseUpdated=earlierAccess.has(account)&&course.revision>1&&['in_progress','unrecorded'].includes(course.state);
+   return route.fulfill({status:failLoad?503:200,json:failLoad?{error:'Fixture read outage'}:{tour:saved.get(account)??{step:0,state:'new'},course,courseOpened:opened.has(account),courseUpdated}});
   }
   if(!['GET','HEAD'].includes(req.method())){writes.push({path,body:req.postDataJSON()});return route.fulfill({status:403,json:{error:'No live actions in this fixture'}});}
   if(path==='/api/account')return route.fulfill({json:{...fixtureAccount,email:account+'@example.invalid',balanceCents:0,workspaceAcknowledged:acknowledged,mode:'live',billingModel:'membership_credits',membershipActive:!locked}});
@@ -93,13 +95,27 @@ export async function verifyWalkthrough(browser,base,options,name){
   course={revision:1,state:'in_progress',percent:35};await page.reload();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0,'Existing playback also dismisses reminders');
   course={revision:1,state:'completed',percent:100};await page.reload();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0);
   course={revision:2,state:'unrecorded',percent:null};await page.reload();await courseCard.getByRole('link',{name:'Watch course',exact:true}).waitFor();
-  await page.getByLabel('Account menu',{exact:true}).click();await page.locator('.workspace-account-options').getByRole('link',{name:'Training course',exact:true}).click();
+  const headerCourse=page.locator('#workspace-tour-course'),badge=headerCourse.getByText('Updated',{exact:true});
+  await badge.waitFor();
+  await page.setViewportSize({width:320,height:options.viewport.height});
+  const headerBox=await headerCourse.boundingBox(),linksBox=await page.locator('.workspace-header-links').boundingBox();
+  assert(headerBox.height>=44&&headerBox.x+headerBox.width<=linksBox.x,'Updated course and account controls fit on a narrow phone');
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.setViewportSize(options.viewport);
+  await page.screenshot({path:`/tmp/icash-course-updated-${name.replaceAll(' ','-')}.png`});
+  await page.getByLabel('Account menu',{exact:true}).click();
+  await page.locator('.workspace-account-options').getByRole('link',{name:/Training course\s*Updated/}).click();
   await page.getByRole('link',{name:'My workspace',exact:true}).waitFor();await page.waitForLoadState('networkidle');assert(opened.has('existing'));
   await page.getByRole('link',{name:'My workspace',exact:true}).click();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0);
-  course={revision:3,state:'unrecorded',percent:null};await page.reload();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0,'A replacement video does not restore a dismissed discovery prompt');
+  await badge.waitFor(); // Opening the updated course leaves the update visible.
+  course={revision:2,state:'in_progress',percent:94};await page.reload();await badge.waitFor();
+  course={revision:2,state:'completed',percent:95};
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await badge.waitFor({state:'hidden'});assert.equal(await headerCourse.innerText(),'Training course');
+  course={revision:3,state:'unrecorded',percent:null};await page.reload();await badge.waitFor();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0,'A replacement video does not restore a dismissed discovery prompt');
   account='card-user';saved.set(account,{step:0,state:'available'});await page.reload();await courseCard.getByRole('link',{name:'Watch course',exact:true}).click();
   await page.getByRole('link',{name:'My workspace',exact:true}).waitFor();await page.waitForLoadState('networkidle');assert(opened.has('card-user'));
-  await page.getByRole('link',{name:'My workspace',exact:true}).click();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0);
+  await page.getByRole('link',{name:'My workspace',exact:true}).click();await page.waitForLoadState('networkidle');assert.equal(await courseCard.count(),0);assert.equal(await badge.count(),0,'Someone who first received this version has no badge');
   account='other-new';await page.reload();await ready('First, watch the course.');
   assert(!saved.has('other-new'),'Another account does not inherit completion');
   await page.keyboard.press('Escape');await tour.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
@@ -115,6 +131,8 @@ export async function verifyWalkthrough(browser,base,options,name){
   locked=true;await page.reload();await page.getByRole('heading',{name:'Renew subscription',exact:true}).waitFor();assert.equal(await tour.count(),0);locked=false;
   acknowledged=false;await page.reload();await page.getByRole('button',{name:'I agree & open workspace',exact:true}).waitFor();assert.equal(await tour.count(),0,'The guide cannot bypass acknowledgment');
   assert.equal(await page.getByRole('complementary',{name:'Start with the course'}).getByRole('link',{name:'Watch the course →',exact:true}).getAttribute('href'),'/course');
+  account='existing';course={revision:3,state:'unrecorded',percent:null};await page.reload();
+  await page.getByRole('link',{name:'Watch the updated course →',exact:true}).waitFor();
   assert.equal(await page.getByRole('checkbox').isChecked(),false,'Course discovery never accepts terms');
   assert(writes.every(write=>write.path==='/api/account/walkthrough'),'The tour never funds, runs a bot, accepts terms or records course playback');
   assert.deepEqual(external,[]);assert.deepEqual(errors,[]);

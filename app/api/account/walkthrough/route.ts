@@ -2,7 +2,7 @@ import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {limitRequest} from '@/lib/funding';
-import {readCourseProgress} from '@/lib/course-progress-server';
+import {readWorkspaceCourseStatus} from '@/lib/course-progress-server';
 import {walkthroughInput,walkthroughState,walkthroughVersion} from '@/lib/workspace-walkthrough';
 const headers={'Cache-Control':'private, no-store'};
 export const runtime='nodejs';
@@ -14,12 +14,17 @@ function failure(error:unknown){
 export async function GET(){
  try{
   const {accountId}=await workAccount({allowUnacknowledged:true});
-  const [rows,course]=await Promise.all([
+  const [rows,status]=await Promise.all([
    db<{step:number;state:string;course_opened_at:string|null}[]>(`icash_workspace_walkthroughs?account_id=eq.${accountId}&version=eq.${walkthroughVersion}&select=step,state,course_opened_at&limit=1`),
-   readCourseProgress(accountId).catch(()=>null),
+   readWorkspaceCourseStatus(accountId).catch(()=>null),
   ]);
   const row=rows[0];
-  return Response.json({tour:walkthroughState.parse(row?{step:row.step,state:row.state}:{step:0,state:'new'}),course,courseOpened:!!row?.course_opened_at},{headers});
+  return Response.json({
+   tour:walkthroughState.parse(row?{step:row.step,state:row.state}:{step:0,state:'new'}),
+   course:status?.course??null,
+   courseOpened:row?.course_opened_at?true:status?.priorPlayback??null,
+   courseUpdated:status?.courseUpdated===true,
+  },{headers});
  }catch(error){return failure(error);}
 }
 export async function POST(req:Request){

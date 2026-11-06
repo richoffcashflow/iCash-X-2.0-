@@ -2,7 +2,8 @@
 import {useEffect,useLayoutEffect,useRef,useState,type CSSProperties} from 'react';
 import {ArrowRight,BookOpen,Check,X} from 'lucide-react';
 import {webinarRequest} from '@/lib/webinar-client';
-import {courseProgressSchema,type CourseProgress} from '@/lib/course-progress';
+import type {CourseProgress} from '@/lib/course-progress';
+import type {WorkspaceGuide} from '@/lib/use-workspace-walkthrough';
 import {walkthroughState,walkthroughSteps,type WalkthroughState} from '@/lib/workspace-walkthrough';
 import styles from './workspace-walkthrough.module.css';
 
@@ -59,27 +60,24 @@ function TourDialog({step,course,busy,error,onMove,onClose,onCourse,onFinish}:{s
  </dialog>;
 }
 
-export function WorkspaceWalkthrough({openRequest,blocked,onOpenChange}:{openRequest:number;blocked:boolean;onOpenChange:(open:boolean)=>void}){
- const [tour,setTour]=useState<WalkthroughState|null>(null),[course,setCourse]=useState<CourseProgress|null>(null),[open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[occupied,setOccupied]=useState(false);
- const [courseOpened,setCourseOpened]=useState<boolean|null>(null);
+export function WorkspaceWalkthrough({guide,openRequest,blocked,onOpenChange}:{guide:WorkspaceGuide|null;openRequest:number;blocked:boolean;onOpenChange:(open:boolean)=>void}){
+ const [tour,setTour]=useState<WalkthroughState|null>(null),[open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[occupied,setOccupied]=useState(false);
+ const course=guide?.course??null,courseOpened=guide?.courseOpened;
+ const initialized=useRef(false);
  const queue=useRef<Promise<unknown>>(Promise.resolve()),revision=useRef(0),mounted=useRef(false),manual=useRef(false),retry=useRef<SaveState|null>(null),writeController=useRef<AbortController|null>(null);
  useEffect(()=>{
-  mounted.current=true;const controller=new AbortController();writeController.current=new AbortController();
+  mounted.current=true;writeController.current=new AbortController();
   const url=new URL(window.location.href),returning=url.searchParams.get('walkthrough')==='1';
   if(returning){manual.current=true;setTour({step:1,state:'active'});setOpen(true);url.searchParams.delete('walkthrough');window.history.replaceState(window.history.state,'',url.pathname+url.search+url.hash);}
-  const load=(initial:boolean)=>void webinarRequest<{tour:unknown;course:unknown;courseOpened:boolean}>('/api/account/walkthrough',{cache:'no-store',signal:controller.signal},10000).then(data=>{
-   if(controller.signal.aborted)return;
-   const saved=walkthroughState.parse(data.tour),progress=courseProgressSchema.safeParse(data.course);
-   setCourse(progress.success?progress.data:null);
-   const discovered=data.courseOpened===true||(progress.success&&['in_progress','completed'].includes(progress.data.state));
-   setCourseOpened(discovered);
-   if(!manual.current){setTour(saved);if(discovered)setOpen(false);else if(initial)setOpen(saved.state==='new'||saved.state==='active');}
-  }).catch(()=>{/* A guide outage must not block the customer's workspace; the menu can still open it. */});
-  load(true);
-  const refresh=()=>load(false),restore=(event:PageTransitionEvent)=>{if(event.persisted)refresh();};
-  window.addEventListener('focus',refresh);window.addEventListener('pageshow',restore);
-  return()=>{mounted.current=false;controller.abort();writeController.current?.abort();window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',restore);};
+  return()=>{mounted.current=false;writeController.current?.abort();};
  },[]);
+ useEffect(()=>{
+  if(!guide||guide.courseOpened===null||manual.current)return;
+  setTour(guide.tour);
+  if(guide.courseOpened)setOpen(false);
+  else if(!initialized.current)setOpen(guide.tour.state==='new'||guide.tour.state==='active');
+  initialized.current=true;
+ },[guide]);
  useEffect(()=>{if(openRequest>0){manual.current=true;setTour({step:0,state:'active'});setOpen(true);setError('');}},[openRequest]);
  useEffect(()=>{
   const check=()=>setOccupied(!!document.querySelector('dialog[open]:not([data-workspace-tour]),.workspace-account-menu[open]')||!!document.activeElement?.matches('input,textarea,select,[contenteditable="true"]'));
