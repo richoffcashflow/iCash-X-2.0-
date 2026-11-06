@@ -48,6 +48,7 @@ const maintenanceDb=async(path,method,body)=>{
 };
 const ok=async()=>Response.json({ok:true});
 const route=await loadService('app/api/internal/maintenance/route.ts',{
+ retryVolumeDeferredText:async()=>({status:'idle'}),
  recoverTextDeliveryReceipts:async actualDb=>{assert.equal(actualDb,maintenanceDb);receiptRuns++;return {status:'idle',errors:0};},
  processSupportCustomerNotifications:async()=>({failed:0}),
  applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
