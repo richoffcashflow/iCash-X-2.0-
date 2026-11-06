@@ -30,12 +30,18 @@ export function supportPaidAccessReply(context:PurchaseContext){
 export function supportVipPurchaseReply(context:PurchaseContext){
  let active=false,start=-1;
  const users=context.messages.filter(m=>m.role==='user');
- for(const [index,{content}] of users.entries()){
+ const receiptAcknowledged=(turn:(typeof users)[number])=>{
+  if(!/^(?:yes[, ]+)?i (?:already )?did(?: that)?[.! ]*$/i.test(turn.content.trim()))return false;
+  const previous=context.messages.slice(0,context.messages.indexOf(turn)).findLast(m=>m.role==='assistant'||m.role==='operator');
+  return !!previous&&/email (?:the|your) VIP purchase receipt|(?:sent|emailed) (?:the|your) VIP purchase receipt/i.test(previous.content);
+ };
+ for(const [index,turn] of users.entries()){
+  const {content}=turn;
   const vip=/\bvip\b|\bask ai bot\b/i.test(content);
   const complaint=/\b(?:paid|purchased|bought|charged|already|missing|locked|transfer|carry|not showing|not recognized|not active)\b/i.test(content);
   const unrelated=/\b(?:leads?|contacts?|phone numbers?|calls?|texts?|course|training|refund|cancel|charged twice|duplicate charge)\b/i.test(content);
   const followup=/^(?:ask ai(?: bot)?(?: vip)?|still (?:not|missing|locked)|it (?:says|shows)|same|yes|no|i (?:already |just )?(?:sent|emailed)|(?:can|could|would) you (?:please )?(?:check|look))\b/i.test(content.trim());
-  const next:boolean=!unrelated&&(vip&&complaint||active&&followup);
+  const next:boolean=!unrelated&&(vip&&complaint||active&&(followup||receiptAcknowledged(turn)));
   if(next&&!active)start=index;
   active=next;
   if(!active)start=-1;
@@ -51,7 +57,7 @@ export function supportVipPurchaseReply(context:PurchaseContext){
  if(migration&&/\b(?:transfer|carry(?: over)?)\b/i.test(q)&&!/\b(?:not showing|missing|locked)\b/i.test(q))return {reply:policy+(vip?.code==='vip_active'?' Your current 2.0 account does have VIP active.':''),status:'resolved' as const,ai:false};
  if(vip?.code==='vip_active')return {reply:'Your current 2.0 account has VIP active, so you do not need to buy it again. Open Ask AI Bot beside Your leads. If it still shows an upgrade screen, that access mismatch remains unresolved here.',status:'open' as const,ai:false};
  const prefix=vip?.code==='vip_inactive'?'VIP is not active on this 2.0 account. ':'I haven’t confirmed 2.0 VIP access yet. ';
- const sent=activeUsers.some(m=>/\b(?:sent|emailed|submitted)\b.{0,40}\b(?:vip|receipt)|\b(?:vip|receipt)\b.{0,35}\b(?:sent|emailed|submitted)\b|^(?:i (?:have |already |just )?)?(?:sent|emailed|submitted) it\b/i.test(m.content)&&!/\b(?:not|never|haven[’']t|didn[’']t)\b/i.test(m.content));
+ const sent=activeUsers.some(receiptAcknowledged)||activeUsers.some(m=>/\b(?:sent|emailed|submitted)\b.{0,40}\b(?:vip|receipt)|\b(?:vip|receipt)\b.{0,35}\b(?:sent|emailed|submitted)\b|^(?:i (?:have |already |just )?)?(?:sent|emailed|submitted) it\b/i.test(m.content)&&!/\b(?:not|never|haven[’']t|didn[’']t)\b/i.test(m.content));
  const asked=context.messages.slice(first).some(m=>m.role!=='user'&&/VIP purchase receipt/i.test(m.content));
  const next=sent?'You’ve said you sent the receipt. I haven’t confirmed that the VIP purchase has been matched yet; you do not need to send the same receipt again.':asked?'The receipt requested above is still needed to verify that VIP purchase.':`Email the VIP purchase receipt to ${supportLegacyProofEmail} so its product and account can be verified.`;
  return {reply:prefix+(migration?policy+' ':'')+'If your payment was specifically for 2.0 VIP, don’t buy it again before that purchase is verified. '+next,status:sent?'open' as const:'waiting_on_customer' as const,ai:false};
