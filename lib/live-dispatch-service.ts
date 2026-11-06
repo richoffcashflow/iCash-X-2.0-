@@ -8,6 +8,7 @@ import {automaticOfferPolicy} from './automatic-offer-policy.ts';
 import {sellerContractToolId} from './seller-contract-tool.ts';
 import {automaticOfferReceptionPrompt,payoffAutomaticOfferReceptionPrompt,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,progressAutomaticOfferReceptionPrompt} from './seller-agreement-reception.ts';
 import {sellerAgreementDeliveryPrompt} from './seller-agreement-delivery-prompt.ts';
+import {sellerCallerIdentityPrompt} from './seller-caller-identity.ts';
 import {sellerOfferPresentation} from './seller-offer-presentation.ts';
 import {VoiceActivationBudgetError} from './voice-budget-failure.ts';
 import {limitedSellerPrompt} from './seller-limited-contact.ts';
@@ -174,7 +175,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  const buildPrompt=()=>{
   const base=!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerAgreementDeliveryPrompt(basePrompt()):basePrompt();
   const guide=!intake&&!cancellation&&p.party==='seller'&&!automaticOfferPolicy(recordedReview.offerPolicy)?base+'\n'+opportunityConversationInstructions:base;
-  const instructions=!intake&&!cancellation&&!limited&&p.party==='seller'?efficientSellerPrompt(guide):guide;
+  const efficient=!intake&&!cancellation&&!limited&&p.party==='seller'?efficientSellerPrompt(guide):guide;
+  const instructions=!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerCallerIdentityPrompt(efficient):efficient;
   return instructions+(assigned?`\nREVIEWED INTEREST QUESTION (shared-v1/${limited?'limited':'reviewed'}): Only after the required identity and ownership checks, and only if interest is not already answered in the saved conversation, use this exact question: ${acquisitionOpeners[strategy]} Do not repeat it to a returning seller who already answered. All existing consent, stop, human handoff, offer authority and agreement requirements still apply.`:'');
  };
  if(automaticContext&&p.party==='seller'){
