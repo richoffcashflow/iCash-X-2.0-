@@ -109,6 +109,31 @@ try{
    assert.doesNotMatch(ui.text(),/Could not load your account|Your account could not refresh/);
   }finally{ui.dispose();}
  });
+ await scenario('the first account load recovers after a prolonged outage with read-only retries',async()=>{
+  browserFixture();
+  const originalTimeout=globalThis.setTimeout,originalClear=globalThis.clearTimeout;
+  const timers=new Map();let reads=0,available=false;
+  globalThis.setTimeout=(fn,ms,...args)=>{
+   if(![5000,15000,30000,60000].includes(ms))return originalTimeout(fn,ms,...args);
+   const id=Symbol();timers.set(id,{fn,ms});return id;
+  };
+  globalThis.clearTimeout=id=>{if(!timers.delete(id))originalClear(id);};
+  globalThis.fetch=async(path,init)=>{
+   assert.equal(path,'/api/account?view=core');assert.equal(init.method??'GET','GET');
+   reads++;if(!available)throw Error('Offline fixture');return Response.json(fixture);
+  };
+  const ui=harness('app/page.tsx');try{
+   await ui.flush();
+   for(const delay of [5000,15000,30000,60000,60000]){
+    assert.equal(timers.size,1);const [id,timer]=timers.entries().next().value;
+    assert.equal(timer.ms,delay);timers.delete(id);await timer.fn();await ui.flush();
+   }
+   available=true;
+   const [id,timer]=timers.entries().next().value;timers.delete(id);await timer.fn();await ui.flush();
+   assert.equal(reads,7);assert.equal(timers.size,0);
+   assert.equal(ui.find(n=>n.type==='BotRunBar').props.enabled,true);
+  }finally{ui.dispose();globalThis.setTimeout=originalTimeout;globalThis.clearTimeout=originalClear;}
+ });
  await scenario('email-only sign-in preserves existing code, retry and trial recovery controls',async()=>{
   for(const props of [{},{trialRecovery:true},{ready:false}]){
    let signedIn=0;const calls=[];
@@ -137,5 +162,5 @@ try{
   }finally{ui.dispose();}
  });
 }finally{globalThis.fetch=originalFetch;}
-assert.equal(count,10);
-console.log('Ten bounded local request-recovery scenarios passed. No external requests or paid providers.');
+assert.equal(count,11);
+console.log('Eleven bounded local request-recovery scenarios passed. No external requests or paid providers.');

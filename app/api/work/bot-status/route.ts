@@ -3,15 +3,16 @@ import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {currentBotActivity} from '@/lib/bot-activity';
 export const dynamic='force-dynamic';
-export async function GET(){
+export async function GET(request:Request){
+ const signal=request.signal;
  const headers={'Cache-Control':'private, no-store'};
  try{
-  const {accountId}=await workAccount();
+  const {accountId}=await workAccount({signal});
   const [accounts,tickets,screening,progress]=await Promise.all([
-   db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused&limit=1`),
-   db<{kind:string;state:string;expires_at:string}[]>(`icash_automation_tickets?account_id=eq.${accountId}&state=eq.consumed&expires_at=gt.${new Date().toISOString()}&select=kind,state,expires_at&order=created_at.desc&limit=10`),
-   db<{state:string;lease_until:string|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.running&select=state,lease_until&limit=10`),
-   db<{status?:string;callsBudgetHeld?:number}|null>('rpc/icash_prospecting_progress','POST',{p_account:accountId}),
+   db<{bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=bot_paused&limit=1`,'GET',undefined,signal),
+   db<{kind:string;state:string;expires_at:string}[]>(`icash_automation_tickets?account_id=eq.${accountId}&state=eq.consumed&expires_at=gt.${new Date().toISOString()}&select=kind,state,expires_at&order=created_at.desc&limit=10`,'GET',undefined,signal),
+   db<{state:string;lease_until:string|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.running&select=state,lease_until&limit=10`,'GET',undefined,signal),
+   db<{status?:string;callsBudgetHeld?:number}|null>('rpc/icash_prospecting_progress','POST',{p_account:accountId},signal),
   ]);
   if(!accounts[0])throw Error('ACCOUNT_REQUIRED');
   return NextResponse.json(currentBotActivity({paused:accounts[0].bot_paused,tickets,screening,progress}),{headers});

@@ -41,7 +41,7 @@ try{
  for(const file of ['config/support-center.sql','config/support-owner-notifications.sql','supabase/migrations/20261017185057_paid_access_support.sql','supabase/migrations/20261017213055_support_conversation_replies.sql','supabase/migrations/20261017214402_support_operator_resolution_guard.sql','supabase/migrations/20261017222557_support_customer_reply_email.sql','supabase/migrations/20261018065930_automated_support_resolution.sql'])await pg.exec(read(file));
 
  await pg.exec(read('config/support-conversation-closure.sql'));
- await pg.exec(read('supabase/migrations/20261106182456_support_management_review.sql'));
+ await pg.exec(read('supabase/migrations/20261106185532_support_management_review.sql'));
  await q('insert into auth.users values($1,$2,now()),($3,$4,now())',[owner,'member@example.invalid',operator,'operator@example.invalid']);
  await q('insert into icash_accounts values($1,$2,false)',[account,owner]);
  await q("insert into icash_trusted_operators values($1,null,now()+interval '1 day',array['support'])",[operator]);

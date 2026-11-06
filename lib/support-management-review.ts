@@ -14,6 +14,9 @@ const genericHuman = /^This is automated support|^I can help troubleshoot this h
 export function supportManagementReview(context:SupportContext, answer:SupportReply):SupportReply {
  const index=context.messages.findLastIndex(turn=>turn.role==='user');
  if(index<0)return answer;
+ if(context.handedOff&&answer.status==='closed'){
+  return {reply:'The refund policy still applies. Your case is still in management review, and your earlier details are saved here.',status:'open',managementReview:true,ai:false};
+ }
  const question=context.messages[index].content;
  const previous=context.messages.slice(0,index).findLast(turn=>turn.role==='assistant'||turn.role==='operator');
  const partyQuestion=/\b(?:seller|buyer|homeowner|property owner|lead)\b/i.test(question)&&!/\b(?:support|supervisor|management|manager|ticket|escalate|representative)\b/i.test(question);
@@ -29,10 +32,10 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
   (answer.status==='open'&&previous.content===answer.reply&&!answer.reply.includes('?'))
  );
  const paymentReview=/reporting a charge you don’t recognize|duplicate-charge report needs its own payment check|do both statement entries match|statement details you supplied are saved/i.test(answer.reply)&&!/\b(?:what if|hypothetically|if i (?:am|were)|could i be)\b/i.test(question);
- const needsReview=paymentReview||explicit||exhaustedAccess||proofAwaitingReview||failedAgain||repeatedDeadEnd;
+ const genericReply=generic.test(answer.reply)||genericHuman.test(answer.reply)||/^Hi!|^Which page is this happening on\?/i.test(answer.reply);
+ const needsReview=paymentReview||explicit||exhaustedAccess||proofAwaitingReview||failedAgain||repeatedDeadEnd||context.handedOff&&genericReply;
  if(!needsReview)return answer;
  const note=context.handedOff?'Your case is still in management review.':'I’ve flagged this conversation for management review.';
- const genericReply=generic.test(answer.reply)||genericHuman.test(answer.reply)||/^Hi!|^Which page is this happening on\?/i.test(answer.reply);
  let detail=genericReply?'':answer.reply;
  if(explicit&&genericReply)detail='This is automated support, so there isn’t a live transfer.';
  if(missingCode&&genericReply)detail='Your sign-in code still hasn’t reached you. You don’t need to request another code or pay again.';

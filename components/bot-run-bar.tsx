@@ -37,10 +37,18 @@ export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,v
  const live=readOnly?observedLive:runEnabled;
  const liveLabel=!readOnly?(runEnabled?'Run enabled':stopped?'Paused':'Not running'):blocked?'Work delayed':healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':live?'Live':'Not live';
  const title=readOnly&&(stale||healthUnavailable)?'Checking status':paymentRequired?'Restore access':readOnly&&blocked?'Work delayed':readOnly&&active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped||readOnly&&current?.label==='Paused'?'Bot paused':(readOnly?running:modeRunning)?(readOnly?'Run enabled':'Bot running'):'Bot ready';
- const detail=readOnly&&stale?'Reconnecting…':paymentRequired?'Update your subscription to continue.':readOnly&&(blocked||healthUnavailable)?current!.label:active?current!.label:!funded?(hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.'):(readOnly?running:modeRunning)?(!stale&&!busy&&!blocked&&!healthUnavailable&&current?(observedLive&&hasLeads===false?'Looking for a deal':readOnly?current.label:''):readOnly?'Checking for the next task…':''):stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
+ let detail: string;
+ if (readOnly && stale) detail='Reconnecting…';
+ else if (paymentRequired) detail='Update your subscription to continue.';
+ else if (readOnly && current && (blocked || healthUnavailable)) detail=current.label;
+ else if (active && (readOnly || runEnabled)) detail=current!.label;
+ else if (!funded) detail=hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.';
+ else if (!readOnly && runEnabled) detail='Searching for a deal';
+ else if (readOnly && running && !stopped) detail=!busy && current ? (observedLive && hasLeads===false?'Looking for a deal':current.label) : 'Checking for the next task…';
+ else detail=stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
  const displayTitle=botName?.trim()&&title.startsWith('Bot ')?`${botName.trim()} is ${title.slice(4)}`:title;
  return <section id="workspace-tour-controls" className={`bot-run-bar bot-run-centered${active?' is-active':''}`} aria-label="Bot controls">
-  <div className="bot-run-status"><IcashMark className="bot-orb"/><div><div className="bot-run-title"><h2>{displayTitle}</h2><span className="bot-live-status" data-live={live} role="status"><i aria-hidden="true"/><span className="sr-only">{liveLabel}</span></span>{vip&&<span className="workspace-vip-badge" aria-label="VIP access"><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div>{detail&&<p aria-live="polite">{detail}</p>}</div></div>
+  <div className="bot-run-status"><IcashMark className="bot-orb"/><div><div className="bot-run-title"><h2>{displayTitle}</h2><span className="bot-live-status" data-live={live} role="status"><i aria-hidden="true"/><span className="sr-only">{liveLabel}</span></span>{vip&&<span className="workspace-vip-badge" aria-label="VIP access"><Crown size={24} strokeWidth={2} aria-hidden="true"/><span>VIP</span></span>}</div>{detail&&<p aria-live="polite">{!readOnly&&runEnabled&&!active&&<span className="sr-only">Goal: </span>}{detail}</p>}</div></div>
   <div className="bot-run-actions">
    {(!funded||paymentRequired)&&<button className="bot-main-action" type="button" aria-haspopup="dialog" disabled={busy||stale||readOnly} onClick={onBudget}><Plus size={18} aria-hidden="true"/>{busy?'One moment…':paymentRequired?'Restore access':'Add money to start'}</button>}
    {funded&&!paymentRequired&&(canPause||stopped)&&<button className="bot-run-budget" type="button" disabled={busy||stale||readOnly} onClick={canPause?onPause:onResume}>{canPause?<Pause size={14} aria-hidden="true"/>:<Play size={14} aria-hidden="true"/>}{canPause?'Pause bot':'Run bot'}</button>}

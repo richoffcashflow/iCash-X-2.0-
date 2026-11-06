@@ -43,6 +43,13 @@ const repeated=await answer('That is all I know',[user('Unknown problem'),agent(
 assert.equal(repeated.managementReview,true);assert.doesNotMatch(repeated.reply,/what are you trying/i);
 const topicChange=await answer('How do I change my bot voice?',[user('I need management review'),agent('Your case is in management review.')],{handedOff:true});
 assert.match(topicChange.reply,/Custom voice/);assert.doesNotMatch(topicChange.reply,/repeat|need a receipt/);
+const pending=await answer('That is everything I have',[{role:'operator',content:'The original purchase ownership is still under review.'}],{kind:'access',handedOff:true});
+assert.equal(pending.managementReview,true);assert.match(pending.reply,/still in management review/);assert.doesNotMatch(pending.reply,/enough information|trying to do|send.*again/i);
+const reviewedRefund=await answer('I want my money back',[
+ user('I want a refund'),agent('All sales are final.'),
+ user('I want a refund'),agent('Our refund policy still applies. I’ll close this chat if the same request continues.')
+],{handedOff:true});
+assert.equal(reviewedRefund.status,'open');assert.equal(reviewedRefund.managementReview,true);assert.doesNotMatch(reviewedRefund.reply,/closing this chat/i);
 const resolved=await answer('That worked',[user('My browser call failed'),agent('Try selecting the output on the device.')]);
 assert.equal(resolved.status,'resolved');assert.equal(resolved.managementReview,undefined);
 console.log('Passed account and guest support review, delivery, product and billing conversation replays.');
