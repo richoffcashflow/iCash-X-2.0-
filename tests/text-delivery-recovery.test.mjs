@@ -130,6 +130,14 @@ try{
  await q("update icash_text_messages set state='delivered',last_delivery_at=now() where id=$1",[current]);
  assert.equal(await one('select count(*) from fixture_opened_gaps'),2,'Unrecovered new messages keep normal follow-up behavior');
  assert.notEqual(await one('select first_outreach_at from icash_meta_leads'),null);
+ await seed(41);
+ const beforeDelay=(await q('select * from icash_text_messages where id=$1',[current])).rows[0];
+ const delay={id:'evt_fixture_temporary_unavailable',type:'numbers.delayed',timestamp:Date.now()/1000,
+  data:{original_number:sender,affected_id:beforeDelay.provider_id,reason:'number_temporary_unavailable'}};
+ for(let retry=0;retry<2;retry++)await one('select icash_ingest_text_event_before_operational($1,false)',[delay]);
+ assert.equal(await one('select count(*) from icash_text_events where id=$1',[delay.id]),1);
+ assert.deepEqual((await q('select * from icash_text_messages where id=$1',[current])).rows[0],beforeDelay);
+ assert.equal(await one('select count(*) from fixture_opened_gaps'),2,'Delay does not start a follow-up');
  assert.equal(await one("select count(*) from icash_text_messages where direction='incoming'"),0,'No history or AI replay');
  for(const role of ['anon','authenticated'])for(const signature of ['icash_claim_text_delivery_rechecks()','icash_finish_text_delivery_recheck(uuid,jsonb)'])assert.equal(await one("select has_function_privilege($1,$2,'execute')",[role,signature]),false);
  assert.equal(await one('select paused from icash_text_threads where id=$1',[thread]),true,'Pause preserved and original receipt reads still work');

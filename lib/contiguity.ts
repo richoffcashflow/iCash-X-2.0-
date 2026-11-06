@@ -67,6 +67,26 @@ export function isMessageOptOut(text:string){
  return isContactOptOut(text);
 }
 const messageEvent=z.object({id:z.string().min(1).max(200),type:z.string().min(1).max(100),timestamp:z.number().finite(),data:z.object({from:z.union([phone,serviceSender]),to:phone,body:z.string().max(20000).optional(),message_id:z.string().max(200).optional(),error:z.string().max(20000).optional().catch(undefined),attachments:z.array(z.object({url:z.string().url().max(3000),mime:z.string().max(150).optional(),filename:z.string().max(250).optional()})).max(20).optional()})});
+const senderDelayEvent=z.object({
+ id:z.string().regex(/^[A-Za-z0-9_-]{1,200}$/),
+ type:z.literal('numbers.delayed'),
+ timestamp:z.number().finite().positive(),
+ data:z.object({
+  original_number:phone,
+  affected_id:z.string().regex(/^[A-Za-z0-9_-]{1,200}$/),
+  reason:z.literal('number_temporary_unavailable')
+ })
+});
+
+// This provider notice identifies the original sending number and message.
+// It contains no recipient, delivery result, or instruction to resend.
+export function parseSenderDelay(input:unknown){
+ const event=senderDelayEvent.parse(input);
+ const timestamp=event.timestamp>=1e12?event.timestamp/1000:event.timestamp;
+ if(timestamp>253402300799)throw Error('Invalid delay timestamp');
+ return {...event,timestamp};
+}
+
 export function parseTextWebhook(input:unknown){
  const envelope=z.object({type:z.string(),data:z.unknown()}).passthrough().parse(input);
  // The provider documents both communications.* aliases and the v2 iMessage

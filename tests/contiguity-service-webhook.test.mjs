@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
-import {isServiceTextSender,parseTextWebhook,textPayload,verifyContiguityWebhook} from '../lib/contiguity.ts';
+import {isServiceTextSender,parseTextWebhook,parseSenderDelay,textPayload,verifyContiguityWebhook} from '../lib/contiguity.ts';
 import {suppressCarrierBlockedSms} from '../lib/carrier-blocked-sms.ts';
 
 const destination='+17208134296',secret='fixture-service-webhook-secret';
 const fixture={id:'fixture-service-message',type:'text.incoming.sms',timestamp:Math.floor(Date.now()/1000),data:{from:'+22395',to:destination,body:'Synthetic service notice: do not persist or send to an AI.'}};
 let registered=true,campaignOnly=false,effects=[],failurePath=null,diagnostics=[];
-const deps={replyToInstantLeadText,NextResponse:{json:Response.json},verifyContiguityWebhook,parseTextWebhook,isServiceTextSender,suppressCarrierBlockedSms,
+const deps={replyToInstantLeadText,NextResponse:{json:Response.json},verifyContiguityWebhook,parseTextWebhook,parseSenderDelay,isServiceTextSender,suppressCarrierBlockedSms,
  console:{warn:(...args)=>diagnostics.push(args)},
  db:async(path,method,body,signal)=>{
   if(path==='rpc/icash_record_text_ingress_failure')assert(signal instanceof AbortSignal,'Diagnostics have an independent bounded deadline');
@@ -101,5 +101,30 @@ assert.deepEqual(effects.at(-1).body,{p_kind:'authenticated_rejected',p_stage:'p
 failurePath='rpc/icash_record_text_ingress_failure';diagnostics=[];
 assert.equal((await POST(request({...fixture,type:'unsupported'}))).status,400,'Monitoring failure never changes the original response or replays work');
 assert.deepEqual(diagnostics,[['text_webhook_rejected',{reason:'unsupported_or_malformed',eventClass:'other_or_unknown'}],['text_webhook_monitoring_failed']]);
+failurePath=null;
+const delay={id:'evt_fixture_delay',type:'numbers.delayed',timestamp:1783000000123,
+ data:{original_number:destination,affected_id:'text_fixture_delayed',reason:'number_temporary_unavailable'}};
+for(const campaign of [false,true]){
+ campaignOnly=campaign;effects=[];
+ assert.equal((await POST(request(delay))).status,200);
+ assert.equal((await POST(request(delay))).status,200);
+ assert.deepEqual(effects.map(x=>x.path),Array(2).fill([
+  `icash_text_senders?phone=eq.${encodeURIComponent(destination)}&select=phone`,
+  `icash_webinar_text_senders?phone=eq.${encodeURIComponent(destination)}&select=phone`,
+  'rpc/icash_ingest_text_event'
+ ]).flat());
+ assert.deepEqual(effects[2].body,{p_event:{...delay,timestamp:1783000000.123},p_optout:false});
+}
+campaignOnly=false;effects=[];
+assert.equal((await POST(request(delay,{key:'incorrect'}))).status,401);assert.equal(effects.length,0);
+registered=false;assert.equal((await POST(request(delay))).status,400);
+assert(!effects.some(e=>e.path==='rpc/icash_ingest_text_event'));registered=true;
+for(const data of [{...delay.data,affected_id:''},{...delay.data,original_number:'22395'},{...delay.data,reason:'unknown'}]){
+ effects=[];assert.equal((await POST(request({...delay,data}))).status,400);
+ assert.deepEqual(effects.map(e=>e.path),['rpc/icash_record_text_ingress_failure']);
+}
+failurePath='rpc/icash_ingest_text_event';effects=[];
+assert.equal((await POST(request(delay))).status,503);
+assert.deepEqual(effects.at(-1).body,{p_kind:'processing_failed',p_stage:'delivery_receipt'});
 failurePath=null;
 console.log('PASS signed short-code webhook: registered destination, no persistence/AI/replies, harmless retries, signature/replay checks, normal STOP handling and strict outbound numbers. Fixtures only.');
