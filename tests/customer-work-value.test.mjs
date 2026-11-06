@@ -23,7 +23,7 @@ try{
  create table icash_text_threads(id uuid,account_id uuid,deal_id uuid,party text,recipient text,ai_mode text,paused boolean,manual_only boolean,retired_at timestamptz,eligibility_until timestamptz,permission_until timestamptz);
  create table icash_text_messages(id uuid,account_id uuid,thread_id uuid,direction text,state text,provider_id text,event_id text,created_at timestamptz,body text);
  create table icash_text_ai_jobs(id uuid,account_id uuid,thread_id uuid,message_id uuid,state text,next_attempt_at timestamptz,outgoing_id uuid);
- create table icash_seller_reply_progress(account_id uuid,message_id uuid,thread_id uuid,deal_id uuid,reason text,state text,next_check_at timestamptz);
+ create table icash_seller_reply_progress(account_id uuid,message_id uuid,thread_id uuid,deal_id uuid,reason text,state text,next_check_at timestamptz,milestone text);
  create table icash_seller_agreement_private.call_history(screening_id uuid,account_id uuid,contact_key text,session_id uuid,completed_at timestamptz,transcript jsonb);
  create table icash_live_conversations(id uuid,account_id uuid,screening_id uuid,contact_key text,party text,state text,conversation_id text,completed_at timestamptz,result jsonb);
  create table icash_live_callbacks(account_id uuid,conversation_id uuid,screening_id uuid,state text,due_at timestamptz);
@@ -47,6 +47,7 @@ try{
  await pg.exec(migration.slice(0,migration.indexOf('-- Preserve every predecessor'))+migration.slice(migration.lastIndexOf('revoke all on function')));
  const emailMigration=readdirSync(root).find(n=>n.endsWith('_value_direct_offer_email.sql'));
  await pg.exec(readFileSync(new URL(emailMigration,root),'utf8'));
+ await pg.exec(readFileSync(new URL(readdirSync(root).find(n=>n.endsWith('_value_receipt_followup_review.sql')),root),'utf8'));
  const a=uuid(),b=uuid(),s=uuid(),practice=uuid(),deal=uuid(),t=uuid(),call=uuid(),m=uuid(),lead=uuid(),phone='+12145550142';
  const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
  const receipt=async(account=a)=>(await q("select icash_work_private.value_receipt($1,now()-interval '1 day',now()) r",[account])).rows[0].r;
@@ -78,11 +79,16 @@ try{
  await q("insert into icash_property_controls values($1,'real',true)",[a]);assert.equal(await warm(),false);
  await q('delete from icash_property_controls where account_id=$1',[a]);
  await q("update icash_text_ai_jobs set next_attempt_at=now()-interval '10 minutes';");await q("update icash_text_messages set created_at=now()-interval '11 minutes' where id=$1",[m]);assert.equal(await warm(),false,'An old job cannot freeze acquisition');
- await q("insert into icash_seller_reply_progress values($1,$2,$3,$4,'visit_requested','needs_review',null)",[a,m,t,deal]);
+ await q("insert into icash_seller_reply_progress values($1,$2,$3,$4,'visit_requested','needs_review',null,'visit_coordination')",[a,m,t,deal]);
  await q("update icash_text_messages set created_at=now() where id=$1",[m]);
  r=await receipt();assert.equal(r.nextReply.reason,'visit_requested');
  const p={days:1,timezone:'America/Chicago',screened:4,eligible:0,contacted:2,responded:1,queued:0,status:'ready'};
- assert.match(supportValueSummary(p,r),/\$6\.40.*\$16\.60.*visit/);assert.match(receiptNextStep({...p,health:{status:'blocked'}},r),/delayed/);
+ assert.match(supportValueSummary(p,r),/\$6\.40.*\$16\.60.*visit/);
+ await q("update icash_seller_reply_progress set reason='active_call_receipt_unresolved' where message_id=$1",[m]);
+ assert.match(receiptNextStep({...p,status:'budget_reached'},await receipt()),/research credits.*earlier call/);
+ await q('insert into icash_text_suppressions values($1)',[phone]);
+ const historical=await receipt();assert.equal(historical.interested,1);assert.equal(historical.evidence,null);
+ await q('delete from icash_text_suppressions where phone=$1',[phone]);assert.match(receiptNextStep({...p,health:{status:'blocked'}},r),/delayed/);
  const fn=async v=>(await q('select public.icash_value_question($1) yes',[v])).rows[0].yes;
  for(const phrase of ['What did my money get me?','Where did my credits go?','What did I pay for?','Spent $25 and got no leads'])assert(await fn(phrase),phrase);
  for(const phrase of ['Cancel my subscription','My card was charged twice','What is my ARV?'])assert.equal(await fn(phrase),false);

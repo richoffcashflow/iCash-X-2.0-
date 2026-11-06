@@ -21,7 +21,7 @@ export function WorkValueReceipt({progress:p,receipt:r,apiBase,onText}:{progress
    {e.source!=='text'&&openCall===e.sourceId&&<CallConversation key={e.sourceId} apiBase={apiBase} id={e.sourceId} source={e.source==='reception'?'reception':'outbound'} initiallyOpen party="seller" interested completedAt={e.at}/>}
   </div>}
   <p>{receiptNextStep(p,r)}</p>
-  {r.nextReply&&!r.callbackAt&&p.status!=='paused'&&p.status!=='membership_required'&&p.health?.status!=='blocked'&&
+  {r.nextReply&&!(e?.source==='text'&&e.threadId===r.nextReply.threadId)&&
    <button type="button" className={styles.viewRequest} onClick={()=>{if(r.nextReply)onText(r.nextReply.screeningId,r.nextReply.threadId);}}>View follow-up</button>}
   <small>Last confirmed · {receiptLastWork(r,p.timezone)}</small>
  </section>,host);
