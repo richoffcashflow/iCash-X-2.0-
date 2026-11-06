@@ -38,6 +38,8 @@ jobs:
         run: python3 scripts/test-learning-evidence-cutover-postgres.py
       - name: Verify prospective text learning under concurrent queues and customer Pause
         run: python3 scripts/test-seller-sms-learning-v5-postgres.py
+      - name: Verify sender recovery pacing under concurrent seller introductions
+        run: python3 scripts/test-sender-delay-opener-postgres.py
       - name: Verify independent targeting query receipts under concurrent admission
         if: ${{ !cancelled() }}
         run: python3 scripts/test-targeting-query-binding-postgres.py
