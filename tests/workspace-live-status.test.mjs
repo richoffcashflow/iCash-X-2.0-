@@ -36,15 +36,16 @@ activity=null;
 const customer={readOnly:false,enabled:true};
 assert.match(text(render(customer)),/Bot running/);
 assert.match(text(render(customer)),/Run enabled/);
+assert.match(text(render(customer)),/Searching for a deal/);
 assert.doesNotMatch(text(render(customer)),/Checking status|Not live|Work delayed/);
 for(const change of [{stale:true},{busy:true},{running:false}]){
  const tree=render({...customer,...change});
- assert.match(text(tree),/Bot running/);assert.equal(live(tree),true,'The indicator describes saved Run mode');
+ assert.match(text(tree),/Bot running/);assert.match(text(tree),/Searching for a deal/);assert.equal(live(tree),true,'The indicator describes saved Run mode');
  assert.doesNotMatch(text(tree),/Checking status|Reconnecting|Not live|Work delayed/);
 }
 for(const health of [{blocked:true,label:'A service issue is blocking work on your account.'},{unavailable:true,label:'Work status is temporarily unavailable'},{label:'Confirming earlier work costs'}]){
  activity={principalKey:'fixture',active:false,checkedAt:new Date().toISOString(),...health};
- const tree=render({...customer,hasLeads:true});assert.match(text(tree),/Bot running/);
+ const tree=render({...customer,hasLeads:true});assert.match(text(tree),/Bot running/);assert.match(text(tree),/Searching for a deal/);
  assert.doesNotMatch(text(tree),/service issue|unavailable|Work delayed|earlier work costs/);
 }
 activity={principalKey:'fixture',active:false,label:'Paused',checkedAt:new Date().toISOString()};
@@ -53,6 +54,9 @@ assert.match(text(render({...customer,enabled:false,stopped:true})),/Bot paused/
 assert.match(text(render({...customer,paymentRequired:true})),/Restore access/);
 assert.match(text(render({...customer,balanceCents:0,hasCreditHistory:true})),/Out of credits/);
 activity=null;assert.doesNotMatch(text(render({readOnly:false,enabled:undefined,running:false,stale:true})),/Bot running|Run enabled/,'No fabricated Run mode without a saved account setting');
+for(const state of [{enabled:false,stopped:true},{paymentRequired:true},{balanceCents:0}])assert.doesNotMatch(text(render({...customer,...state})),/Searching for a deal/);
+activity={principalKey:'fixture',active:true,label:'Contacting an owner',checkedAt:new Date().toISOString()};
+assert.doesNotMatch(text(render(customer)),/Searching for a deal/,'Fresh work has its own label');
 // Execute the polling lifecycle: a failed refresh must clear task animation,
 // even when no other state update would re-evaluate the timestamp cutoff.
 const originalFetch=globalThis.fetch,originalDocument=globalThis.document;
@@ -66,7 +70,7 @@ try{
  const afterFailure=render(customer);
  assert.doesNotMatch(text(afterFailure),/Contacting an owner|Checking status|Work delayed/);
  assert(!afterFailure.props.className.includes('is-active'),'A failed poll clears the stale task animation');
- assert.match(text(afterFailure),/Bot running/);assert.equal(live(afterFailure),true,'The saved Run mode remains unchanged');
+ assert.match(text(afterFailure),/Searching for a deal/);assert.match(text(afterFailure),/Bot running/);assert.equal(live(afterFailure),true,'The saved Run mode remains unchanged');
  cleanup();cleanup=undefined;
  activity={principalKey:'fixture',active:true,label:'Contacting an owner',checkedAt:new Date().toISOString()};
  effects=[];render({...customer,stale:true});effects.at(-1)();assert.equal(activity,null,'A stale account read clears task evidence');

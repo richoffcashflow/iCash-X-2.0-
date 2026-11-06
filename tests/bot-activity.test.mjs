@@ -22,11 +22,13 @@ for(const reason of ['configuration_expired','configuration_disabled','system_pa
 }
 assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{health:{status:'unavailable'}}},now).unavailable,true);
 const account='00000000-0000-4000-8000-000000000001';
+const request=new Request('https://workspace.invalid/api/work/bot-status');
 const route=await loadService('app/api/work/bot-status/route.ts',{
  currentBotActivity,
  NextResponse:{json:(body,options={})=>({body,...options})},
- workAccount:async()=>{if(!authorized)throw Error('SIGN_IN_REQUIRED');return {accountId:account};},
- db:async(path,method,body)=>{
+ workAccount:async({signal})=>{assert.equal(signal,request.signal);if(!authorized)throw Error('SIGN_IN_REQUIRED');return {accountId:account};},
+ db:async(path,method,body,signal)=>{
+  assert.equal(signal,request.signal);
   queries.push(path);if(failed)throw Error('database unavailable');
   if(path==='rpc/icash_prospecting_progress'){assert.equal(method,'POST');assert.deepEqual(body,{p_account:account});return {status:'budget_reached',callsBudgetHeld:25};}
   assert(path.includes(`eq.${account}`),'all reads are authenticated-account scoped');
@@ -34,7 +36,7 @@ const route=await loadService('app/api/work/bot-status/route.ts',{
   return path.startsWith('icash_accounts?')?[{bot_paused:false}]:path.startsWith('icash_automation_tickets?')?[ticket]:[];
  },
 });
-let response=await route.GET();assert.equal(response.body.label,'Finding property owners');assert.equal(response.headers['Cache-Control'],'private, no-store');
-assert.equal(queries.length,4);authorized=false;queries=[];assert.equal((await route.GET()).status,401);assert.equal(queries.length,0,'no reads without authentication');
-authorized=true;failed=true;response=await route.GET();assert.equal(response.status,503);assert(!('active' in response.body),'failure never fabricates work');
+let response=await route.GET(request);assert.equal(response.body.label,'Finding property owners');assert.equal(response.headers['Cache-Control'],'private, no-store');
+assert.equal(queries.length,4);authorized=false;queries=[];assert.equal((await route.GET(request)).status,401);assert.equal(queries.length,0,'no reads without authentication');
+authorized=true;failed=true;response=await route.GET(request);assert.equal(response.status,503);assert(!('active' in response.body),'failure never fabricates work');
 console.log('PASS bot activity: actual active tasks, waiting/paused/stale states, tenant scoping, no contact data and authentication');
