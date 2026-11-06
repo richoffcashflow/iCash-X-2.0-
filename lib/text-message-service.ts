@@ -6,7 +6,8 @@ import {db} from './stripe-test.ts';
 import {sendContiguityText,textPayload} from './contiguity.ts';
 import {saveTextReceipt} from './text-receipt.ts';
 import {SellerInventoryUnavailableError} from './voice-budget-failure.ts';
-export async function dispatchTextMessage(accountId:string,messageId:string,manual=false){
+type TextClaimKind='automatic'|'manual'|'meta';
+export async function dispatchTextMessage(accountId:string,messageId:string,manual=false,requiredClaim?:TextClaimKind){
  if(!smsWorkEnabled())return {status:'live_work_not_ready'};
  const key=process.env.CONTIGUITY_API_KEY;
  if(!key||!process.env.CONTIGUITY_WEBHOOK_SECRET)return {status:'messaging_configuration_required'};
@@ -32,6 +33,8 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
  }
  textPayload({from,to:thread.recipient,message:m.body,attachments:m.attachments});
  const metaMessage=!manual&&instantLeadsEnabled(process.env)?await db<{message_id:string}[]>(`icash_meta_lead_messages?message_id=eq.${messageId}&select=message_id&limit=1`):[];
+ const claimKind:TextClaimKind=metaMessage.length?'meta':manual?'manual':'automatic';
+ if(requiredClaim && claimKind!==requiredClaim)return {status:'message_held'};
  let job:unknown;
  try{job=await db<unknown>(metaMessage.length?'rpc/icash_meta_claim_text':manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});}
  catch(error){
@@ -48,4 +51,13 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
  await db(`icash_text_messages?id=eq.${messageId}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{state:'needs_review',updated_at:new Date().toISOString()});
  return {status:'message_delivery_needs_review'};
  }
+}
+
+/** Resume only messages refused before dispatch. The original funding, consent,
+ * routing and one-use claim run again. A provider attempt is never replayed. */
+export async function retryVolumeDeferredText(){
+ const due=await db<{accountId:string;messageId:string;claimKind:TextClaimKind}|null>('rpc/icash_next_sender_volume_retry','POST',{});
+ if(!due)return {status:'idle'};
+ if(!['automatic','manual','meta'].includes(due.claimKind)||!due.accountId||!due.messageId)throw Error('Invalid deferred text binding');
+ return dispatchTextMessage(due.accountId,due.messageId,due.claimKind==='manual',due.claimKind);
 }
