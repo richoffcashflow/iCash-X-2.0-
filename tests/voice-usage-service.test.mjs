@@ -44,7 +44,9 @@ const batchDb=async(path,method,body,signal)=>{
   pages++;assert.equal(q.get('limit'),'1');assert.equal(q.get('order'),'estimate_checked_at.asc.nullsfirst,operation_key.asc');
   const due=q.get('or').match(/^\(estimate_checked_at\.is\.null,estimate_checked_at\.lte\.(.*)\)$/);assert(due);
   assert.equal(Date.parse(due[1]),clock-300000);
-  return pending.filter(row=>!row.settled&&(!row.estimate_checked_at||Date.parse(row.estimate_checked_at)<=Date.parse(due[1]))).sort((a,b)=>(a.estimate_checked_at??'').localeCompare(b.estimate_checked_at??'')||a.operation_key.localeCompare(b.operation_key)).slice(0,1).map(row=>({...row}));
+  assert.equal(q.get('select'),'operation_key,estimate_checked_at,completed_call:icash_live_conversations!inner(id)');
+  assert.equal(q.get('completed_call.account_id'),'eq.account');assert.equal(q.get('completed_call.state'),'eq.complete');
+  return pending.filter(row=>row.operation_key!=='op002'&&!row.settled&&(!row.estimate_checked_at||Date.parse(row.estimate_checked_at)<=Date.parse(due[1]))).sort((a,b)=>(a.estimate_checked_at??'').localeCompare(b.estimate_checked_at??'')||a.operation_key.localeCompare(b.operation_key)).slice(0,1).map(row=>({...row}));
  }
  assert.equal(q.get('limit'),'1');assert.equal(q.get('state'),'eq.complete');
  const op=q.get('operation_key').slice(3);return op==='op002'?[]:[{id:op}];
@@ -61,7 +63,8 @@ for(let i=0;i<77;i++){
  assert(visited.length-before<=1,'Provider work must be bounded per invocation');
  for(const key of Object.keys(totals))totals[key]+=batch[key];
 }
-assert.equal(pages,77);assert.equal(claims,77);assert.equal(visited.length,76);assert.equal(new Set(visited).size,76);
+assert.equal(pages,77);assert.equal(claims,76);assert.equal(visited.length,76);assert.equal(new Set(visited).size,76);
+assert.equal(pending[2].estimate_checked_at,null,'An operation waiting for its carrier binding keeps its original check timestamp');
 assert.deepEqual(totals,{settled:1,held:74,reviewRequired:1});
 // A hot background loop cannot repeatedly fetch the same held provider receipt.
 let hotAttempts=0;
