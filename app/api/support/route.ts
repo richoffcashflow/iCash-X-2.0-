@@ -6,6 +6,7 @@ import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
 import {supportId,supportMessageInput,redactSupportQuestion} from '@/lib/support-policy';
+import {supportWorkValue} from '@/lib/support-work-value';
 import {collectSupportDiagnostics} from '@/lib/support-diagnostics';
 import {replyToSupport,type SupportTurn} from '@/lib/support-conversation';
 import {supportOwnerNotificationsEnabled} from '@/lib/support-owner-notifications';
@@ -51,11 +52,13 @@ export async function POST(req:Request){
    return NextResponse.json({threadId:started.threadId,replay:true},{headers});
   }
   await recoverSupportAccount(accountId,userId).catch(()=>undefined);
-  const [evidence,history,threads]=await Promise.all([
+  const [evidence,history,threads,valueReceipt]=await Promise.all([
    collectSupportDiagnostics(accountId),
    db<SupportTurn[]>(`icash_support_messages?account_id=eq.${accountId}&thread_id=eq.${started.threadId}&select=role,content&order=created_at.desc,id.desc&limit=201`),
-   db<{status:string}[]>(`icash_support_threads?account_id=eq.${accountId}&id=eq.${started.threadId}&select=status`)
+   db<{status:string}[]>(`icash_support_threads?account_id=eq.${accountId}&id=eq.${started.threadId}&select=status`),
+   supportWorkValue(accountId,question,req.headers.get('x-icash-timezone'))
   ]);
+  if(valueReceipt)evidence.push(valueReceipt);
   const messages=history.reverse();
   if(messages.at(-1)?.content!==question||messages.at(-1)?.role!=='user')messages.push({role:'user',content:question});
   if(refundEvidenceNeeded(messages))evidence.push(await prepareSupportRefundEvidence(db,{accountId,threadId:started.threadId,requestId:i.requestId},evidence,fundingMode()));

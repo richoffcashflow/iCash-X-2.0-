@@ -39,7 +39,7 @@ tree=page({...account,smsWorkReady:true},{...campaign,released:true},true);asser
 
 function budget(report,days=1,error=''){let index=0;const slots=[days,report?{scope:JSON.stringify(['/api/work',report.days,'UTC']),report}:null,error,0],mod={exports:{}};new Function('require','module','exports',code('components/budget-summary.tsx'))(name=>name==='react'?{useEffect(){},useState:()=>[slots[index++],()=>{}]}:name==='@/lib/workspace-progress'?progress:name==='@/lib/activity-report'?activity:require(name),mod,mod.exports);return mod.exports.BudgetSummary({timezone:'UTC'});}
 const summary={days:1,leads:5,calls:8,texts:12,contracts:2,spentCents:1750};
-tree=budget(summary);assert.match(text(tree),/Bot activity/);assert.doesNotMatch(text(tree),/Spent|17.50|spending/);assert.match(text(tree),/Leads\s+5/);assert.match(text(tree),/Calls\s+8/);assert.match(text(tree),/Texts\s+12/);assert.match(text(tree),/Contracts\s+2/);
+tree=budget(summary);assert.match(text(tree),/Bot activity/);assert.doesNotMatch(text(tree),/Spent|17.50|spending/);assert.match(text(tree),/Properties found\s+5/);assert.match(text(tree),/Calls attempted\s+8/);assert.match(text(tree),/Texts\s+12/);assert.match(text(tree),/Contracts\s+2/);
 assert.equal(all(tree).filter(n=>n.type==='details').length,0,'report is always visible without nested sections');
 assert.deepEqual(all(tree).filter(n=>n.type==='button').map(text),['Today','7 days','30 days']);
 assert.doesNotMatch(text(tree),/Your progress|preliminary|All-time|Download PDF/);

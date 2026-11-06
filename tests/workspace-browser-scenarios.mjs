@@ -111,6 +111,8 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/manual-call')return route.fulfill({json:{businessNumber:'+12025550199',contacts:[{phone:'+12025550101',name:'Example Seller',available:callMode!=='blocked',reason:callMode==='blocked'?'This contact asked not to be called.':''},...(callMode==='multiple'?[{phone:'+12025550102',name:'Other Seller',available:true}]:[])],personalCalls:[]}});
   if(p==='/api/work/browser-call')return route.fulfill({json:{ready:callMode!=='unavailable'}});
   if(p==='/api/work/call-history')return route.fulfill({json:{recordings:[{id:'33333333-3333-4333-8333-333333333333',status:callOutcome?'failed':'available',...(callOutcome&&callOutcome!=='failed'?{callOutcome}:{}),createdAt:'2026-10-16T05:00:00Z',durationSeconds:62,audioAvailable:true,audioExpiresAt:'2027-01-01T05:00:00Z',source:'outbound',party:'seller',conversationId:null}],next:null}});
+  if(p==='/api/work/conversation'&&url.searchParams.get('id')==='a0000000-0000-4000-8000-000000000001')
+   return route.fulfill({json:{transcript:[{role:'user',message:'I would like to sell my property.'}],next:null}});
   if(p==='/api/work/recording/audio')return route.fulfill({contentType:'audio/wav',body:fixtureAudio});
   if(p==='/api/buyer-qualifications')return route.fulfill({json:{requests:[],candidates:[],hasMore:false,notice:'Fixture'}});
   if(p==='/api/work/buyer-coordination')return route.fulfill({json:{availability:null,receipt:null,assignment:scenario==='deposit_due'?{id:'signed-buyer-assignment',buyer:'Cedar Ridge Homes',depositCents:200000}:null}});
@@ -307,6 +309,20 @@ export async function verifyWorkspace(browser,base,options,name){
   opportunityProgress={budgetId:1,startedAt:new Date().toISOString(),limitCents:5000,spentCents:120,pendingCents:977,remainingCents:3903,queued:2,screened:40,eligible:3,contacted:2,responded:0,status:'working'};
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Your opportunity search'}).waitFor();
+  const receipt=page.getByRole('region',{name:'Work credit receipt'});
+  const source='a0000000-0000-4000-8000-000000000001';
+  opportunityProgress={...opportunityProgress,responded:1,receipt:{spentCents:640,availableCents:1860,heldCents:0,interested:1,
+   evidence:{source:'call',sourceId:source,screeningId:'00000000-0000-4000-8000-000000000001',threadId:null,quote:'I would like to sell my property.',at:new Date().toISOString()},
+   lastWork:{kind:'seller_interest',at:new Date().toISOString()},contactWindowAt:null,callbackAt:null}};
+  await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));
+  await receipt.getByRole('heading',{name:'Interested sellers 1'}).waitFor();
+  assert.match(await receipt.innerText(),/\$6\.40 used today · \$18\.60 available/);
+  assert(await receipt.evaluate(node=>node.getBoundingClientRect().right<=innerWidth+1),'Receipt fits the viewport');
+  await receipt.getByRole('button',{name:'View seller call'}).click();
+  await receipt.locator('.message-bubble').getByText('I would like to sell my property.',{exact:false}).waitFor();
+  await receipt.getByRole('button',{name:'Close seller call'}).click();
+  opportunityProgress={...opportunityProgress,responded:0,receipt:null};
+  await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));await receipt.waitFor({state:'hidden'});
   assert.match(await momentum.innerText(),/40[\s\S]*Eligible matches[\s\S]*3/);assert.doesNotMatch(await momentum.innerText(),/\$|Your search plan|Up to .*per 24 hours/,'Progress omits spending allowance dollar amounts');assert.equal(await momentum.getByRole('button',{name:'View responses'}).count(),0);
   assert(await momentum.evaluate(node=>{const b=node.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1;}),'Live counters fit desktop and mobile');
   await page.getByRole('group',{name:'Activity period'}).getByRole('button',{name:'7 days',exact:true}).click();await momentum.getByText('7 days',{exact:true}).waitFor();
@@ -406,11 +422,12 @@ export async function verifyWorkspace(browser,base,options,name){
     await dialog.getByRole('button',{name:'Texts',exact:true}).waitFor();
     await dialog.getByRole('button',{name:'Calls',exact:true}).click();
     await dialog.getByRole('heading',{name:'Call recordings',exact:true}).waitFor();
+    const priorTranscriptReads=apiReads.filter(path=>path==='/api/work/conversation').length;
     const audio=dialog.locator('audio[aria-label="Call recording"]');await audio.waitFor();assert.equal(await audio.getAttribute('preload'),'none');
     assert.equal(await dialog.getByRole('button',{name:/transcript/i}).count(),0,'Audio is available before any transcript exists');
     await audio.evaluate(async node=>{await node.play();});await page.waitForFunction(()=>{const node=document.querySelector('audio[aria-label="Call recording"]');return node&&node.readyState>=2&&node.currentTime>0;});
     await audio.evaluate(node=>node.pause());assert(apiReads.includes('/api/work/recording/audio'),'The browser fetched actual audio bytes');
-    assert(!apiReads.includes('/api/work/conversation'),'Playing audio never fetches a transcript');
+    assert.equal(apiReads.filter(path=>path==='/api/work/conversation').length,priorTranscriptReads,'Playing audio never fetches a transcript');
     await dialog.getByRole('button',{name:'Close conversation'}).click();
     callMode='single';await card.getByRole('button',{name:/^Call /}).click();
     await dialog.getByText('Allow microphone access in your browser, then try again.',{exact:true}).waitFor();

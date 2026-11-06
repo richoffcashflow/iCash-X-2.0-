@@ -1,4 +1,5 @@
 'use client';
+import {WeeklyWorkValue} from './weekly-work-value';
 import {useEffect,useState} from 'react';
 import type {UsageLoopReport as Report} from '@/lib/usage-loop-tracking';
 import {webinarRequest} from '@/lib/webinar-client';
@@ -18,6 +19,7 @@ export function UsageLoopReport({includeOwner,refresh=0}:{includeOwner:boolean;r
  const rate=(n:number,d:number)=>d?`${Math.round(n/d*100)}%`:'—';
  return <section className={styles.leads} aria-labelledby="usage-loop-title">
   <div className={styles.leadHeading}><div><h2 id="usage-loop-title">Funding & progress</h2><p>What happens after customers add work credits.</p></div></div>
+  <WeeklyWorkValue includeOwner={includeOwner} refresh={refresh}/>
   {failed&&<p role="status">{report?'Refresh unavailable. Showing the last report.':'Progress measurement is temporarily unavailable.'}</p>}
   <div className={styles.metrics} aria-label="First seven days after funding">
    <article><h3>First funding</h3><strong>{count(report?.cohort.firstFunded)}</strong><p>Accounts with a full 7 days to observe</p></article>

@@ -16,3 +16,11 @@
 @keyframes pulse{50%{opacity:.5}}
 @media(max-width:640px){.panel{padding:20px 16px;border-radius:16px}.panel h3{font-size:22px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 12px}.metric:nth-child(3){border-left:0;padding-left:0}.bottom{align-items:flex-start;flex-direction:column}.count{font-size:32px}}
 @media(prefers-reduced-motion:reduce){.count,.dot{animation:none}}
+
+.receipt{border:1px solid #dcdcdc;border-radius:16px;background:#fff;color:#181818;padding:18px 20px;margin:12px 0}
+.receipt header,.receipt h3,.evidence{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.receipt header{justify-content:space-between}.receipt h3{margin:0;font-size:17px}.receipt h3 strong{font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.receipt header span,.receipt small{font-size:12px;color:#5c5c5c}.receipt p{font-size:14px;line-height:1.45;margin:8px 0}
+.evidence{border-left:2px solid #ccc;padding-left:12px;margin:12px 0}.evidence q{overflow-wrap:anywhere}
+.viewRequest,.evidence button{color:inherit;font:inherit;font-weight:650;text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:transparent;border:0;padding:5px;min-height:44px}
+.evidence article{flex-basis:100%;min-width:0}.evidence button:focus-visible{outline:2px solid currentColor}

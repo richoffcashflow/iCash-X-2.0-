@@ -49,6 +49,7 @@ export function CustomerAccountView({viewId}:{viewId:string}){
    {account&&<>
     <h1 className="sr-only">{accountLabel}’s workspace</h1>
     <BotRunBar key={`bot:${viewId}`} apiBase={base} readOnly hasLeads={hasLeads} botName={account.assistantName??undefined} vip={account.vip} running={running} paymentRequired={paymentRequired} stopped={account.paused&&account.balanceCents>0} busy={false} stale={!!error} balanceCents={account.balanceCents} hasCreditHistory={account.fundedCents>0} canPause={!account.paused&&account.balanceCents>0} principalKey={viewId} onBudget={noAction} onPause={noAction} onResume={noAction}/>
+    <div id="workspace-work-receipt"/>
     <div className={workspaceStyles.activity}><BudgetSummary days={activityDays} onDaysChange={setActivityDays} timezone={activityTimezone} key={`report:${viewId}`} apiBase={base} vip={account.vip}/></div>
     <section className="operation-panel" aria-label="Your AI real estate bot"><LiveWorkspace activityDays={activityDays} activityTimezone={activityTimezone} key={`work:${viewId}`} apiBase={base} readOnly onAccessLost={accessLost} onLeadPresenceChange={setHasLeads} principal={accountLabel} botPaused={account.paused} botAvailable={running} accountStale={!!error} showCoach={false}/></section>
    </>}
