@@ -12,7 +12,7 @@ export function missingAccessCodeReply(messages:Turn[],check?:AccessInvestigatio
  const bothTried=users.some(text=>/^both[.!\s]*$/i.test(text)||/(?:tried|used|requested).{0,40}both|both.{0,50}(?:tried|no code|not.*(?:send|arrive))/i.test(text)
   ||(/email/i.test(text)&&/phone|text|sms/i.test(text)&&/no code|no .*code|not gotten|not received|haven't received|already used|tried|nothing/i.test(text)));
  const receiptKnown=asked(/email on your iCash X payment receipt|receipt email match/)
-  ||users.some(text=>/(?:email|receipt).{0,30}match|matches.{0,20}receipt/i.test(text));
+  ||users.some(text=>/(?:email|receipt).{0,30}match|matches.{0,20}receipt|(?:using|used|entered|tried|with) (?:my |the )?(?:purchase|receipt|checkout) email|(?:entered|used|using) (?:the |my )?email.{0,35}(?:paid|purchased|bought)/i.test(text));
  const emailTried=asked(/request (?:one|a) fresh code|check.{0,30}(?:spam|junk)/)
   ||users.some(text=>/(?:tried|requested|resent|resend).{0,30}(?:email|code)|(?:email|code).{0,30}(?:few|several|many) times/i.test(text))||bothTried;
  const phoneTried=asked(/optional receipt email blank|select .Text me a code.|request one fresh text code/)
@@ -25,7 +25,7 @@ export function missingAccessCodeReply(messages:Turn[],check?:AccessInvestigatio
  if(/checkout email.{0,50}(?:differ|does not match|doesn't match)|(?:matched|matches).{0,40}(?:payment|receipt)|(?:payment|receipt).{0,40}(?:matched|matches)/i.test(operator)){
   return open('The payment check already recorded in this conversation is the next step to follow. You don’t need to repeat the code requests or send the same payment proof again. Access is still unresolved; this chat has not changed your sign-in email or restored access.');
  }
- if(/(?:are|will|can) you.{0,25}send|send (?:it|the code|my code)|you(?:'re| are) not sending/i.test(question))return open('I haven’t sent a code from this chat. '+prefix+(emailTried||phoneTried?'Repeated requests haven’t fixed this, and I won’t ask you to keep resending. ':'Code delivery is still unconfirmed. ')+'Your access issue is still open.');
+ if(/(?:are|will|can) you.{0,25}send|send (?:it|the code|my code)|(?:issue|send) me (?:a|the|my) (?:sign[ -]?in )?code|you(?:'re| are) not sending/i.test(question))return open('I haven’t sent a code from this chat. '+prefix+(emailTried||phoneTried?'Repeated requests haven’t fixed this, and I won’t ask you to keep resending. ':'Code delivery is still unconfirmed. ')+'Your access issue is still open.');
  if(!receiptKnown&&!bothTried)return ask(prefix+'Check the email on your iCash X payment receipt. Does it match the email you entered on the sign-in page? Don’t share any sign-in code.');
  if(check?.email!=='unavailable'&&!emailTried&&!already)return ask(prefix+'Use the email on your payment receipt to request one fresh code, then check that inbox and its spam or junk folder. Does a code arrive?');
  if(!asked(/main button|field labels and button text/)&&!users.some(text=>/no (?:error )?message|nothing (?:appears|happens)|doesn't (?:say|show) anything/i.test(text)))return ask(prefix+'You’ve already tried requesting a code, so please don’t request another yet. What does the main button say now: “Email me a code,” “Sign in,” or “One moment…”?');

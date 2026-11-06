@@ -39,7 +39,7 @@ export async function POST(req:Request){
   const value=JSON.parse(raw);
   if(value.action==='escalate'){
    z.object({action:z.literal('escalate'),threadId:supportId}).strict().parse(value);
-   return NextResponse.json({error:'Support continues automatically in this chat. Send what is still happening so I can check it.'},{status:409,headers});
+   return NextResponse.json({error:'To request management review, send a message in this conversation.'},{status:409,headers});
   }
   const i=supportMessageInput.parse(value);
   // Redact common credentials/contact details before durable storage and model use.
@@ -61,7 +61,9 @@ export async function POST(req:Request){
   if(refundEvidenceNeeded(messages))evidence.push(await prepareSupportRefundEvidence(db,{accountId,threadId:started.threadId,requestId:i.requestId},evidence,fundingMode()));
   // Replayed receipts use the local answer; they never repeat a paid model call.
   const answer=await replyToSupport({kind:'account',messages,evidence,historyComplete:history.length<201,handedOff:threads[0]?.status==='escalated',allowAI:!started.replay});
-  await db('rpc/icash_support_finish_conversation','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer.reply,p_evidence:evidence,p_status:answer.status,p_notify:supportOwnerNotificationsEnabled()});
+  const saved=await db<boolean>('rpc/icash_support_finish_conversation','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer.reply,p_evidence:evidence,p_status:answer.managementReview?'management_review':answer.status,p_notify:supportOwnerNotificationsEnabled()});
+  if(saved===false)return NextResponse.json({threadId:started.threadId,superseded:true},{headers});
+  if(saved!==true)throw Error('Unconfirmed support receipt');
   scheduleSupportOwnerNotifications();scheduleSupportCustomerNotifications();
   return NextResponse.json({threadId:started.threadId,ai:answer.ai},{headers});
  }catch(e){const auth=e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED'].includes(e.message);return NextResponse.json({error:auth?'Sign in to get help.':e instanceof z.ZodError||e instanceof SyntaxError?'Please check your message and try again.':'Could not confirm that the reply was saved. Refresh the conversation before retrying.'},{status:auth?401:e instanceof z.ZodError||e instanceof SyntaxError?400:503,headers});}

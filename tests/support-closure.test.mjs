@@ -41,6 +41,7 @@ try{
  for(const file of ['config/support-center.sql','config/support-owner-notifications.sql','supabase/migrations/20261017185057_paid_access_support.sql','supabase/migrations/20261017213055_support_conversation_replies.sql','supabase/migrations/20261017214402_support_operator_resolution_guard.sql','supabase/migrations/20261017222557_support_customer_reply_email.sql','supabase/migrations/20261018065930_automated_support_resolution.sql'])await pg.exec(read(file));
 
  await pg.exec(read('config/support-conversation-closure.sql'));
+ await pg.exec(read('supabase/migrations/20261106185532_support_management_review.sql'));
  await q('insert into auth.users values($1,$2,now()),($3,$4,now())',[owner,'member@example.invalid',operator,'operator@example.invalid']);
  await q('insert into icash_accounts values($1,$2,false)',[account,owner]);
  await q("insert into icash_trusted_operators values($1,null,now()+interval '1 day',array['support'])",[operator]);
@@ -88,5 +89,34 @@ try{
  for(let i=0;i<101;i++)await chat({role:'user',age:48});
  for(let i=0;i<101;i++)await chat();
  await pg.exec('set role service_role');assert.equal((await rpc('icash_close_inactive_support',{})).accountChats,100);assert.equal((await rpc('icash_close_inactive_support',{})).accountChats,1,'Bounded batch carries remaining work forward');
+ // A saved review survives additional customer turns, bot follow-ups and cleanup.
+ const reviewed=await chat({status:'open'}), reviewKey=randomUUID();
+ const askReview={p_account:account,p_user:owner,p_thread:reviewed,p_request:reviewKey,p_message:'Please request management review'};
+ await rpc('icash_support_begin_message',askReview);
+ const saveReview={p_account:account,p_user:owner,p_thread:reviewed,p_request:reviewKey,p_message:'Flagged for management review.',p_status:'management_review',p_evidence:[],p_notify:false};
+ assert.equal(await rpc('icash_support_finish_conversation',saveReview),true);
+ assert.equal(await rpc('icash_support_finish_conversation',saveReview),true);
+ assert.equal((await row("select count(*)::int n from icash_support_messages where request_id=$1 and role='assistant'",[reviewKey])).n,1);
+ assert.equal((await row('select status from icash_support_threads where id=$1',[reviewed])).status,'escalated');
+ await assert.rejects(rpc('icash_support_finish_conversation',{...saveReview,p_user:randomUUID()}));
+ const again=randomUUID();await rpc('icash_support_begin_message',{...askReview,p_request:again,p_message:'Another detail'});
+ assert.equal(await rpc('icash_support_finish_conversation',{...saveReview,p_request:again,p_status:'resolved'}),true);
+ assert.equal((await row('select status from icash_support_threads where id=$1',[reviewed])).status,'escalated');
+ const late=randomUUID();await rpc('icash_support_begin_message',{...askReview,p_request:late});
+ await rpc('icash_support_operator_update',{p_operator:operator,p_thread:reviewed,p_status:'waiting_on_customer',p_request:randomUUID(),p_reply:null});
+ assert.equal(await rpc('icash_support_finish_conversation',{...saveReview,p_request:late}),false);
+ const visitor=await guest({status:'open'}), guestAsk=randomUUID();
+ const visitorReply={p_id:visitor,p_key:guestAsk,p_status:'management_review',p_reply:'Flagged for management review.',p_handoff:true};
+ const addGuest=async(key)=>{await q("insert into icash_access_help_messages(request_id,request_key,role,content) values($1,$2,'user','Help')",[visitor,key]);return rpc('icash_access_help_claim_reply',{p_id:visitor,p_key:key});};
+ const lease=await addGuest(guestAsk);
+ assert.equal(await rpc('icash_access_help_finish_reply',{...visitorReply,p_token:randomUUID()}),false);
+ assert.equal(await rpc('icash_access_help_finish_reply',{...visitorReply,p_token:lease.token}),true);
+ let more=randomUUID(),next=await addGuest(more);assert.equal(next.handedOff,true);
+ assert.equal(await rpc('icash_access_help_finish_reply',{...visitorReply,p_key:more,p_token:next.token,p_status:'waiting_on_customer',p_handoff:false}),true);
+ assert.deepEqual(await row('select status,needs_operator from icash_access_help_requests where id=$1',[visitor]),{status:'open',needs_operator:true});
+ more=randomUUID();next=await addGuest(more);
+ await rpc('icash_access_help_operator_update',{p_operator:operator,p_id:visitor,p_key:randomUUID(),p_status:'waiting_on_customer',p_reply:null});
+ assert.equal(await rpc('icash_access_help_finish_reply',{...visitorReply,p_key:more,p_token:next.token}),false);
+ assert.deepEqual(await row('select status,needs_operator from icash_access_help_requests where id=$1',[visitor]),{status:'waiting_on_customer',needs_operator:false});
  console.log('PASS support closure: polite policy/warning/close, new issues and payment evidence protected, inactive-only bounded closure, no email fanout, preserved history, account/guest reopen, idempotency, operator races, private ACLs. Local fixtures only.');
 }finally{await pg.close();}

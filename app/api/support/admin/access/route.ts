@@ -13,15 +13,15 @@ export async function GET(req:Request){
   await requireTrustedOperator();const id=new URL(req.url).searchParams.get('id');
   if(id){
    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))return Response.json({error:'Invalid request.'},{status:400,headers});
-   const [request]=await db<Record<string,unknown>[]>(`icash_access_help_requests?id=eq.${id}&select=id,email,phone,status,created_at,updated_at`);
+   const [request]=await db<Record<string,unknown>[]>(`icash_access_help_requests?id=eq.${id}&select=id,email,phone,status,needs_operator,created_at,updated_at`);
    if(!request)return Response.json({error:'Request not found.'},{status:404,headers});
    const messages=await db<Record<string,unknown>[]>(`icash_access_help_messages?request_id=eq.${id}&select=id,role,content,created_at,access_investigation&order=created_at.desc,id.desc&limit=100`);
    const [notification]=await db<{status:string;delivery:string|null}[]>(`icash_support_customer_emails?access_request_id=eq.${id}&select=status,delivery&order=created_at.desc,id.desc&limit=1`);
    return Response.json({request,messages:messages.reverse(),notification:notification??null},{headers});
   }
   const [requests,resolved,purchases]=await Promise.all([
-   db<Record<string,unknown>[]>('icash_access_help_requests?status=not.in.(resolved,closed)&select=id,email,phone,status,created_at,updated_at&order=updated_at.desc&limit=100'),
-   db<Record<string,unknown>[]>('icash_access_help_requests?status=in.(resolved,closed)&select=id,email,phone,status,created_at,updated_at&order=updated_at.desc&limit=20'),
+   db<Record<string,unknown>[]>('icash_access_help_requests?status=not.in.(resolved,closed)&select=id,email,phone,status,needs_operator,created_at,updated_at&order=needs_operator.desc,updated_at.desc,id.desc&limit=100'),
+   db<Record<string,unknown>[]>('icash_access_help_requests?status=in.(resolved,closed)&select=id,email,phone,status,needs_operator,created_at,updated_at&order=updated_at.desc&limit=20'),
    db('icash_purchase_access_attention?select=id,email,paid_at,email_status,email_delivery,text_status,text_delivery,reason&order=paid_at.asc&limit=100')
   ]);
   return Response.json({requests:[...requests,...resolved],purchases},{headers});

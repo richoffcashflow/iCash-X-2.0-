@@ -29,9 +29,9 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
    }
    if(url.pathname==='/api/support/admin/access'){
     if(denied)return json({error:'Sign in with a support operator account to open this inbox.'},403);
-    const request={id,email:conversation.email,phone:conversation.phone,status:conversation.status,created_at:now,updated_at:now};
+    const request={id,email:conversation.email,phone:conversation.phone,status:conversation.status,needs_operator:!!conversation.managementReview,created_at:now,updated_at:now};
     if(route.request().method()==='POST'){
-     const body=route.request().postDataJSON();assert.equal(body.id,id);conversation.status=body.status;
+     const body=route.request().postDataJSON();assert.equal(body.id,id);conversation.status=body.status;conversation.managementReview=false;
      if(body.reply)conversation.messages.push({id:'00000000-0000-4000-8000-000000000302',requestId:body.requestId,role:'operator',content:body.reply,createdAt:now});return json({saved:true});
     }
     if(url.searchParams.has('id'))return json({request,messages:conversation.messages.map(message=>({...message,created_at:message.createdAt}))});
@@ -53,7 +53,14 @@ export async function verifyAccessHelp(browser,base,options,name,fixtureCookies)
   assert.equal(await page.locator('textarea').inputValue(),question,'Failed response preserves draft');
   await page.getByRole('button',{name:'Refresh support',exact:true}).click();await page.getByText('Your earlier message was saved. Support continues here.',{exact:true}).waitFor();
   assert.equal(await page.getByLabel('Reply to support',{exact:true}).inputValue(),'','Saved receipt clears only the confirmed draft');assert.equal(sends,1);
+  await page.getByRole('button',{name:'Request management review',exact:true}).click();
+  assert.match(await page.getByLabel('Reply to support',{exact:true}).inputValue(),/management to review/);
+  assert.equal(sends,1,'Choosing review only drafts a message');
+  await page.getByLabel('Reply to support',{exact:true}).fill('');
+  conversation.managementReview=true;
+  await page.reload();await page.getByText('In management review',{exact:true}).waitFor();
   await page.goto(base+'/support/admin');const desk=page.getByRole('region',{name:'Support inbox',exact:true});
+  await desk.getByRole('button',{name:/^Management review/}).click();
   await desk.getByRole('button',{name:/buyer@example.invalid/}).waitFor();
   assert.equal(await desk.getByText('Fixture deployment ready.',{exact:true}).isVisible(),false,'Diagnostics stay out of the inbox');
   assert.equal(await desk.getByText('Operations needing review',{exact:true}).isVisible(),false,'Review tools are collapsed');
