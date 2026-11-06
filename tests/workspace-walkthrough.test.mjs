@@ -33,11 +33,25 @@ try{
  let accountId=oldAccount,userId=owner,authError=false,origin=true,limited=false;
  const course={revision:1,state:'in_progress',percent:20};
  const db=async(path,method,body)=>{const data=await adapter.db(path,method,body);return path.startsWith('icash_workspace_walkthroughs?')?data.map(({step,state,course_opened_at})=>({step,state,course_opened_at})):data;};
- const route=await loadService('app/api/account/walkthrough/route.ts',{workAccount:async()=>{if(authError)throw Error('SIGN_IN_REQUIRED');return {accountId,userId};},db,allowedOrigin:()=>origin,limitRequest:async(req,scope,id)=>{assert.equal(scope,'workspace-walkthrough');assert.equal(id,accountId);if(limited)throw Object.assign(Error('Limited'),{status:429});},readCourseProgress:async id=>{assert.equal(id,accountId);return course;},walkthroughInput,walkthroughState,walkthroughVersion});
+ let priorPlayback=false,courseUpdated=false,courseUnavailable=false;
+ const readWorkspaceCourseStatus=async id=>{
+  assert.equal(id,accountId);
+  if(courseUnavailable)throw Error('Course unavailable');
+  return {course,priorPlayback,courseUpdated};
+ };
+ const route=await loadService('app/api/account/walkthrough/route.ts',{workAccount:async()=>{if(authError)throw Error('SIGN_IN_REQUIRED');return {accountId,userId};},db,allowedOrigin:()=>origin,limitRequest:async(req,scope,id)=>{assert.equal(scope,'workspace-walkthrough');assert.equal(id,accountId);if(limited)throw Object.assign(Error('Limited'),{status:429});},readWorkspaceCourseStatus,walkthroughInput,walkthroughState,walkthroughVersion});
  let response=await route.GET();assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');assert.equal((await response.json()).tour.state,'available');
  accountId=newAccount;userId=other;
  response=await route.GET();const loaded=await response.json();assert.deepEqual(loaded.tour,{step:3,state:'completed'});assert.equal(loaded.course.percent,20,'Tour completion does not mark the course watched');
  assert.equal(loaded.courseOpened,false);
+ priorPlayback=true;courseUpdated=true;
+ const updated=await (await route.GET()).json();
+ assert.equal(updated.courseOpened,true,'Playback of the old video still suppresses the discovery prompt');
+ assert.equal(updated.courseUpdated,true);
+ courseUnavailable=true;
+ const unavailable=await (await route.GET()).json();
+ assert.deepEqual(unavailable.tour,loaded.tour);assert.equal(unavailable.course,null);assert.equal(unavailable.courseOpened,null);assert.equal(unavailable.courseUpdated,false);
+ priorPlayback=false;courseUpdated=false;courseUnavailable=false;
  const mark={p_account:newAccount,p_user:other};
  await assert.rejects(()=>rpc('icash_mark_course_opened',{...mark,p_user:owner}),/Account owner/);
  await assert.rejects(()=>rpc('icash_mark_course_opened',{...mark,p_user:null}),/Account owner/);
