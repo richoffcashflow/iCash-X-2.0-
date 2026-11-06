@@ -3,6 +3,9 @@ import {supportConversationFallback,replyToSupport} from '../lib/support-convers
 const user=content=>({role:'user',content}),assistant=content=>({role:'assistant',content});
 const check=(key,status,code)=>({key,status,code,detail:`Fixture ${key} check.`,source:'fixture',observedAt:'2026-10-17T18:00:00Z'});
 const ready=[check('work','ok','not_paused'),check('credits','ok','credit_available'),check('readiness','ok','readiness_ready')];
+const valueEvidence={...check('work_value','ok','work_receipt_checked'),detail:'Today (America/Chicago), $6.40 in work credits used and $18.60 available now. One seller expressed interest.'};
+const receiptAnswer=await replyToSupport({kind:'account',messages:[user('What did my money get me?')],evidence:[...ready,valueEvidence]},async()=>{throw Error('Verified receipts need no model');});
+assert.equal(receiptAnswer.reply,valueEvidence.detail);assert.equal(receiptAnswer.status,'open');
 const leadsContext={kind:'account',messages:[user('How do I get a client?')],evidence:ready};
 const unrelatedChecks=[check('work','attention','paused'),check('credits','attention','no_available_credit'),check('readiness','attention','readiness_blocked'),check('course','attention','course_unrecorded')];
 for(const question of [

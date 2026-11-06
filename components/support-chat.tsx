@@ -48,7 +48,7 @@ export function SupportChat({onClose,active=true,onMembershipChanged,initialThre
   const text=draft.trim();
   if(!request.current||request.current.text!==text)request.current={id:crypto.randomUUID(),text,threadId:thread};
   try{
-   const {data:d,...r}=await supportRequest<{error?:string;threadId?:string;pending?:boolean}>('/api/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:request.current.id,...(request.current.threadId?{threadId:request.current.threadId}:{}),message:text})});
+   const {data:d,...r}=await supportRequest<{error?:string;threadId?:string;pending?:boolean}>('/api/support',{method:'POST',headers:{'Content-Type':'application/json','x-icash-timezone':Intl.DateTimeFormat().resolvedOptions().timeZone},body:JSON.stringify({requestId:request.current.id,...(request.current.threadId?{threadId:request.current.threadId}:{}),message:text})});
    if(r.status===401){clearAccount();return;}
    if(!r.ok||!d.threadId)throw Error(d.error||'Could not confirm your message was saved. Your draft is still here.');
    setDraft('');request.current=null;setThread(d.threadId);nearLatest.current=true;

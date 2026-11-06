@@ -3,6 +3,7 @@ import type {ActivityDays} from './activity-report';
 export type OpportunityProgressData={
  days:ActivityDays;timezone:string;startAt:string;endAt:string;
  budgetId?:number;startedAt?:string;spentCents?:number;pendingCents?:number;remainingCents?:number;
+ health?:{status?:string;reason?:string};receipt?:unknown;
  queued:number;screened:number;eligible:number;contacted:number;responded:number;
  status:'paused'|'membership_required'|'settling'|'paced'|'budget_reached'|'working'|'ready'|'waiting';
 };

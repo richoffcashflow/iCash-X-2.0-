@@ -17,7 +17,7 @@ export function BudgetSummary({vip=false,apiBase='/api/work',days:controlledDays
   return()=>{active=false;controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
  },[days,retry,apiBase,timezone,scope]);
  const current=snapshot?.scope===scope?snapshot.report:null;
- const metrics=[['leads','Leads','New properties added to your workspace'],['calls','Calls','Bot calls started, including unanswered calls'],['texts','Texts','Texts sent or delivered'],['contracts','Contracts','Seller contracts signed']] as const;
+ const metrics=[['leads','Properties found','New properties added to your workspace'],['calls','Calls attempted','Bot calls started, including unanswered calls'],['texts','Texts','Texts sent or delivered'],['contracts','Contracts','Seller contracts signed']] as const;
  return <section className="workspace-activity" aria-labelledby="workspace-activity-title">
   <div className="workspace-activity-heading"><h3 id="workspace-activity-title">Bot activity</h3><div className="activity-periods" role="group" aria-label="Activity period">{activityPeriods.map(period=><button key={period.days} type="button" aria-pressed={days===period.days} onClick={()=>changeDays(period.days)}>{period.label}</button>)}</div></div>
   <dl className="activity-metrics" aria-busy={!current&&!error}>{metrics.map(([key,label,meaning])=><div key={key}><dt title={meaning}>{label}</dt><dd>{current?current[key].toLocaleString():'—'}</dd></div>)}</dl>

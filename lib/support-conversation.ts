@@ -83,6 +83,8 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(migration)return result(migration.reply,migration.status);
  const course=supportCourseAnswer(context.messages,context.kind==='account'?supportReplyEvidence(context.messages,context.evidence??[]):[]);
  if(course?.answered&&supportListingQuestion(question))return result(course.reply,earlierSupportProblem(context)?'open':'resolved');
+ const receipt=context.kind==='account'?context.evidence?.find(e=>e.key==='work_value'):undefined;
+ if(receipt)return result(receipt.detail,'open');
  const outreach=context.kind==='account'?supportOutreachReply(context.messages,context.evidence??[]):null;
  if(outreach)return outreach;
  if(supportTopic(question)==='human')return result('This is automated support, and there isn’t a live transfer in this chat. I can use the recorded account checks here, but I haven’t confirmed a fix for the problem you reported.','open');
@@ -146,7 +148,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 /** Recovery runs separately with fixed account-bound operations. The model only explains verified results. */
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportManagementReview(context,supportTechnicalFallback(context));
- if(fallback.managementReview)return fallback;
+ if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
  if(supportInboxGuidance(context))return fallback;
  const latest=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
  if(/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(latest.trim())&&!fallback.reply.includes('?'))return fallback;

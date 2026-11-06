@@ -5,6 +5,7 @@ import {requireTrustedOperator} from '@/lib/trusted-operator';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {supportId,supportStatusInput,redactSupportQuestion} from '@/lib/support-policy';
+import {supportWorkValue} from '@/lib/support-work-value';
 import {collectSupportDiagnostics,supportDeploymentHealth} from '@/lib/support-diagnostics';
 import {supportVerifiedLegacyOfferReply} from '@/lib/support-legacy-migration';
 export const runtime='nodejs';
@@ -15,7 +16,8 @@ export async function GET(req:Request){
  try{
   await requireTrustedOperator();const raw=new URL(req.url).searchParams.get('threadId');
   if(raw){const id=supportId.parse(raw);const [thread]=await db<{id:string;account_id:string;status:string;subject:string}[]>(`icash_support_threads?id=eq.${id}&select=id,account_id,status,subject`);if(!thread)return NextResponse.json({error:'Conversation not found.'},{status:404,headers});
-   const [messages,evidence]=await Promise.all([db(`icash_support_messages?thread_id=eq.${id}&account_id=eq.${thread.account_id}&select=id,role,content,evidence,created_at&order=created_at.desc&limit=100`),collectSupportDiagnostics(thread.account_id)]);
+   const [messages,evidence,valueReceipt]=await Promise.all([db(`icash_support_messages?thread_id=eq.${id}&account_id=eq.${thread.account_id}&select=id,role,content,evidence,created_at&order=created_at.desc&limit=100`),collectSupportDiagnostics(thread.account_id),supportWorkValue(thread.account_id,null,req.headers.get('x-icash-timezone'))]);
+   if(valueReceipt)evidence.push(valueReceipt);
    const [notification]=await db<{status:string;delivery:string|null}[]>(`icash_support_customer_emails?thread_id=eq.${id}&account_id=eq.${thread.account_id}&select=status,delivery&order=created_at.desc,id.desc&limit=1`);
    return NextResponse.json({thread,messages:Array.isArray(messages)?messages.reverse():[],evidence,notification:notification??null},{headers});
   }
