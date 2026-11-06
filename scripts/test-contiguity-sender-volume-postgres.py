@@ -21,7 +21,8 @@ def race(queries):
 def main():
     assert sql("select current_database()") == "icash_reliability"
     migration, = (root / "supabase/migrations").glob("*_contiguity_sender_volume.sql")
-    sql("drop schema if exists icash_sender_private cascade;drop schema public cascade;create schema public;")
+    sql("drop schema if exists icash_sender_private cascade;drop schema if exists icash_text_receipt_private cascade;"
+        "drop schema if exists icash_work_private cascade;drop schema public cascade;create schema public;")
     sql((root / "tests/fixtures/contiguity-volume-predecessors.sql").read_text())
     sql((root / "tests/fixtures/contiguity-volume-admission.sql").read_text())
     sql(migration.read_text())

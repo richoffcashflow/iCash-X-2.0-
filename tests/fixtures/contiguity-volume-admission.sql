@@ -33,3 +33,4 @@ end $$;
 create function public.icash_seller_progress_gate(uuid,uuid) returns boolean language sql as $$select true$$;
 
 create function icash_text_receipt_private.sender_opener_available(text) returns boolean language sql stable as $$select true$$;
+grant usage on schema icash_text_receipt_private to service_role;
