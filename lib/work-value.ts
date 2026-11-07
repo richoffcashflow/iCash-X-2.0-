@@ -1,3 +1,4 @@
+import {dealSearchGoal} from './workspace-progress.ts';
 import type {OpportunityProgressData} from './opportunity-progress';
 
 export type SellerEvidence = {
@@ -38,8 +39,9 @@ export function valueTime(at:string,timezone:string){
 export function receiptNextStep(p:OpportunityProgressData,r:WorkValueReceipt){
  if(p.status==='paused')return 'Your bot is paused. Resume it when you’re ready.';
  if(p.status==='membership_required')return 'Restore your membership to resume automated work.';
- const holding=p.health?.status==='blocked'?(p.health.reason==='pending_work'?'Earlier work is awaiting confirmation.':'Automated work is delayed.')
-  :p.status==='settling'?'Earlier work is awaiting confirmation before those credits are available.'
+ // The receipt explains recorded work and customer actions. An operator's
+ // inactivity flag is neither a customer Pause nor a scheduled restart.
+ const holding=p.status==='settling'?'Earlier work is awaiting confirmation before those credits are available.'
   :p.status==='budget_reached'?'New property research is waiting for available research credits.':'';
  const reply=r.nextReply;
  if(reply){
@@ -47,11 +49,12 @@ export function receiptNextStep(p:OpportunityProgressData,r:WorkValueReceipt){
   return [holding,steps[reply.reason],reply.checkAt?'Next check '+valueTime(reply.checkAt,p.timezone)+'.':''].filter(Boolean).join(' ');
  }
  if(r.callbackAt)return [holding,'A seller requested a callback for '+valueTime(r.callbackAt,p.timezone)+'.'].filter(Boolean).join(' ');
- if(holding)return holding+(p.health?.status==='blocked'?' A restart time is still unconfirmed.':'');
+ if(holding)return holding;
  if(r.contactWindowAt)return 'The next contact window for a queued seller call opens '+valueTime(r.contactWindowAt,p.timezone)+'.';
  if(!r.spentCents&&p.screened>0&&p.eligible===0)return 'None of the newly screened properties passed the financial checks in this period.';
  if(p.queued)return p.queued.toLocaleString()+' '+(p.queued===1?'property is':'properties are')+' queued for screening.';
- return 'The next action has no confirmed time yet.';
+ if(r.availableCents>0&&['ready','working','paced'].includes(p.status))return dealSearchGoal+'. Waiting uses no work credits.';
+ return 'Your next step will appear here when there’s an update.';
 }
 export function receiptLastWork(r:WorkValueReceipt,timezone:string){
  if(!r.lastWork)return 'A completed action hasn’t been confirmed yet.';

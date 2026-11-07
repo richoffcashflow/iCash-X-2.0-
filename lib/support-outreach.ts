@@ -1,12 +1,12 @@
 import {z} from 'zod';
 import type {SupportEvidence} from './support-policy.ts';
-import {currentSupportIssue,supportContinuation,supportBotWorkProblem} from './support-reply-style.ts';
+import {currentSupportIssue,supportContinuation,supportBotWorkProblem,supportWorkDelayNotice} from './support-reply-style.ts';
 
 const count=z.number().int().nonnegative().safe();
 export const supportOutreachSchema=z.object({
  screened:count,outboundProperties:count,inboundProperties:count,contactProperties:count,
  textsSent:count,textsDelivered:count,textReplies:count,callsStarted:count,callsBudgetHeld:count,
- progress:z.object({status:z.string(),remainingCents:count,limitCents:count.optional(),spentCents:count,pendingCents:count.optional(),spendingMode:z.string().optional(),fundedBaselineCents:count.optional()}).passthrough().nullable(),
+ progress:z.object({status:z.string(),health:z.object({status:z.string(),reason:z.string().optional()}).passthrough().nullish().catch(undefined),remainingCents:count,limitCents:count.optional(),spentCents:count,pendingCents:count.optional(),spendingMode:z.string().optional(),fundedBaselineCents:count.optional()}).passthrough().nullable(),
 });
 export type SupportOutreachSnapshot=z.infer<typeof supportOutreachSchema>;
 export function supportOutreachEvidence(value:unknown):Omit<SupportEvidence,'key'|'source'|'observedAt'>{
@@ -14,6 +14,42 @@ export function supportOutreachEvidence(value:unknown):Omit<SupportEvidence,'key
  if(outreach.textsDelivered>outreach.textsSent||outreach.contactProperties>outreach.screened)throw Error('Invalid outreach counts');
  return {status:outreach.callsBudgetHeld>0?'attention':'ok',code:outreach.callsBudgetHeld>0?'outreach_budget_held':'outreach_checked',outreach,
   detail:`${outreach.screened} properties checked; owner details saved for ${outreach.contactProperties}. ${outreach.textsSent} texts sent, ${outreach.textsDelivered} delivered, ${outreach.textReplies} text replies, ${outreach.callsStarted} calls started. ${outreach.callsBudgetHeld} call jobs have a saved credit hold; this count alone does not establish the current blocker. These are recorded results, not proof the customer sees them or that a seller is interested.`};
+}
+
+function delayNoticeReply(evidence:SupportEvidence[]){
+ const outreach=evidence.find(e=>e.key==='outreach')?.outreach;
+ const progress=outreach?.progress;
+ const activity=outreach?` Your account has ${outreach.callsStarted} recorded call ${outreach.callsStarted===1?'attempt':'attempts'} so far.`:'';
+ const health=progress?.health;
+ const work=evidence.find(e=>e.key==='work');
+ const open=(reply:string)=>({reply,status:'open' as const,ai:false});
+ // The signed-in reply finisher saves management review with the message.
+ const review=(reply:string)=>({...open(reply),managementReview:true});
+ if(progress?.status==='membership_required'||evidence.some(e=>e.key==='subscription'&&e.softwareAccess===false))
+  return open('Restore your software access in subscription settings to continue automated work.');
+ if(health?.status==='blocked'&&health.reason==='system_paused')
+  return review('A service issue paused work on this account. You can leave your bot settings as they are.');
+ if(work?.code==='paused'||progress?.status==='paused')return open('Your bot is paused. Select Run bot in your workspace when you’re ready to continue.');
+ if(progress?.status==='settling')
+  return open('Earlier work is awaiting cost confirmation. Those credits stay on hold until the check finishes automatically. Waiting uses no additional work credits.');
+ if(progress?.status==='budget_reached')
+  return open('Your available work credits are below the amount needed for the next research task. You can review your balance in the workspace and add work credits if you want research to continue.');
+ if(health?.status==='blocked'&&health.reason==='pending_work')
+  return open('An earlier task is awaiting confirmation. The bot checks it automatically. You can leave your settings as they are, and waiting uses no work credits.');
+ const running=work?.status==='ok'&&work.code==='not_paused';
+ if(!running||!progress)return review('I couldn’t verify the current work status for your account.'+activity);
+ if(health?.status==='blocked'&&health.reason==='no_completed_work'){
+  const reason='Your bot is switched on. The delay message appeared because the last check hadn’t recorded a recent completed task.';
+  if(evidence.some(e=>e.key==='research_capacity'&&e.status==='attention'&&e.code==='research_capacity_wait'))
+   return open(reason+' New property research is waiting for capacity. Your bot will check again automatically. You can leave it on, and waiting uses no work credits.');
+  return review(reason+' You can leave it on while we check what is holding up new work. Waiting uses no work credits.');
+ }
+ if(health?.status==='blocked')return review('Your bot is switched on, but a service check is holding up work. You can leave your settings as they are.');
+ if(evidence.some(e=>e.key==='readiness'&&e.status==='attention'&&e.code==='readiness_blocked'))
+  return review('Your bot is switched on. An account setup check needs attention. You can leave your bot settings as they are.');
+ if(health?.status==='ok'&&progress.remainingCents>0&&['ready','working','paced'].includes(progress.status))
+  return open('Your bot is switched on, and the latest account work check is clear.'+activity+' Leave it on for eligible tasks. Waiting uses no work credits.');
+ return review('Your bot is switched on. I couldn’t verify the cause of the delay from the latest work check.'+activity);
 }
 
 /** Verified account evidence wins over guesses from a passing setup check. */
@@ -37,6 +73,7 @@ export function supportOutreachReply(messages:{role:string;content:string}[],evi
  const statusCheck=!problem&&/\b(?:check|verify|review|show|what(?:[’']s| is))\b.{0,45}\b(?:bot|outreach|call|text)\b.{0,25}\b(?:status|activity|running|active)\b|\b(?:is (?:my|the) bot (?:on|running|active)|bot status)\b/i.test(issue);
  if(!source&&!problem&&!textDelivery&&!stats&&!statusCheck)return null;
  const check=evidence.find(e=>e.key==='outreach');
+ if(supportWorkDelayNotice(issue)&&!stats&&!textDelivery&&!source)return delayNoticeReply(evidence);
  if(statusCheck){
   const work=evidence.find(e=>e.key==='work');
   const state=work?.code==='paused'?'Your bot is paused.':work?.status==='ok'&&work.code==='not_paused'?'Your bot is switched on.':'I can’t confirm your bot’s current Run/Pause status from these checks.';
