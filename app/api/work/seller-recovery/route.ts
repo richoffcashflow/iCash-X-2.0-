@@ -3,11 +3,12 @@ import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
 import {allowedOrigin} from '@/lib/funding-policy';
 import {db} from '@/lib/stripe-test';
+import {sellerAttentionFilters,sellerReminderDeliveryEmbed} from '@/lib/workspace-attention-query';
 const headers={'Cache-Control':'private, no-store'};
 export async function GET(){
  try{
   const {accountId}=await workAccount();
-  const gaps=await db(`icash_seller_gaps?account_id=eq.${accountId}&state=in.(open,queued,waiting,needs_review)&select=id,deal_id,reason,stage,channel,quote,state,due_at,updated_at&order=updated_at.desc,id&limit=100`);
+  const gaps=await db(`icash_seller_gaps?account_id=eq.${accountId}&state=in.(open,queued,waiting,needs_review)&select=id,deal_id,reason,stage,channel,quote,state,due_at,updated_at,${sellerReminderDeliveryEmbed}&${sellerAttentionFilters(accountId)}&order=updated_at.desc,id&limit=100`);
   return NextResponse.json({gaps},{headers});
  }catch{return NextResponse.json({error:'Could not load seller follow-ups.'},{status:400,headers});}
 }

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
-import {workspaceAttentionQuery} from '../lib/workspace-attention-query.ts';
+import {workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
 const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const account=uuid(999),otherAccount=uuid(998);
 const property=n=>({id:uuid(n),state:'complete',completed_at:'2026-09-30T10:00:00Z',result:{property:{propertyId:`prop_${n}`,address:`${n} Main Street`},financialCheck:{status:'eligible',reason:'Fixture'},preliminarySellerCeilingCents:100000}});
@@ -19,7 +19,7 @@ const contactRows=[lookup(1,[person,{},null,'invalid',{name:34,phones:'invalid'}
  {...lookup(998,[{name:'Other tenant contact',phones:[]}]),account_id:otherAccount}];
 let paths=[],authorized=true,sellerFixtures=[],attentionFixtures=null;
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
-const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
+const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
  if(path==='rpc/icash_refresh_opportunity_outcomes'){assert.equal(body.p_account,account);return null;}
  if(path==='rpc/icash_workspace_text_reply_counts')return {properties:2,unreadProperties:1,unreadMessages:2};
@@ -39,7 +39,7 @@ const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,
   if(q.get('select')?.includes('!inner(')){
    const related=/,([^,]+)!inner\(/.exec(q.get('select'))?.[1];
    assert.equal(q.get(`${related}.account_id`),`eq.${account}`);assert.equal(q.get('limit'),'6');
-   assert.equal(q.get('select'),`id,${related}!inner(${related==='icash_closing_setup'?'review_reason':''})`,'Only the closing reason is projected, never request content');
+   assert.equal(q.get('select'),`id,${related}!inner(${related==='icash_closing_setup'?'review_reason':related==='icash_seller_gaps'?sellerReminderDeliveryEmbed:''})`,'Only closing reason and an empty receipt embed are projected, never message content');
    return attentionFixtures?attentionFixtures[related]??[]:[{id:uuid(1),...(related==='icash_closing_setup'?{icash_closing_setup:[{review_reason:'setup'}]}:{})}];
   }
   if(q.get('select')==='id,result:result->property')return properties.filter(p=>q.get('id').includes(p.id)).map(p=>({id:p.id,result:p.result.property}));

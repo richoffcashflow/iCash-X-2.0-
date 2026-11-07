@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 7, 2026 the owner requested fixing stale customer attention. Completed automatic no-response reminders whose delivery is confirmed and original window has expired are history, not new customer resolution tasks. Filter only the exact account-bound delivered, non-manual draft reminders before pagination; retain genuine requests, unknown delivery, source records and all outreach/billing checks. See docs/completed-reminder-attention.md.
+
 - On November 7, 2026 the owner requested reviewing the support chat and its responses. Answer the current step with verified product controls: distinguish manual seller contact from finding contact details, unanswered calls from text replies, purchase signing from buyer assignments, and purchase evidence from work-credit purchases. Preserve operator findings and supplied payment details, avoid repeating missing-receipt requests, explain management review without a promised fix or deadline, and retain unresolved cases for review. Use anonymized offline replays; no retrospective customer messages or paid tests. See docs/support-reply-audit-2026-11-07.md.
 
 - On November 5, 2026 the owner requested 80% of Business voice capacity: 32 total calls, thirty outgoing and two incoming. Install the separate one-use provider change disabled; enable only after exact-main web and worker verification. Keep daily allowance, billing, provider burst mode, prompts, contact/credit holds and prior receipts unchanged. See docs/eighty-percent-voice-capacity.md.
