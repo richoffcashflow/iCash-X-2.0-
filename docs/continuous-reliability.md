@@ -1,5 +1,22 @@
 # Continuous reliability
 
+## November 7 unused response cleanup
+
+The [HTTP response lifecycle audit](http-response-lifecycle.md) reproduced unused
+response bodies remaining open after database/authentication rejections and
+successful worker dispatches. Cancel only responses the caller no longer needs,
+after any financial classification, preserving authentication status and the
+worker's exact durable-hold acknowledgment even when cleanup fails. No request,
+capability or provider operation is replayed.
+
+`http-response-lifecycle.test.mjs` checks the actual helpers, cleanup failures,
+original financial/authentication/dispatch outcomes, and native loopback streams
+that must close promptly. All four groups failed before the repair and passed
+afterward; this suite also runs in local release verification. Read-only live
+evidence still showed missing SMS delivery confirmations and old pending provider
+work. Those remain separate unresolved conditions; transport cleanup is not proof
+of carrier recovery or settlement.
+
 ## November 7 monitoring gap audit
 
 Read-only production evidence at 11:40 AM Central showed 128 call-start
