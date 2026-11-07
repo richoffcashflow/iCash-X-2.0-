@@ -37,15 +37,15 @@ const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaint
  recoverOwnerExportCapacity:async()=>{throw Error('Capacity evidence unavailable');},
  cleanupOwnerPreflight:async()=>{throw Error('Cleanup unavailable');},
  syncResearchExclusions:async()=>({status:'not_due'}),
- refreshInventoryGeographyBatch:async()=>({status:'not_due'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>{throw Error('Provider unavailable');},readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
+ refreshInventoryGeographyBatch:async()=>({status:'not_due'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
- maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['senderVolume','textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);assert.equal((await lanes.senderVolume()).status,200);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},
+ maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['capacity','senderVolume','textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);assert.equal((await lanes.capacity()).status,200);assert.equal((await lanes.senderVolume()).status,200);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},
  refreshReliability:async(_db,ok)=>{assert.equal(ok,true);monitorRan=true;return true;},
  outbound:async()=>{},recording:async()=>{},ownerRecording:async()=>{},reception:async()=>{},
 });
 const maintenanceResult=await maintenance.GET(new Request('https://example.test/api/internal/maintenance'));
-assert.equal(maintenanceResult.status,200);const maintenanceBody=await maintenanceResult.json();assert.equal(maintenanceBody.capacity.status,'verification_unavailable');assert.equal(maintenanceBody.ownerExports.status,'export_receipt_held');
+assert.equal(maintenanceResult.status,200);const maintenanceBody=await maintenanceResult.json();assert.equal(maintenanceBody.capacity.status,'verified');assert.equal(maintenanceBody.ownerExports.status,'export_receipt_held');
 assert.equal(maintenanceBody.ownerExportCapacity.status,'capacity_review_held');
  assert.equal(maintenanceBody.ownerPreflightCleanup.status,'cleanup_pending');
 assert(pruneTried&&lanesRan&&monitorRan);assert.equal(volumeRuns,1);assert.equal(receiptRuns,1,'Telemetry failure cannot suppress receipt recovery');

@@ -1,20 +1,22 @@
 import {dispatchReliabilityAlerts} from './reliability-alerts-service.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export async function refreshReliability(db:Database,maintenanceOk:boolean){
- let monitored=true;
+ let monitored=true,refreshFailed=false;
  try{
   await db('rpc/icash_record_service_heartbeat','POST',{p_component:'maintenance',p_status:maintenanceOk?'ok':'degraded'});
  }catch{monitored=false;}
  try{await db('rpc/icash_repair_expired_research_configs','POST',{});}
- catch{console.error(JSON.stringify({event:'icash_research_configuration_repair_unavailable'}));}
+ catch{monitored=false;refreshFailed=true;console.error(JSON.stringify({event:'icash_research_configuration_repair_unavailable'}));}
  try{
   const report=await db<{issueCount:number}>('rpc/icash_refresh_account_work_snapshot','POST',{});
   if(!Number.isSafeInteger(report?.issueCount)||report.issueCount<0)throw Error('Invalid monitor snapshot');
   if(report.issueCount)console.error(JSON.stringify({event:'icash_workflow_attention',issueCount:report.issueCount}));
  }catch{
-  monitored=false;
-  // A failed refresh must not extend healthy recovery from a still-fresh old
-  // snapshot. Preserve that original evidence and record this failed cycle.
+  monitored=false;refreshFailed=true;
+ }
+ if(refreshFailed){
+  // Failed recovery or a failed snapshot cannot extend healthy recovery from
+  // fresh old evidence. Both independent stages still run before observation.
   try{await db('rpc/icash_record_service_heartbeat','POST',{p_component:'maintenance',p_status:'degraded'});}
   catch{/* Alert observation remains independent of this telemetry write. */}
  }

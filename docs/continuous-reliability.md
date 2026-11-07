@@ -1,5 +1,46 @@
 # Continuous reliability
 
+## November 7 monitoring gap audit
+
+Read-only production evidence at 11:40 AM Central showed 128 call-start
+tickets and 49 saved conversation results in the preceding hour. Twenty seller
+introductions had provider acceptance, which does not prove delivery. The work
+snapshot still flagged four funded accounts without completed usage and 107
+with old pending work. Their original receipts and holds were not changed.
+Worker logs also contained transport timeouts whose stage was lost.
+
+The audit reproduced these failures in the actual worker and maintenance route:
+
+- Failed scheduler transport/body reads lost their operation before reaching the
+  recurring-failure monitor. Successful idle polls could erase their current
+  error state. Preserve the fixed operation and timeout/failure code so the
+  existing bounded recurrence window sees them. Distinguish a failed claim from
+  an uncertain dispatch; neither is retried within the invocation.
+- Maintenance could record a healthy heartbeat before voice verification
+  finished, and still return success after that verification or configuration
+  recovery failed. Include its existing promise in the independent maintenance
+  batch. Other lanes still run concurrently; failed optional one-time changes
+  still permit the ordinary fresh capacity read.
+- Missing text-receipt configuration returned zero write errors and was treated
+  as a successful check. Only completed or genuinely idle recovery qualifies.
+- Failed research configuration repair logged an error but returned a successful
+  monitoring result. Keep the account snapshot and incident observation running,
+  record a degraded heartbeat before observation, and return an unsuccessful
+  monitor result when either repair or snapshot fails.
+
+`worker-transport-failures.test.mjs` composes the real RPC client, dispatcher and
+scheduler. `maintenance-failure-health.test.mjs` exercises the actual authenticated
+route, monitor and batch, including slow voice checks, failed repairs, unknown
+configuration, parallel recovery and private-error redaction. Existing worker,
+heartbeat, failure-isolation and monitor tests remain required. No schema,
+provider settings, billing, customer controls or original holds change.
+
+These are monitoring and failure-detection repairs. They do not establish SMS
+carrier recovery, settle unresolved provider charges, or prove that the four
+flagged accounts have resumed completed work. Production release still requires
+the exact candidate and merged-main Reliability checks and matching web/worker
+deployments.
+
 The November 5 [outbound result recovery](outbound-receipt-drain-2026-11-05.md)
 addresses a measured 14–16-minute delay after calling resumed. Recording maintenance
 can refill its twelve-record batch up to four times inside the same deadline and
