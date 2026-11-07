@@ -68,8 +68,11 @@ export async function automationTick(rpc,transport=fetch,lane){
  let r;
  try{r=await transport('https://www.geticashx.com/api/internal/automation',{method:'POST',headers:{Authorization:'Bearer '+ticket.token},redirect:'error',signal:AbortSignal.timeout(timeout)});}
  catch(error){throw new WorkerOperationError('AUTOMATION_HELD','automation_dispatch',null,null,requestFailureCode(error));}
+ // Dispatch needs only the status and durable-hold header. Release successful
+ // responses too, so continuous work cannot accumulate unread connections.
+ // A cleanup failure cannot overturn an already returned dispatch outcome.
+ try{await r.body?.cancel();}catch{/* No retry; preserve the original status below. */}
  if(!r.ok){
-  await r.body?.cancel();
   // A failed job remains held and visible in operator diagnostics. Once the
   // API confirms that exact one-use attempt was durably held, it must not put
   // unrelated jobs behind worker-slot infrastructure backoff. No ticket is

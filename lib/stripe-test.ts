@@ -14,7 +14,14 @@ export function guestHash(token:string) { return createHash("sha256").update(tok
 export async function db<T>(path:string,method="GET",body?:unknown,signal?:AbortSignal):Promise<T> {
  if(!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) throw new Error("Database not configured");
  const response=await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`,{method,headers:{apikey:process.env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,"Content-Type":"application/json",Prefer:"return=representation"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
- if(!response.ok) throw await voiceReservationFailure(path,response.status,response);
+ if(!response.ok){
+  try{throw await voiceReservationFailure(path,response.status,response);}
+  finally{
+   // Most failures are deliberately not parsed. Release their transport before
+   // returning so repeated upstream errors cannot accumulate open responses.
+   try{await response.body?.cancel();}catch{/* Preserve the original admission failure. */}
+  }
+ }
  const payload=await response.text();
  return (payload?JSON.parse(payload):null) as T;
 }
