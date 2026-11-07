@@ -37,7 +37,7 @@ try{
  assert.equal(supportAcceptedBotCheck(accepted),true);
  assert.match((await replyToSupport({kind:'account',messages:accepted,evidence},noModel)).reply,/recorded call attempt/);
  const plainThanks=supportConversationFallback({kind:'account',messages:[user('What does the bot do?'),assistant('It handles eligible seller outreach automatically.'),user('OK')],evidence});
- assert.equal(plainThanks.reply,'Understood.');
+ assert.equal(plainThanks.reply,'Got it.');
 
  const noReceipts=await replyToSupport({kind:'account',messages:[...prior,user('Can you check it please?')],evidence:[evidence[0]]},noModel);
  assert.match(noReceipts.reply,/switched on/);assert.match(noReceipts.reply,/can’t verify recent calls or texts/);

@@ -1,13 +1,13 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportDuplicateCharge} from './support-policy.ts';
-import {currentSupportIssue} from './support-reply-style.ts';
+import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-reply-style.ts';
 
 /** Narrow, source-backed answers for observed inbox failures. This only explains
  * controls and supplied evidence; it never changes control, sends or settles work. */
 export function supportInboxGuidance(context:SupportContext):SupportReply|null{
  const q=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
  const issue=currentSupportIssue(context.messages);
- const answer=(reply:string):SupportReply=>({reply,status:'open',ai:false});
+ const answer=(reply:string,routineGuidance=false):SupportReply=>({reply,status:'open',ai:false,...(routineGuidance&&supportRoutineGuidanceQuestion(q)?{routineGuidance:true as const}:{})});
  const cancellation=/\b(?:cancel|stop|end)\b.{0,30}\b(?:subscription|renewal|membership|billing)\b/i.test(q);
  const previous=context.messages.slice(0,-1).findLast(turn=>turn.role==='assistant'||turn.role==='operator')?.content??'';
  const priorCustomer=context.messages.filter(turn=>turn.role==='user').at(-2)?.content??'';
@@ -48,13 +48,13 @@ export function supportInboxGuidance(context:SupportContext):SupportReply|null{
   const start='If the seller hears you, your microphone is working in that call. Mute controls your microphone. Check the device’s call volume and audio output, including connected headphones or Bluetooth.';
   return answer(deviceReply?start+' If audio is still missing, which property and approximate call time should support check?':start+' Which device and browser were you using?');
  }
- if(/\b(?:ai|bot)\b/i.test(q)&&(/\b(?:click|press|tap)\b.{0,15}\bcall\b/i.test(q)||/\bhear me\b|\bhear.{0,25}say something/i.test(q)))return answer('The property’s Call button starts a call for you to speak through your browser microphone using your business number. The seller can hear you once connected unless you mute. It does not hand that browser call to the AI or join you to an automatic AI call. Listening to a saved recording does not transmit your microphone.');
+ if(/\b(?:ai|bot)\b/i.test(q)&&(/\b(?:click|press|tap)\b.{0,15}\bcall\b/i.test(q)||/\bhear me\b|\bhear.{0,25}say something/i.test(q)))return answer('The property’s Call button starts a call for you to speak through your browser microphone using your business number. The seller can hear you once connected unless you mute. It does not hand that browser call to the AI or join you to an automatic AI call. Listening to a saved recording does not transmit your microphone.',true);
  if(/\b(?:take ?over|took over|return to (?:the )?bot|sending messages pauses|send(?:ing)? (?:a |my |the )?(?:text|message).{0,30}paus)\b/i.test(issue)){
   if(/\b(?:renew|refresh|expired|contact checks?)\b/i.test(issue))return null;
   if(/\b(?:not working|doesn[’']?t work|can[’']?t|cannot|failed|error|stuck)\b/i.test(q)&&!/\b(?:agreements?|contracts?)\b/i.test(issue))return answer('Return to bot should restore automatic control of that property; the account also needs to be on Run. If the control does not change, the problem remains unresolved. What happens when you select Return to bot?');
   const buyer=/\bbuyers?\b/i.test(issue);
   if(buyer||!/\b(?:agreements?|contracts?|auto[ -]?fill)\b/i.test(issue)){
-  return answer('Take over or sending a message yourself pauses new automatic work on that property. It stays under your control until you choose Return to bot; it does not resume just because the next morning arrives. '+(buyer?'Buyer search also needs the required signed purchase agreement and checks. If shown, Let bot find a buyer returns that property to bot control. ':'')+'Your account must also be on Run. Seeing the message warning alone does not mean you already took over.');
+  return answer('Take over or sending a message yourself pauses new automatic work on that property. It stays under your control until you choose Return to bot; it does not resume just because the next morning arrives. '+(buyer?'Buyer search also needs the required signed purchase agreement and checks. If shown, Let bot find a buyer returns that property to bot control. ':'')+'Your account must also be on Run. Seeing the message warning alone does not mean you already took over.',true);
   }
  }
  if(/\b(?:agreements?|contracts?)\b/i.test(issue)&&/\b(?:not working|isn[’']?t working|doesn[’']?t work|broken|fails?|failed|error|blank|spinning|can[’']?t (?:send|save|sign|download)|cannot (?:send|save|sign|download))\b/i.test(issue))return answer('The agreement problem is still unresolved. Which step fails: opening the draft, saving edits, sending for signatures, or opening the signing link?');
