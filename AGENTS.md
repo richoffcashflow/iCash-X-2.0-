@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 7, 2026 the owner requested reviewing the support chat and its responses. Answer the current step with verified product controls: distinguish manual seller contact from finding contact details, unanswered calls from text replies, purchase signing from buyer assignments, and purchase evidence from work-credit purchases. Preserve operator findings and supplied payment details, avoid repeating missing-receipt requests, explain management review without a promised fix or deadline, and retain unresolved cases for review. Use anonymized offline replays; no retrospective customer messages or paid tests. See docs/support-reply-audit-2026-11-07.md.
+
 - On November 5, 2026 the owner requested 80% of Business voice capacity: 32 total calls, thirty outgoing and two incoming. Install the separate one-use provider change disabled; enable only after exact-main web and worker verification. Keep daily allowance, billing, provider burst mode, prompts, contact/credit holds and prior receipts unchanged. See docs/eighty-percent-voice-capacity.md.
 
 - On November 5, 2026 the owner supplied the course transcript and requested efficient automatic seller-to-buyer-to-title follow-through. Use anonymized scenario replays, preserve source-backed acceptance and exact accepted signing terms, and isolate prior title holds from unrelated deals. A late provider failure must not reopen a canceled task. Course demonstrations are requirements examples, not proof of live customer results; retain actual signature, deposit, title and proceeds evidence. See docs/course-funnel-reliability-2026-11-05.md.

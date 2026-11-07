@@ -51,7 +51,7 @@ export function currentSupportIssue(messages:Turn[]){
 }
 
 export const supportWorkDelayNotice=(issue:string)=>/\b(?:work (?:is |has been )?(?:temporarily )?delayed|restart time (?:is |remains )(?:still )?unconfirmed)\b/i.test(issue);
-export const supportBotWorkProblem=(issue:string)=>supportWorkDelayNotice(issue)||/\b(?:bot|automation|program)\b.{0,65}\b(?:not working|isn[’']?t working|doesn[’']?t work|stopped|stuck|waiting|not doing|isn[’']?t doing)\b|\b(?:isn[’']?t|not)\b.{0,25}\b(?:bot|program)\b.{0,20}\bworking\b|\bwaiting for (?:the )?next task\b/i.test(issue);
+export const supportBotWorkProblem=(issue:string)=>supportWorkDelayNotice(issue)||/\b(?:bot|automation|program)\b.{0,65}\b(?:down|not working|isn[’']?t working|doesn[’']?t work|stopped|stuck|waiting|not doing|isn[’']?t doing)\b|\b(?:isn[’']?t|not)\b.{0,25}\b(?:bot|program)\b.{0,20}\bworking\b|\bwaiting for (?:the )?next task\b/i.test(issue);
 const workFailure=(issue:string)=>supportBotWorkProblem(issue)||/\b(?:bot|automation|outreach|calls?|calling|texts?|texting|leads?|research)\b.{0,60}\b(?:stopped|stuck|not|never|no|missing|failing|failed|waiting|running|working|status)\b|\b(?:not|no|never|isn[’']?t|doesn[’']?t|won[’']?t|cannot|can[’']?t)\b.{0,60}\b(?:bot|calls?|calling|texts?|texting|leads?|research)\b/i.test(issue);
 
 export function supportCreditRelevant(messages:Turn[],evidence:SupportEvidence[]){

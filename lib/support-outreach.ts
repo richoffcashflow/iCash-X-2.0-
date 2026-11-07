@@ -73,7 +73,7 @@ export function supportOutreachReply(messages:{role:string;content:string}[],evi
  const statusCheck=!problem&&/\b(?:check|verify|review|show|what(?:[’']s| is))\b.{0,45}\b(?:bot|outreach|call|text)\b.{0,25}\b(?:status|activity|running|active)\b|\b(?:is (?:my|the) bot (?:on|running|active)|bot status)\b/i.test(issue);
  if(!source&&!problem&&!textDelivery&&!stats&&!statusCheck)return null;
  const check=evidence.find(e=>e.key==='outreach');
- if(supportWorkDelayNotice(issue)&&!stats&&!textDelivery&&!source)return delayNoticeReply(evidence);
+ if((supportWorkDelayNotice(issue)||/\b(?:bot|automation|program)\b.{0,20}\bdown\b/i.test(issue))&&!stats&&!textDelivery&&!source)return delayNoticeReply(evidence);
  if(statusCheck){
   const work=evidence.find(e=>e.key==='work');
   const state=work?.code==='paused'?'Your bot is paused.':work?.status==='ok'&&work.code==='not_paused'?'Your bot is switched on.':'I can’t confirm your bot’s current Run/Pause status from these checks.';
