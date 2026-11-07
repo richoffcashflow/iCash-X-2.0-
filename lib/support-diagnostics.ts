@@ -54,6 +54,17 @@ export async function collectSupportDiagnostics(accountId:string):Promise<Suppor
   check('readiness','icash_launch_checks',async()=>{const r=await launchReadiness(accountId);return {code:r.ready?'readiness_ready':'readiness_blocked',status:r.ready?'ok':r.blockers.includes('readiness_unavailable')?'unknown':'attention',detail:r.ready?'The launch-readiness check passed. This does not guarantee individual outreach or a completed deal.':`Readiness needs attention: ${r.blockers.map(b=>readinessLabels[b]??'An operational safety check needs review').join('; ')}.`};}),
  ]);
  const outreach=evidence.find(e=>e.key==='outreach'),progress=outreach?.outreach?.progress;
+ // Use the same read-only, account-specific two-request check as the acquisition scheduler.
+ if(progress?.health?.status==='blocked'&&progress.health.reason==='no_completed_work'&&progress.status==='ready'&&progress.remainingCents>0
+  &&evidence.some(e=>e.key==='work'&&e.status==='ok'&&e.code==='not_paused')){
+  evidence.push(await check('research_capacity','icash_dealmachine_capacity_available',async()=>{
+   const available=await db<unknown>('rpc/icash_dealmachine_capacity_available','POST',{p_account:accountId,p_requests:2},AbortSignal.timeout(2000));
+   if(typeof available!=='boolean')throw Error('Invalid capacity response');
+   return available
+    ?{status:'ok',code:'research_capacity_available',detail:'Request capacity is available for the next research check.'}
+    :{status:'attention',code:'research_capacity_wait',detail:'New property research is waiting for request capacity.'};
+  }));
+ }
  const credits=evidence.find(e=>e.key==='credits');
  if(credits&&progress?.spendingMode==='available_balance'){
   Object.assign(credits,{source:'icash_prospecting_progress',code:progress.remainingCents>0?'credit_available':'no_available_credit',status:progress.remainingCents>0?'ok':'attention',detail:`${money(progress.remainingCents)} is available for new work.${progress.pendingCents?` ${money(progress.pendingCents)} is committed to earlier work while its costs are confirmed. This is not a final charge.`:''} A positive balance alone does not confirm a call can start.`});

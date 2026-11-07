@@ -311,12 +311,14 @@ export async function verifyWorkspace(browser,base,options,name){
   const momentum=page.getByRole('region',{name:'Opportunity progress'});await momentum.getByRole('heading',{name:'Your opportunity search'}).waitFor();
   const receipt=page.getByRole('region',{name:'Work credit receipt'});
   const source='a0000000-0000-4000-8000-000000000001';
-  opportunityProgress={...opportunityProgress,responded:1,receipt:{spentCents:640,availableCents:1860,heldCents:0,interested:1,
+  opportunityProgress={...opportunityProgress,status:'ready',queued:0,health:{status:'blocked',reason:'no_completed_work'},responded:1,receipt:{spentCents:640,availableCents:1860,heldCents:0,interested:1,
    evidence:{source:'call',sourceId:source,screeningId:'00000000-0000-4000-8000-000000000001',threadId:null,quote:'I would like to sell my property.',at:new Date().toISOString()},
    lastWork:{kind:'seller_interest',at:new Date().toISOString()},contactWindowAt:null,callbackAt:null}};
   await page.evaluate(()=>window.dispatchEvent(new Event('icash:credits-funded')));
   await receipt.getByRole('heading',{name:'Interested sellers 1'}).waitFor();
   assert.match(await receipt.innerText(),/\$6\.40 used today · \$18\.60 available/);
+  await receipt.getByText('Searching for a deal. Waiting uses no work credits.',{exact:true}).waitFor();
+  assert.doesNotMatch(await receipt.innerText(),/work is delayed|restart time/i);
   assert(await receipt.evaluate(node=>node.getBoundingClientRect().right<=innerWidth+1),'Receipt fits the viewport');
   await receipt.getByRole('button',{name:'View seller call'}).click();
   await receipt.locator('.message-bubble').getByText('I would like to sell my property.',{exact:false}).waitFor();

@@ -88,7 +88,23 @@ try{
  assert.match(receiptNextStep({...p,status:'budget_reached'},await receipt()),/research credits.*earlier call/);
  await q('insert into icash_text_suppressions values($1)',[phone]);
  const historical=await receipt();assert.equal(historical.interested,1);assert.equal(historical.evidence,null);
- await q('delete from icash_text_suppressions where phone=$1',[phone]);assert.match(receiptNextStep({...p,health:{status:'blocked'}},r),/delayed/);
+ await q('delete from icash_text_suppressions where phone=$1',[phone]);
+ const idle={...r,nextReply:null,contactWindowAt:null,callbackAt:null};
+ for(const health of [{status:'blocked',reason:'no_completed_work'},{status:'blocked',reason:'pending_work'},{status:'unavailable'},undefined]){
+  const progress={...p,eligible:1,health};
+  const next=receiptNextStep(progress,idle);
+  assert.match(next,/Searching for a deal/);assert.match(next,/Waiting uses no work credits/);
+  assert.doesNotMatch(supportValueSummary(progress,idle),/delayed|restart|unconfirmed time/i);
+  assert.match(receiptNextStep(progress,r),/seller requested a visit/i);
+  assert.match(receiptNextStep(progress,{...idle,callbackAt:'2026-01-10T16:00:00Z'}),/callback for Jan 10/);
+  assert.match(receiptNextStep(progress,{...idle,contactWindowAt:'2026-01-10T16:00:00Z'}),/next contact window/i);
+  assert.match(receiptNextStep({...progress,queued:2},idle),/2 properties are queued/);
+  for(const [status,expected] of [['paused',/Resume/],['membership_required',/Restore your membership/],['settling',/confirmation/],['budget_reached',/research credits/]]){
+   const constrained=receiptNextStep({...progress,status},idle);assert.match(constrained,expected);assert.doesNotMatch(constrained,/Searching for a deal/);
+  }
+  assert.doesNotMatch(receiptNextStep({...progress,status:'waiting'},idle),/Searching for a deal/);
+  assert.doesNotMatch(receiptNextStep(progress,{...idle,availableCents:0}),/Searching for a deal/);
+ }
  const fn=async v=>(await q('select public.icash_value_question($1) yes',[v])).rows[0].yes;
  for(const phrase of ['What did my money get me?','Where did my credits go?','What did I pay for?','Spent $25 and got no leads'])assert(await fn(phrase),phrase);
  for(const phrase of ['Cancel my subscription','My card was charged twice','What is my ARV?'])assert.equal(await fn(phrase),false);

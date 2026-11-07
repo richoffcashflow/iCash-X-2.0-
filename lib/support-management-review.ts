@@ -33,7 +33,7 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
  );
  const paymentReview=/reporting a charge you don’t recognize|duplicate-charge report needs its own payment check|do both statement entries match|statement details you supplied are saved/i.test(answer.reply)&&!/\b(?:what if|hypothetically|if i (?:am|were)|could i be)\b/i.test(question);
  const genericReply=generic.test(answer.reply)||genericHuman.test(answer.reply)||/^Hi!|^Which page is this happening on\?/i.test(answer.reply);
- const needsReview=paymentReview||explicit||exhaustedAccess||proofAwaitingReview||failedAgain||repeatedDeadEnd||context.handedOff&&genericReply;
+ const needsReview=answer.managementReview===true||paymentReview||explicit||exhaustedAccess||proofAwaitingReview||failedAgain||repeatedDeadEnd||context.handedOff&&genericReply;
  if(!needsReview)return answer;
  const note=context.handedOff?'Your case is still in management review.':'I’ve flagged this conversation for management review.';
  let detail=genericReply?'':answer.reply;

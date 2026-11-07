@@ -95,6 +95,28 @@ try{
  assert.match(delayReply.reply,/recorded call attempt/);assert.doesNotMatch(delayReply.reply,/fix itself|What are you trying|will resume|start soon/);assert.equal(delayReply.status,'open');
  const restarted=await replyToSupport({kind:'account',messages:[user('How do I get calls restarted')],evidence},noModel);
  assert.match(restarted.reply,/recorded call attempt/);assert.doesNotMatch(restarted.reply,/Start outreach|will resume|I restarted/);
+ const notice=user('Why does the receipt say automated work is delayed and a restart time is still unconfirmed? How do I fix this?');
+ const accountCheck=(status,health,extra=[])=>[
+  evidence[0],check('outreach',supportOutreachEvidence({...evidence[1].outreach,progress:{status,health,spentCents:80,remainingCents:850}})),...extra,
+ ];
+ const askDelay=(checks,messages=[notice])=>replyToSupport({kind:'account',messages,evidence:checks},noModel);
+ const flagged={status:'blocked',reason:'no_completed_work'};
+ const capacityWait=check('research_capacity',{status:'attention',code:'research_capacity_wait',detail:'Research capacity is currently unavailable.'});
+ const waiting=await askDelay(accountCheck('ready',flagged,[capacityWait]));
+ assert.match(waiting.reply,/property research is waiting for capacity/);assert.match(waiting.reply,/Waiting uses no work credits/i);
+ assert.doesNotMatch(waiting.reply,/restart|add (?:money|credits)|What are you trying|management review/i);
+ assert.equal(waiting.status,'open');assert.equal(waiting.ai,false);
+ const recovered=await askDelay(accountCheck('ready',{status:'ok'}),[notice,assistant(waiting.reply),user('Will it fix itself?')]);
+ assert.match(recovered.reply,/latest account work check is clear/);assert.match(recovered.reply,/1 recorded call attempt/);assert.equal(recovered.status,'open');
+ const unchecked=await askDelay(accountCheck('ready',flagged));
+ assert.equal(unchecked.managementReview,true);assert.match(unchecked.reply,/flagged.*management review/);assert.doesNotMatch(unchecked.reply,/waiting for capacity/);
+ const alreadyReviewed=await replyToSupport({kind:'account',messages:[notice],evidence:accountCheck('ready',flagged),handedOff:true},noModel);
+ assert.match(alreadyReviewed.reply,/still in management review/);assert.doesNotMatch(alreadyReviewed.reply,/I’ve flagged/);
+ assert.equal((await askDelay([])).managementReview,true);
+ for(const [status,health,expected] of [['paused',flagged,/Select Run bot/],['membership_required',flagged,/Restore your software access/],['settling',flagged,/on hold/],['budget_reached',flagged,/available work credits are below/i],['ready',{status:'blocked',reason:'system_paused'},/service issue paused/]]){
+  const answer=await askDelay(accountCheck(status,health,[capacityWait]));
+  assert.match(answer.reply,expected);assert.doesNotMatch(answer.reply,/latest account work check is clear|waiting for capacity/i);
+ }
  assert.equal(modelCalls,0,'these replays must not invoke paid AI');
 }finally{process.env=environment;}
 console.log('PASS support follow-up audit: accepted status checks, actual activity, unknown evidence, topic changes and correction of false seller-call guidance.');

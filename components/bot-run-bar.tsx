@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import {IcashMark} from '@/components/icash-mark';
 import {Play,Pause,Plus,Crown,Coins} from 'lucide-react';
-import {creditAmount} from '@/lib/workspace-progress';
+import {creditAmount,dealSearchGoal} from '@/lib/workspace-progress';
 import type {BotActivity} from '@/lib/bot-activity';
 type Props={apiBase?:string;readOnly?:boolean;hasLeads?:boolean;botName?:string;vip?:boolean;enabled?:boolean;running:boolean;stopped:boolean;paymentRequired:boolean;busy:boolean;stale:boolean;hasCreditHistory?:boolean;balanceCents?:number;principalKey?:string;canPause?:boolean;onVip?:()=>void;onBudget:()=>void;onResume:()=>void;onPause:()=>void};
 export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,vip=false,enabled,running,stopped,paymentRequired,busy,stale,balanceCents,hasCreditHistory=false,principalKey,canPause=false,onVip,onBudget,onPause,onResume}:Props){
@@ -43,7 +43,7 @@ export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,v
  else if (readOnly && current && (blocked || healthUnavailable)) detail=current.label;
  else if (active && (readOnly || runEnabled)) detail=current!.label;
  else if (!funded) detail=hasCreditHistory?'Add money to continue. Your properties and conversations are saved.':'Choose an amount. Your bot starts after payment.';
- else if (!readOnly && runEnabled) detail='Searching for a deal';
+ else if (!readOnly && runEnabled) detail=dealSearchGoal;
  else if (readOnly && running && !stopped) detail=!busy && current ? (observedLive && hasLeads===false?'Looking for a deal':current.label) : 'Checking for the next task…';
  else detail=stopped?'Your properties and conversations are saved.':'Waiting for eligible work.';
  const displayTitle=botName?.trim()&&title.startsWith('Bot ')?`${botName.trim()} is ${title.slice(4)}`:title;

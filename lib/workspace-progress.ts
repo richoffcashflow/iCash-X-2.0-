@@ -1,5 +1,7 @@
 import type {WorkSummary} from './work-summary';
 
+export const dealSearchGoal='Searching for a deal';
+
 const count=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;
 const money=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
 export function creditAmount(cents:unknown){return money(cents)?`$${(cents/100).toFixed(2)}`:'Unavailable';}
