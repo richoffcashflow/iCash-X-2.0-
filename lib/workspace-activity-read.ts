@@ -6,7 +6,7 @@ import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
 import {attachTaskRecovery} from '@/lib/task-completion-service';
-import {workspaceAttentionQuery} from '@/lib/workspace-attention-query';
+import {workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '@/lib/workspace-attention-query';
 import type {SmsRouteReview} from '@/components/sms-route-review';
 const pageSize=6;
 type Property={id:string;state:string;result:{property:{propertyId:string;address:string};financialCheck:{status:string;reason:string};preliminarySellerCeilingCents:number|null};completed_at:string};
@@ -85,7 +85,7 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
   // routine setup must not hide the explicit post-signing return to bot control.
   const propertyAttentionRows=ids?await Promise.all([
    ['icash_text_attention','open'],['icash_handoffs','open'],['icash_sms_call_requests','needs_review'],['icash_buyer_viewing_requests','needs_confirmation'],['icash_seller_gaps','needs_review'],['icash_closing_setup','needs_review']
-  ].map(async([table,state])=>({table,rows:await db<{id:string;icash_closing_setup?:{review_reason?:string}[]}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids})&select=id,${table}!inner(${table==='icash_closing_setup'?'review_reason':''})&${table}.account_id=eq.${accountId}&${table}.state=${table==='icash_handoffs'?'neq.resolved':`eq.${state}`}${table==='icash_seller_gaps'?'&icash_seller_gaps.or=(review_reason.is.null,review_reason.neq.contact_checks_expired)':''}&limit=${pageSize}`)}))):[];
+  ].map(async([table,state])=>({table,rows:await db<{id:string;icash_closing_setup?:{review_reason?:string}[]}[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${ids})&select=id,${table}!inner(${table==='icash_closing_setup'?'review_reason':table==='icash_seller_gaps'?sellerReminderDeliveryEmbed:''})&${table}.account_id=eq.${accountId}&${table}.state=${table==='icash_handoffs'?'neq.resolved':`eq.${state}`}${table==='icash_seller_gaps'?'&'+sellerAttentionFilters(accountId,table):''}&limit=${pageSize}`)}))):[];
   const propertyAttentionIds=[...new Set(propertyAttentionRows.flatMap(({rows})=>rows.map(p=>p.id)))];
   // Preserve all ordinary attention flags. Missing/unknown closing reasons still
   // block this narrower presentation hint; it never grants automation authority.

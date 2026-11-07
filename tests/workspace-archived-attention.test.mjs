@@ -4,7 +4,7 @@ process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production
 // Local fixtures only: archived agreements remain intact, but never create work.
 import assert from 'node:assert/strict';
 import {z} from 'zod';
-import {workspaceAttentionQuery,workspaceAttentionTables} from '../lib/workspace-attention-query.ts';
+import {workspaceAttentionQuery,workspaceAttentionTables,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
 import {validActivityReport} from '../lib/activity-report.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 
@@ -18,16 +18,55 @@ const states={icash_text_attention:'open',icash_sms_call_requests:'needs_review'
 const queues=Object.fromEntries(workspaceAttentionTables.map(table=>[table,requests.map(r=>({...r,state:states[table],kind:'purchase',test_mode:false,portal_journey_id:null}))]));
 const expiredRecovery=deals.slice(8,16).map((d,i)=>({id:uuid(600+i),account_id:account,deal_id:d.id,screening_id:d.screening_id,state:'needs_review',reason:'no_response',review_reason:'contact_checks_expired',quote:'Saved unanswered question',created_at:'2026-09-01T00:00:00Z'}));
 queues.icash_seller_gaps=[...expiredRecovery,...queues.icash_seller_gaps.map(r=>({...r,reason:'human',review_reason:r.screening_id===uuid(23)?'unrecognized_review':null}))];
+const completedReminders=deals.slice(8,16).map((d,i)=>({id:uuid(700+i),account_id:account,deal_id:d.id,screening_id:d.screening_id,state:'needs_review',reason:'no_response',stage:'draft',review_reason:null,expires_at:'2020-01-01T00:00:00Z',reminder:{account_id:account,state:'delivered',direction:'outgoing',customer_author_id:null}}));
+queues.icash_seller_gaps.unshift(...completedReminders);
 const originalHistory=JSON.stringify(queues);
 const active=id=>properties.some(p=>p.id===id&&p.account_id===account&&p.state==='complete');
 const page=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
+// Verify the actual URL guards, not only the simulated receipt predicate.
+const stamp='2026-11-07T20:00:00.000Z';
+for(const prefix of ['', 'icash_seller_gaps']){
+ const query=sellerAttentionFilters(account,prefix,stamp),key=name=>prefix?prefix+'.'+name:name;
+ assert.equal(query.get(key('completed_reminder.account_id')),'eq.'+account);
+ assert.equal(query.get(key('completed_reminder.direction')),'eq.outgoing');
+ assert.equal(query.get(key('completed_reminder.state')),'eq.delivered');
+ assert.equal(query.get(key('completed_reminder.customer_author_id')),'is.null');
+ assert(query.get(key('and')).includes('expires_at.gt.'+stamp));
+ assert(!sellerReminderDeliveryEmbed.includes('body'),'Receipt body is never selected');
+}
+const assertReceiptFilters=(q,prefix='')=>{
+ const key=name=>prefix?prefix+'.'+name:name;
+ assert.equal(q.get(key('completed_reminder.account_id')),'eq.'+account);
+ assert.equal(q.get(key('completed_reminder.direction')),'eq.outgoing');
+ assert.equal(q.get(key('completed_reminder.state')),'eq.delivered');
+ assert.equal(q.get(key('completed_reminder.customer_author_id')),'is.null');
+ assert(q.get('select').includes(sellerReminderDeliveryEmbed));
+ assert(q.get(key('and')).includes('completed_reminder.is.null'));
+};
 // Model the relevant PostgREST predicates, including SQL NULL != value semantics.
-const contactReviewRows=(rows,expression)=>!expression?rows:rows.filter(r=>expression.slice(1,-1).split(',').some(clause=>{
- const [column,operator,...parts]=clause.split('.'),value=parts.join('.');
- assert.equal(column,'review_reason');
- if(operator==='is'&&value==='null')return r[column]==null;
- assert.equal(operator,'neq');return r[column]!=null&&r[column]!==value;
-}));
+const splitClauses=expression=>{const result=[];let depth=0,start=0;for(let i=0;i<expression.length;i++){if(expression[i]==='(')depth++;if(expression[i]===')')depth--;if(expression[i]===','&&depth===0){result.push(expression.slice(start,i));start=i+1;}}result.push(expression.slice(start));return result;};
+const contactReviewRows=(rows,expression)=>!expression?rows:rows.filter(r=>{
+ const completed=r.reminder?.account_id===account&&r.reminder.state==='delivered'&&r.reminder.direction==='outgoing'&&r.reminder.customer_author_id==null;
+ const matches=clause=>{
+  if(clause.startsWith('or('))return splitClauses(clause.slice(3,-1)).some(matches);
+  const [column,...parts]=clause.split('.');let operator=parts.shift();if(operator==='not')operator+='.'+parts.shift();const value=parts.join('.');
+  const actual=column==='completed_reminder'?(completed?{}:null):r[column];
+  if(operator==='is'&&value==='null')return actual==null;
+  if(operator==='not.is'&&value==='null')return actual!=null;
+  if(operator==='gt')return actual!=null&&Date.parse(actual)>Date.parse(value);
+  assert.equal(operator,'neq');return actual!=null&&actual!==value;
+ };
+ return splitClauses(expression.slice(1,-1)).every(matches);
+});
+const boundary={state:'needs_review',reason:'no_response',stage:'draft',review_reason:null,expires_at:stamp,reminder:{account_id:account,state:'delivered',direction:'outgoing',customer_author_id:null}};
+assert.equal(contactReviewRows([boundary],sellerAttentionFilters(account,'',stamp).get('and')).length,0,'Exactly expired delivered reminders are history');
+assert.equal(contactReviewRows([{...boundary,expires_at:'2026-11-07T20:00:00.001Z'}],sellerAttentionFilters(account,'',stamp).get('and')).length,1,'The next millisecond remains visible');
+for(const prefix of ['', 'icash_seller_gaps']){
+ const predicate=sellerAttentionFilters(account,prefix,stamp).get(prefix?prefix+'.and':'and');
+ for(const state of ['open','queued','waiting','resolved','unknown',null])assert.equal(contactReviewRows([{...boundary,state}],predicate).length,1,'The shared predicate preserves '+state+' rows');
+ assert.equal(contactReviewRows([{...boundary,reason:'human'}],predicate).length,1,'A genuine request remains visible');
+ assert.equal(contactReviewRows([{...boundary,reason:null}],predicate).length,1,'Unknown request reasons remain visible');
+}
 let onlyTable=null,unmatchedText=false,closingEnabled=true;
 const db=async(path,method='GET',body)=>{
  if(path.startsWith('rpc/')){
@@ -59,7 +98,8 @@ const db=async(path,method='GET',body)=>{
    const related=workspaceAttentionTables.find(name=>q.get('select').includes(`${name}!inner(`));
    if(!related||(onlyTable&&onlyTable!==related))return [];
    let children=queues[related].filter(r=>q.get(`${related}.account_id`)===`eq.${r.account_id}`&&(q.get(`${related}.state`)==='neq.resolved'?r.state!=='resolved':q.get(`${related}.state`)===`eq.${r.state}`));
-   if(related==='icash_seller_gaps')children=contactReviewRows(children,q.get(`${related}.or`));
+   if(related==='icash_seller_gaps')assertReceiptFilters(q,related);
+   if(related==='icash_seller_gaps')children=contactReviewRows(children,q.get(`${related}.and`));
    return page(rows.filter(p=>children.some(r=>r.screening_id===p.id)),q).map(p=>({id:p.id,...(related==='icash_closing_setup'?{icash_closing_setup:children.filter(r=>r.screening_id===p.id).map(r=>({review_reason:r.review_reason}))}:{})}));
   }
   return page(rows,q);
@@ -77,16 +117,17 @@ const db=async(path,method='GET',body)=>{
   if(q.get('state')==='neq.resolved')rows=rows.filter(r=>r.state!=='resolved');
   else if(q.has('state'))rows=rows.filter(r=>q.get('state')===`eq.${r.state}`);
   if(q.get('portal_journey_id')==='is.null')rows=rows.filter(r=>r.portal_journey_id===null);
-  if(table==='icash_seller_gaps')rows=contactReviewRows(rows,q.get('or'));
+  if(table==='icash_seller_gaps')assertReceiptFilters(q);
+  if(table==='icash_seller_gaps')rows=contactReviewRows(rows,q.get('and'));
   return page(rows,q).map(r=>signing?{id:r.id,deal_id:r.deal_id,kind:r.kind,test_mode:r.test_mode}:{...r});
  }
  if(['icash_owner_contacts','icash_seller_matches','icash_property_controls','icash_live_conversations','icash_live_callbacks','icash_automation_tickets'].includes(table))return [];
  throw Error('Unexpected read '+table);
 };
-const activityDeps={isConfirmedVoicemail,instantLeadsEnabled,db,z,workspaceAttentionQuery,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}};
+const activityDeps={isConfirmedVoicemail,instantLeadsEnabled,db,z,workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}};
 const {workspaceActivity}=await loadService('lib/workspace-activity-read.ts',activityDeps);
 const {GET}=await loadService('app/api/work/activity/route.ts',{...activityDeps,workspaceActivity});
-const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,validActivityReport,currentBotActivity:input=>{assert.deepEqual(input.progress,{status:'budget_reached',callsBudgetHeld:2});return {checkedAt:'2026-10-12T00:00:00Z',label:'New outreach allowance used',active:false};}});
+const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,sellerAttentionFilters,sellerReminderDeliveryEmbed,validActivityReport,currentBotActivity:input=>{assert.deepEqual(input.progress,{status:'budget_reached',callsBudgetHeld:2});return {checkedAt:'2026-10-12T00:00:00Z',label:'New outreach allowance used',active:false};}});
 const get=query=>GET(new Request('https://example.invalid/api/work/activity'+query));
 const attentionKeys=['textAttention','callRequests','handoffs','signatureActions','viewingRequests','sellerRecovery','closingReview','closingTasks'];
 let response=await get('');assert.equal(response.status,200);assert.equal(response.body.properties.length,6);
@@ -120,6 +161,22 @@ assert.deepEqual(response.body.sellerRecovery,[],'An expired-only account has no
 assert.deepEqual(response.body.propertyAttentionIds,[],'An expired-only account has no ghost property flags');
 assert.equal(response.body.attentionHasMore,false,'Hidden rows do not create empty extra pages');
 assert.equal((await workspaceAssistantContext(account,'America/Chicago','What needs me?')).needsYou,false,'Expired-only checks do not ask the customer to act');
+// Every boundary stays visible instead of disappearing as completed history.
+for(const change of [
+ {reason:'human'}, {stage:'under_contract'}, {review_reason:'unknown_error'},
+ {expires_at:'9999-01-01T00:00:00Z'}, {expires_at:null}, {stage:null}, {reason:null}, {reminder:null},
+ {reminder:{account_id:account,direction:'outgoing'}}, {reminder:{account_id:account,state:null,direction:'outgoing'}},
+ ...['ready','accepted','needs_review','failed','cancelled'].map(state=>({reminder:{account_id:account,state,direction:'outgoing'}})),
+ {reminder:{account_id:other,state:'delivered',direction:'outgoing'}},
+ {reminder:{account_id:account,state:'delivered',direction:'incoming'}},
+ {reminder:{account_id:account,state:'delivered',direction:'outgoing',customer_author_id:uuid(950)}}
+]){
+ const row=completedReminders[0],before={...row};Object.assign(row,change);
+ response=await get('');assert.equal(response.body.sellerRecovery.length,1,JSON.stringify(change));
+ assert.deepEqual(response.body.propertyAttentionIds,[row.screening_id]);
+ assert.equal((await workspaceAssistantContext(account,'America/Chicago','What needs me?')).needsYou,true);
+ Object.assign(row,before);
+}
 properties.forEach((p,i)=>{p.state=recoveryStates[i];});
 assert.equal((await workspaceAssistantContext(account,'America/Chicago','What needs me?')).needsYou,true,'Genuine follow-up still informs the assistant');
 assert.equal(JSON.stringify(queues),originalHistory,'Filtering leaves expired holds and source history intact');
