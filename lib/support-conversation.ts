@@ -5,7 +5,7 @@ import {z} from 'zod';
 import {redactSupportQuestion,supportAnswer,supportTopic,supportDuplicateCharge,type SupportEvidence} from './support-policy.ts';
 import {supportCourseAnswer,supportProductGuide,supportSimpleProductAnswer,supportHowToQuestion,supportListingQuestion} from './support-product-guide.ts';
 import {supportCodeDelivery} from './support-code-delivery.ts';
-import {currentSupportIssue,supportAcceptedBotCheck,supportReplyEvidence,supportCreditRelevant,supportAskedQuestions,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
+import {currentSupportIssue,supportAcceptedBotCheck,supportReplyEvidence,supportCreditRelevant,supportAskedQuestions,supportRoutineGuidanceQuestion,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
 import {supportOutreachReply} from './support-outreach.ts';
 import {supportWorkflowReply} from './support-workflow-guidance.ts';
 import {missingAccessCodeReply} from './support-access-reply.ts';
@@ -22,7 +22,7 @@ import {supportManagementReview} from './support-management-review.ts';
 import {supportInboxGuidance} from './support-inbox-guidance.ts';
 
 export type SupportTurn={role:string;content:string};
-export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean;managementReview?:boolean};
+export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean;managementReview?:boolean;routineGuidance?:true};
 export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean;historyComplete?:boolean;contactKnown?:boolean};
 const noRefunds='All sales are final; we do not offer refunds. I can help fix an access or software issue here.';
 const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'[code removed]');
@@ -37,28 +37,28 @@ function earlierSupportProblem(context:SupportContext){
 function supportTechnicalFallback(context:SupportContext):SupportReply{
  const users=context.messages.filter(m=>m.role==='user'),question=users.at(-1)?.content??'';
  const previous=context.messages.filter(m=>m.role==='assistant'||m.role==='operator').at(-1)?.content??'';
- const result=(reply:string,status:SupportReply['status']='waiting_on_customer'):SupportReply=>{
+ const result=(reply:string,status:SupportReply['status']='waiting_on_customer',routineGuidance=false):SupportReply=>{
   const simple=removeRepeatedSupportQuestions(reply,context.messages);
-  return {reply:simple,status:simple!==reply&&status!=='resolved'?'open':status,ai:false};
+  return {reply:simple,status:simple!==reply&&status!=='resolved'?'open':status,ai:false,...(routineGuidance&&supportRoutineGuidanceQuestion(question)?{routineGuidance:true as const}:{})};
  };
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in(?=[.!]|$|\s+now\b)|got in(?=[.!]|$|\s+now\b)|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
- if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(question.trim()))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Understood.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
+ if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(question.trim()))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Got it.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const currentStep=supportCurrentStepReply(context);if(currentStep)return {...currentStep,reply:removeRepeatedSupportQuestions(currentStep.reply,context.messages),status:currentStep.status==='resolved'&&(earlierSupportProblem(context)||context.handedOff)?'open':currentStep.status};
- const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status);
+ const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status,inbox.routineGuidance);
  const vipPurchase=supportVipPurchaseReply(context);if(vipPurchase)return {...vipPurchase,status:vipPurchase.status==='resolved'&&earlierSupportProblem(context)?'open':vipPurchase.status};
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
  const clarification=supportProductClarification(context.messages);
- if(clarification)return result(clarification.reply,clarification.answered&&!earlierSupportProblem(context)?'resolved':'open');
+ if(clarification)return result(clarification.reply,clarification.answered&&!earlierSupportProblem(context)?'resolved':'open',clarification.answered);
  const checkout=supportCheckoutReply(context);if(checkout)return checkout;
  const purchase=supportPurchaseHelp(context.messages);
  if(purchase)return result(purchase.reply,purchase.status);
  const productAnswer=supportSimpleProductAnswer(question)??(/^(?:could be anytime|so anytime)[?!.\s]*$/i.test(question.trim())?supportSimpleProductAnswer(currentSupportIssue(context.messages)):null);
  if(productAnswer){
   // A side question can be answered without claiming an earlier fault is fixed.
-  return result(productAnswer,earlierSupportProblem(context)?'open':'resolved');
+  return result(productAnswer,earlierSupportProblem(context)?'open':'resolved',true);
  }
  // General workflow recaps can mention contracts and "where needed" without
  // asking for agreement controls or reporting a broken account.

@@ -59,7 +59,7 @@ try{
  }
  for(const question of ['Okay thank you I will','Thanks','Ok']){
   const answer=await ask([user('My bot is not working'),assistant('The issue remains open.'),user(question)]);
-  assert.equal(answer.status,'open');assert.match(answer.reply,/You’re welcome|Understood/);assert.doesNotMatch(answer.reply,/confirmed answer|What are you trying|\?/);
+  assert.equal(answer.status,'open');assert.match(answer.reply,/You’re welcome|Got it/);assert.doesNotMatch(answer.reply,/confirmed answer|What are you trying|\?/);
  }
  assert.equal(supportSafetyOnly('Thanks for trying that.  Leave out passwords and sign-in codes.'),true);
  const stripped=removeRepeatedSupportQuestions('Thanks for trying that. What exact message do you see now, and which screen is it on? Leave out passwords and sign-in codes.',[assistant('What exact message is shown?')]);
