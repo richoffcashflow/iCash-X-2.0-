@@ -75,6 +75,8 @@ try{
  assert.match((await reply('Cancel my subscription',names)).reply,/Cancel subscription/);
  assert.equal(supportCurrentStepReply({kind:'account',messages:[user('When do I sign my buyer assignment agreement?')]}),null);
  assert.equal(supportCurrentStepReply({kind:'account',messages:[user('All the ZIP codes are the same and my bot is not calling')]}),null);
+ assert.equal(supportCurrentStepReply({kind:'account',messages:[user('How do I sign a purchase agreement?'),agent('The seller signs first.'),user('What do I do first to change my email?')]}),null);
+ assert.equal(supportCurrentStepReply({kind:'account',messages:[user('Will the bot follow up?'),agent('Eligible follow-up uses its own timing.'),user('Where can I watch the course again?')]}),null);
  const actualFailure=await reply('The bot is not calling sellers today');
  assert.doesNotMatch(actualFailure.reply,/at most one follow-up/);assert.equal(actualFailure.status,'open');
  // Model rejection and the quality report share the same source-backed boundaries.
