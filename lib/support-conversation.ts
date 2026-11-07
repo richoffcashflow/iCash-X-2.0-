@@ -1,4 +1,5 @@
 import {classifySupportCoaching,supportCoachingReferral,supportCoachingInstructions} from './support-coaching.ts';
+import {supportCurrentStepReply} from './support-current-step.ts';
 import {repeatedRefundReply} from './support-closure.ts';
 import {z} from 'zod';
 import {redactSupportQuestion,supportAnswer,supportTopic,supportDuplicateCharge,type SupportEvidence} from './support-policy.ts';
@@ -44,6 +45,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(question.trim()))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Understood.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
+ const currentStep=supportCurrentStepReply(context);if(currentStep)return {...currentStep,reply:removeRepeatedSupportQuestions(currentStep.reply,context.messages),status:currentStep.status==='resolved'&&(earlierSupportProblem(context)||context.handedOff)?'open':currentStep.status};
  const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status);
  const vipPurchase=supportVipPurchaseReply(context);if(vipPurchase)return {...vipPurchase,status:vipPurchase.status==='resolved'&&earlierSupportProblem(context)?'open':vipPurchase.status};
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
@@ -149,6 +151,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportManagementReview(context,supportTechnicalFallback(context));
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
+ if(supportCurrentStepReply(context))return fallback;
  if(supportInboxGuidance(context))return fallback;
  const latest=context.messages.filter(m=>m.role==='user').at(-1)?.content??'';
  if(/^(?:(?:ok(?:ay)?|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(latest.trim())&&!fallback.reply.includes('?'))return fallback;

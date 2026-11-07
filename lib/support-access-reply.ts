@@ -1,6 +1,10 @@
 import type {AccessInvestigation} from './support-access-investigation.ts';
 type Turn={role:string;content:string};
 const normalize=(text:string)=>text.replace(/[’‘]/g,"'");
+export function hasRecordedAccessPaymentCheck(messages:Turn[]){
+ const operator=messages.filter(m=>m.role==='operator').at(-1)?.content??'';
+ return /checkout email.{0,50}(?:differ|does not match|doesn't match)|(?:matched|matches).{0,40}(?:payment|receipt)|(?:payment|receipt).{0,40}(?:matched|matches)/i.test(operator);
+}
 
 /** Missing delivery is different from a rejected code. Failed steps are never a resend loop. */
 export function missingAccessCodeReply(messages:Turn[],check?:AccessInvestigation){
@@ -21,8 +25,7 @@ export function missingAccessCodeReply(messages:Turn[],check?:AccessInvestigatio
  const prefix=check?.email==='unavailable'?'Email sign-in is currently unavailable. ':!checked?'I can’t verify the sign-in checks right now, so I can’t confirm delivery. ':'';
  const open=(reply:string)=>({reply:replies.includes(normalize(reply))?'There’s no confirmed change to your access yet. Your earlier answers are saved; repeating those steps won’t give us a new result. This issue remains open.':reply,status:'open' as const,ai:false});
  const ask=(reply:string)=>({reply,status:'waiting_on_customer' as const,ai:false});
- const operator=messages.filter(m=>m.role==='operator').at(-1)?.content??'';
- if(/checkout email.{0,50}(?:differ|does not match|doesn't match)|(?:matched|matches).{0,40}(?:payment|receipt)|(?:payment|receipt).{0,40}(?:matched|matches)/i.test(operator)){
+ if(hasRecordedAccessPaymentCheck(messages)){
   return open('The payment check already recorded in this conversation is the next step to follow. You don’t need to repeat the code requests or send the same payment proof again. Access is still unresolved; this chat has not changed your sign-in email or restored access.');
  }
  if(/(?:are|will|can) you.{0,25}send|send (?:it|the code|my code)|(?:issue|send) me (?:a|the|my) (?:sign[ -]?in )?code|you(?:'re| are) not sending/i.test(question))return open('I haven’t sent a code from this chat. '+prefix+(emailTried||phoneTried?'Repeated requests haven’t fixed this, and I won’t ask you to keep resending. ':'Code delivery is still unconfirmed. ')+'Your access issue is still open.');

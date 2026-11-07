@@ -12,9 +12,9 @@ export function currentAccessConversation(messages:Turn[]){
   const turn=messages[index];if(turn.role!=='user')continue;
   if(/^(?:i(?:[’']?m| am) (?:already )?signed in|it worked|i got in)[.!\s]*$/i.test(turn.content.trim())){start=-1;continue;}
   const previous=messages.slice(0,index).findLast(m=>m.role==='assistant'||m.role==='operator')?.content??'';
-  const paymentDetail=/payment date and amount|date and amount on (?:your|the) receipt/i.test(previous)&&/\$\s*\d|\d\s*\$|\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b|\b(?:dollars|paid)\b/i.test(turn.content);
+  const paymentDetail=(/payment date and amount|date and amount on (?:your|the) receipt/i.test(previous)||/^(?:(?:the )?payment date (?:is|was) (?:for )?|(?:the )?date is (?:for )?)?(?:today|yesterday|\d+ hours? ago)\b/i.test(turn.content.trim()))&&/\$\s*\d|\d\s*\$|\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b|\b(?:dollars|paid)\b/i.test(turn.content);
   if(signIn(turn.content)){if(start<0)start=index;}
-  else if(start>=0&&!detail(turn.content)&&!paymentDetail)start=-1;
+  else if(start>=0&&!detail(turn.content)&&!paymentDetail&&!/\b(?:no|missing|didn[’']?t (?:get|receive)|did not (?:get|receive)|never (?:got|received))\b.{0,35}\b(?:receipt|email)\b|^no[, ]+(?:it|that) (?:didn[’']?t|did not)[.!?\s]*$/i.test(turn.content.trim()))start=-1;
  }
  return start<0?[]:messages.slice(start);
 }

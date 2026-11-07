@@ -64,6 +64,12 @@ export function supportInboxGuidance(context:SupportContext):SupportReply|null{
  const noReply=/\b(?:no one|nobody|none)\b.{0,40}\b(?:answer\w*|respond\w*|repl\w*)\b|\bno (?:seller |text )?(?:responses?|replies)\b|\b(?:not|never|haven[’']?t|hasn[’']?t|didn[’']?t|isn[’']?t|aren[’']?t|without)\b.{0,35}\b(?:replies|responses|responding|replying|a reply|a response)\b/i.test(issue);
  if(context.kind==='account'&&noReply&&!/\b(?:no (?:calls?|texts?)|not (?:calling|texting|sending)|missing (?:messages?|texts?))\b/i.test(issue)){
   const o=context.evidence?.find(e=>e.key==='outreach')?.outreach;
+  const phoneQuestion=/\b(?:phone|calls?|calling|answer(?:ing)? the (?:phone|call))\b/i.test(q);
+  const alreadyReviewed=/\b(?:i did|already|reviewed|checked|looked)\b/i.test(q)||/\b(?:Texts and Calls|actual conversation)\b/i.test(previous);
+  if(phoneQuestion){
+   const attempts=o?`${o.callsStarted} call ${o.callsStarted===1?'attempt is':'attempts are'} recorded for your account. `:'';
+   return answer(attempts+'Those totals do not show how many people answered; text replies are a separate result. '+(alreadyReviewed?'Since you checked the calls already, which property and approximate call time should be reviewed?':'Open the property’s Calls to compare the outcome, recording and transcript. I can’t tell why that seller didn’t answer from these totals.'));
+  }
   const next='Open the property’s Texts and Calls to review its actual conversation.';
   if(!o)return answer('I can’t verify the account’s delivery or reply records right now. '+next);
   const replies=o.textReplies===1?'1 seller text reply is recorded.':o.textReplies+' seller text replies are recorded.';

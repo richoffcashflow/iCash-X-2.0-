@@ -45,7 +45,7 @@ try{
  const complaint=await reply(multi);for(const p of [/not a seller response/,/markets automatically/,/itemized costs/,/All sales are final/,/remain open/])assert.match(complaint.reply,p);assert.equal(complaint.status,'open');
  const continuation=await reply('My concerns are not limited to your refund policy. Why are voicemail greetings classified as seller responses? What credits were deducted?', [user(multi),assistant('All sales are final.')]);assert.match(continuation.reply,/itemized costs/);assert.doesNotMatch(continuation.reply,/tell me what happened|All sales are final/);
  for(const q of ['Do you know why no one is answering the calls?','I’ve been reaching out and no one is responding','Nobody replied, what do I do?']){
-  const r=await reply(q);assert.match(r.reply,/4 texts.*0 seller text replies/);assert.doesNotMatch(r.reply,/email again|why new outreach hasn’t started|messages are displaying/);assert.equal(r.status,'open');
+  const r=await reply(q);assert.match(r.reply,/calls?/i.test(q)?/2 call attempts.*do not show how many people answered/:/4 texts.*0 seller text replies/);assert.doesNotMatch(r.reply,/email again|why new outreach hasn’t started|messages are displaying/);assert.equal(r.status,'open');
  }
  const short=await reply('The bot is cutting the call short');assert.match(short.reply,/whether the call ended or playback failed/);assert.doesNotMatch(short.reply,/normal|seller.*not interested/);
  for(const q of ['My opportunity search isn’t populating','Refresh opportunity search results'])assert.match((await reply(q)).reply,/All activity/);

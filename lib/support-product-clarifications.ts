@@ -54,7 +54,7 @@ function capabilityAnswer(question:string):string|null{
 }
 
 export function supportContactTimingQuestion(text:string){
- return /\b(?:contacts?|contact info(?:rmation)?|phone numbers?)\b/i.test(text)&&/\b(?:same time|how long|when|wait|automatically|find|found|come up|show up)\b/i.test(text)&&!/\b(?:invalid|wrong|disconnected|failed|expired|checks?|permissions?|settings|cancel|refund)\b/i.test(text);
+ return /\b(?:contacts|contact (?:info(?:rmation)?|details)|phone numbers?)\b|\b(?:the|a) contact\b/i.test(text)&&/\b(?:same time|how long|when|wait|automatically|find|found|come up|show up)\b/i.test(text)&&!/\b(?:invalid|wrong|disconnected|failed|expired|checks?|permissions?|settings|cancel|refund)\b/i.test(text);
 }
 export function supportContractTimingQuestion(text:string){
  return /\b(?:contracts?|agreements?)\b/i.test(text)&&/\b(?:how long|how soon|average|when (?:will|can|do)|timeline|time frame)\b/i.test(text)&&!/\b(?:download|send|save|signing|expired|error|cancel|refund)\b/i.test(text);
