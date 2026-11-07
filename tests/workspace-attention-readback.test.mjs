@@ -51,7 +51,7 @@ function fixture(options={}){
   assert.equal(request.headers.apikey,env.SUPABASE_SECRET_KEY);
   assert.equal(request.headers.Authorization,'Bearer '+env.SUPABASE_SECRET_KEY);
   assert(!q.get('select').match(/body|quote|result|phone|email|resolution|\*/));
-  assert(Number(q.get('limit'))<=48&&Number(q.get('limit'))>0);
+  assert(Number(q.get('limit'))<=51&&Number(q.get('limit'))>0);
   if(calls.length===1){
    assert.equal(table,'icash_seller_gaps');assert.equal(q.get('select'),'id,account_id');
    assert.equal(q.get('limit'),'12');assert.equal(q.get('review_reason'),'is.null');
@@ -60,6 +60,13 @@ function fixture(options={}){
    assert.equal(q.get('outgoing_id'),'not.is.null');
    if(options.discovery!==undefined)return json(options.discovery);
    return json([{id:gaps[0].id,account_id:account}]);
+  }
+  if(calls.length===2){
+   assert.equal(table,'icash_seller_gaps');assert.equal(q.get('select'),'id,account_id,active_property:icash_screening_jobs!inner()');
+   assert.equal(q.get('limit'),'3');assert.equal(q.get('state'),'eq.needs_review');assert.equal(q.get('active_property.state'),'eq.complete');
+   assert.equal(q.get('reason'),'in.(callback,human,delivery_unknown,declined,repeated_question)');
+   assert.equal(q.get('or'),'(review_reason.is.null,review_reason.neq.contact_checks_expired)');
+   return json(options.retainedDiscovery??(options.discovery?.length===0?[]:[{id:gaps[1].id,account_id:account}]));
   }
   if(q.getAll('id').length===2){
    assert.deepEqual(q.getAll('id'),['eq.00000000-0000-0000-0000-000000000000','neq.00000000-0000-0000-0000-000000000000']);
@@ -168,7 +175,7 @@ for(const [option,code] of [
 for(const discovery of [[{id:'invalid private ID',account_id:account}],Array.from({length:13},()=>({id:gaps[0].id,account_id:account}))])await assert.rejects(checkWorkspaceAttentionReadback({env,now,fetcher:fixture({discovery}).fetcher}),/Attention API verification failed:/);
 const absent=fixture({discovery:[]});
 assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:absent.fetcher})).status,'not_observed');
-assert.equal(absent.calls.length,3,'Empty cohorts still exercise both direct and nested shapes');
+assert.equal(absent.calls.length,4,'Empty cohorts still exercise both direct and nested shapes after both bounded discoveries');
 assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:fixture({noHidden:true}).fetcher})).status,'not_observed','Unconfirmed completed history cannot be labeled passed');
 const nullReceipts=fixture({nullReceipts:true});
 assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:nullReceipts.fetcher})).status,'not_observed');
@@ -179,12 +186,87 @@ for(const option of ['emptyShapeFailure','emptyShapeMismatch'])await assert.reje
 const httpFailure=fixture({httpFailure:true});
 await assert.rejects(checkWorkspaceAttentionReadback({env,now,fetcher:httpFailure.fetcher}),/http_403/);
 assert.deepEqual(httpFailure.cancelled,[403],'Failed response bodies are cancelled, never read or logged');
-assert.equal(httpFailure.calls.length,2,'A failed read is never retried');
+assert.equal(httpFailure.calls.length,3,'A failed read is never retried');
 const noRequests=()=>{throw Error('This environment must not query anything');};
 assert.equal((await checkWorkspaceAttentionReadback({env:{},fetcher:noRequests})).status,'not_requested');
 assert.equal((await checkWorkspaceAttentionReadback({env:{VERCEL_ENV:'preview'},fetcher:noRequests})).status,'not_configured');
 for(const config of [{VERCEL_ENV:'production'},{...env,SUPABASE_URL:'http://database.example.test'},{...env,SUPABASE_URL:'https://private:secret@database.example.test'}])await assert.rejects(checkWorkspaceAttentionReadback({env:config,fetcher:noRequests}),/Attention API verification failed:/);
 assert.equal((await checkWorkspaceAttentionReadback({env:{...env,VERCEL_ENV:'preview'},now,fetcher:fixture().fetcher})).status,'passed','Configured preview runs the same authenticated check');
+
+// Discovery coverage uses distinct accounts and keeps seed reads independent
+// from the newest bounded samples. A genuine request must be checked even when
+// it is outside those samples and its account has no old completed reminders.
+const cohortGap=(n,owner,retained=false)=>({...gaps[0],id:uuid(1000+n),account_id:owner,screening_id:uuid(2000+n),outgoing_id:retained?null:uuid(3000+n),reason:retained?'human':'no_response'});
+function cohortFixture({hidden=[],retained=[],generalSample=[],retainedSample=[]}={}){
+ const calls=[],source=[...hidden,...retained,...generalSample,...retainedSample];
+ const fetcher=async(url,request)=>{
+  const u=new URL(url),q=u.searchParams,table=u.pathname.split('/rest/v1/')[1];calls.push({table,q});
+  assert.equal(u.origin,'https://database.example.test');assert.equal(request.method,'GET');assert.equal(request.body,undefined);
+  assert.equal(request.redirect,'error');assert.equal(request.cache,'no-store');assert(request.signal instanceof AbortSignal);
+  assert(Number(q.get('limit'))>0&&Number(q.get('limit'))<=51);
+  assert(!q.get('select').match(/body|quote|result|phone|email|resolution|\*/));
+  if(calls.length<=2){
+   assert.equal(table,'icash_seller_gaps');assert.equal(q.get('account_id'),null);
+   const positive=calls.length===2;
+   assert.equal(q.get('limit'),positive?'3':'12');
+   assert.equal(q.get('select'),positive?'id,account_id,active_property:icash_screening_jobs!inner()':'id,account_id');
+   if(positive){assert.equal(q.get('active_property.state'),'eq.complete');assert.equal(q.get('reason'),'in.(callback,human,delivery_unknown,declined,repeated_question)');}
+   return json((positive?retained:hidden).map(({id,account_id})=>({id,account_id,...(positive?{active_property:{}}:{})})));
+  }
+  if(q.getAll('id').length===2)return json([]);
+  const owner=q.get('account_id')?.slice(3);assert.match(q.get('account_id')??'',/^eq\.[0-9a-f-]{36}$/,'Every source/projection read is account scoped');
+  assert(source.some(row=>row.account_id===owner),'Only discovered accounts are inspected');
+  const rows=source.filter(row=>row.account_id===owner),ids=inFilter(q.get('id'));
+  if(table==='icash_seller_gaps'&&q.get('select')===gapFields){
+   const selected=ids?rows.filter(row=>ids.includes(row.id)):(q.has('reason')?retainedSample:generalSample).filter(row=>row.account_id===owner);
+   return json(selected.slice(0,Number(q.get('limit'))));
+  }
+  if(table==='icash_screening_jobs'&&q.get('select')==='id,account_id,state')return json(rows.filter(row=>ids.includes(row.screening_id)).map(row=>({id:row.screening_id,account_id:owner,state:'complete'})));
+  if(table==='icash_text_messages'){
+   assert.equal(q.get('select'),receiptFields);
+   return json(rows.filter(row=>row.outgoing_id&&ids.includes(row.outgoing_id)).map(row=>({id:row.outgoing_id,account_id:owner,direction:'outgoing',state:'delivered',customer_author_id:null})));
+  }
+  const visible=rows.filter(row=>row.reason==='human');
+  if(table==='icash_seller_gaps'){
+   assert.equal(q.get('active_property.account_id'),'eq.'+owner);assert.equal(q.get('completed_reminder.account_id'),'eq.'+owner);
+   const offset=Number(q.get('offset')),limit=Number(q.get('limit'));
+   return json(visible.filter(row=>ids.includes(row.id)).sort((a,b)=>a.id.localeCompare(b.id)).slice(offset,offset+limit).map(({id})=>({id})));
+  }
+  assert.equal(table,'icash_screening_jobs');assert.equal(q.get('icash_seller_gaps.account_id'),'eq.'+owner);
+  assert.equal(q.get('icash_seller_gaps.completed_reminder.account_id'),'eq.'+owner);
+  const sampledGaps=inFilter(q.get('icash_seller_gaps.id'));
+  return json(visible.filter(row=>ids.includes(row.screening_id)&&sampledGaps.includes(row.id)).map(row=>({id:row.screening_id})));
+ };
+ return {fetcher,calls};
+}
+const positiveCohort=cohortFixture({hidden:[cohortGap(1,account),cohortGap(2,uuid(3)),cohortGap(3,uuid(4))],retained:[cohortGap(4,other,true),cohortGap(5,uuid(5),true),cohortGap(6,uuid(6),true)]});
+const positiveResult=await checkWorkspaceAttentionReadback({env,now,fetcher:positiveCohort.fetcher});
+assert.deepEqual({...positiveResult,requests:undefined},{status:'passed',accounts:3,completedRemindersChecked:2,retainedRequestsChecked:1,requests:undefined});
+assert.deepEqual([...new Set(positiveCohort.calls.slice(2).map(call=>call.q.get('account_id')))],[account,other,uuid(3)].map(id=>'eq.'+id),'First hidden and first retained accounts take priority before filling the three-account cap');
+assert(positiveCohort.calls.some(call=>call.q.get('account_id')==='eq.'+other&&call.q.get('select')===gapFields&&call.q.get('id')==='in.('+uuid(1004)+')'),'The positive discovery becomes an explicit source seed, outside bounded recent samples');
+const overlap=cohortFixture({hidden:[cohortGap(1,account),cohortGap(2,other)],retained:[cohortGap(3,account,true)]});
+const overlapResult=await checkWorkspaceAttentionReadback({env,now,fetcher:overlap.fetcher});
+assert.equal(overlapResult.accounts,2);assert.equal(overlapResult.retainedRequestsChecked,1);
+assert.equal(overlap.calls.filter(call=>call.q.get('select')===gapFields&&call.q.get('account_id')==='eq.'+account&&call.q.get('id')==='in.('+uuid(1001)+','+uuid(1003)+')').length,2,'Overlapping accounts are checked once, including their final source reread');
+const emptyRetained=await checkWorkspaceAttentionReadback({env,now,fetcher:cohortFixture({hidden:[cohortGap(1,account)]}).fetcher});
+assert.equal(emptyRetained.status,'passed');assert.equal(emptyRetained.retainedRequestsChecked,0,'No current retained request remains a legitimate result');
+const retainedOnly=await checkWorkspaceAttentionReadback({env,now,fetcher:cohortFixture({retained:[cohortGap(1,account,true)]}).fetcher});
+assert.equal(retainedOnly.status,'not_observed');assert.equal(retainedOnly.completedRemindersChecked,0);assert.equal(retainedOnly.retainedRequestsChecked,1,'Positive-only coverage never claims completed-reminder proof');
+const boundCohort=cohortFixture({
+ hidden:Array.from({length:12},(_,n)=>cohortGap(n,account)),retained:Array.from({length:3},(_,n)=>cohortGap(12+n,account,true)),
+ generalSample:Array.from({length:24},(_,n)=>cohortGap(15+n,account,true)),retainedSample:Array.from({length:12},(_,n)=>cohortGap(39+n,account,true))
+});
+const boundResult=await checkWorkspaceAttentionReadback({env,now,fetcher:boundCohort.fetcher});
+assert.equal(boundResult.completedRemindersChecked,12);assert.equal(boundResult.retainedRequestsChecked,39);assert(boundResult.requests<=90);
+assert.equal(Math.max(...boundCohort.calls.map(call=>Number(call.q.get('limit')))),51,'Twelve hidden seeds, three retained seeds and the existing 24+12 samples are the precise maximum');
+assert(boundCohort.calls.some(call=>call.q.get('select')===gapFields&&call.q.get('limit')==='15'),'The seed read is bounded by both discoveries combined');
+for(const retainedDiscovery of [
+ Array.from({length:4},(_,n)=>({id:uuid(500+n),account_id:account})),
+ [{id:gaps[1].id,account_id:account},{id:gaps[1].id,account_id:account}],
+ [{id:gaps[0].id,account_id:account}],
+ [{id:gaps[1].id,account_id:account,active_property:{body:'private'}}],
+ [{id:'private invalid ID',account_id:account}]
+])await assert.rejects(checkWorkspaceAttentionReadback({env,now,fetcher:fixture({retainedDiscovery}).fetcher}),/Attention API verification failed:/,'Retained discovery stays bounded, identifier-only and duplicate-free');
 
 // Execute the real activity caller, then compare its nested URL to the checker.
 // This uses no network and no duplicated application query implementation.

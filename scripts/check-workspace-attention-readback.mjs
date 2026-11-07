@@ -2,7 +2,7 @@
 // credential discovery, or customer identifiers in diagnostics/results.
 import {workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
 
-const discoveryLimit=12,accountLimit=3,sampleLimit=24,retainedLimit=12,pageSize=7,badgeSize=6;
+const discoveryLimit=12,retainedDiscoveryLimit=3,accountLimit=3,sampleLimit=24,retainedLimit=12,pageSize=7,badgeSize=6;
 const gapFields='id,account_id,screening_id,state,reason,stage,review_reason,expires_at,outgoing_id,updated_at';
 const receiptFields='id,account_id,direction,state,customer_author_id';
 const propertyFields='id,account_id,state';
@@ -79,7 +79,7 @@ export async function checkWorkspaceAttentionReadback({env=process.env,fetcher=f
   let requests=0;
   async function read(query){
    const [table,search]=query.split('?'),params=new URLSearchParams(search),limit=Number(params.get('limit'));
-   if(!['icash_seller_gaps','icash_screening_jobs','icash_text_messages'].includes(table)||!Number.isInteger(limit)||limit<1||limit>sampleLimit+discoveryLimit+retainedLimit||++requests>90)fail('read_bound');
+   if(!['icash_seller_gaps','icash_screening_jobs','icash_text_messages'].includes(table)||!Number.isInteger(limit)||limit<1||limit>sampleLimit+discoveryLimit+retainedDiscoveryLimit+retainedLimit||++requests>90)fail('read_bound');
    const response=await fetcher(base.origin+'/rest/v1/'+query,{method:'GET',headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY,Accept:'application/json'},redirect:'error',cache:'no-store',signal:AbortSignal.any([budget,AbortSignal.timeout(10000)])});
    if(!response.ok){
     await response.body?.cancel().catch(()=>{});
@@ -105,17 +105,31 @@ export async function checkWorkspaceAttentionReadback({env=process.env,fetcher=f
     checkIds(await read(table+'?'+params),[],'empty_shape');
    }
   }
-  // One bounded cross-account discovery, identifiers only. Every subsequent
-  // source, property, receipt and projection read is explicitly account scoped.
+  // Two bounded identifier-only discoveries keep old delivered history from
+  // crowding out genuine active requests in different accounts. All later
+  // source, property, receipt and projection reads are explicitly account scoped.
   const discovered=await read(path('icash_seller_gaps',{state:'eq.needs_review',reason:'eq.no_response',stage:'eq.draft',review_reason:'is.null',expires_at:'lte.'+now,outgoing_id:'not.is.null',select:'id,account_id',order:'updated_at.desc,id',limit:String(discoveryLimit)}));
   if(discovered.some(row=>!fields(row,'id,account_id')||!uuid(row.id)||!uuid(row.account_id))||unique(discovered.map(row=>row.id)).length!==discovered.length)fail('invalid_cohort');
-  if(!discovered.length){
+  const retainedDiscovery=await read(path('icash_seller_gaps',{state:'eq.needs_review',reason:'in.(callback,human,delivery_unknown,declined,repeated_question)',or:'(review_reason.is.null,review_reason.neq.contact_checks_expired)',select:'id,account_id,active_property:icash_screening_jobs!inner()','active_property.state':'eq.complete',order:'updated_at.desc,id',limit:String(retainedDiscoveryLimit)}));
+  // Empty property embeds normally disappear from PostgREST output. Tolerate
+  // only an empty representation, never property or message content.
+  const retainedSeeds=retainedDiscovery.map(row=>{
+   if(!record(row))fail('invalid_cohort');
+   const {active_property,...ids}=row;
+   const empty=value=>value===null||(record(value)&&!Object.keys(value).length)||(Array.isArray(value)&&value.every(item=>record(item)&&!Object.keys(item).length));
+   if(!fields(ids,'id,account_id')||!uuid(ids.id)||!uuid(ids.account_id)||(Object.hasOwn(row,'active_property')&&!empty(active_property)))fail('invalid_cohort');
+   return ids;
+  });
+  const allSeeds=[...discovered,...retainedSeeds];
+  if(unique(allSeeds.map(row=>row.id)).length!==allSeeds.length)fail('invalid_cohort');
+  if(!allSeeds.length){
    await emptyShapeProof();
    return {status:'not_observed',reason:'no_completed_reminder_cohort',accounts:0,completedRemindersChecked:0,retainedRequestsChecked:0,requests};
   }
+  const selectedAccounts=unique([discovered[0]?.account_id,retainedSeeds[0]?.account_id,...allSeeds.map(row=>row.account_id)].filter(Boolean)).slice(0,accountLimit);
   let hidden=0,visible=0,accounts=0;
-  for(const accountId of unique(discovered.map(row=>row.account_id)).slice(0,accountLimit)){
-   const seeds=discovered.filter(row=>row.account_id===accountId).map(row=>row.id);
+  for(const accountId of selectedAccounts){
+   const seeds=allSeeds.filter(row=>row.account_id===accountId).map(row=>row.id);
    const scoped=(table,select,ids)=>path(table,{account_id:'eq.'+accountId,id:inIds(ids),select,limit:String(ids.length)});
    const seedRows=checkRows(await read(scoped('icash_seller_gaps',gapFields,seeds)),gapFields,accountId,seeds);
    if(seedRows.length!==seeds.length)fail('cohort_changed');

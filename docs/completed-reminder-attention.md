@@ -31,8 +31,9 @@ must not be expanded for this validation.
 
 The existing contact preflight also runs the metadata-only attention readback in
 configured Vercel preview and production builds. It uses the existing database
-configuration without retrieving or granting credentials. One bounded discovery
-is followed by account-scoped source, receipt, direct-list and nested-badge GETs.
+configuration without retrieving or granting credentials. Two bounded discoveries
+include both completed history and a genuine retained request when available,
+followed by account-scoped source, receipt, direct-list and nested-badge GETs.
 No message bodies, customer identifiers, provider operations or mutations are
 logged or performed. The final source reread rejects a changing cohort.
 
