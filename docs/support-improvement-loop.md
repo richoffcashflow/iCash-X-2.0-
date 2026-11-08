@@ -31,6 +31,8 @@ No retrospective customer messages, refunds, new charges, subscription/access/id
 
 Closing a chat, a thank-you, a passing test, a healthy service or a verified deployment is not customer-confirmed resolution. A correction supplied by an operator still needs product/evidence validation before it becomes shared guidance. Partial samples cannot establish total coverage, a resolution rate or a dispute rate. Actual chargeback trends require separately verified payment/dispute records and a consistent transaction denominator; do not infer them from threatening language. The objective is fewer recurring failures, fewer unresolved paid-access cases and useful progress for the customer, not fewer escalations or artificially closed chats.
 
+Unconfirmed payment/access and dispute signals retain their review priority after a case is closed or marked resolved. The actual workflow status and active-case count remain unchanged. This preserves review evidence; it does not reopen cases, send messages or establish a verified account fault. Explicit customer confirmation and the existing operator/topic boundaries still apply.
+
 ## Verification
 
 `tests/support-improvement-loop.test.mjs` exercises actual account/guest reply routing with external models forbidden, issue changes, operator and successful-result resets, private signal output, deduplication, triage-only updates, truncated/future evidence, bounded CLI input and honest resolution counts. Existing quality route, authorization, pagination and rendering tests remain applicable. This change adds no database migration, customer entitlement change or worker prerequisite.
