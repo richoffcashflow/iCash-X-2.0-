@@ -5,7 +5,7 @@ import {VipPlan} from '@/components/vip-plan';
 import {useEffect,useRef,useState} from 'react';
 import {priceLabel} from '@/lib/membership-policy';
 import {FundingDialog} from '@/components/funding-dialog';
-type MembershipView={complimentary?:boolean;vip?:boolean;vipRetained?:boolean;vipUntil?:string|null;pendingDowngrade?:boolean;state:string;priceCents:number;paidThrough:string|null;cancelAtPeriodEnd:boolean;accessible:boolean;retentionEndsAt?:string|null};
+type MembershipView={nonRenewingRecovery?:boolean;complimentary?:boolean;vip?:boolean;vipRetained?:boolean;vipUntil?:string|null;pendingDowngrade?:boolean;state:string;priceCents:number;paidThrough:string|null;cancelAtPeriodEnd:boolean;accessible:boolean;retentionEndsAt?:string|null};
 type Offer={eligible:boolean;retryable:boolean;priceCents:number;plan:'vip';version:string};
 export function MembershipSettings({locked=false,cancellationOnly=false,planOnly=false,initialUpgradeReview=false,onClosed,onChanged}:{locked?:boolean;cancellationOnly?:boolean;planOnly?:boolean;initialUpgradeReview?:boolean;onClosed?:()=>void;onChanged?:(stopped?:boolean)=>void|Promise<unknown>}={}){
  const [data,setData]=useState<MembershipView|null>(null),[offer,setOffer]=useState<Offer|null>(null),[loaded,setLoaded]=useState(false),[review,setReview]=useState(cancellationOnly),[busy,setBusy]=useState(false),[message,setMessage]=useState('');const operation=useRef(false);
@@ -22,6 +22,12 @@ export function MembershipSettings({locked=false,cancellationOnly=false,planOnly
  }
  const cancelling=data?.state==='cancel_requested',canCancel=data&&data.state!=='cancelled'&&!cancelling;
  const offerAvailable=offer&&(offer.eligible||offer.retryable);
+ if(data?.nonRenewingRecovery){
+  const needsReview=data.state==='needs_review',expired=!!data.paidThrough&&Date.parse(data.paidThrough)<=Date.now();
+  const heading=data.accessible?'Restored software and VIP access':needsReview?'Restored access needs review':cancelling?'Restored access is ending':'Restored access ended';
+  const content=<div className="membership-settings"><div className="membership-summary"><strong>{heading}</strong><span>No automatic renewal</span></div><p>Original paid term {expired?'ended':'ends'} {data.paidThrough?new Date(data.paidThrough).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short',hour12:true}):'at its recorded end'}. No new subscription charge.</p>{needsReview&&<p>Access is on hold for payment review. Contact support before making another purchase.</p>}{cancelling&&<p role="status">Ending this restored access is finishing. Your unused work credits stay saved.</p>}{canCancel&&cancellationOnly&&<><p>You can end this restored access now. This stops new bot work and your unused work credits stay saved.</p><button className="retention-cancel-button" disabled={busy} onClick={()=>void act('cancel')}>{busy?'One moment…':'End restored access'}</button></>}{data.state==='cancelled'&&<a className="fund-button" href="/join">Review a new subscription</a>}{message&&<p role="status">{message}</p>}</div>;
+  return cancellationOnly?<FundingDialog title="Your restored access" onClose={()=>onClosed?.()}>{content}</FundingDialog>:content;
+ }
  if(data?.complimentary){
   const content=<div className="membership-settings"><div className="membership-summary"><strong>Free Standard access</strong><span>Private invitation</span></div><PrivateVipPlan cancellationOnly={cancellationOnly} onChanged={async()=>{await load();await onChanged?.();}}/></div>;
   return cancellationOnly?<FundingDialog title="Your access" onClose={()=>onClosed?.()}>{content}</FundingDialog>:content;

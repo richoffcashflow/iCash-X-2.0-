@@ -15,11 +15,19 @@ export async function accountMembership(accountId:string,signal?:AbortSignal){
  const mode=fundingMode();if(!mode)throw Error('Billing mode unavailable');
  const scope=`icash_memberships?account_id=eq.${accountId}&mode=eq.${mode}`;
  const [current]=await db<Membership[]>(`${scope}&state=neq.cancelled&order=created_at.desc&limit=1&select=*`,undefined,undefined,signal);
- if(current)return current;
+ if(current){
+  if(current.consent_version==='paid-term-recovery-v1'&&current.state==='active'&&Date.parse(current.paid_through??'')<=Date.now()){
+   const [expired]=await db<Membership[]>(`icash_memberships?id=eq.${current.id}&account_id=eq.${accountId}&mode=eq.${mode}&state=eq.active&consent_version=eq.paid-term-recovery-v1`,'PATCH',{state:'cancelled',updated_at:new Date().toISOString()},signal);
+   if(expired)return expired;
+   const [latest]=await db<Membership[]>(`${scope}&id=eq.${current.id}&select=*&limit=1`,undefined,undefined,signal);
+   return latest??null;
+  }
+  return current;
+ }
  const [previous]=await db<Membership[]>(`${scope}&state=eq.cancelled&order=created_at.desc&limit=1&select=*`,undefined,undefined,signal);
  return previous??null;
 }
-export function publicMembership(m:Membership|null){return m?{complimentary:!!m.private_invite_id,state:m.state,priceCents:m.price_cents,vip:vipActive(m),vipUntil:m.vip_until??null,vipRetained:!!m.vip_retained_at,pendingDowngrade:vipActive(m)&&m.price_cents===5000&&!m.vip_retained_at,paidThrough:m.paid_through,cancelAtPeriodEnd:m.cancel_at_period_end,accessible:membershipAccessible(m),retentionEndsAt:m.vip_retained_at?null:m.retention_ends_at??null}:null;}
+export function publicMembership(m:Membership|null){return m?{...(m.consent_version==='paid-term-recovery-v1'?{nonRenewingRecovery:true}:{}),complimentary:!!m.private_invite_id,state:m.state,priceCents:m.price_cents,vip:vipActive(m),vipUntil:m.vip_until??null,vipRetained:!!m.vip_retained_at,pendingDowngrade:vipActive(m)&&m.price_cents===5000&&!m.vip_retained_at,paidThrough:m.paid_through,cancelAtPeriodEnd:m.cancel_at_period_end,accessible:membershipAccessible(m),retentionEndsAt:m.vip_retained_at?null:m.retention_ends_at??null}:null;}
 export async function membershipRetentionOffer(m:Membership|null){
  if(!m?.account_id||m.vip_retained_at||!membershipAccessible(m)||m.cancel_at_period_end||!m.stripe_subscription_id)return null;
  const prior=await db<{id:string}[]>(`icash_memberships?account_id=eq.${m.account_id}&mode=eq.${m.mode}&retention_requested_at=not.is.null&select=id&limit=1`);
@@ -148,6 +156,7 @@ export async function stopMembership(m:Membership){
  // Persist the lock and pause before contacting Stripe. The reconciliation job retries failures.
  m=await db<Membership>('rpc/icash_request_membership_cancellation','POST',{p_membership:m.id,p_account:m.account_id,p_mode:m.mode});
  try{
+ if(m.consent_version==='paid-term-recovery-v1'){await db(`icash_memberships?id=eq.${m.id}&account_id=eq.${m.account_id}&state=eq.cancel_requested`,'PATCH',{state:'cancelled',updated_at:new Date().toISOString()});return;}
  const stripe=fundingStripe();
  if(!m.stripe_subscription_id){if(m.stripe_session_id){const s=await stripe.checkout.sessions.retrieve(m.stripe_session_id);if(s.metadata?.icash_membership!==m.id)throw Error('Checkout mismatch');if(s.status==='open')await stripe.checkout.sessions.expire(s.id);else if(s.status==='complete'){m=await reconcileMembershipCheckout(m);if(m.stripe_subscription_id)return stopMembership(m);}}await db(`icash_memberships?id=eq.${m.id}`,'PATCH',{state:'cancelled',cancel_at_period_end:true});return;}
  const sub=await stripe.subscriptions.retrieve(m.stripe_subscription_id);if((await matchingMembership(sub))?.id!==m.id)throw Error('Cancellation subscription mismatch');
