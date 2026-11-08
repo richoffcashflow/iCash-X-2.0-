@@ -2,15 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {automaticCallOffer,calculateAutomaticCallOffer} from '../lib/automatic-call-offer.ts';
 const input={action:'get_offer',conversationId:'conv_fixture'},token='a'.repeat(64);
+const now=()=>Date.parse('2026-10-09T19:00:00Z');
 const buyer={address:'45 Fixture Lane',askingPriceCents:16227050,purchasePriceCents:15227050,assignmentFeeCents:1000000,depositCents:200000,closingDate:'2026-11-07',titleSelectionStatus:'not_selected'};
 test('current call authority needs only one database round trip for buyer price',async()=>{
- const calls=[];const result=await automaticCallOffer(token,input,{db:async(path)=>{calls.push(path);return {party:'buyer',buyer};},bind:async()=>assert.fail('Bound call must not repeat provider/binding lookup'),verifyInput:async()=>assert.fail()});
+ const calls=[];const result=await automaticCallOffer(token,input,{now,db:async(path)=>{calls.push(path);return {party:'buyer',buyer};},bind:async()=>assert.fail('Bound call must not repeat provider/binding lookup'),verifyInput:async()=>assert.fail()});
  assert.equal(result.priceCents,16227050);assert.deepEqual(calls,['rpc/icash_call_offer_context']);
 });
 test('unbound, expired or denied calls cannot skip canonical identity or authorize a price',async()=>{
  for(const bound of [false,true]){
   const calls=[];let verified=false;
-  const result=await automaticCallOffer(token,input,{db:async()=>{calls.push('context');return verified&&bound?{party:'buyer',buyer}:null;},bind:async()=>{calls.push('bind');verified=true;},verifyInput:async()=>false});
+  const result=await automaticCallOffer(token,input,{now,db:async()=>{calls.push('context');return verified&&bound?{party:'buyer',buyer}:null;},bind:async()=>{calls.push('bind');verified=true;},verifyInput:async()=>false});
   assert.deepEqual(calls,['context','bind','context']);assert.equal(result.quoteAllowed,bound);
  }
  await assert.rejects(automaticCallOffer(token,input,{db:async()=>null,bind:async()=>{throw Error('unconfirmed_call');},verifyInput:async()=>false}),/unconfirmed_call/);
