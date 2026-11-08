@@ -2,7 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
- 'http-response-lifecycle',
+ 'http-response-lifecycle', 'deferred-text-recovery',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
  'scheduler-reliability', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database',
  'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
