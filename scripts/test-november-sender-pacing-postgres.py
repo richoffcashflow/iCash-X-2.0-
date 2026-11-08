@@ -27,6 +27,7 @@ def main():
     migration, = (root / 'supabase/migrations').glob('*_contiguity_sender_volume.sql')
     sql(migration.read_text())
     sql((root / 'config/november-sender-pacing.sql').read_text())
+    sql((root / 'config/november-sender-200.sql').read_text())
     sql('grant usage on schema public to service_role;')
     # Freeze only clock reads in the real admission functions. Run at a fixed
     # daytime instant regardless of the CI runner's clock; retain original locks.
@@ -38,16 +39,16 @@ def main():
     line = "'+16462959838'"
     def contenders(prefix):
         return [f"set role service_role;select icash_sender_private.take('cold-{i}',md5('{prefix}{i}')::uuid,{line},true)" for i in range(8)]
-    assert race(contenders('empty')).count('t') == 1, 'Only one concurrent send may start in five minutes'
+    assert race(contenders('empty')).count('t') == 1, 'Only one concurrent send may start in three minutes'
     assert sql(f"select icash_sender_private.take('reply',md5('reply')::uuid,{line},false)") == 't'
     assert sql("select icash_sender_private.take('independent',md5('independent')::uuid,'+18623812530',true)") == 't'
     sql('truncate icash_sender_private.uses;')
-    sql(f"insert into icash_sender_private.uses(source,source_id,sender,cold,admitted_at) select 'history',md5(i::text)::uuid,{line},true,public.fixture_clock()-interval '30 minutes' from generate_series(1,9)i;")
+    sql(f"insert into icash_sender_private.uses(source,source_id,sender,cold,admitted_at) select 'history',md5(i::text)::uuid,{line},true,public.fixture_clock()-interval '30 minutes' from generate_series(1,19)i;")
     assert race(contenders('hour')).count('t') == 1, 'Last hourly slot is atomic across accounts/channels'
     sql('truncate icash_sender_private.uses;')
-    sql(f"insert into icash_sender_private.uses(source,source_id,sender,cold,admitted_at) select 'history',md5(i::text)::uuid,{line},true,public.fixture_clock()-interval '2 hours' from generate_series(1,99)i;")
+    sql(f"insert into icash_sender_private.uses(source,source_id,sender,cold,admitted_at) select 'history',md5(i::text)::uuid,{line},true,public.fixture_clock()-interval '2 hours' from generate_series(1,199)i;")
     assert race(contenders('day')).count('t') == 1, 'Last daily slot is atomic'
-    assert sql(f'select count(*) from icash_sender_private.uses where sender={line}') == '100'
+    assert sql(f'select count(*) from icash_sender_private.uses where sender={line}') == '200'
     print('PASS native November pacing: one cold admission under contention, independent lines, transactional headroom, atomic hourly/daily limits')
 
 if __name__ == '__main__':

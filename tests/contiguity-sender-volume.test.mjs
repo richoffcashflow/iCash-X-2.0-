@@ -23,6 +23,8 @@ try {
  await pg.query("insert into public.icash_operation_spend(operation_key,account_id,dispatched_at) values('text:'||$1::text,$2,now()-interval '2 hours')",[historical,owner]);
  const held=await make('waiting');
  await exec(read('../supabase/migrations/'+files[0]));
+ await exec(read('../config/november-sender-pacing.sql'));
+ await exec(read('../config/november-sender-200.sql'));
  assert.equal(await uses('property',historical),1,'Deployment accounts for earlier use');
  assert.equal(await uses('property',held),0,'An unstarted message takes no slot');
  for(const role of ['anon','authenticated']){

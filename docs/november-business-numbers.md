@@ -11,12 +11,21 @@ to the existing AI reception, and exact Twilio caller-ID ownership. A number
 awaiting caller-ID verification can receive calls and can be separately enabled
 for texts after active forwarding is confirmed; outgoing calls remain disabled.
 
-Each new number admits at most 100 cold texts per rolling 24 hours, 10 per rolling
-hour, and one every five minutes. Cold sends also require 9 AM–9 PM Eastern,
+The owner's November 8 follow-up raises each of these four numbers to at most
+200 cold texts per rolling 24 hours, 20 per rolling hour, and one every three
+minutes: 800 cold texts per rolling day across the four. Cold sends require 9 AM–9 PM Eastern,
 in addition to existing recipient-local hours. These limits have no automatic
 expiry. Actual requested conversations retain the existing transactional rules
 and shared 1,000-total ceiling. All channels use the same atomic physical-number
 counter; waiting takes no customer credits. Unknown sends are never replayed.
+
+`november_sender_200` updates both the exact-number pacing gate and its shared
+daily baseline, so the older 100/day baseline cannot silently block the requested
+capacity. Other numbers retain their existing 100/day baseline and verified-reply
+qualification for 300/day. These four stop at 200 even with a qualifying cohort.
+Apply this guarded migration after the original pacing migration; it changes no
+usage counters, contact evidence, queued messages or number enablement. The
+hourly and spacing changes let 200/day fit within the existing daytime window.
 
 Apply both reviewed migrations before activation. Publish and verify the exact
 release, connect all four through `/messagingadmin/calls`, then enable only the
