@@ -4,13 +4,14 @@ import {supportContactTimingQuestion,supportContractTimingQuestion} from './supp
 import {supportLeadImportQuestion} from './support-lead-policy.ts';
 import {supportBotWorkProblem} from './support-reply-style.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
+import {supportImprovementReport,type SupportImprovementReport} from './support-improvement.ts';
 
 export type QualityMessage={role:string;content:string;created_at:string};
 export type QualityConversation={id:string;kind:'account'|'access';subject:string;status:string;updated_at:string;messages:QualityMessage[]};
 export type QualityFlag={code:'repeat'|'empty'|'mismatch'|'stalled'|'promise';label:string};
 export type QualityCase=Omit<QualityConversation,'messages'>&{question:string;lastReply:string;flags:QualityFlag[];topic:string};
 export type QualityScope='unresolved'|'recent';
-export type SupportQualityReport={checkedAt:string;days:number;sampled:number;limited:boolean;flagged:number;needsReview:number;topics:{topic:string;conversations:number;flagged:number}[];cases:QualityCase[];page?:{scope:QualityScope;snapshotAt:string;nextCursor:string|null;messagesLimited:boolean}};
+export type SupportQualityReport={checkedAt:string;days:number;sampled:number;limited:boolean;flagged:number;needsReview:number;topics:{topic:string;conversations:number;flagged:number}[];cases:QualityCase[];improvement?:SupportImprovementReport;page?:{scope:QualityScope;snapshotAt:string;nextCursor:string|null;messagesLimited:boolean}};
 const normalize=(text:string)=>text.toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const active=(status:string)=>!['closed','resolved'].includes(status);
 function topic(text:string){
@@ -55,7 +56,7 @@ export function supportQualityReport(conversations:QualityConversation[],now=new
  for(const row of all){const t=topics.get(row.topic)??{topic:row.topic,conversations:0,flagged:0};t.conversations++;if(row.flags.length)t.flagged++;topics.set(row.topic,t);}
  const flagged=all.filter(row=>row.flags.length);
  const cases=(includeUnflagged?all:flagged).sort((a,b)=>Number(active(b.status))-Number(active(a.status))||b.flags.length-a.flags.length||Date.parse(a.updated_at)-Date.parse(b.updated_at));
- return {checkedAt:now.toISOString(),days:7,sampled:all.length,limited,flagged:flagged.length,needsReview:flagged.filter(c=>active(c.status)).length,topics:[...topics.values()].sort((a,b)=>b.flagged-a.flagged||b.conversations-a.conversations),cases};
+ return {checkedAt:now.toISOString(),days:7,sampled:all.length,limited,flagged:flagged.length,needsReview:flagged.filter(c=>active(c.status)).length,topics:[...topics.values()].sort((a,b)=>b.flagged-a.flagged||b.conversations-a.conversations),cases,improvement:supportImprovementReport(conversations,all,now,limited)};
 }
 
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
