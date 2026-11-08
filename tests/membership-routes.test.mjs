@@ -48,3 +48,8 @@ assert.equal(calls.some(c=>c.create),false,'No payment session before readiness 
 releaseOffer(offer);assert.equal((await blocked).status,503);
 assert.equal(calls.some(c=>c.create),false,'A failed parallel readiness check still blocks payment');
 console.log('PASS parallel checkout reads preserve the readiness gate.');
+
+user={id:'user',email:'fixture@example.invalid'};prior={id,account_id:'account',mode:'live',state:'active',price_cents:10000,consent_version:'paid-term-recovery-v1',paid_through:new Date(Date.now()+86400000).toISOString(),cancel_at_period_end:true};calls=[];cancelPending=false;
+for(const action of [{action:'manage'},vipRetention,{...retention,priceCents:5000}]){r=await route.POST(req(action));assert.equal(r.status,409);assert.match(r.body.error,/does not renew/);}
+assert(!calls.some(c=>c.customer||c.create||c.vip||c.retain));r=await route.POST(req({action:'cancel'}));assert.equal(r.status,200);
+console.log('PASS recovery billing route: no manage/renewal/retention, explicit cancellation remains available.');

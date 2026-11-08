@@ -32,6 +32,7 @@ export async function GET(req:Request){try{
   const query=`icash_memberships?${scope}&mode=eq.${mode}`;
   const rows=await db<Membership[]>(`${query}${sessionId?'&stripe_session_id=eq.'+sessionId:'&state=neq.cancelled'}&order=created_at.desc&select=*&limit=1`);
   m=rows[0]??null;
+  if(!sessionId&&account&&m?.consent_version==='paid-term-recovery-v1')m=await accountMembership(account.id);
   if(sessionId&&!m)return NextResponse.json({error:'Sign in with your payment email to open this purchase.'},{status:404,headers});
   if(!m&&!sessionId){const history=await db<Membership[]>(`${query}&state=eq.cancelled&order=created_at.desc&select=*&limit=1`);m=history[0]??null;}
   // A durable paid entitlement does not need another Stripe round trip to open.
@@ -42,7 +43,7 @@ export async function GET(req:Request){try{
   checkoutCustomerContext(hash,user?.email).catch(()=>({name:null,email:user?.email??null})),paidVipDestination(m).catch(()=>null),
   offer.enabled&&!membershipAccessible(m)?customerFundingReady().catch(()=>false):false,vipRetentionOffer(m).catch(()=>null)
  ]);
- if(m?.mode==='live'&&m.paid_through)schedulePurchaseAccessEmail(m.id);
+ if(m?.mode==='live'&&m.paid_through&&m.consent_version!=='paid-term-recovery-v1')schedulePurchaseAccessEmail(m.id);
  return NextResponse.json({postPurchaseUrl,offer,mode,embeddedReady:!!checkoutPublishableKey(mode),customerName:customer.name??'',ready,membership:publicMembership(m),retentionOffer,needsClaim:!!m?.paid_through&&!m.account_id,email:m?.paid_through&&!user?m.payer_email:user?.email??customer.email??null},{headers});
  }catch{return NextResponse.json({error:'Could not check software access. Please retry.'},{status:503,headers});}}
 const input=z.discriminatedUnion('action',[z.object({action:z.literal('prepare'),email:z.string().trim().email().max(254).optional(),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.literal(true),webinarSessionId:z.guid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('checkout'),email:z.string().trim().email().max(254).optional(),accepted:z.literal(true),version:z.literal(membershipTermsVersion),revision:z.number().int().positive(),totalCents:z.number().int().positive(),embedded:z.boolean().optional(),webinarSessionId:z.guid().optional(),timezone:z.string().max(80).optional()}).strict(),z.object({action:z.literal('cancel')}).strict(),z.object({action:z.literal('manage')}).strict(),z.object({action:z.literal('retain_vip'),accepted:z.literal(true),version:z.literal(vipRetentionVersion),priceCents:z.literal(vipRetentionCents)}).strict(),z.object({action:z.literal('retain'),accepted:z.literal(true),version:z.literal(retentionVersion),priceCents:z.number().int().positive(),months:z.literal(6)}).strict()]);
@@ -52,6 +53,7 @@ export async function POST(req:Request){
  const raw=await req.text();if(raw.length>1024)throw Error();const i=input.parse(JSON.parse(raw)),mode=fundingMode();if(!mode)throw Error();const {token,hash,account,user}=await owner(true);await limitRequest(req,'membership',token!,8,600);const stripe=fundingStripe(),origin=req.headers.get('origin')!;
  if(i.action!=='checkout'&&i.action!=='prepare'){
   if(!account||!user)return NextResponse.json({error:'Sign in to manage your software subscription.'},{status:401,headers});const m=await accountMembership(account.id);if(!m)throw Error();
+  if(m.consent_version==='paid-term-recovery-v1'&&i.action!=='cancel')return NextResponse.json({error:'Your restored access does not renew and has no new subscription payment to manage.'},{status:409,headers});
   if(i.action==='retain_vip'){
    try{return NextResponse.json(await changeVipPlan(m,'retain_vip',origin,{request:req}),{headers});}
    catch{return NextResponse.json({error:'Could not confirm the VIP offer. You can retry or cancel your subscription.'},{status:409,headers});}
@@ -79,6 +81,7 @@ export async function POST(req:Request){
  // The public homepage opens Stripe directly; Stripe collects a new buyer's email.
  // Known account/webinar emails still reserve their purchase before opening payment.
  if(!paymentEmail&&i.action!=='prepare')return NextResponse.json({error:'Enter your payment email to check for an existing purchase before opening checkout.'},{status:422,headers});
+ if(account)await accountMembership(account.id); // Expire only a completed nonrenewing recovery before a fresh checkout.
  const filter=account?`account_id=eq.${account.id}`:`guest_hash=eq.${hash}`;const [prior]=await db<Membership[]>(`icash_memberships?${filter}&mode=eq.${mode}&state=neq.cancelled&select=*&limit=1`);
  if(prior){
   if(prior.legacy_trial_offer&&prior.state==='pending')return NextResponse.json({error:'Your returning-customer checkout already exists. Return to /legacy-offer to continue without starting another subscription.'},{status:409,headers});

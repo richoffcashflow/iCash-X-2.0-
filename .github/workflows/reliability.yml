@@ -149,6 +149,8 @@ jobs:
         run: python3 scripts/test-outbound-billing-drain-postgres.py
       - name: Verify free custom voice preview under concurrent clicks
         run: python3 scripts/test-custom-voice-preview-postgres.py
+      - name: Verify finite paid-term recovery under concurrent changes
+        run: python3 scripts/test-paid-term-recovery-postgres.py
       - name: Verify confirmed contract delivery under competing claims
         run: python3 scripts/test-confirmed-contract-delivery-postgres.py
   outreach-preparation-contention:
