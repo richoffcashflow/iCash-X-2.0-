@@ -26,7 +26,7 @@ try{
  const pausedEvidence=[{...work,code:'paused',status:'attention'}, {...outreach,outreach:{...outreach.outreach,progress:{...outreach.outreach.progress,status:'paused'}}}];
  const pause=await reply('I have paused my bot after 0 calls. Keep it paused. Are automated calls enabled, and what is the blocker before I resume?',[user(technical),assistant(checked.reply)],{evidence:pausedEvidence,handedOff:true});
  assert.match(pause.reply,/has not resumed/);assert.match(pause.reply,/not why outreach was missing before/);assert.doesNotMatch(pause.reply,/Select Run|press Run|\bI(?:’ve|'ve| have)? resumed/i);
- for(const q of ['What number will it call? My business number?','How do I setup a previously purchased number for it to use?','Which outbound number will the seller see?','Can I connect my own number for the bot to use?']){
+ for(const q of ['What number will it call? My business number?','How do I setup a previously purchased number for it to use?','What number will it call from?','Can I connect my own number for the bot to use?']){
   const r=await reply(q);assert.match(r.reply,/not a caller-ID selector/);assert.match(r.reply,/don’t identify the exact outbound number/);assert.doesNotMatch(r.reply,/enter the number|use your personal|\+1\d/);
  }
  const location=await reply('Georgia',[user('How do I setup a previously purchased number for it to use?'),assistant('Enter the number in Settings. Where are you when trying to set this number?')]);
@@ -62,7 +62,7 @@ try{
  const cancellation=await reply('Cancel my subscription',accessHistory,{evidence:[subscription,payment]});assert.match(cancellation.reply,/Cancel subscription/);
  const course=await reply('Where is the course?',accessHistory,{evidence:[subscription,payment]});assert.match(course.reply,/Course/i);assert.doesNotMatch(course.reply,/cancellation record/);
  const legacy=await reply('I bought iCash X 1.0. How do I migrate?');assert.match(legacy.reply,/purchase receipt|purchase proof/);
- for(const q of ['How much money should I put as the purchase price in an agreement?','How do I change my personal phone number?','How do I change my own phone number in Settings?','Where is the course?'])assert.equal(supportAccountReviewReply({kind:'account',messages:[user(q)],evidence}),null,q);
+ for(const q of ['How much money should I put as the purchase price in an agreement?','How do I change my personal phone number?','How do I change my own phone number in Settings?','What number will it call for this property?','Where is the course?'])assert.equal(supportAccountReviewReply({kind:'account',messages:[user(q)],evidence}),null,q);
  assert.equal(supportAccountReviewReply({kind:'account',messages:[operator('The display problem is corrected and now live. The repair is verified.'),user('Why are there no seller replies?')],evidence}),null);
  assert.equal(supportMissingSellerContactQuestion('My phone number is missing in Settings'),false);
  assert.equal(supportProductConflict('In Settings, enter the phone number you want the bot to use for calling and texting.'),true);

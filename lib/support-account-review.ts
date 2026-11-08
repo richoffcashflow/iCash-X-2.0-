@@ -1,7 +1,7 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 
 const outreachConcern=(text:string)=>/\b(?:bot|automated|automation|research|outreach|calls?|texts?|sellers?|properties|leads?)\b/i.test(text)&&/\b(?:slow|slower|not doing much|not doing anything|no interested|no interest|haven[’']?t (?:gotten|got|had|received).{0,30}interested)\b/i.test(text);
-const callerIdentity=(text:string)=>(/\b(?:caller[ -]?id|outbound number|outgoing number|business (?:phone|number)|previously purchased number)\b/i.test(text)||/\bown (?:phone )?number\b/i.test(text)&&/\b(?:bot|ai|outbound|calling|texts?|calls?)\b/i.test(text))&&/\b(?:what|which|use|using|call|calls|calling|set ?up|connect|change|disclos|show|see)\w*\b/i.test(text);
+const callerIdentity=(text:string)=>(/\b(?:caller[ -]?id|outbound number|outgoing number|business (?:phone|number)|previously purchased number)\b/i.test(text)||/\bown (?:phone )?number\b/i.test(text)&&/\b(?:bot|ai|outbound|calling|texts?|calls?)\b/i.test(text))&&/\b(?:what|which|use|using|call|calls|calling|set ?up|connect|change|disclos|show|see)\w*\b/i.test(text)||/\b(?:what|which)(?: phone)? number\b.{0,40}\b(?:calls?|calling|texts?|texting) from\b/i.test(text);
 const identityGuide='Outgoing calls use a service-connected business caller ID. The phone field in Settings is your contact number, not a caller-ID selector. There is no customer control to connect a separately purchased number. These support checks don’t identify the exact outbound number for a particular call.';
 
 /** Current account complaints take priority over incidental product keywords.
@@ -28,7 +28,7 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  }
  const phoneSetupFollowup=callerIdentity(users.at(-2)?.content??'')&&/where are you|where.*trying.*number/i.test(previous)&&/^[a-z ]{2,35}[.!]?$/i.test(q.trim())&&!/\b(?:course|refund|cancel|credits?|access|vip|contract|agreement)\b/i.test(q);
  if(phoneSetupFollowup)return answer('The earlier phone-setup instruction was incorrect. '+identityGuide);
- if(callerIdentity(q)||/\b(?:what|which) number will (?:it|the bot) call\b/i.test(q))return answer(identityGuide);
+ if(callerIdentity(q))return answer(identityGuide);
  if(/\b(?:let (?:it|the bot|ai) do (?:all|most)|do(?:es)? (?:all|most of) the work|hands[ -]?off|how does (?:it|this|the bot) work for me)\b/i.test(q)&&!/\b(?:not|stopped|broken|failed|missing|error)\b/i.test(q))
   return answer('The bot handles eligible research, seller outreach and follow-up automatically on Standard as well as VIP. You still need to review seller replies and deal terms, complete required signatures, choose and verify title, and respond to closing requests. VIP adds features; it does not remove those responsibilities or guarantee a closing.');
  const operator=context.messages.findLast(m=>m.role==='operator')?.content??'';
