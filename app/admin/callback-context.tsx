@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {overviewTime} from '@/lib/owner-overview';
-import {callbackPhone,validSellerCallbackContext,type SellerCallbackContext} from '@/lib/seller-callback-context';
+import {callbackPhone,callbackBusinessNumbers,validSellerCallbackContext,type SellerCallbackContext} from '@/lib/seller-callback-context';
 import styles from './outreach.module.css';
 export function OwnerCallbackLookup(){
  const [phone,setPhone]=useState(''),[business,setBusiness]=useState(''),[report,setReport]=useState<SellerCallbackContext|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -24,7 +24,7 @@ export function OwnerCallbackLookup(){
   <p>Look up the caller before discussing the property. Confirm the address with them; their phone number does not verify ownership.</p>
   <form className={styles.callbackForm} onSubmit={e=>{e.preventDefault();void find();}}>
    <label>Seller’s phone<input type="tel" autoComplete="off" value={phone} maxLength={24} placeholder="(555) 555-1234" onChange={e=>{clear();setPhone(e.target.value);}}/></label>
-   <label>Number they called<select value={business} onChange={e=>{clear();setBusiness(e.target.value);}}><option value="">Not sure</option><option value="+14243948384">(424) 394-8384</option><option value="+17208134296">(720) 813-4296</option><option value="+14244377030">(424) 437-7030 · paused</option><option value="+14154208230">(415) 420-8230</option><option value="+16195364770">(619) 536-4770</option></select></label>
+   <label>Number they called<select value={business} onChange={e=>{clear();setBusiness(e.target.value);}}><option value="">Not sure</option>{callbackBusinessNumbers.map(number=><option key={number} value={number}>{number.replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3')}{number==='+14244377030'?' · paused':''}</option>)}</select></label>
    <button disabled={busy} type="submit">{busy?'Finding property…':'Find property'}</button>
   </form>
   {error&&<p role="alert">{error}</p>}
