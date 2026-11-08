@@ -7,6 +7,10 @@ const questions=(text:string)=>text.match(/[^.!?\n]+\?/g)?.map(value=>value.trim
 const normalize=(text:string)=>text.toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 const shortCheckRequest=(text:string)=>/^(?:(?:yes|yeah|yep|sure|ok|okay)(?: please)?|please do(?: that)?|go ahead|do that(?: please)?|(?:can|could|would|will) you (?:please )?(?:check|verify|look into)(?: (?:it|that|this))?(?: for me)?(?: please)?|(?:please )?(?:check|verify) (?:it|that|this)(?: please)?|check please)$/.test(normalize(text));
 const fundingDetail=(text:string)=>/^i (?:already |still )?have (?:(?:\$?\d+(?:\.\d{1,2})?\s+)(?:in )?)?(?:credits|money|funds|a balance)[.!\s]*$/i.test(text.trim());
+export function supportAcknowledgment(text:string){
+ return /^(?:(?:ok(?:ay)?|alright|thanks|thank you|got it|understood)[,! .]*)+(?:i will[.! ]*)?$/i.test(text.trim())
+  || /^(?:sorry for (?:the )?(?:delay|late reply)[,.!\s]*(?:i[’']?ve been (?:traveling|travelling|busy)[,.!\s]*)?)?(?:thank you|thanks) for (?:looking (?:further )?into (?:it|this)|checking(?: on this)?|your help|the update)[.!\s]*$/i.test(text.trim());
+}
 
 /** An accepted offer supplies a subject, never authority or proof that a check succeeded. */
 export function supportAcceptedBotCheck(messages:Turn[]){

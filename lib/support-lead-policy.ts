@@ -15,5 +15,7 @@ export function supportMissingSellerContactQuestion(text:string){
  return new RegExp('\\b(?:no|missing|blank|without|not any|not a single)\\s+'+modifiers+contact+'\\b','i').test(text)
   || new RegExp('\\bnone of (?:(?:these|those|the|my|our) )?(?:leads|properties|sellers|owners) (?:have|show|list) '+modifiers+contact+'\\b','i').test(text)
   || new RegExp('\\b'+contact+'\\s+(?:(?:is|are|was|were|still|all|just)\\s+){0,3}(?:missing|blank|unavailable|not (?:saved|listed|showing|available|there|found))\\b','i').test(text)
-  || new RegExp('\\b'+contact+'\\s+(?:isn[’\']t|aren[’\']t|wasn[’\']t|weren[’\']t) (?:saved|listed|showing|available|there|found)\\b','i').test(text);
+  || new RegExp('\\b'+contact+'\\s+(?:isn[’\']t|aren[’\']t|wasn[’\']t|weren[’\']t) (?:saved|listed|showing|available|there|found)\\b','i').test(text)
+  || new RegExp('\\b(?:property|properties|lead|leads|seller|sellers|they|it)\\s+(?:doesn[’\']?t|don[’\']?t|does not|do not) have '+modifiers+contact+'\\b','i').test(text)
+  || new RegExp('\\b(?:doesn[’\']?t|don[’\']?t|does not|do not) (?:the (?:property|properties|lead|leads|seller|sellers)|they|it) have '+modifiers+contact+'\\b','i').test(text);
 }
