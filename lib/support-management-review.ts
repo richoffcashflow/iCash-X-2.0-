@@ -1,6 +1,7 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportCodeDelivery} from './support-code-delivery.ts';
 import {currentAccessConversation} from './support-access-topic.ts';
+import {supportRepeatedFailedSteps} from './support-learning-signals.ts';
 
 const generic = /^(?:I don[’']t have (?:enough information|a confirmed answer)|I haven[’']t confirmed the cause yet|There[’']s no confirmed change|I couldn[’']t verify your account details)/i;
 const stuck = /\b(?:still|again|already|same (?:issue|problem)|did(?:n[’']t| not) (?:help|work)|not (?:working|getting)|no (?:replies|response|code)|not getting anywhere|going in circles|frustrated|upset|you keep|all day)\b/i;
@@ -47,10 +48,12 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
  );
  const paymentReview=/reporting a charge you don’t recognize|duplicate-charge report needs its own payment check|do both statement entries match|statement details you supplied are saved/i.test(answer.reply)&&!/\b(?:what if|hypothetically|if i (?:am|were)|could i be)\b/i.test(question);
  const genericReply=generic.test(answer.reply)||genericHuman.test(answer.reply)||/^Hi!|^Which page is this happening on\?/i.test(answer.reply);
- const needsReview=answer.managementReview===true||paymentReview||explicit||exhaustedAccess||proofAwaitingReview||failedAgain||repeatedDeadEnd||context.handedOff&&genericReply;
+ const failedSteps=['open','waiting_on_customer'].includes(answer.status)&&!answer.routineGuidance&&supportRepeatedFailedSteps(context.messages);
+ const needsReview=answer.managementReview===true||paymentReview||explicit||exhaustedAccess||proofAwaitingReview||failedAgain||failedSteps||repeatedDeadEnd||context.handedOff&&genericReply;
  if(!needsReview)return answer;
  const note=context.handedOff?'Your case is still in management review.':'I’ve flagged this conversation for management review.';
  let detail=genericReply?'':answer.reply;
+ if(failedSteps)detail='Those troubleshooting steps haven’t resolved the issue. You don’t need to repeat the same steps; the failed attempts are saved in this conversation.';
  if(explicit&&genericReply)detail='This is automated support, so there isn’t a live transfer.';
  if(missingCode&&genericReply)detail='Your sign-in code still hasn’t reached you. You don’t need to request another code or pay again.';
  if(context.handedOff&&previous?.content===answer.reply)detail='';
