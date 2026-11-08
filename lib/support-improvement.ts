@@ -30,10 +30,12 @@ export function supportImprovementReport(conversations:QualityConversation[],cas
   if(last?.role==='user'&&now.getTime()-Date.parse(last.created_at)>=15*60*1000){codes.add('unanswered');metrics.unanswered++;}
   const current=messages.slice(messages.findLastIndex(m=>m.role==='operator')+1);
   const unresolved=current.filter(m=>m.role==='user').slice(-3);
-  if(!confirmed&&active(c.status)&&unresolved.some(m=>supportPaymentAccessConcern(m.content))){codes.add('payment_access');metrics.paymentAccess++;}
-  if(!confirmed&&active(c.status)&&unresolved.some(m=>supportDisputeLanguage(m.content))){codes.add('dispute_language');metrics.disputeLanguage++;}
+  // Closing a workflow cannot erase unresolved customer evidence. Keep the
+  // actual status and active count, while retaining the private review priority.
+  if(!confirmed&&unresolved.some(m=>supportPaymentAccessConcern(m.content))){codes.add('payment_access');metrics.paymentAccess++;}
+  if(!confirmed&&unresolved.some(m=>supportDisputeLanguage(m.content))){codes.add('dispute_language');metrics.disputeLanguage++;}
   if(messages.some((m,i)=>m.role==='operator'&&correction(m.content)&&messages.slice(0,i).some(p=>p.role==='assistant'))){codes.add('operator_correction');metrics.operatorCorrections++;}
-  if(!active(c.status)&&!confirmed&&user&&(supportFailedStep(user.content)||supportPaymentAccessConcern(user.content))){codes.add('unverified_closure');}
+  if(!active(c.status)&&!confirmed&&user&&(supportFailedStep(user.content)||codes.has('payment_access')||codes.has('dispute_language'))){codes.add('unverified_closure');}
   if(!codes.size)continue;
   const sorted=[...codes].sort(),p=priority(sorted),topic=row?.topic??'Other questions';
   // Stable across status-only triage changes; a new/edited message creates a new

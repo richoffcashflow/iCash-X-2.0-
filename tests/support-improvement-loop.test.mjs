@@ -41,6 +41,29 @@ assert(!JSON.stringify(learning).includes('Everything is working'),'Learning out
 const duplicate=supportQualityReport([...sample,paid],now).improvement;
 assert.equal(duplicate.metrics.reviewed,6);assert.equal(duplicate.metrics.paymentAccess,1,'Each conversation counts once per snapshot');
 const original=learning.candidates.find(c=>c.id==='stuck').evidenceKey;
+// Fictional replay: inactivity closure must not erase unresolved paid-access
+// or dispute evidence. Status is workflow metadata, not a customer outcome.
+for(const kind of ['account','access'])for(const status of ['closed','resolved']){
+ const before=supportQualityReport([{...paid,kind}],now).improvement;
+ const after=supportQualityReport([{...paid,kind,status}],now).improvement;
+ assert.equal(after.metrics.paymentAccess,1,'Closure must retain paid-access concern');
+ assert.equal(after.metrics.disputeLanguage,1,'Closure must retain dispute concern');
+ assert.equal(after.metrics.customerConfirmed,0);
+ assert.equal(after.candidates[0].priority,'urgent');
+ assert.equal(after.candidates[0].evidenceKey,before.candidates[0].evidenceKey);
+ assert(after.candidates[0].codes.includes('unverified_closure'));
+ assert.equal(after.patterns.find(p=>p.code==='payment_access').active,0,'Keep actual workflow status honest');
+}
+for(const messages of [
+ [msg('user','What if I am charged twice? What is a chargeback?',0)],
+ [...paid.messages,msg('user','That worked. I can sign in now.',2)],
+ [...paid.messages,msg('operator','I reviewed the payment and access issue.',2),msg('user','Where is the training course?',3)],
+ [msg('user','How can I avoid a buyer deposit dispute?',0)],
+]){
+ const negative=supportQualityReport([fixture('boundary',messages,{status:'closed'})],now).improvement;
+ assert.equal(negative.metrics.paymentAccess,0);
+ assert.equal(negative.metrics.disputeLanguage,0);
+}
 const triaged=supportQualityReport([fixture('stuck',history,{status:'escalated',updated_at:now.toISOString()})],now).improvement;
 assert.equal(triaged.candidates[0].evidenceKey,original,'Status updates do not become new learning evidence');
 const changed=supportQualityReport([fixture('stuck',[...history,msg('user','Still nothing.',6)])],now).improvement;
