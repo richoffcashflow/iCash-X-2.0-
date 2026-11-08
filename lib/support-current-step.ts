@@ -3,6 +3,7 @@ import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCodeDelivery} from './support-code-delivery.ts';
 import {hasRecordedAccessPaymentCheck,missingAccessCodeReply} from './support-access-reply.ts';
 import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-reply-style.ts';
+import {supportCustomVoiceReply} from './support-custom-voice.ts';
 
 /** Source-backed answers to the customer's current step. Prior assistant text
  * supplies a topic only, never proof of payment, authority, delivery or a fix. */
@@ -29,6 +30,7 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
   return missingAccessCodeReply(context.messages,context.accessInvestigation);
  }
  if(context.kind==='access')return null;
+ const customVoice=supportCustomVoiceReply(context);if(customVoice)return customVoice;
 
  const failure=/\b(?:error|failed|broken|blocked|stuck|missing|not working|not calling|not texting|not sending|cannot|can[’']?t|doesn[’']?t|won[’']?t)\b/i.test(q);
  if(/\bfollow[ -]?up\b/i.test(issue)&&/\bblocked\b/i.test(issue)&&!/\b(?:contact checks?|expired|refund|cancel)\b/i.test(issue))return answer('The follow-up is still blocked. A resolution note only records follow-up you actually completed; it does not restart outreach or clear the underlying contact checks. What reason is shown beside that blocked follow-up?');

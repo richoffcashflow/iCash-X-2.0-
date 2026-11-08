@@ -3,6 +3,8 @@
 export function supportProductConflict(reply:string,question=''){
  const sentences=reply.split(/(?<=[.!?])\s+|\n+/);
  return sentences.some(sentence=>{
+  if(/\b(?:custom|cloned?) voice|voice preview/i.test(sentence)&&/\b(?:not supported|unsupported|no playback|(?:cannot|can[’']?t|won[’']?t be able to) play)\b/i.test(sentence)&&!/\b(?:currently|right now|until|because|failed|error|not ready|not active|standard accounts?|standard plan|without vip)\b/i.test(sentence))return true;
+  if(/\b(?:voice|sound)\b/i.test(question+' '+sentence)&&/\b(?:no|not received|haven[’']?t received)\b.{0,35}\bfeedback\b/i.test(reply)&&/\b(?:likely not|is not|isn[’']?t|does not|doesn[’']?t)\b.{0,20}\b(?:scaring|scare|affect|affecting)\b/i.test(sentence))return true;
   if(/\b(?:bot|ai)\b/i.test(sentence)&&/\b(?:every (?:outreach )?day|daily|multiple times.{0,20}each day|keeps? (?:reaching out|contacting))\b/i.test(sentence)&&/\b(?:until|each lead|every seller)\b/i.test(sentence)&&!/\b(?:not|doesn[’']t|never)\b/i.test(sentence))return true;
   if(/\b(?:seller|legal name)\b/i.test(question)&&/\b(?:do not|don[’']t|cannot|can[’']t)\b.{0,35}\b(?:enter|edit|type|put)\b.{0,50}\b(?:name|manually)\b/i.test(sentence)&&!/\b(?:signed|already sent)\b/i.test(sentence))return true;
   if(/\b(?:bot|automation|outreach)\b.{0,50}\b(?:will|automatically)\b.{0,40}\b(?:resume|restart|start again)\b|\b(?:resume|restart|start again)\b.{0,40}\b(?:automatically|tomorrow|morning)\b/i.test(sentence)&&/\b(?:take ?over|took over|pauses?|paused|sending messages)\b/i.test(question)&&!/\b(?:does not|doesn[’']t|will not|won[’']t|until|Return to bot)\b/i.test(sentence))return true;
