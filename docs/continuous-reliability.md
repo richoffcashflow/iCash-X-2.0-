@@ -1,5 +1,18 @@
 # Continuous reliability
 
+## November 8 deferred text recovery
+
+The [deferred text recovery investigation](deferred-text-recovery.md) found stale
+and fresh screenings together in the sender-volume waiting queue. A correct
+pre-send refusal previously ended the entire maintenance pass. The service now
+checks at most four distinct candidates, continuing only on three explicit
+pre-transport holds and stopping after the first SMS attempt or any uncertainty.
+The regression fails against the predecessor and passes with the bounded loop.
+Original SQL claims, rolling caps, sender continuity, financial/contact freshness,
+receipt holds and customer controls remain unchanged. This is not a release of
+stale discovery messages, restoration of a disabled line or provider recovery.
+Exact-head CI and production verification remain required for release.
+
 ## November 7 unused response cleanup
 
 The [HTTP response lifecycle audit](http-response-lifecycle.md) reproduced unused

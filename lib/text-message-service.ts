@@ -56,8 +56,20 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
 /** Resume only messages refused before dispatch. The original funding, consent,
  * routing and one-use claim run again. A provider attempt is never replayed. */
 export async function retryVolumeDeferredText(){
- const due=await db<{accountId:string;messageId:string;claimKind:TextClaimKind}|null>('rpc/icash_next_sender_volume_retry','POST',{});
- if(!due)return {status:'idle'};
- if(!['automatic','manual','meta'].includes(due.claimKind)||!due.accountId||!due.messageId)throw Error('Invalid deferred text binding');
- return dispatchTextMessage(due.accountId,due.messageId,due.claimKind==='manual',due.claimKind);
+ const seen=new Set<string>();
+ let held={status:'idle'};
+ // A stale screening or disabled sender may still be in the deferred queue.
+ // The original claim must reject it, without using the whole recovery pass.
+ // Bound selection work and stop after any SMS transport attempt or uncertainty.
+ for(let attempt=0;attempt<4;attempt++){
+  const due=await db<{accountId:string;messageId:string;claimKind:TextClaimKind}|null>('rpc/icash_next_sender_volume_retry','POST',{});
+  if(!due)return held;
+  if(!['automatic','manual','meta'].includes(due.claimKind)||!due.accountId||!due.messageId)throw Error('Invalid deferred text binding');
+  if(seen.has(due.messageId))return held;
+  seen.add(due.messageId);
+  const result=await dispatchTextMessage(due.accountId,due.messageId,due.claimKind==='manual',due.claimKind);
+  if(!['message_held','business_number_mismatch','seller_inventory_unavailable'].includes(result.status))return result;
+  held=result;
+ }
+ return held;
 }
