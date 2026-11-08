@@ -42,6 +42,8 @@ jobs:
         run: python3 scripts/test-sender-delay-opener-postgres.py
       - name: Verify shared Contiguity sender limits under concurrent dispatch
         run: python3 scripts/test-contiguity-sender-volume-postgres.py
+      - name: Verify new-number daytime pacing under concurrent dispatch
+        run: python3 scripts/test-november-sender-pacing-postgres.py
       - name: Verify independent targeting query receipts under concurrent admission
         if: ${{ !cancelled() }}
         run: python3 scripts/test-targeting-query-binding-postgres.py

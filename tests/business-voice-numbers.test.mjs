@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {voiceOnlyBusinessPhones} from '../lib/business-phone-policy.ts';
+import {voiceOnlyBusinessPhones,novemberBusinessPhones} from '../lib/business-phone-policy.ts';
 import {businessVoiceProviders,inspectBusinessPhone,connectBusinessPhone,selectBusinessCaller,secondaryCallingReady,primaryBusinessPhone as first,secondaryBusinessPhone as second,businessVoiceIngress as ingress} from '../lib/business-voice-numbers.ts';
 const ac='AC'+'a'.repeat(32),pn='PN'+'b'.repeat(32);
 const env={CONTIGUITY_API_KEY:'test-only-contiguity',TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'test-only-carrier-token',VERCEL_ENV:'production'};
@@ -36,7 +36,7 @@ assert.throws(()=>selectBusinessCaller(first,[{sender:target}]));
 reset();assert.throws(()=>businessVoiceProviders(env,fetcher,'+12125550199'));assert.equal(requests.length,0);
 reset();await assert.rejects(inspectBusinessPhone(env,async(url,init)=>{const response=await fetcher(url,init);if(url.includes('call_forwarding')){const data=await response.json();data.data.number=second;return Response.json(data);}return response;},target));
 
-for(const phone of voiceOnlyBusinessPhones){
+for(const phone of [...voiceOnlyBusinessPhones,...novemberBusinessPhones]){
  target=phone;reset();
  const connected=await connectBusinessPhone(db,env,fetcher,phone);
  assert.equal(connected.phone,phone);assert.equal(connected.incoming,true);assert.equal(connected.callerIdVerified,false);

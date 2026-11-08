@@ -110,4 +110,5 @@ export async function testVerifiedOutboundBusinessNumbers(f){
  assert.equal((await one("select has_table_privilege('authenticated','icash_business_voice_numbers','select') allowed")).allowed,false);
  assert.equal((await one("select relrowsecurity from pg_class where oid='icash_business_voice_numbers'::regclass")).relrowsecurity,true);
  console.log('PASS verified outbound numbers: exact verified voice pool, SMS isolation and continuity, unchanged migration state/metadata, caller receipt binding, controls, final AI/manual admission and callback lookup.');
+ if(process.env.NOVEMBER_NUMBERS_ONLY==='1')await (await import('./november-business-numbers-fixture.mjs')).testNovemberNumbers(f);
 }
