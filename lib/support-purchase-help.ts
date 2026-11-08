@@ -11,18 +11,24 @@ const cancellationRequest=(text:string)=>/\b(?:refund|money back|cancel|charged 
 export function supportPaidAccessReply(context:PurchaseContext){
  if(context.kind!=='account')return null;
  const users=context.messages.filter(m=>m.role==='user'),q=users.at(-1)?.content??'';
- if(cancellationRequest(q))return null;
+ const deniesCancellation=(text:string)=>/\b(?:didn[’']?t|did not) cancel\b|\bwithout (?:me|my) cancell?ing\b/i.test(text);
+ if(cancellationRequest(q)&&(!deniesCancellation(q)||/\b(?:please cancel|cancel it now|want to cancel)\b/i.test(q)))return null;
  const subscription=context.evidence?.find(e=>e.key==='subscription'&&e.source==='icash_memberships'&&(e.softwareAccess===false||e.softwareAccess===undefined&&e.code==='renewal_payment_failed'));
  const payment=context.evidence?.find(e=>e.key==='membership_payments'&&e.source==='icash_membership_invoices'&&e.status==='ok'&&e.code==='software_payments_recorded'&&/^Recorded software payments: \$\d/.test(e.detail));
  if(!subscription||!payment)return null;
+ const recentHistory=users.slice(-6);
+ const accessFollowup=/\b(?:access|account)\b/i.test(q)&&/\b(?:restored|restore|unlocked|unlock|locked|when|how long)\b/i.test(q);
+ if((deniesCancellation(q)||accessFollowup)&&recentHistory.some(m=>deniesCancellation(m.content))&&recentHistory.some(m=>accessProblem(m.content))){
+  return {reply:'Your access is still unconfirmed, and you said you did not cancel. The recorded payment, cancellation record and access terms need management review before anyone can confirm why it locked or when it can be restored. Don’t pay again or restart the subscription to troubleshoot this. This chat has not restored access.',status:'open' as const,managementReview:true,ai:false};
+ }
  const observed=Date.parse(payment.observedAt);
  const dates=[...payment.detail.matchAll(/\brecorded ([^;]+? UTC) \(subscription /g)].map(m=>Date.parse(m[1]));
  const recent=Number.isFinite(observed)&&dates.some(date=>Number.isFinite(date)&&observed>=date&&observed-date<=48*60*60*1000);
  const paidNow=/\b(?:just|already|recently) (?:paid|purchased|bought)|\bpaid\b.{0,30}\b(?:today|yesterday|this month|on (?:the )?live)\b/i;
  const paidClaim=paidNow.test(q)||accessProblem(q)&&users.slice(-6,-1).some(m=>paidNow.test(m.content));
- const current=accessProblem(q)||paidNow.test(q)&&users.slice(-6,-1).some(m=>accessProblem(m.content));
+ const current=accessProblem(q)||(paidNow.test(q)||accessFollowup)&&users.slice(-6,-1).some(m=>accessProblem(m.content));
  if(!current||!recent&&!paidClaim)return null;
- return {reply:'A software payment is recorded on this account, but the current access check is not confirming access. Cancelling future renewals does not by itself erase an already paid period. Don’t pay again to troubleshoot this; the recorded payment and its access period need to be matched first. Access has not been restored yet.',status:'open' as const,ai:false};
+ return {reply:'A software payment is recorded on this account, but the current access check is not confirming access. The saved cancellation and access terms also need to be checked. Don’t pay again to troubleshoot this; the recorded payment and its access period need to be matched first. Access has not been restored yet.',status:'open' as const,ai:false};
 }
 
 /** Legacy VIP and a claimed new VIP purchase are different cases. Neither a

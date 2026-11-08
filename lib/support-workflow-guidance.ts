@@ -13,6 +13,11 @@ export function supportWorkflowReply(messages:Turn[],evidence:SupportEvidence[])
  const answer=(reply:string)=>({reply,status:'open' as const,ai:false});
  if(supportMissingSellerContactQuestion(issue)){
   const snapshot=evidence.find(e=>e.key==='outreach')?.outreach;
+  const prior=messages.slice(0,-1).findLast(m=>m.role==='assistant'||m.role==='operator')?.content??'';
+  if(/\b(?:what to do|what (?:do|should|can) i do|what now)\b/i.test(latest)||/\bnext\b/i.test(latest)&&/\b(?:usable seller number|saved owner details|contact information)\b/i.test(prior)){
+   const asked=messages.some(m=>m.role!=='user'&&/which property.{0,30}(?:number|contact)|which property are you opening/i.test(m.content));
+   return answer(asked?'The property detail requested above is still needed to compare your screen with its saved contact record. A missing seller number cannot be replaced with your own number, and I can’t promise when one will appear.':'Without a usable seller number, neither you nor the bot can call or text that contact. Which property is missing its number? That lets support check that property instead of repeating account-wide totals.');
+  }
   return answer('A lead can appear before a usable seller number is available. Without a usable number, that contact cannot be called or texted. '+(snapshot?.contactProperties===0?'Your account check shows no saved owner details yet. ':'')+'Seller numbers are separate from your own number in Settings. I haven’t confirmed why they’re missing yet.');
  }
  if(/\b(?:voice[ -]?mail|answering (?:machine|service)|business (?:service|greeting))\b/i.test(issue)&&/\b(?:seller|calls?|called|calling|replies|reply|do|mean)\b/i.test(issue))return answer('A voicemail or automated business greeting is not a seller response. The bot ends confirmed voicemail calls without leaving a message. Review the property’s calls and texts for a real reply; don’t record the seller as interested or clear an alert unless the needed follow-up is actually complete.');

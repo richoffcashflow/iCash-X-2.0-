@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 8, 2026 the owner requested another support-chat review. Keep slow-work complaints attached to their current issue, even when the customer compares 1.0 or mentions buyers. Explain automatic versus browser calls and service-connected caller ID without inventing a Settings number selector. Preserve unresolved operator findings and disputed cancellation/payment records; do not recommend paying again or assert who canceled. Run labels, saved activity, more credits and VIP do not prove current outreach, seller interest or a future contract. Use anonymized offline replays and preserve unresolved case status. See docs/support-reply-audit-2026-11-08.md; no retrospective replies or paid tests.
+
 - On November 7, 2026 the owner reported failed custom-voice playback through support. Preserve the implemented VIP preview control and its zero-customer-credit behavior. Support must keep playback failures open, correct false unsupported-feature replies and avoid inferring voice quality or seller reactions from absent feedback. Separate support-copy release from provider authorization repair and retain original preview rejections/attempt limits. See docs/custom-voice-support-playback.md.
 
 - On November 7, 2026 the owner requested fixing stale customer attention. Completed automatic no-response reminders whose delivery is confirmed and original window has expired are history, not new customer resolution tasks. Filter only the exact account-bound delivered, non-manual draft reminders before pagination; retain genuine requests, unknown delivery, source records and all outreach/billing checks. See docs/completed-reminder-attention.md.
