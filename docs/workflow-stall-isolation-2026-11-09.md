@@ -44,6 +44,16 @@ tested main commit through normal Reliability checks. Do not apply unrelated
 staged migrations. Verify ordinary production completions and scheduler errors
 afterward; a helper benchmark is not proof every account has recovered.
 
+The production database recorded migration `20261109185635` at 18:56 UTC after
+all six Reliability checks passed for `caef9d3c37b607a36d9002d0934564d2f5a5161c`.
+Its recorded SQL matches the reviewed file exactly. Both function definitions
+match the expected replacements and retain STABLE behavior, invoker security,
+empty search path and service-only execution. The same empty-account read took
+22.602 ms and 2,950 shared buffer hits afterward, versus 169.477 ms and 73,226
+before. This is a single predicate measurement, not an overall throughput claim.
+The migration filename follows the production receipt without rewriting history.
+The final application release still requires its own exact-head and main checks.
+
 Rollback restores only the two definitions in
 `tests/fixtures/workflow-stall-before.json`. It never resets jobs, retries paid
 operations or changes financial evidence.
