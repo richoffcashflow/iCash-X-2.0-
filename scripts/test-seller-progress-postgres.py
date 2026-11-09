@@ -197,7 +197,7 @@ print('PASS native initial reply: 16 webhook deliveries, recoveries and final cl
 
 # Numeric negotiation uses the same native transaction/final-provider boundary.
 # Only the already tested pure planner is substituted with its fixture result.
-sql("drop schema if exists auth cascade; drop schema if exists icash_call_offer_private cascade; drop schema if exists icash_seller_agreement_private cascade;" + (ROOT / 'tests/helpers/seller-text-offer-fixture.sql').read_text() + (ROOT / 'tests/fixtures/seller-text-offer-original-functions.sql').read_text() + (ROOT / 'config/seller-text-offer.sql').read_text() + (ROOT / 'config/seller-offer-receipt-wait.sql').read_text() + (ROOT / 'config/seller-offer-source-prices.sql').read_text())
+sql("drop schema if exists auth cascade; drop schema if exists icash_recording_private cascade; drop schema if exists icash_call_offer_private cascade; drop schema if exists icash_seller_agreement_private cascade;" + (ROOT / 'tests/helpers/seller-text-offer-fixture.sql').read_text() + (ROOT / 'tests/fixtures/seller-text-offer-original-functions.sql').read_text() + (ROOT / 'config/seller-text-offer.sql').read_text() + (ROOT / 'config/seller-offer-receipt-wait.sql').read_text() + (ROOT / 'config/seller-offer-source-prices.sql').read_text() + (ROOT / 'tests/helpers/seller-call-terminal-fixture.sql').read_text() + (ROOT / 'config/seller-call-terminal-progress.sql').read_text() + (ROOT / 'config/seller-voice-text-continuation.sql').read_text())
 NA, NT, ND, NS, NU = [f'10000000-0000-4000-8000-{n:012d}' for n in range(1, 6)]
 snapshot = {"propertyId": "prop_123", "propertyType": "house", "sellerCostReserveCents": 0, "raw": {"data": {"dm_property_id": "prop_123", "full_address": "45 Oak Road", "estimated_value": 200000, "estimated_repair_cost": 40000, "total_estimated_loan_balance": 20000, "estimated_equity_percentage": 90}}}
 sql(f"""update icash_seller_progress_settings set offer_enabled=true,offer_enabled_at=now()-interval '1 minute';
@@ -263,3 +263,45 @@ assert sql(f"select count(*) from icash_text_messages where thread_id='{BT}'") =
 assert sql("select has_function_privilege('anon','public.icash_issue_due_text_ai()','execute')") == 'f'
 assert sql("select has_function_privilege('service_role','public.icash_issue_due_text_ai()','execute')") == 't'
 print('PASS native enabled buyer dispatcher: original ambiguity reproduced; empty queue, 16 reconciliation races and late original receipt succeed with no message replay.')
+
+# Prospective channel handoff: native duplicate webhook/recovery/dispatch races.
+VA, VT, VD, VS, VU, VR = [f'30000000-0000-4000-8000-{n:012d}' for n in range(1, 7)]
+sql(f"""update fixture_flags set conversation=false;
+update icash_seller_progress_settings set voice_text_enabled_at=now()-interval '1 minute';
+insert into auth.users(id,email) values('{VU}','voice-fixture@example.invalid');
+insert into icash_accounts(id,owner_user_id) values('{VA}','{VU}');
+insert into icash_customer_identities values('{VA}','Fixture Buyer');
+insert into icash_screening_jobs(id,account_id,snapshot,result) values('{VS}','{VA}','{json.dumps(snapshot)}'::jsonb||jsonb_build_object('fetchedAt',now()),'{{"financialCheck":{{"status":"eligible"}}}}');
+insert into icash_deal_files(id,account_id,screening_id,terms) values('{VD}','{VA}','{VS}','{{"address":"45 Oak Road","buyer":"Fixture Buyer"}}');
+insert into icash_text_threads(id,account_id,deal_id,recipient) values('{VT}','{VA}','{VD}','+12145550444');
+insert into icash_sms_routes(sender,recipient,account_id) values('+15550000001','+12145550444','{VA}');
+insert into icash_call_recordings(id,account_id,screening_id,party,dial_claimed_at,call_ended_at,call_sid,provider_account_sid,from_phone,to_phone,operation_key)
+ values('{VR}','{VA}','{VS}','seller',now()-interval '30 seconds',now()-interval '10 seconds','CAfixture','ACfixture','+15550000001','+12145550444','voice:{VR}');""")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    list(pool.map(lambda _: sql(f"insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values('{VA}','{VT}','incoming','received','Please text me.','voice-text-original') on conflict(event_id) do nothing;"), range(16)))
+VJ = sql(f"select id from icash_text_ai_jobs where account_id='{VA}'")
+assert sql(f"select count(*) from icash_text_ai_jobs where account_id='{VA}'") == '1'
+assert sql(f"select analysis->>'dialogueAction' from icash_text_ai_jobs where id='{VJ}'") == 'clarify_ownership'
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    voice_resumed = list(pool.map(lambda _: json.loads(sql(f"select icash_resume_seller_text_ai('{VA}','{VJ}')")), range(16)))
+assert len({r['messageId'] for r in voice_resumed}) == 1
+VO = voice_resumed[0]['messageId']
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    voice_claims = list(pool.map(lambda _: sql(f"select icash_claim_text('{VA}','{VO}','+15550000001')"), range(16)))
+assert sum(bool(r) for r in voice_claims) == 1
+assert sql(f"select count(*) from icash_offer_authorities where account_id='{VA}'") == '0'
+# An uncommitted receipt must not clear a hold in another transaction.
+sql(f"update icash_call_recordings set call_ended_at=null,state='failed',last_action='gate_settled' where id='{VR}';insert into icash_operation_spend values('voice:{VR}','{VA}','settled');")
+writer = Session('terminal-receipt-writer')
+try:
+    writer.query(f"begin;insert into icash_recording_private.terminal_cost_receipts values('{VR}','{{\"providerAccountSid\":\"ACfixture\",\"callSid\":\"CAfixture\",\"fromPhone\":\"+15550000001\",\"toPhone\":\"+12145550444\",\"status\":\"no-answer\"}}');")
+    assert sql(f"select icash_seller_recorded_call_finished('{VA}','{VR}')") == 'f'
+    writer.query('commit;')
+finally:
+    writer.close()
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    terminal_results = list(pool.map(lambda _: sql(f"select icash_seller_recorded_call_finished('{VA}','{VR}')"), range(16)))
+assert terminal_results == ['t'] * 16
+assert sql(f"select call_ended_at is null from icash_call_recordings where id='{VR}'") == 't'
+assert sql("select has_function_privilege('anon','public.icash_seller_recorded_call_finished(uuid,uuid)','execute')") == 'f'
+print('PASS native voice-to-text: 16 webhook/recovery/final-claim races, committed terminal-receipt visibility and immutable original termination evidence.')

@@ -73,6 +73,52 @@ for(const [sql,label] of [
 const disabled=await seed(),prepared=await incoming(disabled,'Please text me.');const queued=await rpc('icash_resume_seller_text_ai',[disabled.a,prepared.j.id]);
 await pg.exec('update icash_seller_progress_settings set initial_reply_enabled_at=null');
 assert.equal(await rpc('icash_claim_text',[disabled.a,queued.messageId,'+15550000001']),null,'Rollback stops unclaimed new responses');
+
+// Voice-to-text requests use a real, finished call with the same account,
+// property and number pair. There is no synthetic opener or renewed permission.
+await pg.exec("create table icash_call_recordings(account_id uuid,screening_id uuid,party text,dial_claimed_at timestamptz,call_ended_at timestamptz);"+read('./helpers/seller-call-terminal-fixture.sql'));
+await pg.exec(read('../config/seller-call-terminal-progress.sql').split('do $patch$')[0]+'commit;');
+await pg.exec(read('../config/seller-voice-text-continuation.sql'));
+const voiceSeed=async(options={})=>{
+ const c=await seed({opening:false});await q('delete from icash_text_messages where id=$1',[c.question]);
+ const id=randomUUID();
+ await q("insert into icash_call_recordings(id,account_id,screening_id,party,from_phone,to_phone,call_sid,dial_claimed_at,call_ended_at) values($1,$2,$3,'seller','+15550000001',$4,'CAfixture',now()-interval '8 minutes',now()-interval '7 minutes')",[id,c.a,c.s,c.phone]);
+ return {...c,recording:id};
+};
+const historical=await voiceSeed(),oldRequest=await incoming(historical,'Please text me.');
+assert.notEqual(oldRequest.j?.analysis?.dialogueAction,'clarify_ownership','Activation never replays historical voice replies');
+await pg.exec("update icash_seller_progress_settings set voice_text_enabled_at=now()-interval '10 minutes'");
+const voice=await voiceSeed(),voiceReply=await incoming(voice,'Please text me.');
+assert.equal(voiceReply.j.analysis.dialogueAction,'clarify_ownership');
+const voiceOutput=await rpc('icash_resume_seller_text_ai',[voice.a,voiceReply.j.id]);
+assert.equal(voiceOutput.mode,'dispatch');
+assert.equal((await one('select body from icash_text_messages where id=$1',[voiceOutput.messageId])).body,'Text is fine. Are you the owner of the property we called about?');
+assert.ok(await rpc('icash_claim_text',[voice.a,voiceOutput.messageId,'+15550000001']));
+assert.equal(await rpc('icash_claim_text',[voice.a,voiceOutput.messageId,'+15550000001']),null);
+for(const [sql,label] of [
+ ["update icash_call_recordings set account_id=gen_random_uuid() where id=$1",'different account'],
+ ["update icash_call_recordings set screening_id=gen_random_uuid() where id=$1",'different property'],
+ ["update icash_call_recordings set from_phone='+15550000999' where id=$1",'different sender'],
+ ["update icash_call_recordings set call_sid=null where id=$1",'unattempted call'],
+ ["update icash_call_recordings set call_ended_at=null where id=$1",'unresolved call'],
+ ["update icash_call_recordings set dial_claimed_at=now()-interval '1 day' where id=$1",'old call'],
+]){
+ const c=await voiceSeed();await q(sql,[c.recording]);const turn=await incoming(c,'Please text me.');
+ assert.notEqual(turn.j?.analysis?.dialogueAction,'clarify_ownership',label);
+}
+for(const [sql,label] of [
+ ["update icash_accounts set bot_paused=true where id=$1",'Pause'],
+ ["update icash_text_threads set manual_only=true where account_id=$1",'takeover'],
+ ["update icash_text_threads set permission_until=now()-interval '1 second' where account_id=$1",'contact expiry'],
+ ["update icash_sms_routes set revision=revision+1 where account_id=$1",'route changed'],
+]){
+ const c=await voiceSeed(),turn=await incoming(c,'Please text me.');const out=await rpc('icash_resume_seller_text_ai',[c.a,turn.j.id]);
+ await q(sql,[c.a]);assert.equal(await rpc('icash_claim_text',[c.a,out.messageId,'+15550000001']),null,label);
+}
+const cancelledVoice=await voiceSeed(),cancelledRequest=await incoming(cancelledVoice,'Please text me.');
+const cancelledOutput=await rpc('icash_resume_seller_text_ai',[cancelledVoice.a,cancelledRequest.j.id]);
+await pg.exec('update icash_seller_progress_settings set voice_text_enabled_at=null');
+assert.equal(await rpc('icash_claim_text',[cancelledVoice.a,cancelledOutput.messageId,'+15550000001']),null,'Feature rollback fences pending voice replies');
 await assert.rejects(pg.exec(migration),/Seller dialogue changed/);await pg.exec('rollback');
 await pg.close();
 console.log('PASS initial seller acknowledgements: original gap reproduced; prospective exact delivered-source reply, no ownership/offer inference, duplicate/late-source isolation and all final-send controls. No provider/model calls.');
