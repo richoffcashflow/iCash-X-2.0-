@@ -9,6 +9,12 @@ recipient, financial and unknown-operation controls remain intact. Native locked
 dependency regressions distinguish the repaired paths from their predecessors;
 the owner panel separates service failures from individual workflow recovery.
 
+The subsequent [contact receipt ranking repair](preflight-receipt-ranking.md)
+checks for a matching due retry before validating saved list receipts. The first
+rollout exposed this separate timeout in acquisition ranking. Eligible work still
+requires the original receipt proof and every existing final admission check;
+completed, future and unrelated tickets avoid that dependency altogether.
+
 ## November 8 deferred text recovery
 
 The [deferred text recovery investigation](deferred-text-recovery.md) found stale

@@ -62,6 +62,8 @@ jobs:
         run: python3 scripts/test-preflight-waiting-postgres.py
       - name: Verify original list indexing, bounded polling and fair concurrent progress
         run: python3 scripts/test-owner-preflight-indexing-postgres.py
+      - name: Verify due retry ranking skips unrelated receipt dependencies
+        run: python3 scripts/test-preflight-receipt-ranking-postgres.py
       - name: Verify due contact list priority, competing issuers and late holds
         run: python3 scripts/test-owner-preflight-priority-postgres.py
       - name: Verify fair due-retry progress and bounded generic-plan history lookup
