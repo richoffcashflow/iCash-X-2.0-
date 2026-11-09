@@ -69,3 +69,10 @@ not perceived voice quality, model adherence, latency or provider interruption
 performance. Saved authorized audio should be assessed separately. New paid calls
 remain disabled unless separately authorized with a concrete enforced spending cap.
 Only exact-head successful CI and verified web/worker deployment establish release.
+
+## Context-aware preference follow-up
+
+The follow-up design and implementation are documented in
+[Context-aware seller calls](context-aware-seller-calls.md). Its database installation
+and activation are separate release prerequisites; do not infer that they are live
+from the earlier cadence release.

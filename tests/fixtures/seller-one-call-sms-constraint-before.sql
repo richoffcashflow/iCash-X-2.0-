@@ -1,0 +1,1 @@
+ALTER TABLE public.icash_voice_jobs ADD CONSTRAINT icash_voice_sms_source CHECK (((sms_source_message_id IS NULL) OR ((permission_id IS NOT NULL) AND (operational_contact_id IS NULL) AND (callback_id IS NULL) AND (sms_requested_at IS NOT NULL))));

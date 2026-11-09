@@ -53,7 +53,7 @@ for(const state of ['accepted','dispatching']){
 }
 const voice=sellerOfferQualification({transcript:[{role:'agent',message:'Are you the owner?'},{role:'user',message:'Yes'}]});assert(voice.missing.includes('availability'),'Voice availability policy stays intact');
 const sms=sellerOfferQualification({transcript:[{role:'agent',message:'Are you the owner?'},{role:'user',message:'Yes'}]},[],'sms');assert(!sms.missing.includes('availability'));
-// The service derives the flag from the existing current channel predicate,
+// The service derives the flag from current account and source-bound invitation capability,
 // never from a caller field, context JSON, or draft. Read failure keeps SMS useful.
 for(const eligibility of [true,false,'true','error']){
  let saved,read=0,dispatch=0;
@@ -61,9 +61,7 @@ for(const eligibility of [true,false,'true','error']){
   db:async(path,method,body)=>{
    if(path==='rpc/icash_seller_prior_call_context')return [];
    if(path==='rpc/icash_outreach_voice_current'){assert.deepEqual(body,{p_account:base.accountId});read++;if(eligibility==='error')throw Error('read unavailable');return eligibility;}
-   if(path==='rpc/icash_seller_conversation_context')return {sellerConversation:true};
-   if(path.startsWith('icash_contact_permissions?')){assert(path.includes('screening_id=eq.fixture-screen'));assert(path.includes('phone=eq.%2B12125550123'));return [{id:'permission'}];}
-   if(path==='rpc/icash_seller_voice_permission_current'){assert.deepEqual(body,{p_account:base.accountId,p_permission:'permission'});return true;}
+   if(path==='rpc/icash_seller_call_invitation_capable'){assert.deepEqual(body,{p_account:base.accountId,p_thread:base.threadId,p_message:ready.sourceId});return true;}
    assert.equal(path,'rpc/icash_save_seller_text_offer');saved=body;return {messageId:'saved-message'};
   },dispatch:async()=>{dispatch++;return {status:'fixture-only'};},send:async()=>{throw Error('No agreement authorized');},text:async()=>{throw Error('No agreement authorized');}
  });
@@ -75,15 +73,13 @@ assert(callbackSql.includes("(when|what (date|day|time)|good time|available).*(c
 const continuationSql=readFileSync(new URL('../config/seller-conversation-continuation.sql',import.meta.url),'utf8');
 assert(continuationSql.includes("'"+sellerCallInvitation+"'"),'Later availability is bound to actually sent exact question');
 // Every readiness component is required, and a source flag cannot bypass it.
-for(const failure of ['context','permissions','permission','malformed','read_error']){
+for(const failure of ['capability','malformed','read_error']){
  let saved;
  await processSellerTextOffer(ready,{
   db:async(path,method,body)=>{
    if(path==='rpc/icash_seller_prior_call_context')return [];
    if(path==='rpc/icash_outreach_voice_current')return true;
-   if(path==='rpc/icash_seller_conversation_context')return failure==='context'?null:{sellerConversation:true};
-   if(path.startsWith('icash_contact_permissions?'))return failure==='permissions'?[]:[{id:'bound'}];
-   if(path==='rpc/icash_seller_voice_permission_current'){if(failure==='read_error')throw Error('read failed');return failure==='malformed'?'true':false;}
+   if(path==='rpc/icash_seller_call_invitation_capable'){if(failure==='read_error')throw Error('read failed');return failure==='malformed'?'true':false;}
    assert.equal(path,'rpc/icash_save_seller_text_offer');saved=body.p_plan;return {review:true};
   },dispatch:async()=>{throw Error('Unexpected dispatch');},send:async()=>{throw Error('Unexpected signing');},text:async()=>{throw Error('Unexpected delivery');}
  });

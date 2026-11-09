@@ -71,8 +71,25 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  if(c.agent_id!==recordedReview.agentId||c.agent_config_hash!==recordedReview.configHash||c.max_duration_seconds!==recordedReview.maxTotalSeconds||!Array.isArray(c.required_tool_ids)||c.required_tool_ids.length!==recordedReview.toolIds.length||!recordedReview.toolIds.every(id=>c.required_tool_ids.includes(id)))return hold('recorded_call_review_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');
  const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
+ // A newer seller choice or verified request may supersede untouched ordinary
+ // work. Hold it before provider reads, not later as a misleading credit wait.
+ if(p.party==='seller'){
+  let preferenceCurrent=false;
+  try{preferenceCurrent=await db<boolean>('rpc/icash_seller_call_preference_allows_job','POST',{p_account:accountId,p_job:j.id,p_continue:false})===true;}catch{/* Missing proof cannot admit seller contact. */}
+  if(!preferenceCurrent)return hold('seller_call_preference_changed');
+ }
  // This flag is derived exclusively from a fresh server-side database check.
  p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
+ // A later seller request can authorize only this source-bound call, never
+ // restart a paused campaign. Operational targets retain their original DNC
+ // checks; an SMS request is not a replacement contact/consent record.
+ if(j.sms_source_message_id){
+  if(j.callback_id||j.cancellation_notice_id)return hold('contact_binding_invalid');
+  let requested=false;
+  try{requested=await db<boolean>('rpc/icash_seller_one_call_current','POST',{p_account:accountId,p_job:j.id})===true;}catch{/* Missing or failed proof cannot admit a call. */}
+  if(!requested)return hold('seller_call_request_changed');
+  if(p.seller_intake_id&&!j.operational_contact_id)p.sellerConsentVerified=true;
+ }
  // Ordinary outbound calls use the current window. Only an exact owner
  // self-demo with a fresh server-verified request may override that window.
  // Final database admission rechecks the clock before the provider dial.

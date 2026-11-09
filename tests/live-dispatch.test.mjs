@@ -65,6 +65,7 @@ const secondaryCallingReady=async()=>secondVerified;
 let reservationError=null,budgetHoldAccepted=true,flexibleFunding={maxSeconds:120};
 let metaClaimResult='claimed',spacingCurrent=true,spacingAfterReservation=true;
 let sellerConsentCurrent=true,activeConversation=false,outreachContextOverride=undefined,metaContext=null,cancellationCurrent=true;
+let oneCallCurrent=true,callPreferenceCurrent=true;
 let customVoice=null;
 const selectedCustomCallVoice=async()=>customVoice;
 let c=structuredClone(configTemplate),providerAgent=structuredClone(agent),providerPaths=[],agentReadFailed=false,agentReadError=null,identityVoice='voice';
@@ -96,6 +97,8 @@ const db=async(path,method,body)=>{
  if(path==='rpc/icash_seller_call_request'){assert.equal(body.p_account,'account');assert.equal(body.p_screening,'screening');assert.equal(body.p_phone,permission.phone);return {name:null,submittedAt:new Date(now-1000).toISOString()};}
  if(path==='rpc/icash_seller_sms_call_ack')return 'ack-message';
  if(path==='rpc/icash_seller_voice_permission_current')return sellerConsentCurrent;
+ if(path==='rpc/icash_seller_call_preference_allows_job'){assert.deepEqual(body,{p_account:'account',p_job:'job',p_continue:false});if(callPreferenceCurrent==='error')throw Error('Preference proof unavailable');return callPreferenceCurrent;}
+ if(path==='rpc/icash_seller_one_call_current'){assert.deepEqual(body,{p_account:'account',p_job:'job'});if(oneCallCurrent==='error')throw Error('Request proof unavailable');return oneCallCurrent;}
  if(path==='rpc/icash_voice_outreach_context'){assert.equal(body.p_account,'account');assert.equal(body.p_job,'job');return outreachContextOverride===undefined?outreachContext(permission.timezone,activeConversation||!!cancellationContext&&cancellationCurrent):outreachContextOverride;}
  if(path==='rpc/icash_operational_contact_current'){assert.equal(body.p_account,'account');assert.equal(body.p_contact,'operational');assert.equal(body.p_channel,'voice');return operationalCurrent;}
  if(path==='rpc/icash_reserve_flexible_voice'){spacingCurrent=spacingAfterReservation;if(flexibleFunding===null&&inventoryDenied)jobState='held';return flexibleFunding;}
@@ -127,7 +130,7 @@ let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service
 source='const {outboundSellerCadencePrompt,voiceApprovalDiagnostics,finishVoicePredialAbort,assignSharedLearning,SharedLearningSafetyHold,acquisitionOpeners,console,readVoiceOutreachContext,opportunityConversationInstructions,efficientSellerPrompt,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,sellerCallerIdentityPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation,contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy}=globalThis.__voiceTest;\n'+source;
 const {dispatchLiveVoice}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 process.env.ELEVENLABS_API_KEY='fixture-no-network';process.env.CONTIGUITY_FROM='+14243948384';
-const reset=()=>{spacingCurrent=true;spacingAfterReservation=true;metaClaimResult='claimed';resolvedSender=undefined;activeConversation=false;outreachContextOverride=undefined;metaContext=null;cancellationCurrent=true;cancellationId=null;cancellationContext=null;priorSellerCalls=[];smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;agentReadError=null;preflightDiagnostics=[];identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
+const reset=()=>{callPreferenceCurrent=true;oneCallCurrent=true;spacingCurrent=true;spacingAfterReservation=true;metaClaimResult='claimed';resolvedSender=undefined;activeConversation=false;outreachContextOverride=undefined;metaContext=null;cancellationCurrent=true;cancellationId=null;cancellationContext=null;priorSellerCalls=[];smsSource=null;ackFails=false;textThreads=[{sender:'+14243948384'}];secondEnabled=false;secondVerified=false;delete process.env.ICASH_FLEXIBLE_VOICE_READY;flexibleFunding={maxSeconds:120};reservationError=null;budgetHoldAccepted=true;c=structuredClone(configTemplate);providerAgent=structuredClone(agent);providerPaths=[];agentReadFailed=false;agentReadError=null;preflightDiagnostics=[];identityVoice='voice';providerReads=0;flipAt=null;flip=()=>{};legacyRate=false;recordingStatus='recording_consent_pending';Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:review.providerAccountSid,TWILIO_AUTH_TOKEN:'synthetic-provider-token'});operational=false;operationalCurrent=true;contextOverrides=true;outboundBody=undefined;buyerApproved=true;records=[];postCount=0;allowClaim=true;paused=false;timeout=false;jobState='issued';practice=false;quoteSeconds=600;callbackId=null;providerNumber='+14243948384';suppressed=false;paced=true;};
 reset();cancellationId='notice';cancellationContext={address:'128 Sample Lane',body:'Cancellation requested; signed terms still apply.',completed:false};
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
 assert(!outboundBody.prompt.includes(sellerCallCadenceInstructions),'Cancellation stays narrowly scoped');
@@ -312,6 +315,38 @@ assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');a
 reset();sellerConsentCurrent=false;permission={...permission,sellerConsentVerified:true};
 assert.equal((await dispatchLiveVoice('account','job')).status,'contact_operating_checks_required');noAdmission();
 assert(records.some(r=>r.path==='rpc/icash_seller_voice_permission_current'),'Never trust a stored/client verification flag');
+// A late ordinary worker must durably hold superseded work before provider
+// reads rather than leave it issued behind a misleading reservation/credit wait.
+for(const proof of [false,'true',null,'error']){
+ reset();sellerConsentCurrent=true;callPreferenceCurrent=proof;
+ assert.equal((await dispatchLiveVoice('account','job')).status,'seller_call_preference_changed');
+ noAdmission();assert.equal(providerReads,0);assert.equal(jobState,'held');
+}
+// Source-bound call permission is one request only, not a global preference reset.
+reset();sellerConsentCurrent=false;smsSource='fresh-request';
+assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1);
+assert(records.some(r=>r.path==='rpc/icash_seller_one_call_current'));
+for(const proof of [false,'true',null,'error']){
+ reset();sellerConsentCurrent=false;smsSource='fresh-request';oneCallCurrent=proof;
+ assert.equal((await dispatchLiveVoice('account','job')).status,'seller_call_request_changed');noAdmission();assert.equal(providerReads,0);
+}
+reset();sellerConsentCurrent=false;smsSource='fresh-request';allowClaim=false;
+assert.equal((await dispatchLiveVoice('account','job')).status,'dispatch_permission_changed');assert.equal(postCount,0,'Late source/preference changes still need the atomic claim');
+reset();sellerConsentCurrent=false;smsSource='fresh-request';permission={...permission,timezone:'Pacific/Honolulu'};
+assert.equal((await dispatchLiveVoice('account','job')).status,'outside_contact_hours');noAdmission();assert.equal(providerReads,0,'Fresh consent never bypasses quiet hours');
+reset();sellerConsentCurrent=false;smsSource='fresh-request';callbackId='unrelated-callback';permission={...permission,timezone:'America/Chicago'};
+assert.equal((await dispatchLiveVoice('account','job')).status,'contact_binding_invalid');noAdmission();
+reset();sellerConsentCurrent=false;smsSource='fresh-request';operational=true;delete permission.seller_intake_id;
+assert.equal((await dispatchLiveVoice('account','job')).status,'contact_operating_checks_required');noAdmission();assert.equal(postCount,0,'A seller request cannot replace operational DNC evidence');
+permission={...permission,seller_intake_id:'saved-intake',timezone:'America/Chicago'};
+const intakeRequestPermission={...permission};
+reset();sellerConsentCurrent=false;smsSource='operational-request';operational=true;permission={...permission,seller_intake_id:null,dnc_clear:true,dnc_checked_at:new Date(now-1000).toISOString()};
+assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(postCount,1,'A matching operational voice target keeps its original DNC evidence');
+assert(records.some(r=>r.path==='rpc/icash_operational_contact_current'));assert(records.some(r=>r.path==='rpc/icash_seller_one_call_current'));
+reset();sellerConsentCurrent=false;smsSource='operational-request';operational=true;oneCallCurrent=false;
+assert.equal((await dispatchLiveVoice('account','job')).status,'seller_call_request_changed');noAdmission();assert.equal(providerReads,0,'DNC proof alone cannot revive a stale seller request');
+permission=intakeRequestPermission;
+
 reset();sellerConsentCurrent=true;textThreads=[{sender:secondaryBusinessPhone,sender_pool_assigned:true}];assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_verification_required');assert.equal(postCount,0,'A disabled established caller never falls back to another number');
 reset();sellerConsentCurrent=true;textThreads=[{sender:secondaryBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;secondVerified=true;assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.fromPhone,secondaryBusinessPhone);assert(!providerPaths.some(p=>p.includes('/phone-numbers/')));
 reset();sellerConsentCurrent=true;textThreads=[{sender:secondaryBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_verification_required');assert.equal(postCount,0);

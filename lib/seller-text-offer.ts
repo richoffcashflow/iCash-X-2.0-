@@ -12,8 +12,10 @@ import {runScreeningJob} from './screening-job.ts';
 import {canonical,sha} from './required-call-recording.ts';
 import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {sellerResponseDisposition} from './seller-response-policy.ts';
+import {sellerCallInvitation,sellerCallTimeQuestion,sellerCallPreference,isDeliveredCallInvitation,isDeliveredCallQuestion,isCancelledUnsentSellerMessage,type SellerTextMessage} from './seller-call-preference.ts';
+export {sellerCallInvitation} from './seller-call-preference.ts';
 
-type Message={id:string;direction:string;body:string;state:string;providerId:string|null;updatedAt?:string;action?:string;quoteRevision?:string;priceCents?:number;customerAuthored?:boolean};
+type Message=SellerTextMessage;
 type Closing={legalName?:string;date?:string;inspection?:'yes'|'no'};
 export type TextOfferState=AutomaticOfferState&{textThreadId?:string;closing?:Closing;processedSource?:string;pendingAskingPriceCents?:number};
 export type TextOfferContext={accountId:string;jobId:string;threadId:string;sourceId:string;dealId:string;screeningId:string;phone:string;ownerUserId:string;ownerEmail:string;principal:string;address:string;snapshot:unknown;terms:unknown;offerState:TextOfferState|null;offerVersion:number;messages:Message[];history?:unknown[];fingerprint:string;activeCallSince?:string|null;callInvitationAllowed?:boolean};
@@ -32,18 +34,6 @@ function closingDateAnswer(body:string){
  return validCalendarDate(date)?date:undefined;
 }
 
-/** A preference question is not a booking or new calling authority. Keep the
- * existing exact callback wording so a subsequent “now” reaches its established
- * source-bound call workflow. Missing channel eligibility fails closed. */
-export const sellerCallInvitation='When is a good time to talk about a cash offer?';
-function isDeliveredCallInvitation(message:Message|undefined){
- return message?.direction==='outgoing'&&message.state==='delivered'&&!!message.providerId
-  &&(message.action==='invite_call'||message.body===sellerCallInvitation);
-}
-function priorCallPreference(messages:Message[]){
- return messages.some(m=>m.direction==='outgoing'&&(m.action==='invite_call'||/\b(?:when|what (?:date|day|time)|good time|available).*\b(?:call|talk)\b|\bcan (?:i|we) call\b/i.test(m.body))
-  ||m.direction==='incoming'&&/\b(?:text(?:ing)? only|only text|(?:just|rather|prefer(?: to)?) (?:keep )?text(?:ing)?|(?:keep|stay) (?:it |this )?(?:on|over|to|in) text|(?:keep|prefer) texting|(?:just|please) text me|rather not (?:talk|call)|(?:cannot|can't) (?:talk|take calls)|call me|call back|callback|phone call)\b/i.test(m.body));
-}
 /** A bare “Sold” is a material ambiguity, not ownership or acceptance. Only a later explicit correction resolves it. */
 function saleStatus(messages:Message[]):'sold'|'unclear'|null{
  let status:'sold'|'unclear'|null=null;
@@ -60,25 +50,27 @@ function saleStatus(messages:Message[]):'sold'|'unclear'|null{
 
 /** Deterministic execution policy, not LLM prose. Each answer keeps its delivered
  * question, exact source, current underwriting and recipient. Asking is not acceptance. */
-export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOfferPlan{
+function ordinarySellerTextOffer(c:TextOfferContext,now:number):TextOfferPlan{
  const source=c.messages.find(m=>m.id===c.sourceId);
  const state:TextOfferState=structuredClone(c.offerState??{});
  const review=(reason:string,nextStep:string):TextOfferPlan=>({kind:'review',action:'review',reason,nextStep,state});
  if(c.activeCallSince){const held=review('active_call_receipt_unresolved','Wait for the active seller call and its original completion receipt before continuing by text.');return Date.parse(c.activeCallSince)>now-15*60000?{...held,kind:'wait',reason:'seller_call_active'}:held;}
  if(!source||source.direction!=='incoming'||source.state!=='received')return review('source_required','Reconcile the original seller message receipt.');
- const turns=c.messages.filter(m=>m.direction==='incoming'||m.state==='delivered'&&m.providerId).flatMap((m,index,messages)=>{
+ const turns=c.messages.filter(m=>m.direction==='incoming'&&m.state==='received'||m.state==='delivered'&&m.providerId).flatMap((m,index,messages)=>{
   // An optional phone preference is not ownership, selling interest or a refusal
   // to keep texting. Reset the conversational question without altering receipts.
-  if(isDeliveredCallInvitation(m))return [{role:'agent',message:''}];
-  const prior=messages.slice(0,index).findLast(turn=>turn.direction==='outgoing');
-  if(m.direction==='incoming'&&isDeliveredCallInvitation(prior)&&/^(?:yes|yeah|yep|sure|okay|ok|no|nope|(?:just|only) text(?: me)?|text(?:ing)? only)[.! ]*$/i.test(m.body.trim()))return [];
+  if(isDeliveredCallQuestion(m))return [{role:'agent',message:''}];
+  const prior=messages[index-1];
+  if(m.direction==='incoming'&&isDeliveredCallQuestion(prior)&&/^(?:yes|yeah|yep|sure|okay|ok|no|nope|(?:just|only) text(?: me)?|text(?:ing)? only)[.! ]*$/i.test(m.body.trim()))return [];
   return [{role:m.direction==='incoming'?'user':'agent',message:m.body}];
  });
  const transcript={transcript:turns};
- const previous=c.messages.slice(0,c.messages.indexOf(source)).findLast(m=>m.direction==='outgoing');
- if(previous&&(!previous.providerId||previous.state!=='delivered')){
+ const preceding=c.messages.slice(0,c.messages.indexOf(source));
+ const previous=preceding.findLast(m=>m.direction==='outgoing');
+ const unresolved=previous&&(!previous.providerId||previous.state!=='delivered')?previous:undefined;
+ if(unresolved){
   const result=review('offer_receipt_unresolved','Reconcile the original outgoing receipt before interpreting this answer; do not resend.');
-  if(['ready','accepted','dispatching'].includes(previous.state)&&Date.parse(previous.updatedAt??'')>now-15*60000)return {...result,kind:'wait',reason:'offer_receipt_pending'};
+  if(['ready','accepted','dispatching'].includes(unresolved.state)&&Date.parse(unresolved.updatedAt??'')>now-15*60000)return {...result,kind:'wait',reason:'offer_receipt_pending'};
   return result;
  }
  const ask=(action:string,body:string):TextOfferPlan=>{
@@ -136,13 +128,10 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  if(previous?.action==='explain_cash_price'&&/\b(?:renovated|new roof|repaired|repairs?|square feet|bedrooms?|bathrooms?)\b/i.test(source.body))return ask('repair_budget','What is your estimate of the total remaining repair budget?');
  if(/^(?:who pays (?:the )?closing costs|(?:are there|what about|what are|any) (?:the |any )?fees)[?! .]*$/i.test(source.body))return ask('explain_costs','The purchase terms cover buyer-paid transaction closing costs. Seller debts and required charges are handled at closing; net proceeds need title confirmation.');
  if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process','We confirm property details and a cash price, agree on written terms, then coordinate signatures and title. What part would you like to discuss?');
- if(isDeliveredCallInvitation(previous)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
+ if(isDeliveredCallInvitation(preceding.at(-1))&&unqualifiedYes(source.body))return ask('invite_call_time',sellerCallTimeQuestion);
  const qualification=sellerOfferQualification(transcript,c.history??[],'sms');
  if(!qualification.ready){
   if(qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
-  if(c.callInvitationAllowed===true&&!sellerRequestsPrice(source.body)&&!source.body.includes('?')&&!qualification.missing.includes('ownership')&&!qualification.missing.includes('interest')
-   &&!priorCallPreference(c.messages)&&!state.quotedPriceCents&&!state.acceptedPriceCents)
-   return ask('invite_call',sellerCallInvitation);
   const priceQuestion=sellerRequestsPrice(source.body);
   return ask('qualify_'+qualification.missing[0],(priceQuestion?'An offer depends on the property details. ':'')+qualification.nextQuestion);
  }
@@ -186,4 +175,23 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  }catch{return review('contract_terms_required','Resolve the specific missing or changed property/contract terms before preparing this accepted proposal.');}
  if(!sellerAgreementEvidence(transcript,terms,now))return ask('confirm_terms',`${priceText(terms.priceCents!)} cash; closing ${terms.closingDate}; ${terms.inspectionDays}-day inspection. Do these terms work, and may I text the agreement now?`);
  return {kind:'agreement',action:'prepare_agreement',state,terms,confirmation};
+}
+
+/** Compute the ordinary negotiation step first. A channel suggestion may replace
+ * only a next property-detail question, never an answer, quote or agreement step.
+ * The service derives channel capability afresh; this is not calling authority. */
+export function planSellerTextOffer(context:TextOfferContext,now=Date.now()):TextOfferPlan{
+ const sourceIndex=context.messages.findIndex(m=>m.id===context.sourceId);
+ const messages=sourceIndex<0||context.messages.filter(m=>m.id===context.sourceId).length!==1?[]:context.messages.slice(0,sourceIndex+1).filter(m=>!isCancelledUnsentSellerMessage(m));
+ const c={...context,messages};
+ const ordinary=ordinarySellerTextOffer(c,now);
+ const source=messages.at(-1);
+ if(c.callInvitationAllowed!==true||ordinary.kind!=='message'||!source
+  ||!/^qualify_(?:situation|condition|occupancy|timing|listing)$|^repair_budget$/.test(ordinary.action)
+  ||ordinary.state.quotedPriceCents||ordinary.state.acceptedPriceCents
+  ||sellerRequestsPrice(source.body)||source.body.includes('?')
+  ||/\b(?:price|offer|fees?|costs?|closing|contract|agreement|sign(?:ature)?|accept|counteroffer|net)\b/i.test(source.body)
+  ||callSellerPriceEvidence({transcript:messages.filter(m=>m.direction==='incoming'&&m.state==='received'||m.direction==='outgoing'&&m.state==='delivered'&&m.providerId).map(m=>({role:m.direction==='incoming'?'user':'agent',message:m.body}))},{action:'report_change',sellerStatement:source.body})!==null)return ordinary;
+ if(!sellerCallPreference(messages,c.sourceId).mayInvite)return ordinary;
+ return {...ordinary,action:'invite_call',body:sellerCallInvitation};
 }

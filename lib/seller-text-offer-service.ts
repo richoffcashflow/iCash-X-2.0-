@@ -17,13 +17,12 @@ export async function processSellerTextOffer(context:TextOfferContext,d:Dependen
  if(candidate.action==='invite_call'){
   try{
    if(await d.db('rpc/icash_outreach_voice_current','POST',{p_account:context.accountId})===true){
-    const conversation=await d.db('rpc/icash_seller_conversation_context','POST',{p_account:context.accountId,p_thread:context.threadId});
-    if(object(conversation).sellerConversation===true){
-     const permissions=await d.db<{id:string}[]>(`icash_contact_permissions?account_id=eq.${encodeURIComponent(context.accountId)}&screening_id=eq.${encodeURIComponent(context.screeningId)}&phone=eq.${encodeURIComponent(context.phone)}&party=eq.seller&select=id&limit=2`);
-     for(const permission of Array.isArray(permissions)?permissions.slice(0,2):[]){
-      if(await d.db('rpc/icash_seller_voice_permission_current','POST',{p_account:context.accountId,p_permission:permission.id})===true){plan=candidate;break;}
-     }
-    }
+    // This source-bound RPC independently verifies account, thread, route,
+    // property and controls for intake OR reviewed operational contact evidence.
+    // The legacy conversation context excludes ordinary operational draft deals
+    // and is not an additional authority here. Global voice remains unchanged.
+    // This read cannot queue a call or expand future contact consent.
+    if(await d.db('rpc/icash_seller_call_invitation_capable','POST',{p_account:context.accountId,p_thread:context.threadId,p_message:context.sourceId})===true)plan=candidate;
    }
   }catch{/* Missing/failed reads keep the supported text step moving. */}
  }

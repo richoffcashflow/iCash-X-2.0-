@@ -13,7 +13,7 @@ const suites = [
  'research-request-reuse', 'research-market-duplicate-cooling', 'research-duplicate-yield-cooling', 'research-provider-feedback', 'seller-interest-evidence',
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
  'pro-voice-capacity', 'pro-voice-capacity-database',
- 'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-call-invitation',
+ 'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-call-invitation', 'seller-call-preference', 'seller-call-preference-service', 'seller-one-call-consent',
  'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
  'validation-compatibility',
