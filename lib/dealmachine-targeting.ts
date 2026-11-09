@@ -6,7 +6,7 @@ export const targetingVersion='seller-targeting-v1';
 const range=z.object({min:z.number().nonnegative(),max:z.number().nonnegative()}).strict().refine(v=>v.min<=v.max);
 const buyerRanges=z.object({estimated_value:range.optional(),num_bedrooms:range.optional(),num_bathrooms:range.optional(),living_area_sqft:range.optional(),year_built:range.optional()}).strict().refine(v=>Object.keys(v).length>0);
 export const targetingDefinitionSchema=z.object({
- id:z.uuid(),segment:z.enum(['off_market','sale_7_10','sale_10_plus','buyer_fit','out_of_state_absentee','vacant_absentee','mobile']),
+ id:z.uuid(),segment:z.enum(['off_market','sale_7_10','sale_10_plus','buyer_fit','out_of_state_absentee','vacant_absentee','out_of_state_old_sale','off_market_repairs','mobile']),
  // A fixed date is part of the immutable experiment, never a moving cursor query.
  asOf:z.iso.date().refine(v=>v>='2020-01-01'),ranges:buyerRanges.optional(),
  buyerEvidence:z.object({accountId:z.uuid(),buyerId:z.uuid(),sourceReference:z.string().min(12).max(1000),observedAt:z.iso.datetime({offset:true}),expiresAt:z.iso.datetime({offset:true}),zips:z.array(z.string().regex(/^\d{5}$/)).min(1).max(100)}).strict().optional(),
@@ -35,6 +35,8 @@ export function targetingFilters(input:TargetingDefinition):Record<string,unknow
   case 'buyer_fit':return Object.entries(d.ranges!).sort(([a],[b])=>a.localeCompare(b)).map(([filter_id,value])=>({filter_id,operator:'range',value}));
   case 'out_of_state_absentee':return [bool('has_absentee_owners'),bool('has_out_of_state_owners')];
   case 'vacant_absentee':return [bool('is_vacant_home'),bool('has_absentee_owners')];
+  case 'out_of_state_old_sale':return [bool('has_absentee_owners'),bool('has_out_of_state_owners'),{filter_id:'last_sale_date',operator:'is_before',value:yearsBefore(d.asOf,10)}];
+  case 'off_market_repairs':return [{filter_id:'market_status',operator:'contains_any',value:[6]},{filter_id:'estimated_repair_cost',operator:'greater_than_or_equal',value:25000}];
   case 'mobile':return [];
  }
 }

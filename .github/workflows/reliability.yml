@@ -47,6 +47,9 @@ jobs:
       - name: Verify independent targeting query receipts under concurrent admission
         if: ${{ !cancelled() }}
         run: python3 scripts/test-targeting-query-binding-postgres.py
+      - name: Verify one mobile introduction number per owner under concurrent admission
+        if: ${{ !cancelled() }}
+        run: python3 scripts/test-dealmachine-list-quality-postgres.py
       - name: Verify one-use owner preflights under real concurrent transactions
         run: python3 scripts/test-owner-preflight-postgres.py
       - name: Verify local quota refusal recovery under concurrent transactions

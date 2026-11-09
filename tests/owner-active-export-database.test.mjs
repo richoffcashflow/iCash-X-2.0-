@@ -56,13 +56,19 @@ try{
  create table icash_discovery_filter_pages(account_id uuid,operation_key text,plan jsonb);`);
  const targeting=read('config/dealmachine-targeting-experiments.sql');
  await db.exec(targeting.match(/create function public.icash_owner_targeting_pool\([\s\S]*?end \$patch\$;/)[0]);
+ // Exercise the usage-field patch against this earlier complete billing fixture.
+ // The full migration test separately verifies the exact production MD5 guards.
+ const quality=read('config/dealmachine-list-quality-bindings.sql');
+ const usagePatch=quality.slice(quality.indexOf(" d:=pg_get_functiondef('public.icash_admit_owner_active_export"),quality.indexOf(" d:=pg_get_functiondef('public.icash_operational_contact_current"))
+  .replace(/ if md5\(d\)<>[^\n]+\n/g,'');
+ await db.exec('do $patch$ declare d text;needle text;begin '+usagePatch+' end $patch$;');
  await q('insert into icash_accounts(id) values($1),($2)',[account,other]);await q('insert into icash_operating_budget values(1)');
  await q('insert into icash_operation_rates values($1,$2)',[rate,{dealmachine:250000}]);
  for(const a of [account,other])await q('insert into icash_discovery_configs values($1,2,$2,25,10000,$3,true)',[a,rate,'2099-01-01']);
  const items=[screen,second].map((s,i)=>({screeningId:s,snapshot:{propertyId:'prop_'+(i+1)},ids:i===0?['per_9007199254740993123']:['per_9007199254740993123','per_2','per_3','per_4']}));
  const preview={data:items.map(i=>({dm_property_id:i.snapshot.propertyId,found:true,contacts:i.ids.map(dm_person_id=>({dm_person_id,contact_type:'owner',availability:{phones:3}}))})),totals:{submitted:2,found:2,not_found:0},credits:{used:0,people:0,properties:0,deduplicated:0}};
  for(const i of items)await q('insert into icash_screening_jobs values($1,$2,\'complete\',$3)',[i.screeningId,account,i.snapshot]);
- const config={rateId:rate,creditCap:25,unitCostMicros:10000,rightsUntil:'2099-01-01'},request=activeOwnerExportRequest([...new Set(items.flatMap(i=>i.ids))]);
+ const config={rateId:rate,creditCap:25,unitCostMicros:10000,rightsUntil:'2099-01-01'},request=activeOwnerExportRequest([...new Set(items.flatMap(i=>i.ids))],false,true);
  const admit=(b=batch,a=account,its=items,pr=preview,req=request)=>rpc('icash_admit_owner_active_export',[a,its[0].screeningId,b,its,pr,config,req]);
  assert.equal(await admit(),'held');assert.equal(Number(await v('select count(*) from icash_operation_spend')),0);
  await db.exec('update icash_research_private.owner_export_settings set enabled=true');
@@ -149,7 +155,9 @@ try{
  assert.equal(await rpc('icash_record_owner_export_recovery',[batch,id(99),{httpStatus:200,raw:{data:raw}}]),false);
  assert.equal(await rpc('icash_record_owner_export_recovery',[batch,saved.lease,{httpStatus:200,raw:{data:{...raw,status:'completed'}}}]),true);
  const rows=['9007199254740993123','2'].map((n,i)=>Object.fromEntries(activeOwnerColumns.map(k=>[k,({internal_person_id:n,person_full_name:i===0?'':'Synthetic Owner',phone_1:'214555010'+i,is_phone_1_dnc:'No',people_phone_1_type_id:'Wireless',has_active_phone_number:'Yes'})[k]??''])));
- const csv=[activeOwnerColumns,...rows.map(r=>activeOwnerColumns.map(k=>r[k]))].map(r=>r.join(',')).join('\n')+'\n';
+ for(const row of rows){row.phone_1_usage_2_months_id='Heavy';row.phone_1_usage_12_months_id='';}
+ const usageHeaders=[...activeOwnerColumns,'phone_1_usage_2_months_id','phone_1_usage_12_months_id'];
+ const csv=[usageHeaders,...rows.map(r=>usageHeaders.map(k=>r[k]))].map(r=>r.join(',')).join('\n')+'\n';
  assert.equal(await rpc('icash_record_owner_export_artifact',[batch,saved.lease,csv]),true);
  const originalEvidence=await v("select jsonb_build_object('request',request,'receipt',receipt,'recovery',recovery,'history',recovery_history,'csv',csv,'hash',artifact_sha256,'terminal',terminal_at) from icash_research_private.owner_exports where id=$1",[batch]);
  await q("update icash_research_private.owner_exports set recovery_attempts=6,lease_until=now()-interval '1 second',next_recover_at=now()-interval '1 second' where id=$1",[batch]);
@@ -167,6 +175,7 @@ try{
  const fabricated=structuredClone(allocated);fabricated[0].result.providerCredits.deduplicated=1;
  await assert.rejects(rpc('icash_save_owner_active_export',[batch,cached.lease,fabricated,rows]),/allocation or source/);
  assert.equal(await rpc('icash_save_owner_active_export',[batch,cached.lease,allocated,parseOwnerExportCsv(csv)]),true);
+ assert.equal(await v("select result->'contacts'->0->'phones'->0->>'usage2Months' from icash_owner_contacts where screening_id=$1",[screen]),'Heavy');
  assert.equal(await v("select result->'contacts'->0->>'name' from icash_owner_contacts where screening_id=$1",[screen]),'','A source-bound blank display name saves without fabrication');
  assert.equal(await rpc('icash_save_owner_active_export',[batch,cached.lease,allocated,rows]),true);
  assert.deepEqual(await v("select jsonb_build_object('request',request,'receipt',receipt,'recovery',recovery,'history',recovery_history,'csv',csv,'hash',artifact_sha256,'terminal',terminal_at) from icash_research_private.owner_exports where id=$1",[batch]),originalEvidence);

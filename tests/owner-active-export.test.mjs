@@ -67,7 +67,7 @@ const db=async(path,method,p)=>{
  if(path==='rpc/icash_finish_dealmachine_request')return true;
  if(path==='rpc/icash_admit_owner_active_export'){
   if(busy)return 'export_busy';if(claimed)return 'held';claimed=true;
-  assert.deepEqual(p.p_request,activeOwnerExportRequest(ids));
+  assert.deepEqual(p.p_request,activeOwnerExportRequest(ids,false,true));
   saved={id:p.p_batch,accountId:account,createdAt:now,items:p.p_items,preview:p.p_preview,request:p.p_request,csv:null,lease:'fixture-lease'};return 'claimed';
  }
  if(path==='rpc/icash_record_owner_export_receipt'){saved.receipt=p.p_receipt;assert.equal(paid,1);return true;}

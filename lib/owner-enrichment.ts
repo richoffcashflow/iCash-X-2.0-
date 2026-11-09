@@ -75,7 +75,10 @@ export function contactsFromReceipt(raw:unknown,ids:readonly string[],owners:Ret
   if(!p.found)continue;
   const phones=Array.isArray(p.phones)?p.phones.slice(0,20).map(v=>{
    const x=record(v)?v:{};
-   return {number:typeof x.number==='string'?x.number.slice(0,30):null,doNotCall:flag(x.do_not_call),type:typeof x.type==='string'?x.type.slice(0,30):null,permission:'unverified'};
+   return {number:typeof x.number==='string'?x.number.slice(0,30):null,doNotCall:flag(x.do_not_call),type:typeof x.type==='string'?x.type.slice(0,30):null,permission:'unverified',
+    ...(Object.hasOwn(x,'match_confidence')?{matchConfidence:typeof x.match_confidence==='number'&&Number.isFinite(x.match_confidence)&&x.match_confidence>=0&&x.match_confidence<=100?x.match_confidence:null}:{}),
+    ...(Object.hasOwn(x,'usage_2_months')?{usage2Months:typeof x.usage_2_months==='string'?x.usage_2_months.slice(0,50):null}:{}),
+    ...(Object.hasOwn(x,'usage_12_months')?{usage12Months:typeof x.usage_12_months==='string'?x.usage_12_months.slice(0,50):null}:{})};
   }):[];
   const emails=Array.isArray(p.emails)?p.emails.slice(0,20).map(v=>record(v)&&typeof v.address==='string'?v.address.slice(0,320):null).filter((v):v is string=>v!==null):[];
   const association=owners.get(p.dm_person_id)!;

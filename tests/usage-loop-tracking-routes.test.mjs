@@ -36,7 +36,7 @@ const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaint
  recoverOwnerActiveExports:async()=>{throw Error('Original export receipt unavailable');},
  recoverOwnerExportCapacity:async()=>{throw Error('Capacity evidence unavailable');},
  cleanupOwnerPreflight:async()=>{throw Error('Cleanup unavailable');},
- syncResearchExclusions:async()=>({status:'not_due'}),
+ drainResearchExclusions:async()=>({status:'not_due'}),
  refreshInventoryGeographyBatch:async()=>({status:'not_due'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
