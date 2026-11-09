@@ -30,10 +30,10 @@ assert.equal(summary({spend:[{...spend,cost_basis:'verified'}]}).strategyObserva
 for(const patch of [{actual_micros:null},{actual_micros:-1},{settlement_evidence:null},{settled_at:null},{cost_basis:'unknown'}])assert.equal(summary({spend:[{...spend,...patch}]}).strategyObservations[0].unresolvedCostOperations,1);
 for(const patch of [{test_mode:true},{provider_id:'wrong'},{provider_evidence:null},{recipients:[]},{state:'customer_signature_needed'},{updated_at:'2027-01-01'},{provider_evidence:{...envelope.provider_evidence,recipients:envelope.provider_evidence.recipients.map(x=>({...x,status:'pending'}))}}])assert.equal(summary({envelopes:[{...envelope,...patch}]}).signedPurchaseDeals,0);
 assert.equal(summary({envelopes:[{...envelope,deal_id:'foreign'}]}).signedPurchaseDeals,0);
-const tables={icash_live_conversations:records.calls,icash_deal_files:records.deals,icash_operation_spend:records.spend,icash_signing_envelopes:records.envelopes,icash_closing_updates:[],icash_title_replies:[]};
+const tables={icash_live_conversations:records.calls,icash_deal_files:records.deals,icash_operation_spend:records.spend,icash_signing_envelopes:records.envelopes,icash_closing_updates:[],icash_title_replies:[],icash_buyer_deposit_receipts:[],icash_proceeds_receipts:[],icash_deal_journeys:[]};
 let paths=[];
 r=await readDealLearningReport(async(path,method)=>{assert.equal(method,undefined);assert(path.includes(`account_id=eq.${account}`));assert(!path.includes('select=*'));paths.push(path);return tables[path.split('?')[0]];},account,now);
-assert.equal(r.signedPurchaseDeals,1);assert.equal(paths.length,6);assert.equal(r.complete,true);
+assert.equal(r.signedPurchaseDeals,1);assert.equal(paths.length,9);assert.equal(r.complete,true);
 await assert.rejects(()=>readDealLearningReport(async()=>[],"evil&account_id=neq.x",now));
 await assert.rejects(()=>readDealLearningReport(async()=>[{account_id:'foreign'}],account,now),/Invalid evidence response/);
 // A full bounded page is never silently presented as a complete total.

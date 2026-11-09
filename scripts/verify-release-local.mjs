@@ -20,6 +20,7 @@ const suites = [
  'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
  'validation-compatibility',
+ 'buyer-contact-quality', 'buyer-links', 'buyer-funnel-evidence', 'deal-learning-report',
  'call-contact-evidence', 'support-review-20261105', 'support-review-20261107', 'support-review-20261108', 'support-custom-voice', 'customer-phone-maintenance',
  'close-capacity', 'parallel-capacity-provider', 'nationwide-inventory', 'close-conversion-database', 'close-conversion-routes',
  'owner-accounts-database', 'owner-accounts-routes',
