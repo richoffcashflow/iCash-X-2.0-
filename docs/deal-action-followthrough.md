@@ -29,9 +29,17 @@ The evidence policy and SMS policy were enabled at `2026-11-09T18:46:43Z`. Readb
 ## Release sequence for the new actions
 
 1. Run offline regressions, native Ask AI contention tests, production build, and desktop/mobile browser fixtures. Required exact-head CI must pass.
-2. Install `seller_post_call_identity` and `assistant_text_actions` disabled. Their canonical SQL is mirrored in `config/` and their timestamped migration files.
+2. Install `seller_post_call_identity` and `assistant_text_actions` disabled, then the guarded `owner_retry_source_filter` optimization. Their canonical SQL is mirrored in `config/` and their timestamped migration files.
 3. Release the same commit to web and worker and verify exact-main Reliability and both production deployments.
 4. Under the existing budget lock, set `post_call_identity_enabled_at` to the current transaction timestamp and enable `icash_assistant_action_settings`. Never backdate activation.
 5. Read back settings and fresh ordinary production receipts. Do not place development calls, send test texts, replay old conversations or purchase provider data.
 
-The pre-existing main revision `b17ce3c` failed a native owner-retry selector stress test; its deployments did not replace the verified `7927e8d` production release. This release cannot bypass that check. Record the final verified release here after it completes.
+## Retry queue performance
+
+The pre-existing main revision `b17ce3c` failed a native owner-retry selector stress test; its deployments did not replace the verified `7927e8d` production release. The same failure reproduced locally. PostgreSQL evaluated correlated same-property history against 1,000 stale source snapshots before rejecting their invalid hashes, repeatedly decompressing the large snapshots.
+
+The guarded source filter materializes candidates after the original source and retry checks, before the same-property history and cohort proof. All predicates, priority ordering, complete-candidate coverage, final admission locks and original financial/receipt holds remain. This is not a shortened candidate list or a retry reset. A hash match is required before the expensive retry-source proof.
+
+The unchanged native PostgreSQL 17.6 stress case now passes with 100,000 historical tickets and 1,000 invalid sources; the measured complete-source selector took 223 ms locally. The actual one-use issuer also passes concurrent claims and late Pause, reserved-wallet, changed-source, deadline, approval-cap and unknown-receipt cases. Offline regressions separately retain manual control, recent same-property contacts, existing operations and reserved/dispatched sibling operations. Production timing remains to be observed after release.
+
+The production build and desktop/mobile Ask AI browser fixtures pass, including stale conversation rejection and original receipt recovery after a lost response. The new stylesheet is imported by the actual root layout, and the browser checks verify its loaded styles. Record the final verified release after exact-main checks and both deployments complete.

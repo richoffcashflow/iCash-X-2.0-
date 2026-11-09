@@ -67,6 +67,9 @@ export async function verifyAssistantCoach(browser,base,options,name){
   await page.waitForFunction(draft=>document.querySelector('.assistant-text-action textarea')?.value===draft,draft);
   assert.equal(sendCount,0,'Preview never sends');assert.equal(await input.inputValue(),draft);
   assert(await action.evaluate(node=>node.scrollWidth<=node.clientWidth+1),'Action preview fits the dialog');
+  assert.equal(await action.evaluate(node=>getComputedStyle(node).borderTopStyle),'solid','Action stylesheet is loaded');
+  assert.equal(await input.evaluate(node=>getComputedStyle(node).fontSize),'16px','Editable reply remains readable without mobile zoom');
+  await action.getByRole('button',{name:'Send reply',exact:true}).scrollIntoViewIfNeeded();
   await page.screenshot({path:`/tmp/icash-ask-ai-action-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
   changed=true;await action.getByRole('button',{name:'Check status',exact:true}).click();
   await action.getByText(/The conversation changed/).waitFor();assert(await action.getByRole('button',{name:'Send reply',exact:true}).isDisabled());assert.equal(sendCount,0);

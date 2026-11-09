@@ -1,0 +1,27 @@
+
+/* Saved, source-bound Ask AI reply actions. */
+.assistant-text-action{border:1px solid var(--line,#d9e2df);border-radius:16px;background:var(--surface,#fff);padding:16px;margin:12px 0;max-height:55vh;overflow:auto}
+.assistant-text-action header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.assistant-text-action p{font-size:13px;line-height:1.5;margin:8px 0;overflow-wrap:anywhere}
+.assistant-text-action label{display:grid;gap:8px;font-weight:600;margin:12px 0 4px}
+.assistant-text-action textarea{font:inherit;min-height:88px;width:100%;resize:vertical;border:1px solid #b8c6bf;border-radius:10px;padding:10px;background:#fff;color:#163c2c}
+.assistant-text-action small{font-size:12px;color:#53675d}
+.assistant-action-latest{padding:10px;border-radius:10px;background:#f2f6f3;margin-top:12px}
+.assistant-text-action button{cursor:pointer}
+.assistant-text-action button:disabled{cursor:default;opacity:.5}
+
+.property-followthrough{padding:18px;border:1px solid #d6e4db;border-radius:16px;background:#f5f9f6;margin:12px 0}
+.property-followthrough-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.property-followthrough-heading span{font-size:12px;font-weight:600;color:#2d6145;background:#e4efe8;padding:5px 9px;border-radius:20px}
+.property-followthrough p{font-size:14px;line-height:1.5;margin:10px 0}
+.property-followthrough dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0 0}
+.property-followthrough dt{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#65776b}
+.property-followthrough dd{font-size:12px;line-height:1.5;margin:3px 0 0}
+
+.assistant-dialog:has(.assistant-text-action) .assistant-history,.assistant-dialog:has(.assistant-text-action) .assistant-suggestions{display:none}
+.assistant-dialog .assistant-text-action{flex:1;min-height:0;max-height:none;margin:10px;overflow:auto}
+.assistant-text-action header button{flex:none;min-height:44px;padding:8px 12px;border:1px solid #d9dedb;border-radius:10px;background:#fff;color:#263f30;font-size:12px}
+.assistant-text-action textarea{box-sizing:border-box;font-size:16px;line-height:1.5}
+.assistant-text-action .assistant-answer-actions{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+.assistant-text-action .assistant-answer-actions button{padding:10px 12px;border:1px solid #d9dedb;border-radius:10px;font-size:12px}
+.assistant-text-action .assistant-answer-actions button:first-child{background:#163c2c;color:white}

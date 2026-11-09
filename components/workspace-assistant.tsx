@@ -22,7 +22,7 @@ export function WorkspaceAssistant({request,openRequest=0,stale,onAction,onVipRe
  useEffect(()=>{const node=historyView.current;if(!open||!node)return;if(busy){node.scrollTop=node.scrollHeight;return;}const latest=node.querySelector<HTMLElement>('.assistant-exchange:last-of-type');node.scrollTop=latest?node.scrollTop+latest.getBoundingClientRect().top-node.getBoundingClientRect().top-20:0;},[items,busy,open,context?.screeningId]);
  async function ask(value=question,selected=context){
   const text=value.trim();if(!text||inFlight.current||stale)return;
-  inFlight.current=true;setBusy(true);setOpen(true);setError('');
+  inFlight.current=true;setTextAction(null);setBusy(true);setOpen(true);setError('');
   const previous=pending.current;
   const attempt=previous?.question===text&&previous.screeningId===selected?.screeningId?previous:{requestId:crypto.randomUUID(),question:text,...(selected?{screeningId:selected.screeningId}:{})};pending.current=attempt;
   controller.current=new AbortController();const timer=setTimeout(()=>controller.current?.abort(),55000);
