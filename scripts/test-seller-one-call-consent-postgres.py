@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 PORT = os.environ.get('ICASH_FIXTURE_PGPORT', '55443')
@@ -12,8 +13,9 @@ assert PORT in ('55443', '55465'), 'Only isolated localhost fixture ports are al
 ENV = {**os.environ, 'PGPASSWORD': 'isolated-fixture-only', 'PGCONNECT_TIMEOUT': '5'}
 CMD = ['psql', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', PORT, '-U', 'postgres', '-d', 'icash_reliability']
 
-def sql(query):
-    r = subprocess.run(CMD, input="set statement_timeout='12s';\n"+query, env=ENV, text=True, capture_output=True, timeout=20)
+def sql(query, application_name=None):
+    env={**ENV, 'PGAPPNAME': application_name} if application_name else ENV
+    r = subprocess.run(CMD, input="set statement_timeout='12s';\n"+query, env=env, text=True, capture_output=True, timeout=20)
     assert r.returncode == 0, r.stderr
     return r.stdout.strip()
 
@@ -292,20 +294,29 @@ sql(request_definition)
 
 # Budget-serialized committed source races: final dial must reread after waiting.
 def boundary_race(f, locked_query, waiting_query, expected):
-    blocker = subprocess.Popen(CMD, env=ENV, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    run_id=uuid4().hex
+    blocker_name='seller-one-call-blocker-'+run_id
+    waiter_name='seller-one-call-waiter-'+run_id
+    blocker = subprocess.Popen(CMD, env={**ENV, 'PGAPPNAME': blocker_name}, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     try:
         blocker.stdin.write("begin;set local statement_timeout='12s';select id from icash_operating_budget where id=1 for update;"+locked_query+"select 'source_locked';\n")
         blocker.stdin.flush()
         while blocker.stdout.readline().strip() != 'source_locked':
             if blocker.poll() is not None: raise AssertionError(blocker.stderr.read())
+        blocker_pid=sql(f"select pid from pg_stat_activity where application_name={lit(blocker_name)};")
+        assert blocker_pid.isdigit(),'Expected exactly one fixture blocker connection'
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future=pool.submit(sql,waiting_query)
+            future=pool.submit(sql,waiting_query,waiter_name)
             waiting=False
             for _ in range(100):
-                waiting=sql(f"select exists(select 1 from pg_stat_activity where pid<>pg_backend_pid() and wait_event_type='Lock' and query like '%{f['job']}%');")=='t'
+                # psql submits each statement separately, so a blocked INSERT
+                # need not contain the job UUID from the later proof SELECT.
+                # Observe this connection and its actual blocker, not SQL text.
+                waiting=sql(f"select exists(select 1 from pg_stat_activity where application_name={lit(waiter_name)} and state='active' and wait_event_type='Lock' and {blocker_pid}=any(pg_blocking_pids(pid)));")=='t'
                 if waiting:break
                 time.sleep(.025)
-            assert waiting,'Final admission did not reach shared source lock'
+            assert waiting,f"Final admission did not reach shared source lock for {f['job']}"
+            assert not future.done(),'Waiting admission completed before blocker commit'
             blocker.stdin.write('commit;\n\\q\n');blocker.stdin.flush();blocker.wait(timeout=5)
             assert future.result()==expected
     finally:

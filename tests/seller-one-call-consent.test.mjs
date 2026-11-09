@@ -30,6 +30,7 @@ assert(!/alter function public\.(?:icash_claim_voice_job|icash_reserve_paced_voi
 assert(sql.includes('revoke all on schema icash_seller_call_private from service_role'));
 assert(sql.includes('from public,anon,authenticated'));
 const native=read('scripts/test-seller-one-call-consent-postgres.py');
-for(const required of ['127.0.0.1','icash_reliability','set role service_role','ThreadPoolExecutor','boundary_race','Now works','pool-new-choice','source_locked','seller-soft-text-modal-preferences.json','terminal_receipt_pending','settled_cross_account','recording_only_ended'])assert(native.includes(required),required);
+for(const required of ['127.0.0.1','icash_reliability','set role service_role','ThreadPoolExecutor','boundary_race','Now works','pool-new-choice','source_locked','seller-soft-text-modal-preferences.json','terminal_receipt_pending','settled_cross_account','recording_only_ended','PGAPPNAME','application_name={lit(waiter_name)}','pg_blocking_pids(pid)','assert not future.done()'])assert(native.includes(required),required);
+assert(!native.includes("and query like '%"),'Race observation must not depend on multi-statement SQL text');
 assert(read('.github/workflows/reliability.yml').includes('test-seller-one-call-consent-postgres.py'));
 console.log('PASS one-call migration equality,13 exact source hashes,default-off/source binding/ACL/clock boundaries,native race coverage registration.');
