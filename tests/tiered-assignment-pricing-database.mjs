@@ -131,7 +131,7 @@ try{
  const records=async()=>Promise.all(protectedTables.map(async t=>(await q(`select to_jsonb(t) row from ${t} t order by to_jsonb(t)::text`)).rows));
  const protectedBefore=await records();
  const formulaMigration=readFileSync('config/seventy-percent-offer-formula.sql','utf8');
- assert.equal(formulaMigration,readFileSync('supabase/migrations/20261109155321_seventy_percent_offer_formula.sql','utf8'));
+ assert.equal(formulaMigration,readFileSync('supabase/migrations/20261109161418_seventy_percent_offer_formula.sql','utf8'));
  await pg.exec(formulaMigration);
  assert.deepEqual(await records(),protectedBefore,'migration never updates accepted/signed terms or published prices, fees, deposits and recovery receipts');
  assert.equal(await prep(legacy.deal),true);
