@@ -3,7 +3,7 @@ import {supportCurrentStepReply} from './support-current-step.ts';
 import {supportAccountReviewReply} from './support-account-review.ts';
 import {repeatedRefundReply} from './support-closure.ts';
 import {z} from 'zod';
-import {redactSupportQuestion,supportAnswer,supportTopic,supportDuplicateCharge,type SupportEvidence} from './support-policy.ts';
+import {redactSupportQuestion,supportAnswer,supportTopic,supportDuplicateCharge,supportRenewalCancellationRequested,type SupportEvidence} from './support-policy.ts';
 import {supportCourseAnswer,supportProductGuide,supportSimpleProductAnswer,supportHowToQuestion,supportListingQuestion} from './support-product-guide.ts';
 import {supportCodeDelivery} from './support-code-delivery.ts';
 import {currentSupportIssue,supportAcknowledgment,supportAcceptedBotCheck,supportReplyEvidence,supportCreditRelevant,supportAskedQuestions,supportRoutineGuidanceQuestion,removeRepeatedSupportQuestions,repeatsSupportQuestion,supportReplyStyle} from './support-reply-style.ts';
@@ -68,7 +68,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(workflow)return workflow;
  if(supportDuplicateCharge(currentSupportIssue(context.messages))){
   const checks=(context.evidence??[]).filter(e=>['membership_payments','subscription'].includes(e.key));
-  const wantsCancel=/\b(?:cancel|stop|end)\b.{0,35}\b(?:billing|renewals?|charging|subscription|membership)\b/i.test(question);
+  const wantsCancel=supportRenewalCancellationRequested(question)||/\b(?:cancel|stop|end)\b.{0,35}\b(?:billing|renewals?|charging|subscription|membership)\b/i.test(question);
   const cancel=wantsCancel?(context.kind==='account'?' To stop future renewals, open Cancel subscription in the workspace account menu and confirm.':' Your request to stop future renewals is also recorded in this conversation.'):'';
   const details=context.kind==='account'&&checks.length?checks.map(e=>e.detail).join('\n\n')+'\n\nDo not pay again. Do both statement entries match these recorded software payments, or is one a different amount or date?':'Do not pay again. A duplicate-charge report needs its own payment check. What dates and amounts appear for the two charges? Please leave out card numbers.';
   return result(details+cancel,'waiting_on_customer');
@@ -77,10 +77,10 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(closure)return closure;
  if(context.kind==='access'&&supportCodeDelivery(context.messages)==='missing'&&['refund','cancel'].includes(supportTopic(question))){
   const cancelled=context.messages.some(m=>m.role==='operator'&&/next renewal.{0,30}(?:stopped|cancelled|canceled)|renewals? (?:has|have) been stopped/i.test(m.content));
-  if(supportTopic(question)==='cancel')return result(cancelled?'The earlier support update confirms your next renewal was stopped. That is separate from the unresolved sign-in problem; you don’t need to sign in to repeat the cancellation.':'You’re asking to stop future renewals, and sign-in is still blocked. I’ve kept that request in this conversation, but this chat has not cancelled the subscription. You don’t need to repeat the failed sign-in steps.','open');
+  if(supportTopic(question)==='cancel'||supportRenewalCancellationRequested(question))return result(cancelled?'The earlier support update confirms your next renewal was stopped. That is separate from the unresolved sign-in problem; you don’t need to sign in to repeat the cancellation.':'You’re asking to stop future renewals, and sign-in is still blocked. I’ve kept that request in this conversation, but this chat has not cancelled the subscription. You don’t need to repeat the failed sign-in steps.','open');
   return result('Our refund policy is unchanged, but your missing sign-in code is still an unresolved access issue. You’ve already explained what went wrong; you don’t need to repeat it or request another code.','open');
  }
- if(supportTopic(question)==='refund')return result(`${noRefunds}${/\bcancel\b/i.test(question)?' '+supportAnswer('cancel',[],false):' If there’s a payment, access or software problem, tell me what happened so I can help.'}`);
+ if(supportTopic(question)==='refund')return result(`${noRefunds}${(supportRenewalCancellationRequested(question)||/\bcancel\b/i.test(question))?' '+supportAnswer('cancel',[],false):' If there’s a payment, access or software problem, tell me what happened so I can help.'}`);
  if(supportTopic(question)==='cancel')return result(context.kind==='account'?supportAnswer('cancel',[],false):'To stop future renewals, sign in and open Cancel subscription in the workspace account menu. Confirm the cancellation there. If you cannot sign in, tell me which sign-in step fails so I can help you get access.');
  const identity=supportIdentityReply(context);if(identity)return result(identity,'open');
  const migration=supportLegacyMigrationReply(context.messages);
