@@ -33,6 +33,8 @@ Closing a chat, a thank-you, a passing test, a healthy service or a verified dep
 
 Unconfirmed payment/access and dispute signals retain their review priority after a case is closed or marked resolved. The actual workflow status and active-case count remain unchanged. This preserves review evidence; it does not reopen cases, send messages or establish a verified account fault. Explicit customer confirmation and the existing operator/topic boundaries still apply.
 
+Specific voicemail timing and response-count complaints take priority over incidental phrases such as “automated calls” and “available fix.” Support explains the existing confirmed-voicemail cutoff policy: end without leaving a message, rather than waiting for the beep. It does not claim to have listened to a recording, corrected a count or repaired call behavior from aggregate activity checks. Fictional account/guest replays cover this priority and subsequent topic changes.
+
 ## Verification
 
 `tests/support-improvement-loop.test.mjs` exercises actual account/guest reply routing with external models forbidden, issue changes, operator and successful-result resets, private signal output, deduplication, triage-only updates, truncated/future evidence, bounded CLI input and honest resolution counts. Existing quality route, authorization, pagination and rendering tests remain applicable. This change adds no database migration, customer entitlement change or worker prerequisite.

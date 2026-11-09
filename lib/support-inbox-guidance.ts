@@ -2,6 +2,10 @@ import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportDuplicateCharge} from './support-policy.ts';
 import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-reply-style.ts';
 
+const voicemailSubject=(text:string)=>/\b(?:voice[ -]?mails?|answering[ -]machines?|automated (?:greetings?|recordings?))\b/i.test(text);
+const voicemailTiming=(text:string)=>voicemailSubject(text)&&/\b(?:beep|tone|speaks? over|speaking over|talks? over|talking over|wait(?:ing)? for|timing)\b/i.test(text);
+export const supportVoicemailComplaint=(text:string)=>voicemailSubject(text)&&(/\b(?:count\w*|classif\w*|responses?|dashboard|reports?)\b/i.test(text)||voicemailTiming(text));
+
 /** Narrow, source-backed answers for observed inbox failures. This only explains
  * controls and supplied evidence; it never changes control, sends or settles work. */
 export function supportInboxGuidance(context:SupportContext):SupportReply|null{
@@ -23,10 +27,10 @@ export function supportInboxGuidance(context:SupportContext):SupportReply|null{
  }
  if(cancellation)return null;
  // A refund mention must not erase a simultaneous technical/account complaint.
- const voicemail=/\bvoice[ -]?mail|automated (?:greetings?|recordings?)\b/i.test(issue);
- const classification=voicemail&&/\b(?:count|counted|classif\w*|responses?|dashboard|reports?)\b/i.test(issue);
+ const classification=supportVoicemailComplaint(issue);
  if(classification){
   const parts=['A voicemail greeting is not a seller response or proof of interest. A dashboard that counts it as a response needs review; this chat has not corrected that count.'];
+  if(voicemailTiming(issue))parts.push('The bot is meant to end a confirmed voicemail call without leaving a message, not wait for the beep. Speaking over a greeting needs review of the saved recording and call result. I haven’t verified what happened in those recordings or a fix.');
   if(/\b(?:markets?|states?|cities|dallas|locations?)\b/i.test(q))parts.push('The bot selects markets automatically; there is no customer market selector. That setting alone does not explain why your saved leads are concentrated in one city.');
   if(/\b(?:credits?|costs?|charged|deducted)\b/i.test(q))parts.push('Work credits cover completed research, contact lookup, calls and texts, even when a seller does not respond. These checks do not contain itemized costs for those calls, so I can’t quote the exact deductions or confirm they were correct.');
   if(/\brefund\b/i.test(q)&&!/\bnot limited to\b/i.test(q))parts.push('All sales are final; a reported billing or software error still needs investigation.');

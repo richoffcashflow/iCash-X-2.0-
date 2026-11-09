@@ -1,4 +1,5 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
+import {supportVoicemailComplaint} from './support-inbox-guidance.ts';
 
 const outreachConcern=(text:string)=>/\b(?:bot|automated|automation|research|outreach|calls?|texts?|sellers?|properties|leads?)\b/i.test(text)&&/\b(?:slow|slower|not doing much|not doing anything|no interested|no interest|haven[’']?t (?:gotten|got|had|received).{0,30}interested)\b/i.test(text);
 const callerIdentity=(text:string)=>(/\b(?:caller[ -]?id|outbound number|outgoing number|business (?:phone|number)|previously purchased number)\b/i.test(text)||/\bown (?:phone )?number\b/i.test(text)&&/\b(?:bot|ai|outbound|calling|texts?|calls?)\b/i.test(text))&&/\b(?:what|which|use|using|call|calls|calling|set ?up|connect|change|disclos|show|see)\w*\b/i.test(text)||/\b(?:what|which)(?: phone)? number\b.{0,40}\b(?:calls?|calling|texts?|texting) from\b/i.test(text);
@@ -11,6 +12,9 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const previous=context.messages.findLast(m=>m.role==='assistant'||m.role==='operator')?.content??'';
  const answer=(reply:string,managementReview=false):SupportReply=>({reply,status:'open',ai:false,...(managementReview?{managementReview:true}:{})});
  if(/\b(?:refund|money back|cancel (?:my|the|this) (?:subscription|membership)|charged twice|duplicate charge)\b/i.test(q))return null;
+ // Specific call-result complaints must reach their guidance before incidental
+ // words such as "automated calls" and "available fix" match capability checks.
+ if(supportVoicemailComplaint(q))return null;
  if(/\b(?:(?:more|extra) (?:money|credits?)|(?:add|adding|fund)\b.{0,25}\b(?:bot|account)|buy (?:more )?credits?)\b/i.test(q)&&/\b(?:contracts?|deals?|results?|work differently|work faster|better)\b/i.test(q)&&!/\b(?:purchase price|seller price|assignment fee|offer amount)\b/i.test(q))
   return answer('Adding money buys more prepaid work credits for eligible research, contact lookup, calls and texts. It does not guarantee a contract, seller response or closed deal, and it does not change the bot’s strategy. More credits do not fix a technical problem or override Pause. You don’t need to pay more to troubleshoot missing activity.');
  if(context.kind!=='account')return null;
