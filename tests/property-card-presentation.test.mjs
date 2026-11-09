@@ -1,3 +1,4 @@
+import * as followthrough from '../lib/property-followthrough.ts';
 import * as conversationDisplay from '../lib/conversation-display.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -15,10 +16,10 @@ const source=readFileSync(new URL('../components/live-workspace.tsx',import.meta
 const compiled=ts.transpileModule(source+'\nexport {PropertyCard};',{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const headerModule={exports:{}};
 const headerCode=ts.transpileModule(readFileSync(new URL('../components/property-card-header.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
-new Function('require','module','exports',headerCode)(name=>name==='./seller-reply-preview'?{SellerReplyPreview:()=>null}:name==='@/lib/property-analysis-view'?analysis:name==='@/components/property-card-header'?{PropertyCardHeader}:name==='./workspace-view'?view:require(name),headerModule,headerModule.exports);
+new Function('require','module','exports',headerCode)(name=>name==='./seller-reply-preview'?{SellerReplyPreview:()=>null}:name==='@/lib/property-analysis-view'?analysis:name==='@/components/property-card-header'?{PropertyCardHeader}:name==='@/lib/property-followthrough'?followthrough:name==='./property-followthrough'?{PropertyFollowthrough:'PropertyFollowthrough'}:name==='./workspace-view'?view:require(name),headerModule,headerModule.exports);
 const {PropertyCardHeader}=headerModule.exports;
 const mod={exports:{}};
-new Function('require','module','exports',compiled)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},useRef:v=>({current:v}),Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='@/lib/conversation-display'?conversationDisplay:name==='@/components/property-card-header'?{PropertyCardHeader}:name==='./workspace-view'?view:name==='@/lib/deal-card-summary'?cardSummary:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/property-contract-visibility'?contracts:{},mod,mod.exports);
+new Function('require','module','exports',compiled)(name=>name==='react'?{useState:v=>[v,()=>{}],useEffect(){},useRef:v=>({current:v}),Activity:'Activity'}:name==='react/jsx-runtime'?require(name):name==='@/lib/conversation-display'?conversationDisplay:name==='@/components/property-card-header'?{PropertyCardHeader}:name==='@/lib/property-followthrough'?followthrough:name==='./property-followthrough'?{PropertyFollowthrough:'PropertyFollowthrough'}:name==='./workspace-view'?view:name==='@/lib/deal-card-summary'?cardSummary:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/property-contract-visibility'?contracts:{},mod,mod.exports);
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):node.type===PropertyCardHeader?all(PropertyCardHeader(node.props)):[node,...all(node.props?.children)];
 const text=node=>typeof node==='string'?node:typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
 const work=makeWorkspaceFixture(),property=work.properties[0];
@@ -42,6 +43,7 @@ for(const button of all(nodes.find(n=>n.props?.className==='property-quick-actio
 assert.deepEqual(toggle,[true],'Call and Text open their conversation panel without toggling details');
 card=mod.exports.PropertyCard({...props,active:true,visited:true});nodes=all(card);
 assert.equal(card.props['data-expanded'],true);
+assert.equal(nodes.find(n=>n.type==='PropertyFollowthrough').props.progress.last.at,property.completed_at,'The expanded card binds follow-through to its actual saved activity');
 assert.match(text(nodes.find(n=>n.props?.className==='property-summary')),/Close lead/);
 assert.equal(nodes.find(n=>n.type==='Activity').props.mode,'visible');
 assert(nodes.some(n=>n.type==='button'&&String(n.props['aria-label']).startsWith('Take over')));

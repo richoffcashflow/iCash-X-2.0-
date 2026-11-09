@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const sql=read('config/learning-evidence-refresh-cutover.sql');
-assert.equal(sql,read('supabase/migrations/20261104060153_learning_evidence_refresh_cutover.sql'));
+assert.equal(sql,read('supabase/migrations/20261109184628_learning_evidence_refresh_cutover.sql'));
 const db=new PGlite();
 const value=async q=>Object.values((await db.query(q)).rows[0])[0];
 try{

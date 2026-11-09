@@ -1,3 +1,4 @@
+import * as followthrough from '../lib/property-followthrough.ts';
 // Exercise the actual collapsed card and its control handler with local receipts only.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -19,6 +20,7 @@ const hooks={
  useEffect(){},Activity:'Activity',
 };
 const modules={
+ '@/lib/property-followthrough':followthrough,'./property-followthrough':{PropertyFollowthrough:'PropertyFollowthrough'},
  react:hooks,'@/lib/workspace-guidance':guidance,'./workspace-view':view,
  '@/lib/property-contract-visibility':visibility,'@/lib/deal-card-summary':summary,
  '@/lib/work-milestone':milestones,'@/lib/conversation-display':conversation,

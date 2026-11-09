@@ -1,3 +1,4 @@
+import * as followthrough from '../lib/property-followthrough.ts';
 import * as agreements from '../lib/agreement-workspace.ts';
 import * as purchaseTerms from '../lib/buyer-purchase-terms.ts';
 import * as conversationDisplay from '../lib/conversation-display.ts';
@@ -40,7 +41,7 @@ const hooks={
  }
 };
 const mod={exports:{}};
-new Function('require','module','exports',compiled)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/conversation-display'?conversationDisplay:name==='./workspace-view'?view:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/deal-card-summary'?dealSummary:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/buyer-purchase-terms'?purchaseTerms:name==='@/lib/deal-documents'?documents:name==='@/lib/agreement-workspace'?agreements:{},mod,mod.exports);
+new Function('require','module','exports',compiled)(name=>name==='react'?hooks:name==='react/jsx-runtime'?require(name):name==='@/lib/conversation-display'?conversationDisplay:name==='@/lib/property-followthrough'?followthrough:name==='./property-followthrough'?{PropertyFollowthrough:'PropertyFollowthrough'}:name==='./workspace-view'?view:name==='@/lib/work-milestone'?milestone:name==='@/lib/workspace-guidance'?guidance:name==='@/lib/property-analysis-view'?analysis:name==='@/lib/deal-card-summary'?dealSummary:name==='@/lib/property-contract-visibility'?contracts:name==='@/lib/buyer-purchase-terms'?purchaseTerms:name==='@/lib/deal-documents'?documents:name==='@/lib/agreement-workspace'?agreements:{},mod,mod.exports);
 const fixture=makeWorkspaceFixture(),property=fixture.properties[0];
 const draft=fixture.deals[0],ready={...draft,terms:{...draft.terms,priceSource:'seller_reported'}};
 const workFor=(deal,controls=[])=>({...fixture,deals:[deal],signing:[],controls});

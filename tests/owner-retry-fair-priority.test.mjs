@@ -40,6 +40,21 @@ try{
  const propertyAdded="\n  case when t.kind='contacts' and t.state='held' and t.outcome='owner_preview_rate_limited'\n   and t.owner_preview_deferrals between 1 and 7 and t.owner_preview_retry_after<=now() and t.owner_preview_retry_until>now()\n   then t.owner_preview_retry_after end nulls last,";
  assert.equal((await v("select pg_get_functiondef('icash_next_acquisition()'::regprocedure)")).replace(accountAdded,''),originals['public.icash_next_acquisition()'],'Exact issuer difference is only one ORDER BY expression');
  assert.equal((await v("select pg_get_functiondef('icash_enrichment_before_prospecting_budget(uuid)'::regprocedure)")).replace(propertyAdded,''),originals['public.icash_enrichment_before_prospecting_budget(uuid)'],'Exact property difference is only one ORDER BY expression');
+ assert.equal(read('config/owner-retry-source-filter.sql'),read('supabase/migrations/20261109185853_owner_retry_source_filter.sql'));
+ await pg.exec(read('config/owner-retry-source-filter.sql'));
+ // Moving history proof after source filtering must keep every same-property
+ // exclusion, including a reservation attached to a different screening.
+ for(const guard of ['manual','recent_contacts','same_operation','reserved','dispatched'])await isolated(async()=>{
+  await q("update icash_screening_jobs set result='{}' where id=$1",[retry.fresh]);
+  if(guard==='manual')await q("insert into icash_property_controls(account_id,property_id,manual) select account_id,snapshot->>'propertyId',true from icash_screening_jobs where id=$1",[retry.screening]);
+  else{
+   const prior=guard==='same_operation'?retry.screening:await v("insert into icash_screening_jobs(account_id,event_key,snapshot,state,result,completed_at) select account_id,'history-guard',snapshot,state,'{}',now()-interval '2 days' from icash_screening_jobs where id=$1 returning id",[retry.screening]);
+   if(guard==='recent_contacts')await q("insert into icash_owner_contacts(screening_id,account_id,operation_key,result) values($1,$2,'synthetic-contact-proof','{}')",[prior,retry.account]);
+   else await q("insert into icash_operation_spend(operation_key,account_id,rate_id,credit_reservation_id,charge_cap_cents,reserved_micros,state,permission_until) values('owners:'||$1||':'||$2,$1::uuid,$3,gen_random_uuid(),100,100,$4,now()+interval '1 hour')",[retry.account,prior,retry.rate,guard==='same_operation'?'settled':guard]);
+  }
+  assert.equal(await candidate(retry),null,'Retain original history exclusion: '+guard);
+  await issue();assert.equal(await v('select state from icash_automation_tickets where id=$1',[retry.ticket]),'held',guard);
+ });
  await isolated(async()=>{
   const result=await issue();assert(result?.token);
   const after=await evidence(retry);assert.equal(after.ticket.state,'issued');assert.notEqual(after.ticket.token,before.ticket.token);
@@ -99,5 +114,5 @@ try{
  assert.deepEqual(await evidence(retry),before);
  for(const table of ['icash_operation_spend','icash_credit_reservations','icash_cost_manifests','icash_credit_ledger'])assert.equal(await v('select count(*)::int from '+table),0,table);
  const paths=readdirSync(new URL('../supabase/migrations',import.meta.url)).filter(x=>x.endsWith('_owner_retry_fair_priority.sql'));assert.equal(paths.length,1);assert.equal(migration,read('supabase/migrations/'+paths[0]));
- console.log('PASS due held retry priority: exact ORDER BY-only changes, saved lists and ordinary aging preserved, valid retry beyond 512 stale hints, same finite deadline/token/cap/receipt/financial gates, five-account scan. Offline only.');
+ console.log('PASS due held retry priority: original ordering, saved lists, ordinary aging and same-property holds preserved after source filtering; valid retry beyond 512 stale hints, same finite deadline/token/cap/receipt/financial gates, five-account scan. Offline only.');
 }finally{await pg.close();}

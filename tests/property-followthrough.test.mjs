@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {propertyFollowthrough} from '../lib/property-followthrough.ts';
+const base={paused:false,manual:false,needsYou:false,stage:'draft',next:'Review the conversation.',screenedAt:'2026-11-09T12:00:00Z',sellerReply:{message_id:'reply',received_at:'2026-11-09T13:00:00Z'},sellerStep:{message_id:'reply',thread_id:'thread',deal_id:'deal',state:'waiting',reason:'awaiting_seller_reply',next_step:'Waiting for the seller to answer.',next_check_at:'2026-11-09T13:15:00Z',updated_at:'2026-11-09T13:01:00Z'}};
+assert.equal(propertyFollowthrough(base).owner,'Seller');assert.equal(propertyFollowthrough(base).last.label,'Seller reply received');assert.equal(propertyFollowthrough(base).checkAt,base.sellerStep.next_check_at);
+assert.equal(propertyFollowthrough({...base,paused:true}).owner,'You');assert.equal(propertyFollowthrough({...base,manual:true}).checkAt,null);
+assert.equal(propertyFollowthrough({...base,sellerReply:{...base.sellerReply,message_id:'newer'}}).owner,'Awaiting update','A superseded progress row cannot describe a new reply');
+assert.equal(propertyFollowthrough({...base,sellerStep:{...base.sellerStep,state:'needs_review'}}).owner,'You');
+assert.equal(propertyFollowthrough({...base,stage:'cancelled'}).owner,'Stopped');
+assert.equal(propertyFollowthrough({...base,callback:{state:'held_for_human',due_at:'2026-11-10T10:00:00Z',timezone:'America/Chicago'}}).owner,'You');
+assert.equal(propertyFollowthrough({...base,needsYou:true,callback:{state:'ready',due_at:'2026-11-10T10:00:00Z',timezone:'UTC'}}).checkAt,null,'A pending human request takes priority over automatic callback timing');
+assert.equal(propertyFollowthrough({...base,callAt:'2026-11-09T14:00:00Z'}).last.label,'Seller call completed');
+console.log('PASS deal follow-through: exact-source progress, actual timestamps, human/Pause priority and no fabricated scheduled action.');

@@ -14,7 +14,7 @@ Validation: `tests/learning-operations-review.test.mjs`, support pagination test
 
 ## Canonical policy lifecycle
 
-The follow-on `20261104053328_learning_policy_lifecycle.sql` replaces the single global policy proposal with separate domain/context/market/policy-version cohorts. A new activated release receives a successor proposal version; old evidence remains unchanged. Reviews process at most 20 due cohorts per tick, at most once per cohort-hour, and isolate failed cohorts with private SQLSTATE telemetry.
+The follow-on `20261109184429_learning_policy_lifecycle.sql` replaces the single global policy proposal with separate domain/context/market/policy-version cohorts. A new activated release receives a successor proposal version; old evidence remains unchanged. Reviews process at most 20 due cohorts per tick, at most once per cohort-hour, and isolate failed cohorts with private SQLSTATE telemetry.
 
 Only a privileged deployment operator can insert the immutable `icash_learning_private.policy_releases` row after the exact main-push Reliability workflow succeeds. The row records the actual SHA, CI run and attempt, repository, workflow, branch, event and completion time. There is no client-provided verification RPC and the service role cannot insert release, validation or application receipts. `icash_activate_learning_policy` additionally requires post-CI evidence invalidation before enabling the shared policy and reviewed SMS variant switch together; it does not dispatch customer work.
 

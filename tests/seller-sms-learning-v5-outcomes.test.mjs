@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const migration=read('config/seller-sms-learning-v5-outcomes.sql');
-assert.equal(migration,read('supabase/migrations/20261104053101_seller_sms_learning_v5_outcomes.sql'));
+assert.equal(migration,read('supabase/migrations/20261109184402_seller_sms_learning_v5_outcomes.sql'));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const db=new PGlite(),q=(sql,args=[])=>db.query(sql,args),val=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0]??{})[0];
 const extract=(source,name)=>source.match(new RegExp('create (?:or replace )?function public\\.'+name+'\\([\\s\\S]*?(?:\\$\\$|\\$function\\$);','i'))?.[0];

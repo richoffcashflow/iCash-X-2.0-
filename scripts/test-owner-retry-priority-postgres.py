@@ -23,6 +23,7 @@ def setup(install=True):
         sql(definition)
     if install:
         sql(read('config/owner-retry-fair-priority.sql'))
+        sql(read('config/owner-retry-source-filter.sql'))
 
 
 def seed(n, waiting=False, overdue='2 minutes', fresh=False):
@@ -165,6 +166,7 @@ def run():
     old_choice = sql("begin;do $$begin perform icash_next_acquisition();end$$;select account_id from icash_automation_tickets where state='issued';rollback;")
     assert old_choice != retry['account'], 'Reproduce newer fresh accounts winning ahead of due retry'
     sql(read('config/owner-retry-fair-priority.sql'))
+    sql(read('config/owner-retry-source-filter.sql'))
     assert hint(retry) and candidate(retry) == retry['screening']
     assert fixture.evidence(retry) == before, 'Read-only preference cannot change original evidence'
     new_choice = sql("begin;do $$begin perform icash_next_acquisition();end$$;select account_id from icash_automation_tickets where state='issued';rollback;")

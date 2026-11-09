@@ -12,7 +12,7 @@ The exact buyer principal and street address are preserved. A candidate must fit
 
 ## Assignment and activation
 
-Install `20261104052433` (evidence policy), `20261104052834` (SMS assignment), then `20261104053101` (SMS outcomes). The SMS migration guards the exact existing queue, candidate, assignment and v4 renderer definitions. Its new private setting starts disabled. The global evidence-v2 release setting must also be enabled before SMS can activate.
+Install `20261104052433` (evidence policy), `20261104052834` (SMS assignment), then `20261109184402` (SMS outcomes). The SMS migration guards the exact existing queue, candidate, assignment and v4 renderer definitions. Its new private setting starts disabled. The global evidence-v2 release setting must also be enabled before SMS can activate.
 
 After the exact web/worker release and required CI checks pass, the service-only `icash_set_seller_sms_learning_enabled(true)` enables future assignments under the existing operating-budget admission lock. Deactivation uses the same function with `false`. Deactivation affects future choices; it does not cancel or modify an existing conversation. Historical v4 copy and inbound/owner demonstration paths retain their prior behavior.
 
