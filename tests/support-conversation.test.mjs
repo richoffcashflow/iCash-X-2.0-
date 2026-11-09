@@ -202,7 +202,7 @@ for (const kind of ['account','access']) {
   const only=await replyToSupport({kind,allowAI:false,messages:[user(`I am ${spelling} my subscription.`)]});
   assert.match(only.reply,/Cancel subscription/);
  }
- for (const q of ['I am not cancelling my membership; I want a refund.','I already cancelled my membership and want a refund.','I am cancelling a seller appointment and want a refund.','I am cancelling a viewing, keeping my subscription, and requesting a refund.']) {
+ for (const q of ['I am not cancelling my membership; I want a refund.','I am no longer cancelling my subscription, but I want a refund.','I already cancelled my membership and want a refund.','I am cancelling a seller appointment and want a refund.','I am cancelling a viewing, keeping my subscription, and requesting a refund.']) {
   const negative=await replyToSupport({kind,allowAI:false,messages:[user(q)]});
   assert.doesNotMatch(negative.reply,/Open the workspace account menu|then Cancel subscription/);
  }

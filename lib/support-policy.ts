@@ -18,7 +18,7 @@ export function supportDuplicateCharge(text:string){
 export function supportRenewalCancellationRequested(text:string){
  const q=text.replace(/[’']/g,"'");
  return /\bcancel(?:l?ing)?\s+(?:(?:my|the|this|our|your|current|monthly|annual|iCash\s*X)\s+){0,4}(?:subscription|membership|renewals?)\b/i.test(q)
-  && !/\b(?:not|never|don't|do not)(?:\s+(?:want|intend|plan|going|to)){0,3}\s+cancel(?:l?ing)?\b/i.test(q);
+  && !/\b(?:not|never|don't|do not|no longer)(?:\s+(?:want|intend|plan|going|to)){0,3}\s+cancel(?:l?ing)?\b/i.test(q);
 }
 export function supportTopic(text:string):SupportTopic {
  if(/^(hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(text.trim()))return 'general';
