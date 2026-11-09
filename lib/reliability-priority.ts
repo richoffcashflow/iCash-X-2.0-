@@ -7,6 +7,14 @@ export const reliabilitySeverityGuidance={
  high:'Prioritize investigation. A send or contract needs review, monitoring is incomplete, or delays are persistent or widespread.',
  critical:'Immediate attention. Background services are unhealthy or multiple funded accounts are blocked or failing to complete work.',
 };
+export function reliabilityImpact(report:ReliabilityReport|null):string{
+ if(!report?.fresh||!report.snapshot)return 'Current workflow health is unverified. Refresh monitoring before judging recovery.';
+ const affected=[report.components.worker.status!=='ok'?'background scheduling':null,report.components.maintenance.status!=='ok'?'maintenance':null].filter(Boolean);
+ if(affected.length)return `Service problem: ${affected.join(' and ')}. Healthy work lanes can continue, but affected work may be delayed.`;
+ if(report.status==='ok'&&report.snapshot.issueCount===0&&(report.snapshot.accountProgress?.affectedAccounts??0)===0)return 'Background checks are responding; no active workflow alerts were found in this check.';
+ return 'Background checks are responding. The alerts below identify individual workflows and accounts that still need recovery.';
+}
+export const reliabilityRecoveryGuidance='Failed scheduler checks retry automatically with backoff. Independent eligible work can continue. Earlier calls, texts and charges keep their original receipts and holds until their outcome is verified.';
 export function reliabilityItemPriority(issue:{kind:string;since:string},now=Date.now()):'minor'|'high'{
  return ['text_receipt','text_review','call_receipt','contract_delivery','contract_preparation','owner_export'].includes(issue.kind)||now-Date.parse(issue.since)>=30*60000?'high':'minor';
 }

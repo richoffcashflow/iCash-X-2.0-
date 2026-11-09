@@ -1,5 +1,14 @@
 # Continuous reliability
 
+## November 9 workflow selection
+
+The [workflow isolation repair](workflow-stall-isolation-2026-11-09.md) removes
+unnecessary global call-capacity scans for accounts without due callbacks and
+conversation-history scans for ordinary daytime text checks. Original recovery,
+recipient, financial and unknown-operation controls remain intact. Native locked
+dependency regressions distinguish the repaired paths from their predecessors;
+the owner panel separates service failures from individual workflow recovery.
+
 ## November 8 deferred text recovery
 
 The [deferred text recovery investigation](deferred-text-recovery.md) found stale
