@@ -35,7 +35,9 @@ export function redactSupportQuestion(text:string){
  .replace(/(?:Bearer\s+)?(?:sk[-_](?:live_|test_)?|sb_secret_|re_|whsec_|eyJ)[A-Za-z0-9_\-.]{8,}/gi,'[credential removed]')
  .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,'[email removed]')
  .replace(/https?:\/\/\S+/gi,'[link removed]')
- .replace(/\b\d[\d\s().+\-]{5,}\d\b/g,'[number removed]');
+ // Separators can join short ledger amounts to the next timestamp. Count
+ // digits, not formatting characters, before treating a run as a number.
+ .replace(/\b\d[\d\s().+\-]{5,}\d\b/g,value=>value.replace(/\D/g,'').length>=7?'[number removed]':value);
 }
 export function supportAnswer(topic:SupportTopic,evidence:SupportEvidence[],ai:boolean){
  if(topic==='general')return 'Hi! How can we help with your bot, billing, or a property?';
