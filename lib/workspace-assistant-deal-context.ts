@@ -1,10 +1,11 @@
+import {isCarrierTextNotice} from './carrier-text-notice';
 import {db} from '@/lib/stripe-test';
 import {analysisMoney} from './property-analysis-view';
 import {journeyNextAction,type JourneyProgress} from './deal-journey-progress';
 import {redactSupportQuestion} from './support-policy';
 import type {CoachDetails,CoachThread} from './workspace-assistant-coach';
 
-type RecentMessage={id:string;body:string;direction:string;state:string;customer_author_id:string|null;created_at:string;thread:{id:string;party:'seller'|'buyer';paused:boolean}};
+type RecentMessage={id:string;body:string;attachments:unknown;direction:string;state:string;customer_author_id:string|null;created_at:string;thread:{id:string;party:'seller'|'buyer';paused:boolean}};
 type Envelope={id:string;kind:string;state:string;test_mode:boolean};
 export async function assistantDealContext(accountId:string,screeningId:string,propertyId:string,dealId:string):Promise<CoachDetails>{
  const scope=`account_id=eq.${accountId}&deal_id=eq.${dealId}`;
@@ -16,7 +17,7 @@ export async function assistantDealContext(accountId:string,screeningId:string,p
   db<JourneyProgress[]>('rpc/icash_journey_progress','POST',{p_account:accountId,p_screenings:[screeningId]}),
   db<{buyers:{state:string;reply:string|null}[]}>('rpc/icash_network_workspace','POST',{p_account:accountId,p_deal:dealId}),
   db<{summary:string|null}[]>('rpc/icash_buyer_reception_calls','POST',{p_account:accountId,p_screenings:[screeningId]}),
-  ...(['seller','buyer'] as const).map(party=>db<RecentMessage[]>(`icash_text_messages?account_id=eq.${accountId}&thread.account_id=eq.${accountId}&thread.deal_id=eq.${dealId}&thread.retired_at=is.null&thread.party=eq.${party}&select=id,body,direction,state,customer_author_id,created_at,thread:icash_text_threads!inner(id,party,paused)&order=created_at.desc,id.desc&limit=24`))
+  ...(['seller','buyer'] as const).map(party=>db<RecentMessage[]>(`icash_response_text_messages?account_id=eq.${accountId}&thread.account_id=eq.${accountId}&thread.deal_id=eq.${dealId}&thread.retired_at=is.null&thread.party=eq.${party}&select=id,body,attachments,direction,state,customer_author_id,created_at,thread:icash_text_threads!inner(id,party,paused)&order=created_at.desc,id.desc&limit=24`))
  ]);
  const assignments=envelopes.filter(e=>e.kind==='assignment'&&e.state==='completed'&&!e.test_mode);
  const deposits=assignments.length===1?await db<{id:string}[]>(`icash_buyer_deposit_receipts?${scope}&envelope_id=eq.${assignments[0].id}&select=id&limit=1`):[];
@@ -24,6 +25,7 @@ export async function assistantDealContext(accountId:string,screeningId:string,p
  for(const rows of threadGroups){
   const recent=new Map<string,CoachThread>();
   for(const m of rows){
+   if(m.direction==='incoming'&&isCarrierTextNotice(m.body,m.attachments))continue;
    if(!recent.has(m.thread.id)){if(recent.size===2)continue;recent.set(m.thread.id,{...m.thread,messages:[]});}
    const t=recent.get(m.thread.id)!;if(t.messages.length===6)continue;
    t.messages.push({id:m.id,body:redactSupportQuestion(m.body??'').slice(0,600),direction:m.direction,state:m.state,author:m.direction==='incoming'?'contact':m.customer_author_id?'you':'bot',at:m.created_at});

@@ -38,7 +38,8 @@ export function filterProperties<T extends WorkspaceProperty>(properties:T[],wor
  const needle=query.trim().toLocaleLowerCase();
  return properties.filter(p=>(filter==='all'||propertyGroup(p.id,work)===filter)&&(!needle||p.result.property.address.toLocaleLowerCase().includes(needle)));
 }
-export function messageSpeaker(direction:string,party?:string,author?:'bot'|'you'|'contact') {
+export function messageSpeaker(direction:string,party?:string,author?:'bot'|'you'|'contact'|'notice') {
+ if(direction==='incoming'&&author==='notice')return 'Automated notice';
  return direction==='outgoing'?(author==='bot'?'AI bot':author==='you'?'You':'From your bot number'):party==='buyer'?'Buyer':party==='seller'?'Seller':'Contact';
 }
 export function safeLocalTime(value:string,timezone?:string) {

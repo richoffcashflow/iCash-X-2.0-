@@ -1,3 +1,4 @@
+import {isCarrierTextNotice} from '@/lib/carrier-text-notice';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {workAccount} from '@/lib/work-account';
@@ -7,7 +8,7 @@ import {dispatchTextMessage} from '@/lib/text-message-service';
 import {customerTextStatus} from '@/lib/customer-text-status';
 import {threadConversationCalls} from '@/lib/thread-conversation-calls';
 type Thread={id:string;recipient:string;paused:boolean;party:string};
-type Message={id:string;created_at:string;state:string;direction:string;request_key:string|null;customer_author_id:string|null};
+type Message={id:string;body:string;attachments:unknown;created_at:string;state:string;direction:string;request_key:string|null;customer_author_id:string|null};
 const messageFields='id,thread_id,direction,body,state,attachments,created_at,request_key,customer_author_id';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
@@ -30,7 +31,7 @@ export async function GET(req:Request){
  requestKey?db<{state:string;request_key:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&customer_author_id=eq.${userId}&request_key=eq.${requestKey}&select=state,request_key&limit=1`):Promise.resolve([]),
  db<Message[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=${messageFields}&order=created_at.asc,id.asc&limit=1`)
  ]):[[],[],[]];
- const present=({customer_author_id,request_key,...message}:Message)=>({...message,author:message.direction==='incoming'?'contact':customer_author_id?'you':'bot',retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null});
+ const present=({customer_author_id,request_key,...message}:Message)=>({...message,author:message.direction==='incoming'?(isCarrierTextNotice(message.body,message.attachments)?'notice':'contact'):customer_author_id?'you':'bot',retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null});
  const messages=rows.slice(0,20).map(present),last=messages.at(-1),current=threads.find(t=>t.id===threadId);
  const callsResult=current&&params.get('includeCalls')==='true'?threadConversationCalls(db,accountId,{...current,dealId},before??null,rows.length>20&&last?last.created_at:null,process.env.ICASH_RECORDING_RECEIPTS_READY==='true'):Promise.resolve({calls:[],callsUnavailable:false});
  const sendReason=threadId?await db<string|null>('rpc/icash_manual_text_reason','POST',{p_account:accountId,p_thread:threadId}):null;

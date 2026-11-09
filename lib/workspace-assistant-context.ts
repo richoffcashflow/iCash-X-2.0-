@@ -20,7 +20,7 @@ export async function workspaceAssistantContext(accountId:string,timezone:string
   db<{kind:string;state:string;expires_at:string}[]>(`icash_automation_tickets?account_id=eq.${accountId}&state=eq.consumed&expires_at=gt.${new Date().toISOString()}&select=kind,state,expires_at&order=created_at.desc&limit=10`),
   db<{state:string;lease_until:string|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.running&select=state,lease_until&limit=10`),
   db<{status?:string;callsBudgetHeld?:number}|null>('rpc/icash_prospecting_progress','POST',{p_account:accountId}),
-  db<{message_id:string}[]>(`icash_sms_route_reviews?account_id=eq.${accountId}&resolved_at=is.null&select=message_id&limit=1`),
+  db<{message_id:string}[]>(`icash_response_sms_route_reviews?account_id=eq.${accountId}&resolved_at=is.null&select=message_id&limit=1`),
   db<{id:string}[]>('rpc/icash_closing_task_attention','POST',{p_account:accountId,p_offset:0,p_limit:1}),
   ...workspaceAttentionTables.map(table=>db<{id:string}[]>(workspaceAttentionQuery(table,accountId,{limit:1})))
  ]);
