@@ -22,6 +22,9 @@ try{
  assert.match(reliabilityImpact(null),/unverified/);
  assert.match(reliabilityImpact(report([issue('call_receipt')])),/individual workflows and accounts/);
  assert.match(reliabilityImpact(report()),/no active workflow alerts/);
+ const accountRecovery=report();accountRecovery.snapshot.accountProgress={affectedAccounts:3};
+ assert.match(reliabilityImpact(accountRecovery),/individual workflows and accounts/,'account recovery remains visible without a listed workflow issue');
+ assert.match(reliabilityImpact({...report(),status:'degraded'}),/individual workflows and accounts/,'a degraded report never claims there are no alerts');
  const broad=report([issue('seller_response',6,1),issue('seller_response',6,2),issue('screening_lease',6,3)]);
  const cases=[[report(),null],[report([issue()]),'minor'],[report([issue('buyer_fulfillment',11)]),'minor'],[report([issue('seller_response',29.99)]),'minor'],[report([issue('seller_response',30)]),'high'],[report([issue('text_receipt')]),'high'],[report([issue('call_receipt')]),'high'],[report([issue('contract_delivery')]),'high'],[broad,'high'],[{...report([issue()]),snapshot:{...report([issue()]).snapshot,issueCount:5}},'high'],[core,'critical'],[stale,'high'],[null,'high']];
  for(const [value,expected] of cases){assert.equal(reliabilityPriority(value,now),expected);assert.equal(await one('select icash_reliability_severity($1,$2)',[value,new Date(now).toISOString()]),expected,'database and UI severity agree');}
