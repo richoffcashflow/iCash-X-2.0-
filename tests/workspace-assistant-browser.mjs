@@ -3,7 +3,7 @@ import {makeWorkspaceFixture,fixtureAccount,uuid} from './fixtures/workspace-vol
 
 export async function verifyAssistantCoach(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});const page=await context.newPage();page.setDefaultTimeout(15000);
- const writes=[],questions=[],errors=[];let changed=false,sendCount=0;
+ const writes=[],questions=[],errors=[];let changed=false,sendCount=0,receipt=null;
  const work=makeWorkspaceFixture({count:1});Object.assign(work,{textAttention:[],propertyAttentionIds:[],contacts:[],conversations:[],journeys:[],signingConfigured:true});
  const propertyId=work.properties[0].id,dealId=work.deals[0].id,threadId=uuid(41),messageId=uuid(42);
  const draft='What closing timeline works for you? I can walk you through the next steps.';
@@ -19,6 +19,14 @@ export async function verifyAssistantCoach(browser,base,options,name){
    if(req.method()==='GET')return route.fulfill({json:{items:[]}});
    const body=req.postDataJSON();questions.push(body);assert.equal(body.screeningId,propertyId);
    return route.fulfill({json:{id:uuid(100+questions.length),state:'complete',question:body.question,created_at:new Date().toISOString(),answer:reply}});
+  }
+  if(p==='/api/work/assistant/actions'){
+   if(req.method()==='POST'){
+    const body=req.postDataJSON();assert.equal(body.actionIndex,0);assert.equal(body.message,draft);assert.equal(changed,false);
+    sendCount++;writes.push(p);receipt={id:uuid(90),state:'accepted',body:draft,request_key:body.requestKey};
+    return route.abort('failed'); // Provider accepted; HTTP response was lost.
+   }
+   return route.fulfill({json:{address:'100 Example Street',party:'buyer',body:draft,latest:{body:changed?'Actually, can we visit first?':'What happens next?',direction:'incoming',state:'received'},receipt,reason:changed?'The conversation changed. Review the latest messages and ask for a fresh reply.':null}});
   }
   if(p==='/api/work/messages'&&req.method()==='POST'){sendCount++;writes.push(p);assert.equal(req.postDataJSON().threadId,threadId);assert.equal(req.postDataJSON().message,draft);return route.fulfill({json:{id:uuid(90),status:'message_accepted',state:'accepted'}});}
   if(p==='/api/work/experience'&&req.method()==='POST'){const event=req.postDataJSON();assert.equal(event.event,'panel_open');assert.equal(event.stage,'documents');return route.fulfill({json:{saved:true}});}
@@ -54,19 +62,23 @@ export async function verifyAssistantCoach(browser,base,options,name){
   const agreement=page.getByRole('dialog',{name:'Agreements',exact:true});await agreement.waitFor();assert.equal(sendCount,0);await agreement.getByRole('button',{name:'Close Agreements',exact:true}).click();
   await card.getByRole('button',{name:/^Ask AI about/}).click();
   await dialog.getByRole('button',{name:'Review & send buyer reply',exact:true}).click();
-  const conversation=page.getByRole('dialog',{name:/100 Example Street/});await conversation.waitFor();
-  const input=conversation.getByRole('textbox',{name:'Text message',exact:true});await input.waitFor();
-  await page.waitForFunction(({id,draft})=>document.getElementById(id)?.value===draft,{id:'reply-'+threadId,draft});assert.equal(await input.inputValue(),draft);assert.equal(sendCount,0,'Review only prefills the exact buyer thread');
-  await input.fill('My unsent draft');await conversation.getByRole('button',{name:'Close conversation',exact:true}).click();
-  await card.getByRole('button',{name:/^Ask AI about/}).click();dialog=page.getByRole('dialog',{name:'Ask AI Bot',exact:true});
-  await dialog.getByRole('button',{name:'Review & send buyer reply',exact:true}).click();await conversation.getByRole('region',{name:'Suggested reply'}).waitFor();assert.equal(await input.inputValue(),'My unsent draft','Existing draft remains intact');
-  await conversation.getByRole('button',{name:'Keep my draft',exact:true}).click();await input.fill('');await conversation.getByRole('button',{name:'Close conversation',exact:true}).click();
-  changed=true;
-  await card.getByRole('button',{name:/^Ask AI about/}).click();await dialog.getByRole('button',{name:'Review & send buyer reply',exact:true}).click();
-  await conversation.getByRole('region',{name:'Suggested reply'}).waitFor();assert.equal(await input.inputValue(),'','New message requires reviewing suggestion');assert.equal(sendCount,0);
-  await conversation.getByRole('button',{name:'Use suggested reply',exact:true}).click();await conversation.getByRole('button',{name:'Send text',exact:true}).click();
-  await page.waitForFunction(()=>document.body.innerText.includes('Sent')||document.body.innerText.includes('accepted'));assert.equal(sendCount,1,'Only explicit Send submits once');
-  assert.deepEqual(errors,[]);assert.deepEqual(writes,['/api/work/messages']);
-  console.log(`PASS ${name}: coaching card, exact buyer draft, no implicit send, unsent draft preservation, changed-conversation review and explicit Send.`);
+  let action=dialog.getByRole('region',{name:'Review and send reply'});await action.waitFor();
+  const input=action.getByRole('textbox',{name:'Message',exact:true});await input.waitFor();
+  await page.waitForFunction(draft=>document.querySelector('.assistant-text-action textarea')?.value===draft,draft);
+  assert.equal(sendCount,0,'Preview never sends');assert.equal(await input.inputValue(),draft);
+  assert(await action.evaluate(node=>node.scrollWidth<=node.clientWidth+1),'Action preview fits the dialog');
+  await page.screenshot({path:`/tmp/icash-ask-ai-action-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});
+  changed=true;await action.getByRole('button',{name:'Check status',exact:true}).click();
+  await action.getByText(/The conversation changed/).waitFor();assert(await action.getByRole('button',{name:'Send reply',exact:true}).isDisabled());assert.equal(sendCount,0);
+  changed=false;await action.getByRole('button',{name:'Check status',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('.assistant-text-action button')?.disabled);
+  await action.getByRole('button',{name:'Send reply',exact:true}).click();
+  await action.getByText('Sent. Delivery confirmation pending.',{exact:true}).waitFor();assert.equal(sendCount,1,'Lost response recovers the one original receipt');
+  assert(await action.getByRole('button',{name:'Send reply',exact:true}).isDisabled());
+  await action.getByRole('button',{name:'Close',exact:true}).click();
+  await dialog.getByRole('button',{name:'Review & send buyer reply',exact:true}).click();
+  action=dialog.getByRole('region',{name:'Review and send reply'});await action.getByText('Sent. Delivery confirmation pending.',{exact:true}).waitFor();assert.equal(sendCount,1,'Reopening cannot resend a saved action');
+  assert.deepEqual(errors,[]);assert.deepEqual(writes,['/api/work/assistant/actions']);
+  console.log(`PASS ${name}: coaching, inline draft review, stale conversation block, explicit send and original receipt recovery without duplicates.`);
  }finally{await context.close();}
 }
