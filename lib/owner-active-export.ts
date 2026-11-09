@@ -17,10 +17,11 @@ const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const invalid=()=>{throw Error('OWNER_EXPORT_RECONCILIATION_REQUIRED');};
 export const activeOwnerColumns=['internal_person_id','person_full_name','person_address_full','phone_1','is_phone_1_dnc','people_phone_1_type_id','phone_2','is_phone_2_dnc','people_phone_2_type_id','phone_3','is_phone_3_dnc','people_phone_3_type_id','email_address_1','email_address_2','email_address_3','has_active_phone_number'];
+export const ownerUsageColumns=[1,2,3].flatMap(i=>[`phone_${i}_usage_2_months_id`,`phone_${i}_usage_12_months_id`]);
 
-export function activeOwnerExportRequest(ids:string[],mobileOnly=false){
+export function activeOwnerExportRequest(ids:string[],mobileOnly=false,includeUsage=false){
  if(!ids.length||ids.length>125||new Set(ids).size!==ids.length||ids.some(id=>!/^per_[0-9]{1,100}$/.test(id)))return invalid();
- return {people_ids:ids,fields:['person_full_name','has_active_phone_number'],property_match:'owner',anchor:'person',limit:ids.length,require_phone:true,scrub_dnc:true,active_phones_only:true,...(mobileOnly?{mobile_only:true}: {})};
+ return {people_ids:ids,fields:['person_full_name','has_active_phone_number',...(includeUsage?ownerUsageColumns:[])],property_match:'owner',anchor:'person',limit:ids.length,require_phone:true,scrub_dnc:true,active_phones_only:true,...(mobileOnly?{mobile_only:true}: {})};
 }
 /** Bounded RFC4180 reader. IDs stay text, including values above MAX_SAFE_INTEGER. */
 export function parseOwnerExportCsv(text:string){
@@ -32,14 +33,14 @@ export function parseOwnerExportCsv(text:string){
   if(c==='"'){if(cell||closed)return invalid();quoted=true;continue;}
   if(c===','||c==='\n'||c==='\r'){
    row.push(cell);cell='';closed=false;
-   if(row.length>activeOwnerColumns.length)return invalid();
+   if(row.length>activeOwnerColumns.length+ownerUsageColumns.length)return invalid();
    if(c!==','){rows.push(row);row=[];if(c==='\r'&&text[i+1]==='\n')i++;if(rows.length>126)return invalid();}
   }else{if(closed)return invalid();cell+=c;}
  }
  if(quoted)return invalid();if(cell||row.length||closed){row.push(cell);rows.push(row);}
  if(rows[0]?.[0])rows[0][0]=rows[0][0].replace(/^\uFEFF/,'');
  const header=rows.shift();
- if(!header||header.length!==activeOwnerColumns.length||new Set(header).size!==header.length||header.some(h=>!activeOwnerColumns.includes(h))||rows.some(r=>r.length!==header.length)||rows.length>125)return invalid();
+ if(!header||activeOwnerColumns.some(h=>!header.includes(h))||new Set(header).size!==header.length||header.some(h=>!activeOwnerColumns.includes(h)&&!ownerUsageColumns.includes(h))||rows.some(r=>r.length!==header.length)||rows.length>125)return invalid();
  return rows.map(r=>Object.fromEntries(header.map((h,i)=>[h,r[i]])));
 }
 export function validateOwnerExportReceipt(receipt:Receipt,request:ReturnType<typeof activeOwnerExportRequest>){
@@ -60,7 +61,7 @@ export function validateOwnerExportReceipt(receipt:Receipt,request:ReturnType<ty
 export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt'|'request'|'receipt'>,csv:string,audience:Audience){
  const receipt=validateOwnerExportReceipt(saved.receipt,saved.request),rows=parseOwnerExportCsv(csv);
  const ids=[...new Set(audience.flatMap(a=>[...a.ids]))];
- if(!isDeepStrictEqual(saved.request,activeOwnerExportRequest(ids,saved.request.mobile_only===true))||rows.length!==receipt.rows)return invalid();
+ if(!isDeepStrictEqual(saved.request,activeOwnerExportRequest(ids,saved.request.mobile_only===true,saved.request.fields.includes(ownerUsageColumns[0])))||rows.length!==receipt.rows)return invalid();
  const byId=new Map<string,typeof rows[number]>();
  for(const row of rows){const id='per_'+row.internal_person_id;
   // Owner identity comes from the exact selected person ID and saved preview.
@@ -82,7 +83,11 @@ export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt
     if(!number){if(dnc||type)return invalid();continue;}
     if(saved.request.mobile_only===true&&type!=='Wireless')return invalid();
     if(!/^\d{10}$/.test(number)||!['No','false'].includes(dnc)||!type||type.length>30||seen.has(number))return invalid();
-    seen.add(number);phones.push({number,doNotCall:false,type,permission:'unverified',activity:'active',activityBasis:'provider_export_filter'});
+    // Usage describes activity, not ownership, permission or delivery. Preserve
+    // absent/blank provider values instead of inventing a zero or a good match.
+    const usage=Object.fromEntries([[`phone_${i}_usage_2_months_id`,'usage2Months'],[`phone_${i}_usage_12_months_id`,'usage12Months']].filter(([key])=>Object.hasOwn(row,key)).map(([key,name])=>[name,row[key]]));
+    if(Object.values(usage).some(v=>v.length>50))return invalid();
+    seen.add(number);phones.push({number,doNotCall:false,type,permission:'unverified',activity:'active',activityBasis:'provider_export_filter',...usage});
    }
    if(!phones.length)return invalid();
    return [{personId:id,name:row.person_full_name,likelyOwner:true,propertyContactType:match.propertyContactType,matchFlags:match.matchFlags,
@@ -185,7 +190,7 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  await savePhoneLessOwnerPreviews(db,accountId,batchId,previewRequestId,preview,candidates,allAudience);
  const audience=allAudience.filter(a=>a.ids.length);
  if(!audience.length)return {status:'empty',contacts:0};
- const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))],mobileOnly);
+ const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))],mobileOnly,true);
  const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
  const preflight=await preflightOwnerExport(db,accountId,items,request,transport);
  if(preflight.status==='empty')return {status:'empty',contacts:0};

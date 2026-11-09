@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import * as f from './helpers/list-quality-fixture.mjs';
+import {targetingFilters} from '../lib/dealmachine-targeting.ts';
+import {targetingLearningDecision} from '../lib/dealmachine-targeting-learning.ts';
+import {activeOwnerColumns,ownerUsageColumns,parseOwnerExportCsv,allocateActiveOwnerExport,activeOwnerExportRequest} from '../lib/owner-active-export.ts';
+import {ownerBatchAudience} from '../lib/owner-batch.ts';
+const db=new PGlite(),q=(s,a=[])=>db.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
+try{
+ await db.exec('create role anon;create role authenticated;create role service_role;');
+ await db.exec(f.setup);await db.exec(f.migration);
+ assert.equal(await v('select enabled from icash_research_private.list_quality_settings'),false);
+ for(const segment of ['out_of_state_old_sale','off_market_repairs','vacant_absentee']){
+  const def={id:f.screen,segment,asOf:'2026-11-09'};
+  assert.equal(await v('select icash_targeting_definition_valid($1)',[def]),true);
+  assert.deepEqual(await v('select icash_targeting_filters($1)',[def]),targetingFilters(def));
+ }
+ const best=p=>v('select icash_owner_sms_best_phone($1)',[p]);
+ assert.equal(await best(f.person),'+12145550103');
+ assert.equal(await best({...f.person,phones:[{number:'2145550100',type:'Landline',doNotCall:false}]}),null);
+ assert.equal(await best({...f.person,phones:f.person.phones.map((p,i)=>({...p,...(i===1?{matchConfidence:80}:{})}))}),'+12145550102','Match confidence takes priority over usage');
+ assert.equal(await best({...f.person,phones:f.person.phones.map((p,i)=>({...p,...(i===2?{matchConfidence:0}:{})}))}),'+12145550102','Known zero is not unknown');
+ assert.equal(await v("select icash_phone_usage_rank('not supplied')"),null);
+ for(const text of ['wrong number','I don’t own that property'])assert.equal(await v('select icash_seller_wrong_number($1)',[text]),true);
+ for(const text of ['This is not the wrong number','I did not say wrong number','The tenant said wrong number'])assert.equal(await v('select icash_seller_wrong_number($1)',[text]),false);
+ await db.exec('insert into icash_operating_budget(id) values(1);');await db.exec(f.seed);
+ const current=(phone,account=f.account,screen=f.screen)=>v('select icash_owner_sms_quality_current($1,$2,$3)',[account,screen,phone]);
+ assert.equal(await current('+12145550101'),false,'Landline is held');
+ assert.equal(await current('+12145550102'),false,'Lower-ranked mobile cannot get first introduction');
+ assert.equal(await current('+12145550103'),true);
+ await q("insert into icash_deal_files(id,account_id,screening_id) values($1,$2,$1)",[f.screen,f.account]);
+ await q("insert into icash_text_threads(id,account_id,deal_id,party,recipient) values($1,$2,$1,'seller','+12145550103')",[f.screen,f.account]);
+ await q("insert into icash_text_messages(id,account_id,thread_id,direction,state,body,created_at) values($1,$2,$1,'incoming','received','Wrong number',now())",[f.screen,f.account]);
+ const wrong=()=>v("select icash_screening_wrong_number($1,$2,now()-interval '1 minute')",[f.account,f.screen]);
+ assert.equal(await wrong(),false,'Unverified incoming row is not an outcome');
+ await q("update icash_text_messages set event_id='original-provider-event' where id=$1",[f.screen]);
+ assert.equal(await wrong(),true);
+ assert.equal(await v('select icash_screening_wrong_number($1,$2,null)',[f.account,f.screen]),false,'No attempt means no measured outcome');
+ await q('delete from icash_text_messages where id=$1',[f.screen]);
+ assert.equal(await v('select count(*)::int from icash_research_private.owner_sms_choices'),1);
+ await q('insert into icash_owner_contacts(account_id,screening_id,result) values($1,$2,$3)',[f.other,f.other,{...f.source,contacts:[{...f.person,phones:f.person.phones.slice(0,2)}]}]);
+ assert.equal(await current('+12145550102',f.other,f.other),false,'Another account/property cannot rotate the same owner');
+ assert.equal(await current('+12145550103',f.other,f.other),false,'Choice cannot authorize a phone absent from the exact source');
+ await assert.rejects(db.exec("update icash_research_private.owner_sms_choices set phone='+12145550102'"),/immutable/);
+ await assert.rejects(db.exec('set role service_role;delete from icash_research_private.owner_sms_choices'),/permission denied/);await db.exec('reset role');
+ const output=await v("select pg_get_functiondef('icash_operational_contact_current(uuid,uuid,text,boolean)'::regprocedure)");
+ const old=f.before.find(d=>d.proname==='icash_operational_contact_current').definition;
+ assert.equal(output.replace(" if p_channel='sms' and not public.icash_owner_sms_quality_current(p_account,c.screening_id,c.phone) then return false;end if;\n",''),old,'All original final eligibility checks retained');
+}finally{await db.close();}
+// New CSV output metadata neither changes the selected owners nor the charge.
+const columns=[...activeOwnerColumns,...ownerUsageColumns],row={internal_person_id:'1',person_full_name:'Synthetic',phone_1:'2145550100',is_phone_1_dnc:'No',people_phone_1_type_id:'Wireless',has_active_phone_number:'Yes',phone_1_usage_2_months_id:'Heavy',phone_1_usage_12_months_id:''};
+const csv=[columns,columns.map(c=>row[c]??'')].map(r=>r.join(',')).join('\n')+'\n';
+assert.equal(parseOwnerExportCsv(csv)[0].phone_1_usage_2_months_id,'Heavy');
+assert.throws(()=>parseOwnerExportCsv(csv.replace('phone_1_usage_2_months_id','invented_score')));
+const items=[{screeningId:f.screen,snapshot:{propertyId:'prop_1'}}],preview={data:[{dm_property_id:'prop_1',found:true,contacts:[{dm_person_id:'per_1',contact_type:'owner',availability:{phones:1}}]}],totals:{submitted:1,found:1,not_found:0},credits:{used:0,people:0,properties:0,deduplicated:0}};
+const saved={id:f.screen,createdAt:new Date().toISOString(),request:activeOwnerExportRequest(['per_1'],false,true),receipt:{httpStatus:200,raw:{export_id:'fixture',record_count:1,file_count:1,credits:{used:1,people:1}},rawText:'{}'}};
+const result=allocateActiveOwnerExport(saved,csv,ownerBatchAudience(preview,items,25))[0].result;
+assert.equal(result.creditsUsed,1);assert.equal(result.contacts[0].phones[0].usage2Months,'Heavy');assert.equal(result.contacts[0].phones[0].usage12Months,'');assert.equal(result.outreachAuthorized,false);
+const ctx={accountId:f.account,zip:'75217',pageSize:25,queryPolicy:{version:'research-efficiency-v2',exclusionListId:'fixture'}},strategy='target_'+f.screen,now=Date.now();
+const arm={attempts:20,matureAttempts:0,interested:0,optedOut:0,wrongNumbers:0,contractTrials:0,contracts:0,closingTrials:0,closings:0,costCents:1,providerCostMicros:1,costsComplete:false};
+const evidence={version:'seller-targeting-learning-v1',context:ctx,startedAt:new Date(now-1000).toISOString(),checkedAt:new Date(now).toISOString(),baseline:{...arm,strategy:'baseline'},candidate:{...arm,strategy,wrongNumbers:3}};
+assert.equal(targetingLearningDecision(evidence,ctx,strategy,now).status,'wrong_number_hold');
+assert.equal(targetingLearningDecision({...evidence,candidate:{...arm,strategy,optedOut:3}},ctx,strategy,now).status,'opt_out_hold');
+assert.equal(targetingLearningDecision({...evidence,candidate:{...arm,strategy,attempts:19,wrongNumbers:3}},ctx,strategy,now).hold,false);
+console.log('PASS list quality: exact migration, filter parity, mobile ranking, immutable owner choice, original gates, real-only wrong numbers, output-only usage and early cohort holds.');
