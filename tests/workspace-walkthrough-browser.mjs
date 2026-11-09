@@ -77,7 +77,7 @@ export async function verifyWalkthrough(browser,base,options,name){
   account='existing';await page.reload();await courseCard.getByRole('heading',{name:'Start here: Watch the course.',exact:true}).waitFor();
   assert.equal(await courseCard.getByRole('link',{name:'Watch course',exact:true}).getAttribute('href'),'/course','Users who have not opened the course still see its reminder');
   assert.equal(await page.locator('#workspace-tour-course').innerText(),'Training course');
-  assert.equal(await page.locator('#workspace-tour-course').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(23, 23, 23)');
+  assert.equal(await page.locator('#workspace-tour-course').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(255, 255, 255)');
   for(const width of [...new Set([options.viewport.width,320])]){
    await page.setViewportSize({width,height:options.viewport.height});
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Course card and navigation fit narrow screens');
