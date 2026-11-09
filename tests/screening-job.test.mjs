@@ -20,8 +20,8 @@ console.log('Screening worker: stale data, underwriting, no outreach, empty queu
 // The current formula and fee tier ignore historical fixed-fee and repair-range settings.
 const scalarSnapshot={...snapshot,assignmentFeeCents:1500000,raw:{data:{...snapshot.raw.data,estimated_repair_cost_low:30000,estimated_repair_cost_high:50000}}};
 const scalarJob=runScreeningJob(scalarSnapshot,now);
-assert.equal(scalarJob.property.screeningBuyerCeilingCents,11200000);
-assert.equal(scalarJob.preliminarySellerCeilingCents,10200000);
+assert.equal(scalarJob.property.screeningBuyerCeilingCents,10000000);
+assert.equal(scalarJob.preliminarySellerCeilingCents,9000000);
 for(const repairs of [null,undefined,'40000',-1]){
  const job=runScreeningJob({...scalarSnapshot,raw:{data:{...scalarSnapshot.raw.data,estimated_repair_cost:repairs}}},now);
  assert.equal(job.preliminarySellerCeilingCents,null);
@@ -30,4 +30,4 @@ for(const repairs of [null,undefined,'40000',-1]){
 }
 assert.equal(runScreeningJob({...scalarSnapshot,raw:{data:{...scalarSnapshot.raw.data,estimated_repair_cost:0}}},now).preliminarySellerCeilingCents,13000000);
 
-assert.equal(runScreeningJob(snapshot,now).cashOfferPriceCents,10200000);assert.equal(runScreeningJob(snapshot,now).offerAuthorized,true);assert.equal(runScreeningJob({...snapshot,propertyType:'land'},now).cashOfferPriceCents,null);
+assert.equal(runScreeningJob(snapshot,now).cashOfferPriceCents,9000000);assert.equal(runScreeningJob(snapshot,now).offerAuthorized,true);assert.equal(runScreeningJob({...snapshot,propertyType:'land'},now).cashOfferPriceCents,null);

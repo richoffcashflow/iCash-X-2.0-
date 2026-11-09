@@ -47,7 +47,7 @@ const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.
 const mod={exports:{}};
 new Function('require','module','exports',compiled)(name=>name==='@/lib/property-analysis-view'?analysis:require(name),mod,mod.exports);
 const text=node=>typeof node==='string'?node:typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(' '):node&&typeof node==='object'?text(node.props?.children):'';
-let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calculationVersion:'net_after_repairs_70_v2'}}));
+let rendered=text(mod.exports.PropertyAnalysisSummary({result:{...result,calculationVersion:'arv_70_less_repairs_v3'}}));
 assert.match(rendered,/Maximum cash offer.*\$90,000/);
 assert.match(rendered,/Estimated repairs.*\$40,000/);
 assert.match(rendered,/Value after repairs.*\$200,000/);
@@ -66,7 +66,7 @@ assert.doesNotMatch(source,/repairs\.rangeCents/,'the visible estimate never dis
 const all=node=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(all):[node,...all(node.props?.children)];
 const offerMetric=saved=>all(mod.exports.PropertyAnalysisSummary({result:saved})).find(n=>n.props?.className==='property-analysis-metric property-analysis-offer');
 const original=JSON.stringify(result);
-for(const calculationVersion of [undefined,null,'legacy_range_v0','provider_repair_scalar_v1','unknown_future_version']){
+for(const calculationVersion of [undefined,null,'legacy_range_v0','provider_repair_scalar_v1','net_after_repairs_70_v2','unknown_future_version']){
  const saved={...result,calculationVersion};
  const metric=offerMetric(saved);
  assert.equal(metric.props['data-earlier-estimate'],true);
@@ -76,8 +76,8 @@ for(const calculationVersion of [undefined,null,'legacy_range_v0','provider_repa
 }
 assert.equal(JSON.stringify(result),original,'display must not overwrite saved research');
 assert.match(text(mod.exports.PropertyAnalysisSummary({result})),/Maximum cash offer · Needs update.*Unapproved/);
-assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'net_after_repairs_70_v2'}).offerNeedsUpdate,false);
-const current=text(offerMetric({...result,calculationVersion:'net_after_repairs_70_v2'}));
+assert.equal(analysis.propertyAnalysisView({...result,calculationVersion:'arv_70_less_repairs_v3'}).offerNeedsUpdate,false);
+const current=text(offerMetric({...result,calculationVersion:'arv_70_less_repairs_v3'}));
 assert.match(current,/Maximum cash offer.*\$90,000/);assert.doesNotMatch(current,/Needs update/,'current-version presentation stays distinct without claiming fresh research');
 for(const fetchedAt of [undefined,null,'bad']){
  const metric=text(offerMetric({...result,property:{...property,fetchedAt}}));
@@ -93,7 +93,7 @@ for(const amount of [null,undefined,-1,1.5,'410000',NaN,Infinity,Number.MAX_SAFE
 assert.doesNotMatch(source,/runScreeningJob|calculateHouseOffer|onClick|onSubmit/,'the financial summary adds no calculation or action');
 console.log('Historical-offer presentation: visible saved amount, update/unapproved/date labels, exact version guard, UTC dates, malformed/missing values and no calculation or mutation passed.');
 
-assert.equal(offerMetric({...result,calculationVersion:'net_after_repairs_70_v2'}).props['data-earlier-estimate'],undefined,'historical styling never changes current-version estimates');
+assert.equal(offerMetric({...result,calculationVersion:'arv_70_less_repairs_v3'}).props['data-earlier-estimate'],undefined,'historical styling never changes current-version estimates');
 const styles=readFileSync(new URL('../app/workspace-clarity.css',import.meta.url),'utf8');
 assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\] :is\(dt,dd,small\)\{color:#535353\}/,'historical limitations use high-contrast text');
 assert.match(styles,/\.property-analysis-offer\[data-earlier-estimate=true\]\{background:#f6f6f6\}/,'historical amount keeps a neutral treatment');
@@ -104,9 +104,9 @@ for(const declaration of ['display:block','margin-top:6px','font-size:11px','lin
 }
 assert.doesNotMatch(historicalSmallRule,/(?:^|;)(?:white-space:nowrap|height:|position:|overflow:hidden)/,'the limitation remains in document flow and can wrap at narrow widths');
 
-const currentResult={property,calculationVersion:'net_after_repairs_70_v2',preliminarySellerCeilingCents:10200000};
+const currentResult={property,calculationVersion:'arv_70_less_repairs_v3',preliminarySellerCeilingCents:9000000};
 assert.equal(analysis.propertyAnalysisView(currentResult).calculation.feeCents,1000000);
 const breakdown=text(mod.exports.PropertyAnalysisSummary({result:currentResult}));
 assert.match(breakdown,/Offer calculation/);
-assert.ok(breakdown.replace(/\s/g,'').includes('($200,000−$40,000)×70%−$10,000=$102,000'));
+assert.ok(breakdown.replace(/\s/g,'').includes('$200,000×70%−$40,000−$10,000=$90,000'));
 assert.equal(analysis.propertyAnalysisView({...currentResult,preliminarySellerCeilingCents:1}).calculation,null,'do not display a breakdown inconsistent with the saved offer');

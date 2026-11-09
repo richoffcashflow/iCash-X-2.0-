@@ -14,7 +14,7 @@ Buyers can state how many properties they can buy over the next 30 days. Existin
 
 Buyers can submit a whole-$1,000 suggested price or a reason a deal does not fit. Feedback is account/deal-bound, replay-safe, and never accepts or changes a price. The customer sees the price gap and the concern in the Buyers area.
 
-For an unreleased, under-contract deal that cannot support the normal minimum, the customer can explicitly approve a property-specific $5,000–$10,000 minimum in $1,000 increments. Approval checks the current terms hash and saves the actor, previous terms and resulting terms. The normal target and 70%-after-repairs ceiling still apply. Published packages, existing disposition authorities and issued assignment agreements prohibit this shortcut. Original signed purchase terms remain unchanged. Fees stay private in buyer packages, messages and conversations; the original assignment contract retains its approved fee disclosure.
+For an unreleased, under-contract deal that cannot support the normal minimum, the customer can explicitly approve a property-specific $5,000–$10,000 minimum in $1,000 increments. Approval checks the current terms hash and saves the actor, previous terms and resulting terms. The normal target and 70%-of-ARV-minus-repairs ceiling still apply. Published packages, existing disposition authorities and issued assignment agreements prohibit this shortcut. Original signed purchase terms remain unchanged. Fees stay private in buyer packages, messages and conversations; the original assignment contract retains its approved fee disclosure.
 
 ## Seller follow-up
 

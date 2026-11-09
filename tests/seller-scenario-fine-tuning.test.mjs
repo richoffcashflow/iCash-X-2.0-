@@ -41,8 +41,8 @@ assert(!unknown.missing.includes('condition'));assert(unknown.missing.includes('
 // 3. New material facts invalidate a saved acceptance even when the researched
 // price is unchanged; subsequent reads cannot silently restore authority.
 turns=structuredClone(qualifiedSellerTurns);
-const quote=await call('get_offer');assert.equal(quote.priceCents,7400000);
-turns.push(agent('Our cash offer is $74,000. Does that work?'),seller('Yes.'));
+const quote=await call('get_offer');assert.equal(quote.priceCents,6000000);
+turns.push(agent('Our cash offer is $60,000. Does that work?'),seller('Yes.'));
 assert.equal((await call('accept_offer',{priceCents:quote.priceCents,quoteRevision:quote.quoteRevision})).status,'verbally_accepted');
 const acceptedContext=structuredClone(context);
 turns.push(agent('Is there anything else we should know?'),seller('There is another owner.'));
@@ -52,9 +52,9 @@ assert.equal(context.offerState.factsPending,true);assert.equal((await call('get
 
 // 4. A brief connection check and the provider's acceptance receipt do not erase
 // the actual answer. A later withdrawal still revokes that same evidence.
-const revision='b'.repeat(64),input={action:'accept_offer',priceCents:7400000,quoteRevision:revision};
-const receipt=status=>({role:'agent',tool_results:[{tool_name:'icash_offer_and_contract',is_error:false,result_value:JSON.stringify({quoteAllowed:true,priceCents:7400000,quoteRevision:revision,status})}]});
-const interrupted=[receipt('calculated_proposal'),agent('Our cash offer is $74,000. Does that work?'),agent('Are you still there?'),seller("Yes, let's do it."),receipt('verbally_accepted'),agent('What closing date works for you?'),seller('October 26, 2026.')];
+const revision='b'.repeat(64),input={action:'accept_offer',priceCents:6000000,quoteRevision:revision};
+const receipt=status=>({role:'agent',tool_results:[{tool_name:'icash_offer_and_contract',is_error:false,result_value:JSON.stringify({quoteAllowed:true,priceCents:6000000,quoteRevision:revision,status})}]});
+const interrupted=[receipt('calculated_proposal'),agent('Our cash offer is $60,000. Does that work?'),agent('Are you still there?'),seller("Yes, let's do it."),receipt('verbally_accepted'),agent('What closing date works for you?'),seller('October 26, 2026.')];
 assert.equal(callOfferEvidence({transcript:interrupted},input),true);
 assert.equal(callOfferEvidence({transcript:[...interrupted,seller('Hold off, I need to think.')]},input),false);
 
@@ -70,7 +70,7 @@ const bound=await boundSellerQualification(async(path,method,input)=>{
 },{accountId:'account',dealId:'deal',screeningId:'screen',phone:'+12125550199'},{transcript:[seller('I am calling back about the agreement.')]});
 assert.equal(historyReads,1);assert.deepEqual(bound,{ready:true});
 context=acceptedContext;turns=[seller('I am calling back about the agreement.')];
-const resumed=await call('get_offer');assert.equal(resumed.status,'verbally_accepted');assert.equal(resumed.priceCents,7400000);
+const resumed=await call('get_offer');assert.equal(resumed.status,'verbally_accepted');assert.equal(resumed.priceCents,6000000);
 assert.notEqual(resumed.sent,true,'an offer read cannot claim text delivery');
 
 console.log('PASS 5 seller scenarios: rapport/question scope; repeat versus unknown; material change; interrupted acceptance; bound return-call continuity. Local fixtures only; no provider traffic.');

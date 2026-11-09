@@ -11,6 +11,6 @@ export function PropertyAnalysisSummary({result}: {result: unknown}) {
    <div className="property-analysis-metric"><dt>Estimated repairs</dt><dd>{repairValue}</dd></div>
    <div className="property-analysis-metric"><dt>Value after repairs</dt><dd>{analysisMoney(view.arvCents)}</dd></div>
   </dl>
-  {view.calculation&&view.cashOfferCeilingCents!==null&&<details className="estimate-details"><summary>Offer calculation</summary><p>({analysisMoney(view.arvCents)} − {repairValue}) × {view.calculation.rulePercent}% − {analysisMoney(view.calculation.feeCents)} = {analysisMoney(view.cashOfferCeilingCents)}</p><p>Target assignment fee: {analysisMoney(view.calculation.feeCents)}. This is the fee you aim to receive for transferring the contract to a buyer. It is not confirmed earnings. Repairs are deducted before applying {view.calculation.rulePercent}%.</p></details>}
+  {view.calculation&&view.cashOfferCeilingCents!==null&&<details className="estimate-details"><summary>Offer calculation</summary><p>{analysisMoney(view.arvCents)} × {view.calculation.rulePercent}% − {repairValue} − {analysisMoney(view.calculation.feeCents)} = {analysisMoney(view.cashOfferCeilingCents)}</p><p>Target assignment fee: {analysisMoney(view.calculation.feeCents)}. This is the fee you aim to receive for transferring the contract to a buyer. It is not confirmed earnings. Apply {view.calculation.rulePercent}% to the value after repairs, then subtract repairs and the fee.</p></details>}
  </section>;
 }

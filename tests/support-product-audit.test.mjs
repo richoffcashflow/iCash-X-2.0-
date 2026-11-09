@@ -32,7 +32,7 @@ const cases=[
  ['so will I need to manual submit to the title company ?',/handle title submission in the app.*email the signed purchase agreement/,/outside the system|yourself outside/],
  ['once a cash offer is generated with the AI bot can it be adjusted or is that final ?',/calculated ceiling.*negotiate.*edit an unsigned agreement/,/can’t adjust|considered final/],
  ['does 2.0 still use deal machine automatically ?',/uses DealMachine for automatic property research/,/does not use|separate tool/],
- ['can 2.0 send me the details it used to calculate the cash offer so that I can use that to get the ARV ?',/Value after repairs.*Offer calculation.*\(ARV − repairs\) × 70% − wholesale fee/,/own methods|own tools|does not provide/],
+ ['can 2.0 send me the details it used to calculate the cash offer so that I can use that to get the ARV ?',/Value after repairs.*Offer calculation.*ARV × 70% − repairs − wholesale fee/,/own methods|own tools|does not provide/],
  ['how can i send buyers their ARV to make things faster',/buyer package can show.*View buyer package/,/does not send ARV/],
  ['does 2.0 tell buyers their ARV ?',/buyer package can show.*research ARV/,/does not send ARV/],
 ];

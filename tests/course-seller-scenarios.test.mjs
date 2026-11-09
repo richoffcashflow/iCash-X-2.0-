@@ -6,6 +6,14 @@ const responses=[['Yes','accept'],['No','counter'],['No thanks','refusal'],['Sto
 let count=0;
 for(const value of [100000,175000,200000,299999,300000,450000])for(const repairs of [0,10000,28000,60000])for(const payoff of [0,10000,80000]){
  const seed=sellerContext({value,repairs,payoff});const initial=sellerTurn(seed,'I need $900,000').plan;
+ const ceilingCents=Math.floor(value*100*0.7)-repairs*100-(value>=300000?20000:10000)*100;
+ if(ceilingCents<=0){
+  assert.equal(initial.kind,'review');assert.equal(initial.reason,'calculation_required');
+  assert.equal(initial.state.quotedPriceCents??null,null);assert.equal(initial.state.acceptedPriceCents??null,null);
+  const acceptance=sellerTurn(seed,'Yes').plan;
+  assert.equal(acceptance.kind,'review');assert.equal(acceptance.state.acceptedPriceCents??null,null);
+  count++;continue;
+ }
  assert(['cash_offer','payoff'].includes(initial.action),`${value}/${repairs}/${payoff}: ${initial.reason}`);
  for(const delivery of ['delivered','accepted','failed'])for(const [body,kind] of responses){
   const c=structuredClone(seed),outgoing=c.messages.at(-1);
@@ -31,9 +39,9 @@ for(const value of [100000,175000,200000,299999,300000,450000])for(const repairs
   count++;
  }
 }
-// Course sequence: $175k value and $28k repairs -> $92k rounded proposal.
+// Course sequence: $175k value and $28k repairs -> $84k rounded proposal.
 const course=sellerContext();let r=sellerTurn(course,'I do not have a price in mind');
-assert.equal(r.plan.state.quotedPriceCents,9200000);assert.equal(r.plan.action,'cash_offer');
+assert.equal(r.plan.state.quotedPriceCents,8400000);assert.equal(r.plan.action,'cash_offer');
 r=sellerTurn(course,'Yes');assert.equal(r.plan.action,'legal_name');
 r=sellerTurn(course,'My full legal name is Tim Fixture');assert.equal(r.plan.action,'owners');
 r=sellerTurn(course,'I am the sole owner and only decision maker');assert.equal(r.plan.action,'closing_date');
@@ -41,14 +49,14 @@ const close=new Date(now+30*86400000).toISOString().slice(0,10);
 r=sellerTurn(course,close);assert.equal(r.plan.action,'inspection');
 r=sellerTurn(course,'Yes');assert.equal(r.plan.action,'confirm_terms');
 const confirm=structuredClone(course);
-r=sellerTurn(course,'Yes, you can text the agreement');assert.equal(r.plan.kind,'agreement');assert.equal(r.plan.terms.priceCents,9200000);
+r=sellerTurn(course,'Yes, you can text the agreement');assert.equal(r.plan.kind,'agreement');assert.equal(r.plan.terms.priceCents,8400000);
 for(const answer of ['No','Wait','Yes, but change the price','My brother also owns the property','Send it if we close tomorrow']){
  const c=structuredClone(confirm);assert.notEqual(sellerTurn(c,answer).plan.kind,'agreement',answer);count++;
 }
 // A low counteroffer resumes automatically; it is never accepted on the seller's behalf.
 const counter=sellerContext();sellerTurn(counter,'I need $200,000');
 assert.equal(sellerTurn(counter,'No').plan.action,'seller_counterprice');
-r=sellerTurn(counter,'$90,000');assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.quotedPriceCents,9000000);assert.equal(r.plan.state.acceptedPriceCents,null);
+r=sellerTurn(counter,'$80,000');assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.quotedPriceCents,8000000);assert.equal(r.plan.state.acceptedPriceCents,null);
 assert.equal(sellerTurn(counter,'Yes').plan.action,'legal_name');
 // No repeat loop: two delivered unanswered requests then a specific review step.
 const repeated=structuredClone(counter);

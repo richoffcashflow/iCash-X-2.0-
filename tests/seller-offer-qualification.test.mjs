@@ -70,7 +70,7 @@ for(const [question,answer] of [['Is this the owner of 45 Fixture Lane?','No, wr
 const unknowns=qualifiedSellerTurns.map(turn=>turn.role==='user'&&/moving|roof|30 days/.test(turn.message)?u("I'd rather not say; I don't know yet."):turn);
 assert.equal(sellerOfferQualification({transcript:unknowns}).ready,true,'explicit unknowns/refusals do not repeat personal questions');
 assert.equal(sellerOfferQualification({transcript:ownerOnly},[{summary:'Seller is motivated, house vacant, needs roof, ready in 30 days.'}]).ready,false,'summaries cannot fabricate seller answers');
-assert.equal(sellerOfferQualification({transcript:ownerOnly},[{transcript:[...ownerOnly,a('We can offer $74,000 cash. Does that work?')]}]).ready,false,'the premature quote does not count as qualification');
+assert.equal(sellerOfferQualification({transcript:ownerOnly},[{transcript:[...ownerOnly,a('We can offer $60,000 cash. Does that work?')]}]).ready,false,'the premature quote does not count as qualification');
 assert.equal(sellerOfferQualification({transcript:[u('I am calling back.')]},[{transcript:qualifiedSellerTurns}]).ready,true,'real bound history preserves answers');
 assert.equal(sellerOfferQualification({transcript:qualifiedSellerTurns},[{transcript:[...ownerOnly,a('Is now a good time?'),u('No, not now.')]}]).ready,true,'a prior bad time does not block a later conversation');
 assert.equal(sellerOfferQualification({transcript:[...qualifiedSellerTurns,a('Is now a good time?'),u('Not now.')]}).stop,true);
@@ -90,8 +90,8 @@ turns=[...ownerOnly,a('What repairs are needed?'),u('The roof needs replacement.
 const repair=await call('update_repairs',{sellerStatement:'The roof needs replacement.'});
 assert.equal(repair.quoteAllowed,false);assert.equal(repair.factsSaved,true);assert.equal(context.offerState.sellerStatement,'The roof needs replacement.');
 assert.equal(repair.priceCents,null,'recording repairs cannot skip the remaining conversation');
-turns=qualifiedSellerTurns;const quote=await call('get_offer');assert.equal(quote.quoteAllowed,true);assert.equal(quote.priceCents,7400000);
-turns=[...turns,a('We can offer $74,000 cash. Does that work?'),u('Yes.')];
+turns=qualifiedSellerTurns;const quote=await call('get_offer');assert.equal(quote.quoteAllowed,true);assert.equal(quote.priceCents,6000000);
+turns=[...turns,a('We can offer $60,000 cash. Does that work?'),u('Yes.')];
 assert.equal((await call('accept_offer',{priceCents:quote.priceCents,quoteRevision:quote.quoteRevision})).status,'verbally_accepted');
 turns=[];assert.equal((await call('get_offer')).status,'verbally_accepted','accepted deal resumes closing rather than asking qualification again');
 context={party:'buyer',buyer:{askingPriceCents:8400000,address:'3614 FRANK ST'}};

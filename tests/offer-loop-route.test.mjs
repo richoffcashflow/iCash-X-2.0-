@@ -26,17 +26,17 @@ const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
 });
 const post=async body=>{const response=await route.POST(new Request('https://fixture.test/api/internal/voice/cash-offer',{method:'POST',headers:{authorization:'Bearer '+'a'.repeat(64)},body:JSON.stringify({conversationId:'conv_fixture',...body})}));assert.equal(response.status,200);return response.json();};
 const quote=await post({action:'update_repairs',sellerStatement:'Needs a new roof and new AC.',repairEstimateCents:null});
-assert.equal(quote.quoteAllowed,true);assert.equal(quote.priceCents,4800000);assert.equal(context.offerState.sellerStatement,actual);assert.equal(reads,1);
+assert.equal(quote.quoteAllowed,true);assert.equal(quote.priceCents,3400000);assert.equal(context.offerState.sellerStatement,actual);assert.equal(reads,1);
 // Anonymized spoken sequence from the November 4 repeat-question incident.
 transcript={transcript:[{role:'agent',message:'Is the property currently listed with a real estate agent?'},{role:'user',message:"No, it's not."}]};
 const unlisted=await post({action:'report_change',sellerStatement:"No, it's not."});
 assert.equal(unlisted.quoteAllowed,true);assert.equal(context.offerState.listedWithAgent,false);assert.equal(context.offerState.factsPending,undefined);
 transcript.transcript.push({role:'agent',message:'Does anyone else own the property with you who would need to agree to sell?'},{role:'user',message:'No, um, no.'});
 const coowner=await post({action:'report_change',sellerStatement:'No, um, no.'});
-assert.equal(coowner.quoteAllowed,true);assert.equal(coowner.priceCents,4800000);assert.equal(context.offerState.factsPending,undefined);
+assert.equal(coowner.quoteAllowed,true);assert.equal(coowner.priceCents,3400000);assert.equal(context.offerState.factsPending,undefined);
 const beforeHold=structuredClone(context.offerState);context.offerState.factsPending=true;
 assert.equal((await post({action:'report_change',sellerStatement:'No, um, no.'})).quoteAllowed,false,'ordinary answers never erase a previous material hold');
 assert.equal(context.offerState.factsPending,true);context.offerState=beforeHold;
 transcript={transcript:[{role:'agent',message:'Is the property currently listed with a real estate agent?'},{role:'user',message:'Yes.'}]};
 const listed=await post({action:'report_change',sellerStatement:'Yes, it is listed.'});assert.equal(listed.reason,'listed_with_agent');assert.equal(reads,5,'one provider transcript read per tool request');assert.equal((await post({action:'get_offer'})).quoteAllowed,false);
-console.log('PASS real POST handler: provider null request, full transcript recovery, rounded $48,000, persisted listing stop, zero external actions.');
+console.log('PASS real POST handler: provider null request, full transcript recovery, rounded $34,000, persisted listing stop, zero external actions.');

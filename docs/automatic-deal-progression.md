@@ -1,6 +1,6 @@
 # Automatic offer and deal progression
 
-Seller asking prices are negotiation inputs. They are neither an accepted offer nor a reason to require the customer to calculate a counteroffer. The existing owner-selected formula remains `(ARV - repairs) × 70% - fee`, with its existing rounding and financial checks. A higher seller ask produces the supported cash proposal; a lower ask can reduce that proposal. Existing accepted prices and prepared/signed agreements remain exact.
+Seller asking prices are negotiation inputs. They are neither an accepted offer nor a reason to require the customer to calculate a counteroffer. The existing owner-selected formula remains `ARV × 70% - repairs - fee`, with its existing rounding and financial checks. A higher seller ask produces the supported cash proposal; a lower ask can reduce that proposal. Existing accepted prices and prepared/signed agreements remain exact.
 
 ## Evidenced failures and scope
 

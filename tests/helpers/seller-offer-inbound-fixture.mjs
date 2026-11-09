@@ -15,7 +15,7 @@ export async function testSellerOfferInbound(f){
   await q("insert into public.icash_text_messages(id,account_id,thread_id,direction,state,created_at,body,provider_id) values(gen_random_uuid(),$1,$2,'outgoing','delivered',now()-interval '1 minute',$3,'synthetic')",[account,id,'Is this the owner of '+address+'?']);
   const lookup=()=>rpc('icash_recorded_reception_property_context',{p_id:r.id,p_nonce_hash:r.nonce_hash});
   const data=await lookup();assert.equal(data.address,address);assert.equal(data.dealStage,'draft');
-  const publicVars=sellerOfferReceptionVariables(data);assert.equal(JSON.parse(publicVars.icash_property_context).sellerOffer.priceCents,10200000);assert(!JSON.stringify(publicVars).includes('PRIVATE_FIXTURE'));assert(!JSON.stringify(publicVars).includes('screeningSnapshot'));
+  const publicVars=sellerOfferReceptionVariables(data);assert.equal(JSON.parse(publicVars.icash_property_context).sellerOffer.priceCents,9000000);assert(!JSON.stringify(publicVars).includes('PRIVATE_FIXTURE'));assert(!JSON.stringify(publicVars).includes('screeningSnapshot'));
   assert.equal(await rpc('icash_recorded_reception_property_context',{p_id:r.id,p_nonce_hash:'f'.repeat(64)}),null);
   await q("insert into public.icash_signing_envelopes values($1,$2,'purchase','awaiting_counterparty')",[account,id]);
   assert.equal(JSON.parse(sellerOfferReceptionVariables(await lookup()).icash_property_context).sellerOffer,null);

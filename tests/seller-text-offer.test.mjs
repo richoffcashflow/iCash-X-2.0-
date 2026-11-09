@@ -61,9 +61,9 @@ async function run(c,body,extra={}){
 // Floral City class: a seller ask above the saved proposal/model is a counteroffer,
 // not an invented acceptance of the customer's old $215k proposal.
 const c=await seed();let r=await run(c,'$210,000 works for me');
-assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.quotedPriceCents,10200000);assert.equal(r.plan.state.acceptedPriceCents,null);
+assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.quotedPriceCents,9000000);assert.equal(r.plan.state.acceptedPriceCents,null);
 assert.match(r.plan.body,/You asked \$210,000/);assert.equal(r.progress.reason,'awaiting_seller_reply');
-r=await run(c,'Yes');assert.equal(r.plan.action,'legal_name');assert.equal(r.plan.state.acceptedPriceCents,10200000);
+r=await run(c,'Yes');assert.equal(r.plan.action,'legal_name');assert.equal(r.plan.state.acceptedPriceCents,9000000);
 r=await run(c,'My full legal name is Jane Seller');assert.equal(r.plan.action,'owners');
 r=await run(c,'Yes, I am the only owner and decision maker');assert.equal(r.plan.action,'closing_date');
 const close=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
@@ -77,7 +77,7 @@ const namedClose=new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'long',da
 assert.equal(planSellerTextOffer({...r.context,messages:r.context.messages.map(m=>m.id===r.source.id?{...m,body:'We can close on '+namedClose}:m)}).state.closing.date,close);
 r=await run(c,'Yes');assert.equal(r.plan.action,'confirm_terms');assert(r.plan.body.length<=160);
 r=await run(c,'Yes, send the agreement');assert.equal(r.plan.kind,'agreement');assert.equal(r.result.status,'seller_agreement_sent');assert.equal(sends,1);assert.equal(texts,1);assert.equal(r.progress.state,'waiting');
-assert.equal((await one('select terms from icash_deal_files where id=$1',[c.d])).terms.priceCents,10200000);
+assert.equal((await one('select terms from icash_deal_files where id=$1',[c.d])).terms.priceCents,9000000);
 assert.equal(await rpc('icash_claim_seller_text_agreement',[c.a,r.j.id]),null,'one-use signing claim');
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[c.a])).n,1);
 
@@ -93,10 +93,10 @@ r=await run(rejected,'Yes');assert.equal(r.plan.action,'legal_name');assert.equa
 // A new price question reopens negotiation even after an earlier yes. It is
 // neither a legal-name answer nor acceptance of the current or requested price.
 for(const [body,asking,quoted] of [
- ['Could you do $120,000?',12000000,10200000],
+ ['Could you do $120,000?',12000000,9000000],
  ['Can you pay me $90,000?',9000000,9000000],
- ['Would you offer one hundred twenty thousand dollars?',12000000,10200000],
- ['Will you do $102,000?',10200000,10200000],
+ ['Would you offer one hundred twenty thousand dollars?',12000000,9000000],
+ ['Will you do $102,000?',10200000,9000000],
 ]){
  const counter=await seed();await run(counter,'I need $210k');
  r=await run(counter,'Yes');assert.equal(r.plan.action,'legal_name');
@@ -167,7 +167,7 @@ assert.equal(await rpc('icash_seller_text_offer_context',[c.a,source.id]),null,'
 for(const body of ['I need $210k','I want $210,000','$210,000 works for me'])assert.equal(callSellerPriceEvidence({transcript:[{role:'user',message:body}]},{action:'report_change',sellerStatement:body}),21000000);
 for(const body of ['I need $210k net','I need $210k if you close Friday','I owe $210k','Not $210k'])assert.equal(callSellerPriceEvidence({transcript:[{role:'user',message:body}]},{action:'report_change',sellerStatement:body}),null);
 for(const question of ['How much is the repair budget?','What is your mortgage payoff balance?'])assert.equal(callSellerPriceEvidence({transcript:[{role:'agent',message:question},{role:'user',message:'I need $40k'}]},{action:'report_change',sellerStatement:'I need $40k'}),null,'do not convert another dollar answer into seller ask');
-const base={party:'seller',address:terms.address,snapshot};assert.equal(calculateAutomaticCallOffer(base,{proposedPriceCents:21000000}).priceCents,10200000);
+const base={party:'seller',address:terms.address,snapshot};assert.equal(calculateAutomaticCallOffer(base,{proposedPriceCents:21000000}).priceCents,9000000);
 assert.equal(calculateAutomaticCallOffer(base,{proposedPriceCents:9000000}).priceCents,9000000);
 assert.equal(calculateAutomaticCallOffer(base,{acceptedPriceCents:9000000,proposedPriceCents:21000000}).priceCents,9000000,'accepted price is not silently increased');
 assert.equal(calculateAutomaticCallOffer({...base,pendingAgreement:{priceCents:9500000,closingDate:close}},{proposedPriceCents:21000000}).priceCents,9500000,'prepared agreement stays frozen');
