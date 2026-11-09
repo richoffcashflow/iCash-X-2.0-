@@ -6,6 +6,8 @@ The owner requested a support system that keeps improving without repeated manua
 
 Existing deterministic product guidance, model-response checks, account evidence and atomic reply finishing remain in place. Two failed troubleshooting follow-ups in the same issue now trigger management review instead of another cycle of instructions. A single failed step, an unrelated question, routine product guidance, an intervening operator response or a successful result does not create that sequence. Guest and account chat use the same detector. The server records management review together with the actual saved reply; the model cannot claim a handoff independently.
 
+Explicit account-deletion requests enter the existing management-review path instead of repeating subscription-cancellation instructions. Short follow-ups preserve that request only until the customer changes subject. Prior operator findings and independently actionable payment checks remain visible; deletion is unconfirmed and no account, billing or identity action is performed. Fictional account/guest replays cover withdrawal, unrelated deletion objects, topic changes and mixed payment complaints.
+
 ## Recurring controller
 
 The separate **Improve iCash support** task checks hourly. The existing **Automatic iCash releases** task continues to own the release queue. Read this document and `docs/automatic-releases.md` from current main, inspect open PRs and exact deployed commits, and preserve other work. Before this implementation reaches main, use the task prompt to continue read-only observation and avoid duplicating its open PR.
