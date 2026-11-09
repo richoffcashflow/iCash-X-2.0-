@@ -25,7 +25,7 @@ try{
  create table fixture_sms_plans(account_id uuid,thread_id uuid,plan jsonb,primary key(account_id,thread_id));
  create function public.icash_seller_sms_learning_plan(a uuid,t uuid) returns jsonb language sql stable as $$select plan from public.fixture_sms_plans where account_id=a and thread_id=t$$;`);
  await db.exec(read('config/learning-policy-lifecycle.sql'));
- assert.equal(read('config/learning-policy-lifecycle.sql'),read('supabase/migrations/20261104053328_learning_policy_lifecycle.sql'));
+ assert.equal(read('config/learning-policy-lifecycle.sql'),read('supabase/migrations/20261109184429_learning_policy_lifecycle.sql'));
  const activate=(release=sha)=>v('select icash_activate_learning_policy($1,$2,true)',[owner,release]);
  const release=async(releaseSha,run)=>q("insert into icash_learning_private.policy_releases(release_sha,ci_run_id,ci_run_attempt,repository,workflow,branch,event,conclusion,completed_at) values($1,$2,1,'richoffcashflow/iCash-X-2.0-','.github/workflows/reliability.yml','main','push','success',now()-interval '4 days')",[releaseSha,run]);
  await assert.rejects(activate(),/Canonical successful release required/);await release(sha,123);
