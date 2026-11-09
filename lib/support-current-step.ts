@@ -4,6 +4,7 @@ import {supportCodeDelivery} from './support-code-delivery.ts';
 import {hasRecordedAccessPaymentCheck,missingAccessCodeReply} from './support-access-reply.ts';
 import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-reply-style.ts';
 import {supportCustomVoiceReply} from './support-custom-voice.ts';
+import {supportOfferCodeReply} from './support-checkout.ts';
 
 /** Source-backed answers to the customer's current step. Prior assistant text
  * supplies a topic only, never proof of payment, authority, delivery or a fix. */
@@ -15,6 +16,7 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
  const answer=(reply:string,status:SupportReply['status']='open'):SupportReply=>({reply,status,ai:false});
  const guidance=(reply:string,status:SupportReply['status']='open'):SupportReply=>({...answer(reply,status),...(supportRoutineGuidanceQuestion(q)?{routineGuidance:true as const}:{})});
  if(/\b(?:refund|cancel|charged twice|duplicate charge|unrecognized charge)\b/i.test(q))return null;
+ const offerCode=supportOfferCodeReply(context.messages);if(offerCode)return offerCode;
 
  // Payment details supplied during sign-in troubleshooting are not a question
  // about buying work credits. A missing receipt cannot be used for verification.

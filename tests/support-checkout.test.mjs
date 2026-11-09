@@ -32,6 +32,35 @@ for(const kind of ['access','account']){
  const claim=supportConversationFallback({...context,messages:[user('I bought iCash X 1.0. Give me the free two-month offer.')]});assert.match(claim.reply,/receipt/);assert.doesNotMatch(claim.reply,/legacy-offer|Resume a checkout/);
 }
 assert.equal(modelCalls,0);
+// Fictional pre-checkout code reports must not assume a paid purchase receipt.
+for(const kind of ['access','account']){
+ const context={kind,contactKnown:true};
+ for(const text of ['The free two month offer asked for my details but no code arrived.', 'I have a legacy offer link and cannot get the code to finish checkout.', 'I selected two months free and entered my information, but I have no code.']){
+  const start=[user(text)];
+  const answer=await replyToSupport({...context,messages:start},noModel);
+  assert.match(answer.reply,/does not by itself confirm that checkout finished/i);
+  assert.match(answer.reply,/which page/i);
+  assert.doesNotMatch(answer.reply,/payment receipt|enter the newest|request.*fresh|active subscription/i);
+  assert.notEqual(answer.status,'resolved');
+  const history=[...start,assistant(answer.reply)];
+  const handoff=await replyToSupport({...context,handedOff:true,messages:[...history,user('Please request management review.'),assistant('Your case is in management review.'),user('Still no code.')]},noModel);
+  assert.doesNotMatch(handoff.reply,/payment receipt|request.*fresh|enter the newest/i);assert.equal(handoff.status,'open');
+  for(const detail of ['The legacy checkout is still asking for a code.', 'No code arrived, and I checked spam.', 'Can you send the code here?', 'Secure checkout', 'Resume a checkout from another device', 'The sign-in page', 'The offer has not completed, still no code.', 'I am not signed in; no code arrived.']){
+   const next=await replyToSupport({...context,messages:[...history,user(detail)]},noModel);
+   assert.match(next.reply,/still unresolved|still.*review/i);
+   assert.doesNotMatch(next.reply,/payment receipt|request.*fresh|enter the newest|Which device/i);
+   assert.equal(next.status,'open');
+  }
+  for(const detail of ['Where is the course?', 'Cancel my subscription', 'I was charged twice', 'How do I call a seller?', 'Checkout completed successfully. My sign-in code has not arrived.', 'Checkout is confirmed, but no code arrived.']){
+   const next=await replyToSupport({...context,messages:[...history,user(detail)]},noModel);
+   assert.doesNotMatch(next.reply,/which page.*code|does not by itself confirm|offer’s code step/i);
+  }
+  const corrected=await replyToSupport({...context,messages:[...history,{role:'operator',content:'The checkout is verified complete. Continue with sign-in troubleshooting.'},user('My sign-in code has not arrived.')]},noModel);
+  assert.doesNotMatch(corrected.reply,/does not by itself confirm|offer’s code step/i);
+  assert.equal((await replyToSupport({...context,messages:[...history,user('That worked.')]},noModel)).status,'resolved');
+ }
+}
+assert.equal(modelCalls,0);
 let membership={state:'active',price_cents:5000,legacy_trial_started_at:new Date().toISOString(),legacy_trial_end:new Date(Date.now()+86400000).toISOString(),paid_through:new Date(Date.now()+86400000).toISOString()};
 const unavailable=()=>{throw Error('Unrelated fixture check unavailable');};
 const {collectSupportDiagnostics}=await loadService('lib/support-diagnostics.ts',{accountMembership:async id=>{assert.equal(id,'owned-account');return membership;},membershipAccessible,db:unavailable,fundingMode:()=> 'live',launchReadiness:unavailable,readCourseProgress:unavailable,courseProgressEvidence:unavailable,supportOutreachEvidence:unavailable,supportVoiceEvidence:unavailable});
