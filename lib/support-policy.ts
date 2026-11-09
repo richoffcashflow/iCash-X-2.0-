@@ -14,12 +14,18 @@ export const supportStatusInput = z.object({requestId:supportId,threadId:support
 export function supportDuplicateCharge(text:string){
  return /\b(?:charg(?:e|ed)|billed|paid|debited)\b.{0,40}\b(?:twice|double|two times)\b|\b(?:duplicate|double)\s+(?:card\s+)?charges?\b|\b(?:two|2)\s+(?:charges|payments)\b|\bduplicate\s+payments?\b(?!\s+methods?)/i.test(text);
 }
+/** Reply intent only: never authorizes cancellation or treats past cancellation as a new request. */
+export function supportRenewalCancellationRequested(text:string){
+ const q=text.replace(/[’']/g,"'");
+ return /\bcancel(?:l?ing)?\s+(?:(?:my|the|this|our|your|current|monthly|annual|iCash\s*X)\s+){0,4}(?:subscription|membership|renewals?)\b/i.test(q)
+  && !/\b(?:not|never|don't|do not|no longer)(?:\s+(?:want|intend|plan|going|to)){0,3}\s+cancel(?:l?ing)?\b/i.test(q);
+}
 export function supportTopic(text:string):SupportTopic {
  if(/^(hi|hello|hey|thanks|thank you)[.!?\s]*$/i.test(text.trim()))return 'general';
  if(supportDuplicateCharge(text))return 'billing';
  if(/\b(?:refund|money back)\b/i.test(text))return 'refund';
  if(/\b(?:human|escalate)\b|\b(?:live help|live support|customer service|support representative)\b|\b(?:speak|talk|connect|transfer)\b.{0,35}\b(?:person|agent|owner|someone)\b|\b(?:live|real)\s+(?:person|agent)\b/i.test(text))return 'human';
- if(/\b(cancel|delete|refund)\b/i.test(text)||/^(?:please\s+)?stop[.!?\s]*$/i.test(text.trim())||/\b(?:want to|please|help me|can you)\s+stop\b|\bstop (?:my |the |future )?(?:bot|work|renewals|billing|plan|subscription)\b/i.test(text))return 'cancel';
+ if(supportRenewalCancellationRequested(text)||/\b(cancel|delete|refund)\b/i.test(text)||/^(?:please\s+)?stop[.!?\s]*$/i.test(text.trim())||/\b(?:want to|please|help me|can you)\s+stop\b|\bstop (?:my |the |future )?(?:bot|work|renewals|billing|plan|subscription)\b/i.test(text))return 'cancel';
  if(/\b(bill|billing|charge|charged|payment|card|credit|balance|renewal)\b/i.test(text))return 'billing';
  if(/\b(sign.?in|setup|start|login)\b/i.test(text))return 'setup';
  return 'work';

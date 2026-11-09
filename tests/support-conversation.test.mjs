@@ -190,3 +190,38 @@ try{
  assert.match(supportConversationFallback({kind:'account',messages:[user('You charged me twice'),assistant('What dates and amounts appear for the two charges?'),user('Cancel my subscription')]}).reply,/Chat messages alone do not cancel/,'A prior charge issue must not override a new cancellation request');
 }finally{process.env=env;}
 console.log('PASS support conversations: multi-turn missing details, resolution, continued automatic troubleshooting, cancellation boundaries, redaction, bounded structured AI, provider failure and replay fallback; no real provider requests.');
+
+// Fictional spelling variants must retain renewal instructions alongside refunds.
+for (const kind of ['account','access']) {
+ for (const spelling of ['cancelling','canceling']) {
+  const mixed=await replyToSupport({kind,allowAI:false,messages:[user(`I am ${spelling} my membership. I also want a refund.`)]});
+  assert.match(mixed.reply,/Cancel subscription/);
+  assert.match(mixed.reply,/confirm/i);
+  assert.doesNotMatch(mixed.reply,/(?:I|we) (?:have )?cancelled|renewals (?:are|have been) stopped/i);
+  assert(!['closed','resolved'].includes(mixed.status));
+  const only=await replyToSupport({kind,allowAI:false,messages:[user(`I am ${spelling} my subscription.`)]});
+  assert.match(only.reply,/Cancel subscription/);
+ }
+ for (const q of ['I am not cancelling my membership; I want a refund.','I am no longer cancelling my subscription, but I want a refund.','I already cancelled my membership and want a refund.','I am cancelling a seller appointment and want a refund.','I am cancelling a viewing, keeping my subscription, and requesting a refund.']) {
+  const negative=await replyToSupport({kind,allowAI:false,messages:[user(q)]});
+  assert.doesNotMatch(negative.reply,/Open the workspace account menu|then Cancel subscription/);
+ }
+ const changed=await replyToSupport({kind,allowAI:false,messages:[user('I am cancelling my membership and want a refund.'),assistant('Open Cancel subscription and confirm.'),user('Where can I watch the course?')]});
+ assert.doesNotMatch(changed.reply,/Cancel subscription|All sales are final/);
+}
+const blockedCancel=await replyToSupport({kind:'access',allowAI:false,messages:[user('My sign-in code never arrived.'),assistant('Which mailbox did you check?'),user('I checked the receipt mailbox and spam. No code. I am cancelling my subscription and want a refund.')]});
+assert.match(blockedCancel.reply,/stop future renewals|cancellation/);
+assert.match(blockedCancel.reply,/not cancelled|has not cancelled|not been cancelled/);
+assert.doesNotMatch(blockedCancel.reply,/sign in and open|request (?:one|another|a new) code/i);
+assert(!['resolved','closed'].includes(blockedCancel.status));
+
+for (const kind of ['account','access']) {
+ const afterReview=await replyToSupport({kind,handedOff:true,allowAI:false,messages:[{role:'operator',content:'The earlier problem remains unresolved.'},user('I am cancelling my membership because this issue continues.')]});
+ assert.match(afterReview.reply,/Cancel subscription/);
+ assert.notEqual(afterReview.status,'resolved');
+ const duplicateCancel=await replyToSupport({kind,allowAI:false,messages:[user('I was charged twice. I am canceling my subscription and want a refund.')]});
+ assert.match(duplicateCancel.reply,/duplicate-charge report/);
+ assert.match(duplicateCancel.reply,/stop future renewals/);
+ assert.doesNotMatch(duplicateCancel.reply,/All sales are final/);
+}
+console.log('PASS fictional cancellation spelling, mixed refund/access/duplicate-charge, operator-history and topic-change boundaries. No account actions.');

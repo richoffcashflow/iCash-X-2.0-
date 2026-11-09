@@ -1,4 +1,5 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
+import {supportRenewalCancellationRequested} from './support-policy.ts';
 import {supportVoicemailComplaint} from './support-inbox-guidance.ts';
 
 const outreachConcern=(text:string)=>/\b(?:bot|automated|automation|research|outreach|calls?|texts?|sellers?|properties|leads?)\b/i.test(text)&&/\b(?:slow|slower|not doing much|not doing anything|no interested|no interest|haven[’']?t (?:gotten|got|had|received).{0,30}interested)\b/i.test(text);
@@ -11,6 +12,7 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const users=context.messages.filter(m=>m.role==='user'),q=users.at(-1)?.content??'';
  const previous=context.messages.findLast(m=>m.role==='assistant'||m.role==='operator')?.content??'';
  const answer=(reply:string,managementReview=false):SupportReply=>({reply,status:'open',ai:false,...(managementReview?{managementReview:true}:{})});
+ if(supportRenewalCancellationRequested(q))return null;
  if(/\b(?:refund|money back|cancel (?:my|the|this) (?:subscription|membership)|charged twice|duplicate charge)\b/i.test(q))return null;
  // Specific call-result complaints must reach their guidance before incidental
  // words such as "automated calls" and "available fix" match capability checks.
