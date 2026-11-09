@@ -6,6 +6,15 @@ import {callContactEvidence,hasHumanCallWords,automatedAnswerInstructions} from 
 import {liveConversationResult,productionDealInstructions} from '../lib/deal-conversation.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const fixtures=[
+ ['Finished recording. You may hang up.',false],['... have finished recording, you may hang up.',false],
+ ["When that's finished recording, you may hang up.",false],['... recording, you may hang up.',false],
+ ['... phone, press the pound key to end recording.',false],['To end recording.',false],
+ ['¿Puedes colgar cuando hayas terminado de grabarlo?',false],
+ ['No se ha grabado nada. Grabe su mensaje después de la señal.',false],
+ ['Deje después del tono. Puedes colgar cuando hayas terminado de grabarlo.',false],
+ ['3553 is not available.',false],['This is a recorded message. You may hang up.',false],
+ ['I finished recording a message for you. I own that house.',true],['You may hang up.',true],
+
  ['',false],['...',false],['…',false],['[Music]',false],['(silence)',false],['[inaudible]',false],
  ['At the tone, please record your message.',false],['Please leave your message for-',false],
  ["When you've finished recording, you may hang up or press one for more options.",false],
@@ -33,6 +42,7 @@ try{
  await db.exec("create table icash_opportunity_refreshes(refreshed_at timestamptz);insert into icash_opportunity_refreshes values(now());");
  const variants=read('supabase/migrations/20261105072921_seller_voicemail_response_variants.sql');
  await db.exec(variants);
+ await db.exec(read('config/automated-call-evidence-variants.sql'));
  for(const [message,expected] of fixtures){
   assert.equal(hasHumanCallWords(message),expected,message);
   const result={transcript:[{role:'user',message},{role:'user',message:'...'}]};
@@ -62,6 +72,7 @@ try{
  // that optimization while remaining compatible with the original predicate.
  await db.exec(read('tests/fixtures/call-response-fast-path.sql'));
  await db.exec(variants);
+ await db.exec(read('config/automated-call-evidence-variants.sql'));
  const fast=(await db.query("select pg_get_functiondef('icash_call_has_seller_response(jsonb)'::regprocedure) as definition")).rows[0].definition;
  assert.match(fast,/case when/);assert.match(fast,/else public.icash_seller_response_disposition/);
  for(const [message,expected] of fixtures)assert.equal((await db.query('select icash_call_has_seller_response($1) value',[{transcript:[{role:'user',message}]}])).rows[0].value,expected);

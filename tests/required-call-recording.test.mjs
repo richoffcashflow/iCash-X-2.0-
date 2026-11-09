@@ -84,6 +84,7 @@ for(const policy of ['direct_recorded_v1','spoken_v1']){
  await voicemailWire.register(row,600,token);
  const data=voicemailBodies.at(-1).conversation_initiation_client_data,prompt=data.conversation_config_override.agent.prompt.prompt;
  assert(prompt.indexOf('VOICEMAIL CUTOFF:')>prompt.indexOf('Earlier saved context'));
+ assert.match(prompt,/OUTBOUND DIRECTION: You placed this call/);assert.match(prompt,/Never require qualification before honoring a request to end/);assert.match(prompt,/business phone menu, call-screening assistant/);assert.match(prompt,/Never repeat silence checks/);
  assert.match(prompt,/immediately call icash_stop_recording/);assert.match(prompt,/callEnded is not true, immediately use end_call/);
  assert.match(prompt,/live person's mention of voicemail.*not confirmed voicemail/);
  assert.equal(data.dynamic_variables.icash_recording_id,id);assert.equal(data.dynamic_variables.secret__icash_recording_stop_token,token);

@@ -57,6 +57,12 @@ try{
  await pg.exec(read('config/seller-optout-base-verbs.sql'));
  await pg.exec(read('config/seller-natural-refusals.sql'));
  await pg.exec(read('config/seller-negative-response-holds.sql'));
+ await pg.exec(`create table icash_sms_seller_openings(account_id uuid,thread_id uuid,owner_question_id uuid,owner_reply_id uuid,interest_message_id uuid);
+ alter table icash_text_ai_jobs add column outgoing_id uuid,add column analysis jsonb;
+ create function icash_sms_reply_time(p_id uuid) returns numeric language sql stable as $$select extract(epoch from created_at) from public.icash_text_messages where id=p_id$$;`);
+ await pg.exec(fn('config/seller-reply-progress.sql','icash_refresh_seller_reply_progress'));
+ await pg.exec(read('config/seller-source-dispositions.sql'));
+
  await pg.exec(fn('config/manual-deal-email.sql','icash_record_deal_email_reply'));
  await pg.exec('create trigger fixture_meta_observe_text after insert or update of state,provider_id on icash_text_messages for each row execute function icash_meta_observe_text()');
  const a=randomUUID(),b=randomUUID(),screen=randomUUID(),otherScreen=randomUUID(),deal=randomUUID(),otherDeal=randomUUID(),thread=randomUUID(),otherThread=randomUUID(),permission=randomUUID(),otherPermission=randomUUID(),lead=randomUUID();
@@ -70,7 +76,7 @@ try{
  await q("insert into icash_contact_permissions(id,account_id,screening_id,party,phone,contact_key,seller_intake_id) values($1,$2,$3,'seller',$4,$5,$6),($7,$8,$9,'seller',$4,$5,$6)",[permission,a,screen,phone,hash,lead,otherPermission,b,otherScreen]);
  const outgoing=randomUUID(),attemptedText=randomUUID(),manualText=randomUUID(),job=randomUUID(),reservedJob=randomUUID(),unknownJob=randomUUID(),call=randomUUID(),callback=randomUUID(),ai=randomUUID(),mail=randomUUID();
  await q("insert into icash_text_messages(id,account_id,thread_id,direction,state,body,provider_id,customer_author_id) values($1,$2,$3,'outgoing','ready','Follow up',null,null),($4,$2,$3,'outgoing','dispatching','Already claimed',null,null),($5,$2,$3,'outgoing','ready','Human reply',null,$6)",[outgoing,a,thread,attemptedText,manualText,randomUUID()]);
- await q("insert into icash_text_ai_jobs values($1,$2,$3,'pending',now())",[ai,a,thread]);
+ await q("insert into icash_text_ai_jobs(id,account_id,thread_id,state,updated_at) values($1,$2,$3,'pending',now())",[ai,a,thread]);
  await q("insert into icash_voice_jobs(id,account_id,permission_id,state,outcome) values($1,$2,$3,'ready',null),($4,$2,$3,'issued',null),($5,$2,$3,'held','provider_outcome_unknown_no_retry')",[job,a,permission,reservedJob,unknownJob]);
  await q("insert into icash_operation_spend values($1,$2,'reserved',null),($3,$2,'reserved',null),($4,$2,'reserved',null)",['voice:'+reservedJob,a,'text:'+outgoing,'sms-ai:'+ai]);
  await q("insert into icash_live_conversations values($1,$2,$3,$4,'seller','waiting',null,null)",[call,a,screen,hash]);
@@ -100,9 +106,9 @@ try{
   assert.deepEqual((await one("select icash_transition_call_recording($1,$2,$3,'recording','reconcile','{}') result",[randomUUID(),a,'voice:'+reservedJob])).result,{reconciled:true});
   assert.equal((await one('select stage from icash_deal_files where id=$1',[deal])).stage,'draft','no invented legal cancellation');
  };
- for(const text of ['I have told yall NO','I am tired of these texts','not super interested','This sounds like a scam','not a scam?'])await isolated(async()=>{await sms(text);await stopped();assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0);});
+ for(const text of ['Wrong phone number','Yes, I do not for sale','I have told yall NO','I am tired of these texts','not super interested','This sounds like a scam','not a scam?'])await isolated(async()=>{await sms(text);await stopped();assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0);});
  for(const text of ['The roof is terrible and the house needs repairs','not a scam, happy to proceed',"I never said not interested, I want to sell",'You wrote STOP in your message'])await isolated(async()=>{await sms(text);assert.equal((await one('select count(*) n from icash_property_controls')).n,0,text);assert.equal((await one("select icash_text_signal($1,'seller') signal",[text])).signal,null,text);});
- for(const body of ['Stop asking me cause I will not fucking sale shit','I am tired of these texts. Stop.','STOP','Stop text me','Stop contact me','Stop call me','Stop message me'])await isolated(async()=>{await sms(body);assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1);assert.equal((await one('select count(*) n from icash_email_suppressions')).n,2,'exact shared phone opt-out propagates to its bound emails');assert.equal((await one('select revoked_at is not null revoked from icash_contact_permissions where id=$1',[permission])).revoked,true);assert.equal(await allowed('text:'+manualText),false,'manual sends never bypass permanent suppression');});
+ for(const body of ['Please remove this number from your mailing and contact list. Thanks, and goodbye.',"Don’t send me any message again",'Stop asking me cause I will not fucking sale shit','I am tired of these texts. Stop.','STOP','Stop text me','Stop contact me','Stop call me','Stop message me'])await isolated(async()=>{await sms(body);assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1);assert.equal((await one('select count(*) n from icash_email_suppressions')).n,2,'exact shared phone opt-out propagates to its bound emails');assert.equal((await one('select revoked_at is not null revoked from icash_contact_permissions where id=$1',[permission])).revoked,true);assert.equal(await allowed('text:'+manualText),false,'manual sends never bypass permanent suppression');});
  await isolated(async()=>{await sms('not interested',{account:b,thread});assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'mismatched source tenant ignored');});
  await isolated(async()=>{await q("update icash_deal_files set terms='{\"practice\":true}' where id=$1",[deal]);await sms('STOP');assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0,'practice source is excluded');});
  for(const source of ['call','inbound_call'])await isolated(async()=>{
@@ -171,6 +177,23 @@ try{
   }
   assert.equal((await one('select icash_claim_operation($1) claimed',['voice:'+pooledReserved])).claimed,false);
   assert.equal((await one('select n from fixture_claims')).n,0);
+ });
+
+ for(const body of ['No','Naw','No, I don’t','Sold','Already sold'])await isolated(async()=>{
+  const question=randomUUID();
+  await q("update icash_text_messages set created_at=now()-interval '2 minutes'");
+  await q("insert into icash_text_messages(id,account_id,thread_id,direction,state,body,provider_id,created_at) values($1,$2,$3,'outgoing','delivered','Do you own 12 Oak Road?','question-receipt',now()-interval '1 minute')",[question,a,thread]);
+  await q('insert into icash_sms_seller_openings values($1,$2,$3,null,null)',[a,thread,question]);
+  await sms(body);await stopped();assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0,'A scoped ownership refusal is not permanent DNC');
+ });
+ for(const body of ['No','Naw','No roof damage','I said "no" to repairs'])await isolated(async()=>{
+  await sms(body);assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'No source-bound question: '+body);
+ });
+ for(const state of ['ready','accepted','failed'])await isolated(async()=>{
+  const question=randomUUID();await q("update icash_text_messages set created_at=now()-interval '2 minutes'");
+  await q("insert into icash_text_messages(id,account_id,thread_id,direction,state,body,provider_id,created_at) values($1,$2,$3,'outgoing',$4,'Do you own 12 Oak Road?','receipt',now()-interval '1 minute')",[question,a,thread,state]);
+  await q('insert into icash_sms_seller_openings values($1,$2,$3,null,null)',[a,thread,question]);await sms('No');
+  assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'An undelivered question cannot explain no');
  });
  await pg.exec('set role anon');await assert.rejects(()=>q('select icash_apply_seller_response($1,$2)',['sms',randomUUID()]),/permission denied/);await pg.exec('reset role');
  assert.equal(read('config/seller-negative-response-holds.sql'),read('supabase/migrations/20261019183500_seller_negative_response_holds.sql'));
