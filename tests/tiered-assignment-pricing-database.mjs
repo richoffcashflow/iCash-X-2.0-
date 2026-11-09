@@ -61,7 +61,7 @@ try{
   const plan=await pricing(price,arv,repairs,explicitFee);
   assert.equal(plan.ready,true);assert.equal(plan.assignmentFeeCents,expectedFee);
   assert.equal(plan.assignmentDepositCents,buyerDepositCents(expectedFee));
-  assert.equal(plan.buyerCeilingCents,cashOfferCalculation(arv*100,repairs*100).buyerCeilingCents);
+  assert.equal(plan.buyerCeilingCents,Math.floor(Math.max(arv*100-repairs*100,0)*0.7));
   assert(plan.askingPriceCents<=plan.buyerCeilingCents);assert.equal(plan.askingPriceCents%100000,0);
   const item=await make(price,arv,repairs,explicitFee);
   assert.equal(await prep(item.deal),true);
@@ -123,6 +123,61 @@ try{
  assert.equal((await one('select count(*) n from icash_seller_recovery_variants where enabled')).n,7,'only approved variants activated');
  assert.equal(await rpc('icash_deal_recovery',{p_account:other,p_deal:rescue.deal}),null);
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'public.icash_authorize_deal_recovery(uuid,uuid,uuid,uuid,text,bigint)','execute') allowed",[role])).allowed,false);
+ // Install only the automatic calculator prerequisite (the voice claim is unrelated).
+ await pg.exec(readFileSync('config/automatic-cash-offer-voice.sql','utf8').split('create function public.icash_claim_automatic_offer_voice_job')[0]+'commit;');
+ await q('revoke all on function public.icash_automatic_cash_offer_price(jsonb) from public,anon,authenticated');
+ const accepted=await make(20200000,350000,50000);
+ const protectedTables=['icash_deal_files','icash_signing_envelopes','icash_disposition_authorities','icash_buyer_package_links','icash_deal_recovery_authorizations'];
+ const records=async()=>Promise.all(protectedTables.map(async t=>(await q(`select to_jsonb(t) row from ${t} t order by to_jsonb(t)::text`)).rows));
+ const protectedBefore=await records();
+ const formulaMigration=readFileSync('config/seventy-percent-offer-formula.sql','utf8');
+ assert.equal(formulaMigration,readFileSync('supabase/migrations/20261109120000_seventy_percent_offer_formula.sql','utf8'));
+ await pg.exec(formulaMigration);
+ assert.deepEqual(await records(),protectedBefore,'migration never updates accepted/signed terms or published prices, fees, deposits and recovery receipts');
+ assert.equal(await prep(legacy.deal),true);
+ assert.deepEqual(await rpc('icash_ensure_buyer_package',{p_account:account,p_deal:legacy.deal}),legacyLink);
+ assert.equal(await prep(rescue.deal),true,'published old-budget recovery remains valid');
+ assert.deepEqual(await rpc('icash_ensure_buyer_package',{p_account:account,p_deal:rescue.deal}),rescuedPackage);
+ assert.equal(await prep(accepted.deal),false,'unpublished old-price deal holds instead of rewriting seller terms');
+ assert.deepEqual((await saved(accepted.deal)).terms,accepted.terms);
+ for(const [arv,repairs] of [[350000,50000],[299999.99,40000],[300000,40000],[203000,23905],[100000.01,0.01],[10000,8000],[10000,20000],[0,0]]){
+  const snap=snapshot(arv,repairs);
+  Object.assign(snap.raw.data,{dm_property_id:snap.propertyId,full_address:'123 Main Street'});
+  const calc=cashOfferCalculation(Math.round(arv*100),Math.round(repairs*100));
+  assert.equal(await rpc('icash_automatic_cash_offer_price',{p_snapshot:snap}),calc.sellerCeilingCents,'automatic seller cents match TS, including negative and fractional-cent budgets');
+  if(calc.sellerCeilingCents>=100000){
+   const price=Math.floor(calc.sellerCeilingCents/100000)*100000;
+   for(const minimum of [undefined,1000000,500000]){
+    const args={p_price:price,p_snapshot:snap,p_fee:null,...(minimum===undefined?{}:{p_minimum:minimum})};
+    const plan=await rpc('icash_buyer_assignment_pricing',args);
+    assert.equal(plan.ready,true);assert.equal(plan.buyerCeilingCents,calc.buyerCeilingCents);
+    assert.equal(plan.assignmentFeeCents,calc.assignmentFeeCents);
+   }
+  }
+ }
+ const prospective=await make(17500000,350000,50000);
+ assert.equal(await prep(prospective.deal),true);
+ assert.equal((await saved(prospective.deal)).terms.assignmentFeeCents,2000000);
+ assert.match((await one('select marketing_evidence from icash_disposition_authorities where deal_id=$1',[prospective.deal])).marketing_evidence,/ARV times 70%/);
+ const lower=await make(18700000,350000,50000);
+ assert.equal(await prep(lower.deal),false,'default $10k floor remains');
+ const recovery=await rpc('icash_deal_recovery',{p_account:account,p_deal:lower.deal});
+ assert.equal(recovery.proposal.assignmentFeeCents,800000);
+ await rpc('icash_authorize_deal_recovery',{p_account:account,p_actor:user,p_deal:lower.deal,p_key:randomUUID(),p_terms_hash:recovery.termsHash,p_minimum:800000});
+ assert.equal(await prep(lower.deal),true,'only explicitly authorized deal gets lower floor');
+ const sibling=await make(18700000,350000,50000);
+ assert.equal(await prep(sibling.deal),false);
+ assert.equal((await pricing(19600000,350000,50000)).reason,'insufficient_margin');
+ assert.equal((await pricing(17500001,350000,50000)).reason,'rounded_purchase_required');
+ for(const role of ['anon','authenticated'])for(const signature of ['jsonb','bigint,jsonb,bigint','bigint,jsonb,bigint,bigint']){
+  const name=signature==='jsonb'?'icash_automatic_cash_offer_price':'icash_buyer_assignment_pricing';
+  assert.equal((await one("select has_function_privilege($1,$2,'execute') allowed",[role,`public.${name}(${signature})`])).allowed,false);
+ }
+ // Guard rejects reruns/drift atomically; it cannot silently overwrite a newer policy.
+ await assert.rejects(()=>pg.exec(formulaMigration),/prerequisite changed/);
+ await q('rollback');
+ assert.equal((await pricing(17500000,350000,50000)).buyerCeilingCents,19500000);
+ console.log('PASS prospective 70% SQL/TS parity, accepted/published immutability, fee-floor scope, guards, rounding and access isolation.');
  console.log('PASS explicit fee recovery, owner isolation, stale-term rejection, replay, signed/released price preservation and seven reviewed follow-ups.');
  console.log('Tiered pricing passed: supported larger fee, step-down, minimum-margin hold, rounded totals/deposits, $5k deposit cap, legacy preservation, immutable purchase, owner guidance and access isolation. No provider spend.');
 }catch(error){console.error(error.message,error.detail??'',error.where??'',error.stack?.split('\n').filter(line=>line.includes('tiered-assignment')).join('\n')??'');process.exitCode=1;}finally{await pg.close();globalThis.fetch=originalFetch;}

@@ -9,7 +9,7 @@ const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const context={checkedAt:new Date().toISOString(),report:{days:1,timezone:'America/Chicago',startAt:new Date().toISOString(),endAt:new Date().toISOString(),leads:2,calls:4,texts:6,contracts:0},paused:true,balanceCents:1000,task:'Paused',active:false,needsYou:false,selectedId:id(5),hasMore:false,properties:[{id:id(5),address:'123 Fixture Lane, Demo, TX',offer:'$96,270.50',arv:'$211,000',repairs:'$59,185',fee:'$10,000',currentCalculation:true,stage:'Property researched',next:'Confirm seller terms.',summary:null,practice:false}]};
 assert.match(policy.answerWorkspaceQuestion('report',context,null).text,/2 new leads, 4 calls, 6 texts, and 0 signed/);
 assert.match(policy.answerWorkspaceQuestion('offer',context,null).text,/96,270.50/);
-assert.match(policy.answerWorkspaceQuestion('offer',context,null).text,/\(ARV − repairs\) × 70% − wholesale fee/);
+assert.match(policy.answerWorkspaceQuestion('offer',context,null).text,/ARV × 70% − repairs − wholesale fee/);
 assert.match(policy.answerWorkspaceQuestion('offer',{...context,properties:[{...context.properties[0],currentCalculation:false}]},null).text,/do not contain a verified current calculation/);
 assert.equal(policy.answerWorkspaceQuestion('offer',{...context,selectedId:null},id(99)).propertyId,null,'An invented property never resolves');
 assert.match(policy.answerWorkspaceQuestion('status',context,null).text,/paused/);

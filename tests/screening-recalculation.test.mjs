@@ -5,7 +5,7 @@ const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt,assignmentF
 const previous={property:{propertyId:'prop_123'},preliminarySellerCeilingCents:5315000};
 const original=JSON.stringify({snapshot,previous});
 const revised=recalculateSavedScreening(snapshot,previous,now);
-assert.equal(revised.preliminarySellerCeilingCents,9627050);
+assert.equal(revised.preliminarySellerCeilingCents,7851500);
 assert.equal(revised.property.repairs.baselineCents,5918500);
 assert.equal(revised.property.fetchedAt,fetchedAt);
 assert.equal(revised.financialCheck.status,'hold');
@@ -23,3 +23,13 @@ assert.equal(runScreeningJob({...snapshot,propertyType:'land'},Date.parse(fetche
 const larger=recalculateSavedScreening({...snapshot,raw:{data:{...snapshot.raw.data,estimated_value:300000}}},previous,now);
 assert.equal(larger.property.offerCalculation.assignmentFeeCents,2000000);
 console.log('Historical recalculation preserves evidence dates and authorization gates');
+
+const priorV2={...previous,calculationVersion:'net_after_repairs_70_v2',preliminarySellerCeilingCents:9627050};
+const v3=recalculateSavedScreening(snapshot,priorV2,now);
+assert.equal(v3.calculationVersion,'arv_70_less_repairs_v3');
+assert.equal(v3.calculationHistory[0].version,'net_after_repairs_70_v2');
+assert.equal(v3.calculationHistory[0].sellerCeilingCents,9627050);
+assert.equal(v3.preliminarySellerCeilingCents,7851500);
+assert.equal(v3.cashOfferPriceCents,null);
+assert.equal(v3.offerAuthorized,false);
+assert.equal(priorV2.preliminarySellerCeilingCents,9627050);

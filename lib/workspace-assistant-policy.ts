@@ -31,7 +31,7 @@ export function answerWorkspaceQuestion(intent:AssistantIntent,c:AssistantContex
   if(c.needsYou){text+=' A saved request needs your attention.';actions=[{kind:'attention',label:'Review request'}];}
  }else if(intent==='offer'){
   if(p){text=`${p.address}\n\nCash offer price: ${p.offer}\nARV: ${p.arv}\nEstimated repairs: ${p.repairs}`;
-   if(p.currentCalculation)text+=`\nWholesale fee: ${p.fee}\n\n(ARV − repairs) × 70% − wholesale fee. This is the saved estimate, not an accepted offer.`;
+   if(p.currentCalculation)text+=`\nWholesale fee: ${p.fee}\n\nARV × 70% − repairs − wholesale fee. This is the saved estimate, not an accepted offer.`;
    else text+='\n\nThe saved inputs do not contain a verified current calculation. Review the deal numbers before making an offer.';
    actions=[open(p)];
   }else{text='Which property should I explain? Choose one below, or use Ask bot on its card.';actions=c.properties.slice(0,3).map(open);}

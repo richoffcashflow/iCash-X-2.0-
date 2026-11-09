@@ -48,10 +48,10 @@ const now=Date.now(),context={party:'seller',address:'45 Fixture Lane',offerStat
 let seller='Yes.';
 const d={now:()=>now,bind:async()=>{},verifyQualification:async()=>({ready:true}),verifyInput:async()=>true,verifyListingStatus:async i=>evidence(seller,question,i.sellerStatement),db:async(path,method,b)=>{if(path==='rpc/icash_call_offer_context')return context;assert.equal(path,'rpc/icash_save_call_offer');assert.equal(b.p_expected_version,context.offerVersion);context.offerState=b.p_state;context.offerVersion++;return true;}};
 const call=(action,extra={})=>automaticCallOffer('a'.repeat(64),{action,conversationId:'conv_fixture',...extra},d);
-assert.equal((await call('get_offer')).priceCents,4800000);
+assert.equal((await call('get_offer')).priceCents,3400000);
 const listed=await call('report_change',{sellerStatement:seller});assert.equal(listed.reason,'listed_with_agent');assert.equal(context.offerState.contractBlocked,true);assert.equal((await call('get_offer')).quoteAllowed,false);
-assert.equal((await call('accept_offer',{priceCents:4800000,quoteRevision:'b'.repeat(64)})).quoteAllowed,false);
-seller='No.';assert.equal((await call('report_change',{sellerStatement:seller})).priceCents,4800000);assert.equal(context.offerState.acceptedPriceCents,null,'listing correction does not manufacture acceptance');
+assert.equal((await call('accept_offer',{priceCents:3400000,quoteRevision:'b'.repeat(64)})).quoteAllowed,false);
+seller='No.';assert.equal((await call('report_change',{sellerStatement:seller})).priceCents,3400000);assert.equal(context.offerState.acceptedPriceCents,null,'listing correction does not manufacture acceptance');
 assert.match(automaticOfferReceptionPrompt,/retry the same action at most once/i);assert.match(automaticOfferReceptionPrompt,/ask each qualification question once/i);
 assert.equal(payoffAutomaticOfferReceptionPolicyHash,'1ad640490c33ff5294e6bd728ed6f382af7909756256d9bac78a965032ae742b','existing live branch remains unchanged while staging');
 console.log('PASS listing evidence, persisted exclusion, exact-price recovery, no invented acceptance and bounded conversation recovery.');
