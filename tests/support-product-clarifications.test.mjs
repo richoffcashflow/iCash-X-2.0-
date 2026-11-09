@@ -6,6 +6,17 @@ const env={...process.env};process.env.ICASH_SUPPORT_AI_ENABLED='true';process.e
 let calls=0;const noAI=async()=>{calls++;throw Error('Known inbox answers must not depend on AI');};
 try{
  for(const kind of ['account','access']){
+  for(const question of ['When should I expect to start seeing results?','How soon can I see results?']){
+   const answer=await replyToSupport({kind,messages:[user(question)]},noAI);
+   assert.match(answer.reply,/new leads, seller replies, or a signed contract/);assert.doesNotMatch(answer.reply,/Which page|verify your account|troubleshooting/);assert.notEqual(answer.status,'resolved');
+  }
+  const resultHistory=[user('My bot has not made calls.'),{role:'operator',content:'The saved calling checks remain unresolved.'},user('When should I expect results?')];
+  assert.notEqual((await replyToSupport({kind,messages:resultHistory},noAI)).status,'resolved');
+  const resultTopic=await replyToSupport({kind,messages:[user('When can I see results?'),assistant('Do you mean new leads, seller replies, or a signed contract?'),user('Where is the course?')]},noAI);
+  assert.match(resultTopic.reply,/course/i);assert.doesNotMatch(resultTopic.reply,/new leads, seller replies/);
+  for(const question of ['When will search results load?','When will my payment results update?','When will I get results? Cancel my subscription.']){
+   assert.doesNotMatch(supportConversationFallback({kind,messages:[user(question)]}).reply,/new leads, seller replies, or a signed contract/);
+  }
   for(const question of ['So the contact info doesn’t show automatically the bot find it?','Do the property contacts automatically come up or do the bot find them?','Does the contact show up the same time as the lead? Or do I have to wait for a contact?']){
    const answer=await replyToSupport({kind,messages:[user(question)],evidence:[]},noAI);
    assert.match(answer.reply,/before a usable seller phone number/);assert.match(answer.reply,/not guaranteed/);assert.doesNotMatch(answer.reply,/add listings|9 AM|Pause|Course/);assert.equal(answer.status,'resolved');

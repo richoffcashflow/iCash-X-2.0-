@@ -68,6 +68,9 @@ export function supportProductClarification(messages:Turn[]){
  // Preserve the established role answer before
  // matching incidental words such as "send contracts to title" in a recap.
  if(supportRoleQuestion(q))return null;
+ // Clarify an unspecified business outcome without turning it into a page error.
+ // Payment, search and specific failures retain their established routes.
+ if(/\b(?:when|how soon|how long)\b/i.test(q)&&/\b(?:see(?:ing)?|get(?:ting)?|expect|start)\b.{0,35}\bresults?\b/i.test(q)&&!/\b(?:search|test|payment|charge|code|sign[ -]?in|error|failed|broken|not working|contracts?|agreements?|calls?|texts?)\b/i.test(q))return {reply:'Do you mean new leads, seller replies, or a signed contract? Those happen at different stages, and I can’t promise a timeline.',answered:false};
  if(/\b(?:arv|value after repairs)\b/i.test(q)&&/\bthem\b/i.test(q)&&/\b(?:send|share|tell|give)\b/i.test(q)&&!/\b(?:buyers?|sellers?|failed|error|missing|not|never)\b/i.test(q)){
   const previous=messages.filter(m=>m.role==='user').slice(0,-1).at(-1)?.content??'';
   if(/\bbuyers?\b/i.test(previous)&&!/\bsellers?\b/i.test(previous)){
