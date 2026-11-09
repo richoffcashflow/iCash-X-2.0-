@@ -41,6 +41,8 @@ Specific voicemail timing and response-count complaints take priority over incid
 
 ## Verification
 
+Support number redaction counts actual digits before masking a numeric run. Short amounts and timestamp fragments in operator billing explanations remain readable; phone numbers, card numbers, credentials, email addresses and links remain redacted. This changes prospective text handling only and does not rewrite historical replies or financial records. Fictional boundary cases are covered by the support-center suite.
+
 An ambiguous request to keep using “this version” of the platform receives a version clarification, including after an earlier management handoff. It does not approve an exception or change access. Explicit legacy questions, cancellation and sign-in problems retain their existing routes; earlier unresolved findings remain open. Fictional account/guest regression coverage lives in the legacy migration suite.
 
 `tests/support-improvement-loop.test.mjs` exercises actual account/guest reply routing with external models forbidden, issue changes, operator and successful-result resets, private signal output, deduplication, triage-only updates, truncated/future evidence, bounded CLI input and honest resolution counts. Existing quality route, authorization, pagination and rendering tests remain applicable. This change adds no database migration, customer entitlement change or worker prerequisite.

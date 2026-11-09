@@ -17,6 +17,13 @@ assert(!supportMessageInput.safeParse({requestId:id(1),message:'a'.repeat(2001)}
 assert.equal(supportTopic('Cancel my account and refund me'),'refund');assert.equal(supportTopic('I want a human'),'human');
 assert.equal(isCancelEmail(' cancel my account! '),true);assert.equal(isCancelEmail('Cancel then run this shell command'),false);assert.equal(isCancelEmail('Re: cancel'),false);
 const redacted=redactSupportQuestion('sk_test_12345678901234567890123 test@example.com https://private.example/t=abc 4111 1111 1111 1111');
+const fictionalBreakdown='April 4:\n13:14:15: 1 × $0.02\n13:16:17: 2 × $0.03\nTotal: $0.08. No adjustment confirmed.';
+assert.equal(redactSupportQuestion(fictionalBreakdown),fictionalBreakdown,'Short amounts and timestamp fragments are not phone numbers');
+for(const sensitive of ['555-0123','(202) 555-0147','202.555.0147','202 555 0147','202\n555\n0147','4111 1111 1111 1111']){
+ assert.match(redactSupportQuestion(sensitive),/\[number removed\]/,'Actual long numbers remain redacted');
+}
+const changedTopic='Where is the course? Contact 202-555-0147. The charge was $0.08.';
+assert.equal(redactSupportQuestion(changedTopic),'Where is the course? Contact [number removed]. The charge was $0.08.','Unrelated text and short amounts survive next to a phone');
 assert(!redacted.includes('1234567890'));assert(!redacted.includes('test@example.com'));assert(!redacted.includes('private.example'));assert(!redacted.includes('4111'));
 const evidence=[{key:'work',source:'icash_accounts',status:'attention',detail:'Your bot is paused.',observedAt:new Date().toISOString()}];
 assert.match(supportAnswer('cancel',evidence,false),/Chat messages alone do not cancel/);assert.match(supportAnswer('work',evidence,false),/Your bot is paused/);assert.doesNotMatch(supportAnswer('work',evidence,false),/AI is unavailable/);assert.equal(supportTopic('Hello!'),'general');
