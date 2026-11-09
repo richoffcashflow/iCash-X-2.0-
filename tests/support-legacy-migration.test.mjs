@@ -10,7 +10,7 @@ for(const kind of ['account','access']){
  assert.notEqual(answer.status,'resolved');
 }
 const {supportVersionClarification}=await import('../lib/support-legacy-migration.ts');
-for(const q of ['Can I keep using the old platform?','Keep using this version of the software but cancel my subscription','I cannot sign in to this version of the software','Can I keep using this version of the contract?','Can I continue using iCash X 2.0?'])assert.equal(supportVersionClarification([{role:'user',content:q}]),null);
+for(const q of ['Can I keep using the old platform?','Keep using this version of the software but cancel my subscription','Keep using this version of the software but I am cancelling my subscription','Keep using this version of the software but I am canceling my membership','I cannot sign in to this version of the software','Can I keep using this version of the contract?','Can I continue using iCash X 2.0?'])assert.equal(supportVersionClarification([{role:'user',content:q}]),null);
 for(const kind of ['account','access']){
  const history=[{role:'user',content:versionQuestion},{role:'assistant',content:'Do you mean iCash X 1.0 or the current iCash X 2.0?'}];
  const answer=await versionEngine.replyToSupport({kind,handedOff:true,allowAI:false,messages:[...history,{role:'user',content:'I mean iCash X 1.0'}]});

@@ -3,7 +3,7 @@ type Turn={role:string;content:string};
 /** Ask before applying legacy policy to an unspecified platform version. */
 export function supportVersionClarification(messages:Turn[]):string|null{
  const q=messages.filter(m=>m.role==='user').at(-1)?.content??'';
- if(/\b(?:cancel|refund|charged|payment|code|sign[ -]?in|not working|cannot|can[’']t)\b/i.test(q))return null;
+ if(/\b(?:cancel(?:l?ing)?|refund|charged|payment|code|sign[ -]?in|not working|cannot|can[’']t)\b/i.test(q))return null;
  if(/\b(?:keep|continue)\s+using\b/i.test(q)&&/\b(?:this|that) version\b/i.test(q)&&/\b(?:platform|software|i[ -]?cash\s*x|icashx)\b/i.test(q)&&!supportLegacyQuestion(q)&&!/[12]\.0/.test(q)){
   return 'Do you mean iCash X 1.0 or the current iCash X 2.0? I haven’t approved an exception or changed your access.';
  }
