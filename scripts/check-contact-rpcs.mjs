@@ -3,6 +3,7 @@
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {checkWorkspaceAttentionReadback} from './check-workspace-attention-readback.mjs';
+import {checkCarrierNoticeSchemaReadback} from './check-carrier-notice-schema-readback.mjs';
 
 export async function checkContactRpcs({env=process.env,fetcher=fetch}={}){
  if(env.VERCEL_ENV!=='production')return {status:'not_requested'};
@@ -43,10 +44,11 @@ export async function checkContactRpcs({env=process.env,fetcher=fetch}={}){
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  checkContactRpcs().then(async result=>{
   console.log('Contact API verification:',JSON.stringify(result));
+  console.log('Carrier schema verification:',JSON.stringify(await checkCarrierNoticeSchemaReadback()));
   console.log('Attention API verification:',JSON.stringify(await checkWorkspaceAttentionReadback()));
  }).catch(error=>{
-  // Only the new check's fixed, sanitized codes may reach deployment logs.
-  if(/^Attention API verification failed: [a-z0-9_]+\.$/.test(error?.message??''))console.error(error.message);
-  console.error('Contact/attention API verification failed; no calls or messages were started.');process.exitCode=1;
+  // Only fixed, sanitized readback codes may reach deployment logs.
+  if(/^(?:Attention API|Carrier schema) verification failed: [a-z0-9_]+\.$/.test(error?.message??''))console.error(error.message);
+  console.error('Contact/attention/carrier schema API verification failed; no calls or messages were started.');process.exitCode=1;
  });
 }

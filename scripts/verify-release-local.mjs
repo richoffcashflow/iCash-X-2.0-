@@ -2,7 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
- 'carrier-text-notice-classification', 'carrier-text-notice-flow', 'carrier-text-notice-projections', 'carrier-text-notice-history', 'carrier-text-notice-meta-projections', 'carrier-text-notice-support', 'carrier-text-notice-rendering', 'customer-work-value',
+ 'carrier-notice-schema-readback', 'carrier-text-notice-classification', 'carrier-text-notice-flow', 'carrier-text-notice-projections', 'carrier-text-notice-history', 'carrier-text-notice-meta-projections', 'carrier-text-notice-support', 'carrier-text-notice-rendering', 'customer-work-value',
  'http-response-lifecycle', 'deferred-text-recovery',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
  'scheduler-reliability', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database',
