@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
-import {reliabilityPriority} from '../lib/reliability-priority.ts';
+import {reliabilityPriority,reliabilityImpact} from '../lib/reliability-priority.ts';
 import {reliabilityAlertClaimSchema,reliabilityAlertStatusSchema} from '../lib/reliability-alerts.ts';
 const pg=await PGlite.create(),owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,now=Date.now();
@@ -17,6 +17,11 @@ try{
  const sql=read('config/reliability-incident-severity.sql');assert.equal(sql,read('supabase/migrations/20261019004544_reliability_incident_severity.sql'));await pg.exec(sql);
  const core=report([issue()]);core.components.worker.status='unavailable';
  const stale=report([issue()]);stale.fresh=false;
+ assert.match(reliabilityImpact(core),/Service problem: background scheduling/);
+ assert.match(reliabilityImpact(stale),/unverified/);
+ assert.match(reliabilityImpact(null),/unverified/);
+ assert.match(reliabilityImpact(report([issue('call_receipt')])),/individual workflows and accounts/);
+ assert.match(reliabilityImpact(report()),/no active workflow alerts/);
  const broad=report([issue('seller_response',6,1),issue('seller_response',6,2),issue('screening_lease',6,3)]);
  const cases=[[report(),null],[report([issue()]),'minor'],[report([issue('buyer_fulfillment',11)]),'minor'],[report([issue('seller_response',29.99)]),'minor'],[report([issue('seller_response',30)]),'high'],[report([issue('text_receipt')]),'high'],[report([issue('call_receipt')]),'high'],[report([issue('contract_delivery')]),'high'],[broad,'high'],[{...report([issue()]),snapshot:{...report([issue()]).snapshot,issueCount:5}},'high'],[core,'critical'],[stale,'high'],[null,'high']];
  for(const [value,expected] of cases){assert.equal(reliabilityPriority(value,now),expected);assert.equal(await one('select icash_reliability_severity($1,$2)',[value,new Date(now).toISOString()]),expected,'database and UI severity agree');}

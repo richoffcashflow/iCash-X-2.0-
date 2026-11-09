@@ -10,7 +10,7 @@ import styles from './overview.module.css';
 type ExperienceReport={experience:WorkspaceExperienceSummary;alerts:ReliabilityAlertStatus};
 const stageLabels={workspace:'Workspace',property:'Property',buyers:'Buyers',buyer_details:'Buyer details',documents:'Documents',closing:'Closing',messages:'Messages',account:'Account'};
 const configurationLabels={disabled:'Off',unconfigured:'Setup incomplete',ready:'Configured',recipient_unverified:'Owner email needs verification'};
-const reasonLabels={worker:'Background worker',maintenance:'Maintenance',monitor:'Monitoring',workflows:'Stalled work'};
+const reasonLabels={worker:'Background worker',maintenance:'Maintenance',monitor:'Monitoring',workflows:'Workflow recovery'};
 
 export function ExperienceHealth(){
  const [report,setReport]=useState<ExperienceReport|null>(null),[busy,setBusy]=useState(true);

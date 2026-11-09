@@ -7,7 +7,7 @@ import styles from './overview.module.css';
 import {ClosingOperationsView} from './closing-operations';
 import {DealOutcomesView} from './deal-outcomes';
 import {reliabilityIssueLabels,reliabilityAcknowledgementLabels} from '@/lib/reliability';
-import {reliabilityPriority,reliabilityItemPriority,reliabilitySeverityLabels,reliabilitySeverityGuidance} from '@/lib/reliability-priority';
+import {reliabilityPriority,reliabilityItemPriority,reliabilitySeverityLabels,reliabilityImpact,reliabilityRecoveryGuidance} from '@/lib/reliability-priority';
 import {incomingStatusLabels,propertyIncomingStatusLabels,textIngressStageLabels} from '@/lib/text-health';
 import {ExperienceHealth} from './experience-health';
 import {UsageLoopReport} from '@/components/usage-loop-report';
@@ -87,7 +87,8 @@ export function OwnerOverviewView(){
    </section>
    {report&&<section className={styles.notice} aria-label="Workflow reliability" role="status">
     <strong>Workflow reliability · {priority?`${reliabilitySeverityLabels[priority]} priority`:(report.reliability?.snapshot?.acknowledgedCount??0)>0?'No new alerts':'Checks passing'}</strong>
-    {priority&&<span>{reliabilitySeverityGuidance[priority]}</span>}
+    <span>{reliabilityImpact(report.reliability??null)}</span>
+    {priority&&<span>{reliabilityRecoveryGuidance}</span>}
     {report.reliability?<>
      <span>Background worker: {report.reliability.components.worker.status} · Maintenance: {report.reliability.components.maintenance.status}</span>
      {!report.reliability.fresh&&<span>Monitoring is overdue. The saved results do not confirm current health.</span>}
@@ -113,14 +114,14 @@ export function OwnerOverviewView(){
        <p>Verify provider receipt, authenticated ingestion and property routing independently before treating reception as proven.</p>
       </div>}
       {report.reliability.snapshot.accountProgress&&<div>
-       <strong>{report.reliability.snapshot.accountProgress.affectedAccounts} funded accounts with blocked or stalled work</strong>
+       <strong>{report.reliability.snapshot.accountProgress.affectedAccounts} accounts with work needing recovery</strong>
        <p>{report.reliability.snapshot.accountProgress.expiredConfigurations} expired configurations · {report.reliability.snapshot.accountProgress.unexpectedPauses} unexpected pauses · {report.reliability.snapshot.accountProgress.stalledAccounts} without recent completed work · {report.reliability.snapshot.accountProgress.pendingAccounts} awaiting earlier work.</p>
        {report.reliability.snapshot.accountProgress.samples.length>0&&<details><summary>Review affected accounts</summary><ul>{report.reliability.snapshot.accountProgress.samples.map(item=><li key={item.accountId}>
         <strong>{{configuration_expired:'Research configuration expired',configuration_disabled:'Research configuration unavailable',system_paused:'Paused without a current customer Pause',no_completed_work:'No completed work for at least 30 minutes',pending_work:'Earlier work is holding available credits'}[item.reason]}</strong> · Since {overviewTime(item.since)} CT · Account {item.accountId}
        </li>)}</ul><p>Customer-requested pauses and accounts below the next task’s funding requirement are excluded. These checks do not retry purchases or outreach.</p></details>}
       </div>}
       <span>Past 24 hours: {report.reliability.snapshot.texts.accepted} texts accepted, {report.reliability.snapshot.texts.delivered} delivery confirmations · {report.reliability.snapshot.contracts.created} contracts created, {report.reliability.snapshot.contracts.completed} signed.</span>
-      {report.reliability.snapshot.issues.length>0&&<details><summary>Review stalled work</summary><ul>{report.reliability.snapshot.issues.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilitySeverityLabels[reliabilityItemPriority(issue)]} · {reliabilityIssueLabels[issue.kind]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Check the saved provider receipt before repeating any action.</li>)}</ul>{report.reliability.snapshot.issueCount>25&&<p>Showing the 25 oldest items.</p>}</details>}
+      {report.reliability.snapshot.issues.length>0&&<details><summary>Review workflow alerts</summary><ul>{report.reliability.snapshot.issues.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilitySeverityLabels[reliabilityItemPriority(issue)]} · {reliabilityIssueLabels[issue.kind]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Check the saved provider receipt before repeating any action.</li>)}</ul>{report.reliability.snapshot.issueCount>25&&<p>Showing the 25 oldest items.</p>}</details>}
       {(report.reliability.snapshot.acknowledgedCount??0)>0&&<details><summary>Reviewed history · {report.reliability.snapshot.acknowledgedCount} acknowledged alert{report.reliability.snapshot.acknowledgedCount===1?'':'s'}</summary><p>These alerts were removed from the active list after owner review. Unresolved receipts, budget holds and blocked work remain recorded. Receipt checks continue; acknowledgment does not retry work or confirm completion.</p><ul>{report.reliability.snapshot.acknowledgedIssues?.map(issue=><li key={`${issue.kind}:${issue.resourceId}`}><strong>{reliabilityAcknowledgementLabels[issue.disposition]}</strong> · {overviewTime(issue.since)} CT · Reference {issue.resourceId}<br/>Acknowledged {overviewTime(issue.acknowledgedAt)} CT</li>)}</ul>{(report.reliability.snapshot.acknowledgedCount??0)>25&&<p>Showing the 25 oldest acknowledged items. Full history is retained.</p>}</details>}
      </>}
     </>:<span>Monitoring could not be loaded. Refresh to try again.</span>}

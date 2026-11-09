@@ -6,7 +6,7 @@ const suites = [
  'support-account-deletion', 'support-center',
  'http-response-lifecycle', 'deferred-text-recovery',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
- 'scheduler-reliability', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database',
+ 'scheduler-reliability', 'workflow-stall-isolation', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database',
  'dealmachine-list-quality', 'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',
