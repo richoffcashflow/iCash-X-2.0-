@@ -4,7 +4,7 @@ process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production
 // Local fixtures only: archived agreements remain intact, but never create work.
 import assert from 'node:assert/strict';
 import {z} from 'zod';
-import {workspaceAttentionQuery,workspaceAttentionTables,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
+import {workspaceAttentionQuery,workspaceAttentionSource,workspaceAttentionTables,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
 import {validActivityReport} from '../lib/activity-report.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 
@@ -84,18 +84,18 @@ const db=async(path,method='GET',body)=>{
   throw Error('Unexpected RPC '+path);
  }
  assert.equal(method,'GET','Workspace reads never mutate retained history');
- const [table,search]=path.split('?'),q=new URLSearchParams(search);
+ const [sourceTable,search]=path.split('?'),table=sourceTable.replace('icash_response_','icash_'),q=new URLSearchParams(search);
  assert.equal(q.get(table==='icash_accounts'?'id':'account_id'),`eq.${account}`);
  if(table==='icash_accounts')return [{bot_paused:false}];
  if(table==='icash_wallets')return [{balance_cents:1000,reserved_cents:0}];
- if(table==='icash_sms_route_reviews')return unmatchedText?[{message_id:uuid(800)}]:[];
+ if(table==='icash_sms_route_reviews'){assert.equal(sourceTable,'icash_response_sms_route_reviews','Assistant checks filtered route sources before its one-row bound');return unmatchedText?[{message_id:uuid(800)}]:[];}
  if(table==='icash_screening_jobs'){
   let rows=properties.filter(p=>p.account_id===account&&(!q.has('state')||q.get('state')===`eq.${p.state}`));
   if(q.has('id'))rows=rows.filter(p=>q.get('id').includes(p.id));
   const fragment=q.get('result->property->>address');if(fragment)rows=rows.filter(p=>p.result.property.address.includes(fragment.slice(7,-1)));
   if(q.get('select')==='id,result:result->property')return rows.map(p=>({id:p.id,result:p.result.property}));
   if(q.get('select').includes('!inner(')){
-   const related=workspaceAttentionTables.find(name=>q.get('select').includes(`${name}!inner(`));
+   const related=workspaceAttentionTables.find(name=>q.get('select').includes(`${name===workspaceAttentionSource(name)?name:name+':'+workspaceAttentionSource(name)}!inner(`));
    if(!related||(onlyTable&&onlyTable!==related))return [];
    let children=queues[related].filter(r=>q.get(`${related}.account_id`)===`eq.${r.account_id}`&&(q.get(`${related}.state`)==='neq.resolved'?r.state!=='resolved':q.get(`${related}.state`)===`eq.${r.state}`));
    if(related==='icash_seller_gaps')assertReceiptFilters(q,related);
@@ -124,10 +124,10 @@ const db=async(path,method='GET',body)=>{
  if(['icash_owner_contacts','icash_seller_matches','icash_property_controls','icash_live_conversations','icash_live_callbacks','icash_automation_tickets'].includes(table))return [];
  throw Error('Unexpected read '+table);
 };
-const activityDeps={isConfirmedVoicemail,instantLeadsEnabled,db,z,workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}};
+const activityDeps={isConfirmedVoicemail,instantLeadsEnabled,db,z,workspaceAttentionQuery,workspaceAttentionSource,sellerAttentionFilters,sellerReminderDeliveryEmbed,workAccount:async()=>({accountId:account}),attachTaskRecovery:async(_,rows)=>rows,NextResponse:{json:(body,options={})=>({body,status:options.status??200})}};
 const {workspaceActivity}=await loadService('lib/workspace-activity-read.ts',activityDeps);
 const {GET}=await loadService('app/api/work/activity/route.ts',{...activityDeps,workspaceActivity});
-const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionTables,sellerAttentionFilters,sellerReminderDeliveryEmbed,validActivityReport,currentBotActivity:input=>{assert.deepEqual(input.progress,{status:'budget_reached',callsBudgetHeld:2});return {checkedAt:'2026-10-12T00:00:00Z',label:'New outreach allowance used',active:false};}});
+const {workspaceAssistantContext}=await loadService('lib/workspace-assistant-context.ts',{db,workspaceAttentionQuery,workspaceAttentionSource,workspaceAttentionTables,sellerAttentionFilters,sellerReminderDeliveryEmbed,validActivityReport,currentBotActivity:input=>{assert.deepEqual(input.progress,{status:'budget_reached',callsBudgetHeld:2});return {checkedAt:'2026-10-12T00:00:00Z',label:'New outreach allowance used',active:false};}});
 const get=query=>GET(new Request('https://example.invalid/api/work/activity'+query));
 const attentionKeys=['textAttention','callRequests','handoffs','signatureActions','viewingRequests','sellerRecovery','closingReview','closingTasks'];
 let response=await get('');assert.equal(response.status,200);assert.equal(response.body.properties.length,6);

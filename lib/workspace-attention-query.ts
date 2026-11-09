@@ -24,6 +24,11 @@ export function sellerAttentionFilters(accountId:string,prefix='',now=new Date()
  return params;
 }
 
+// Response views preserve saved source rows but exclude verified automated notices.
+export function workspaceAttentionSource(table:string){
+ return ({icash_handoffs:'icash_response_handoffs',icash_text_attention:'icash_response_text_attention',icash_sms_call_requests:'icash_response_sms_call_requests',icash_seller_gaps:'icash_response_seller_gaps'} as Record<string,string>)[table]??table;
+}
+
 // Apply property visibility inside the database query, before LIMIT/OFFSET.
 // Retained agreements and requests are history once their property is archived.
 // This queue is independent of the currently displayed property page/search.
@@ -45,5 +50,5 @@ export function workspaceAttentionQuery(table:WorkspaceAttentionTable,accountId:
  if(options.order)params.set('order',options.order);
  params.set('limit',String(options.limit));
  if(options.offset!==undefined)params.set('offset',String(options.offset));
- return `${table}?${params}`;
+ return `${workspaceAttentionSource(table)}?${params}`;
 }

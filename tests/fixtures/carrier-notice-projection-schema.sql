@@ -1,0 +1,23 @@
+-- Isolated synthetic schema for response-projection behavior tests.
+create role anon;create role authenticated;create role service_role bypassrls;
+ create table icash_accounts(id uuid primary key,owner_user_id uuid);
+ create table icash_screening_jobs(id uuid primary key,account_id uuid,state text,snapshot jsonb default '{}',result jsonb default '{}',completed_at timestamptz default now()-interval '2 days',created_at timestamptz default now()-interval '3 days',event_key text);
+ create table icash_deal_files(id uuid primary key,account_id uuid,screening_id uuid,terms jsonb default '{}',stage text default 'review');
+ create table icash_text_threads(id uuid primary key,account_id uuid,deal_id uuid,party text,retired_at timestamptz,recipient text);
+ create table icash_text_messages(id uuid primary key,account_id uuid,thread_id uuid,direction text,state text,body text,created_at timestamptz default now()-interval '2 days',updated_at timestamptz default now()-interval '2 days',attachments jsonb default '[]',provider_id text,event_id text,customer_author_id uuid);
+ create table icash_workspace_revisions(account_id uuid primary key,revision bigint default 1,changed_at timestamptz default now());
+ create table icash_meta_leads(screening_id uuid,account_id uuid,response_at timestamptz);
+ create table icash_opportunity_outcomes(screening_id uuid primary key,account_id uuid,zip text,eligible boolean default false,discovered_at timestamptz,attempted boolean default false,responded boolean default false,interested boolean default false,opted_out boolean default false,purchase_signed boolean default false,response_at timestamptz,provider_cost_micros bigint default 42,costs_complete boolean default false,research_source boolean default true,refreshed_at timestamptz default now());
+ create table icash_opportunity_refreshes(account_id uuid primary key,refreshed_at timestamptz);
+ create table icash_live_conversations(id uuid,account_id uuid,screening_id uuid,operation_key text,created_at timestamptz,completed_at timestamptz,party text,conversation_id text,state text,result jsonb);
+ create table icash_operation_spend(account_id uuid,operation_key text,settled_at timestamptz,state text,actual_micros bigint);
+ create table icash_seller_email_openers(account_id uuid,deal_id uuid,email_id uuid,recipient text);
+ create table icash_deal_emails(id uuid,account_id uuid,deal_id uuid,reply_to_id uuid,direction text,state text,provider_id text,recipient text,body_text text,created_at timestamptz,updated_at timestamptz);
+ create table icash_signing_envelopes(account_id uuid,deal_id uuid,kind text,state text,test_mode boolean,updated_at timestamptz);
+ create table icash_owner_contacts(account_id uuid,screening_id uuid,operation_key text,created_at timestamptz);
+ create table icash_voice_contact_targets(id uuid,account_id uuid,screening_id uuid,phone text,party text);
+ create function icash_property_contact_priority(uuid,uuid) returns numeric language sql as $$select 0::numeric$$;
+ create function icash_call_has_seller_response(result jsonb) returns boolean language sql as $$select coalesce((result->>'response')::boolean,false)$$;
+ create function icash_call_selling_interest(result jsonb) returns boolean language sql as $$select coalesce((result->>'interested')::boolean,false)$$;
+ create function icash_seller_contact_stop(body text) returns boolean language sql as $$select lower(body)='stop'$$;
+ create function icash_filter_sms_interest(uuid,uuid) returns boolean language sql as $$select false$$;

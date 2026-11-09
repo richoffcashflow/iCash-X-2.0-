@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
-import {workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
+import {workspaceAttentionQuery,workspaceAttentionSource,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
 const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const account=uuid(999),otherAccount=uuid(998);
 const property=n=>({id:uuid(n),state:'complete',completed_at:'2026-09-30T10:00:00Z',result:{property:{propertyId:`prop_${n}`,address:`${n} Main Street`},financialCheck:{status:'eligible',reason:'Fixture'},preliminarySellerCeilingCents:100000}});
@@ -19,7 +19,7 @@ const contactRows=[lookup(1,[person,{},null,'invalid',{name:34,phones:'invalid'}
  {...lookup(998,[{name:'Other tenant contact',phones:[]}]),account_id:otherAccount}];
 let paths=[],authorized=true,sellerFixtures=[],attentionFixtures=null;
 const paginate=(rows,q)=>rows.slice(Number(q.get('offset')??0),Number(q.get('offset')??0)+Number(q.get('limit')??rows.length));
-const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
+const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,workspaceAttentionSource,sellerAttentionFilters,sellerReminderDeliveryEmbed,attachTaskRecovery:async(id,tasks)=>{assert.equal(id,account);return tasks;},NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},workAccount:async()=>{if(!authorized)throw Error();return {accountId:account};},db:async(path,method,body)=>{
  paths.push({path,method,body});
  if(path==='rpc/icash_refresh_opportunity_outcomes'){assert.equal(body.p_account,account);return null;}
  if(path==='rpc/icash_workspace_text_reply_counts')return {properties:2,unreadProperties:1,unreadMessages:2};
@@ -33,13 +33,14 @@ const mocks={isConfirmedVoicemail,instantLeadsEnabled,z,workspaceAttentionQuery,
  if(path==='rpc/icash_closing_task_attention'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map(q=>({...q,kind:'deadline',label:'Confirm closing date',state:'needs_review',due_date:null}));}
  if(path==='rpc/icash_buyer_reception_calls'){assert.equal(body.p_account,account);return [];}
  if(path==='rpc/icash_sms_route_review_items'){assert.equal(body.p_account,account);assert.equal(body.p_limit,7);return queue.slice(body.p_offset,body.p_offset+body.p_limit).map((q,i)=>({message_id:q.id,recipient:'+12145550123',body:'Which property?',revision:7,needs_review:true,candidates:[]}));}
- const [table,params]=path.split('?');const q=new URLSearchParams(params);
+ const [sourceTable,params]=path.split('?');const table=sourceTable.replace('icash_response_','icash_');const q=new URLSearchParams(params);
  assert.equal(q.get(table==='icash_seller_intakes'?'assigned_account':'account_id'),`eq.${account}`,'Every read is tenant scoped');
  if(table==='icash_screening_jobs'){
   if(q.get('select')?.includes('!inner(')){
-   const related=/,([^,]+)!inner\(/.exec(q.get('select'))?.[1];
+   const relation=/,([^,]+)!inner\(/.exec(q.get('select'))?.[1];const related=relation?.split(':')[0];
+   if(related!==workspaceAttentionSource(related))assert.equal(relation,related+':'+workspaceAttentionSource(related));
    assert.equal(q.get(`${related}.account_id`),`eq.${account}`);assert.equal(q.get('limit'),'6');
-   assert.equal(q.get('select'),`id,${related}!inner(${related==='icash_closing_setup'?'review_reason':related==='icash_seller_gaps'?sellerReminderDeliveryEmbed:''})`,'Only closing reason and an empty receipt embed are projected, never message content');
+   assert.equal(q.get('select'),`id,${relation}!inner(${related==='icash_closing_setup'?'review_reason':related==='icash_seller_gaps'?sellerReminderDeliveryEmbed:''})`,'Only closing reason and an empty receipt embed are projected, never message content');
    return attentionFixtures?attentionFixtures[related]??[]:[{id:uuid(1),...(related==='icash_closing_setup'?{icash_closing_setup:[{review_reason:'setup'}]}:{})}];
   }
   if(q.get('select')==='id,result:result->property')return properties.filter(p=>q.get('id').includes(p.id)).map(p=>({id:p.id,result:p.result.property}));
@@ -81,10 +82,10 @@ assert.equal(r.headers['Cache-Control'],'private, no-store');
 assert.deepEqual(r.body.contacts,[{screening_id:uuid(1),created_at:'2026-10-01T01:02:03.000Z',fetchedAt:'2026-10-01T01:01:02.000Z',source:'DealMachine',ownershipVerified:false,outreachAuthorized:false,
  contacts:[{name:'Synthetic Person',phones:[{number:'+12025550101',type:'Mobile',doNotCall:true},{number:'+12025550102',type:'Landline',doNotCall:false},{number:'+12025550103',type:null,doNotCall:null},{number:'+12025550104',type:null,doNotCall:null},{number:null,type:null,doNotCall:null}]},{name:null,phones:[]},{name:null,phones:[]}]}]);
 assert.doesNotMatch(JSON.stringify(r.body.contacts),/private|Private|Other tenant|Wrong account|Nonvisible|Page two|Retained/);
-assert(paths.find(x=>x.path.startsWith('icash_sms_call_requests')).path.includes('&limit=7&offset=0'));
-assert(!paths.find(x=>x.path.startsWith('icash_sms_call_requests')).path.includes('screening_id=in.'),'Callback queue spans all property pages');
-assert(paths.find(x=>x.path.startsWith('icash_handoffs')).path.includes('state=neq.resolved'),'Acknowledged handoffs stay visible until resolved');
-assert(paths.find(x=>x.path.startsWith('icash_handoffs')).path.includes('portal_journey_id=is.null'),'Portal handoffs appear once through their versioned recovery task');
+assert(paths.find(x=>x.path.startsWith('icash_response_sms_call_requests')).path.includes('&limit=7&offset=0'));
+assert(!paths.find(x=>x.path.startsWith('icash_response_sms_call_requests')).path.includes('screening_id=in.'),'Callback queue spans all property pages');
+assert(paths.find(x=>x.path.startsWith('icash_response_handoffs')).path.includes('state=neq.resolved'),'Acknowledged handoffs stay visible until resolved');
+assert(paths.find(x=>x.path.startsWith('icash_response_handoffs')).path.includes('portal_journey_id=is.null'),'Portal handoffs appear once through their versioned recovery task');
 paths=[];r=await get('?page=1&attentionPage=1');assert.equal(r.body.properties[0].id,uuid(7));assert.equal(r.body.textAttention[0].id,uuid(106));assert.deepEqual(r.body.propertyAttentionIds,[uuid(1)],'Property attention does not depend on current request page');assert.equal(r.body.attentionHasMore,true);
 assert.deepEqual(r.body.contacts.map(c=>c.screening_id),[uuid(7)]);
 r=await get('?attentionPage=2');assert.equal(r.body.textAttention.length,2);assert.equal(r.body.attentionHasMore,false);

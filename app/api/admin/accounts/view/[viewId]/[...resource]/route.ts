@@ -101,7 +101,7 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
    if(selected.length!==1||selected[0].id!==threadId)throw new OwnerViewError(404,'Conversation unavailable in this account.');threads.push(selected[0]);
   }
   if(!!f.before!==!!f.beforeId)throw new OwnerViewError(400,'Invalid message page.');
-  const messages=threadId?await db<{id:string;direction:string;body:string;state:string;created_at:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=id,direction,body,state,created_at&order=created_at.desc,id.desc&limit=21${f.before?`&or=(created_at.lt.${encodeURIComponent(f.before)},and(created_at.eq.${encodeURIComponent(f.before)},id.lt.${f.beforeId}))`:''}`):[];
+  const messages=threadId?await db<{id:string;direction:string;body:string;state:string;created_at:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=id,direction,body,attachments,state,created_at&order=created_at.desc,id.desc&limit=21${f.before?`&or=(created_at.lt.${encodeURIComponent(f.before)},and(created_at.eq.${encodeURIComponent(f.before)},id.lt.${f.beforeId}))`:''}`):[];
   const visible=messages.slice(0,20),last=visible.at(-1);
   return json({threads,threadId:threadId??null,messages:visible,next:messages.length>20&&last?{before:last.created_at,beforeId:last.id}:null,nextThread:rows.length>20?rows[19].id:null});
  }

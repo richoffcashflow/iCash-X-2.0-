@@ -1,4 +1,5 @@
 'use client';
+import {isCarrierTextNotice} from '@/lib/carrier-text-notice';
 import type {AssistantDraft} from '@/lib/workspace-assistant-coach';
 import {PrivatePhone} from '@/components/owner-phone-privacy';
 import {notifyWorkspaceChanges,subscribeWorkspaceChanges} from '@/lib/workspace-events-client';
@@ -11,7 +12,7 @@ import {conversationTimeline,type ConversationCall} from '@/lib/conversation-tim
 import {createPollCadence} from '@/lib/poll-cadence';
 import {messageSpeaker,safeLocalTime} from './workspace-view';
 type Thread={reply?:{preview:string;received_at:string;unread_count:number}|null;id:string;recipient:string;paused:boolean;manualReply?:boolean;sendReason?:string|null;name?:string;party?:string};
-type Message={author?:'bot'|'you'|'contact';id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;retryKey?:string|null;attachments?:{url:string;filename?:string}[]};
+type Message={author?:'bot'|'you'|'contact'|'notice';id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;retryKey?:string|null;attachments?:{url:string;filename?:string}[]};
 type Data={threads:Thread[];messages:Message[];firstMessage?:Message|null;calls?:ConversationCall[];callsUnavailable?:boolean;receipt?:TextReceipt|null;threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
 export function DealMessages({draftRequest,dealId,initialThreadId='',contactNames={},active=true,onTakeover,historyOnly=false}:{draftRequest?:AssistantDraft;dealId:string;historyOnly?:boolean;initialThreadId?:string;contactNames?:Record<string,string>;active?:boolean;onTakeover?:()=>void}){
  const [data,setData]=useState<(Data&{scope:string})|null>(null),[error,setError]=useState(''),[threadId,setThreadId]=useState(initialThreadId),[afterThread,setAfterThread]=useState(''),[page,setPage]=useState<{before:string;beforeId:string}|null>(null),[refresh,setRefresh]=useState(0),[drafts,setDrafts]=useState<Record<string,string>>({});
@@ -43,7 +44,7 @@ export function DealMessages({draftRequest,dealId,initialThreadId='',contactName
  const current=data?.scope===scope?data.threads.find(t=>t.id===data.threadId):undefined;
  useEffect(()=>{
   if(!active||!current||data?.scope!==scope||error)return;
-  const candidates=data.messages.filter(m=>m.direction==='incoming'&&m.state==='received'&&!readIds.current.has(m.id)).map(m=>m.id);
+  const candidates=data.messages.filter(m=>m.direction==='incoming'&&m.state==='received'&&!isCarrierTextNotice(m.body,m.attachments)&&!readIds.current.has(m.id)).map(m=>m.id);
   if(!candidates.length)return;
   const log=container.current?.querySelector<HTMLElement>('.message-history');if(!log)return;
   const save=async()=>{if(document.hidden||readInFlight.current)return;
@@ -62,7 +63,7 @@ export function DealMessages({draftRequest,dealId,initialThreadId='',contactName
  const [suggestion,setSuggestion]=useState<AssistantDraft|null>(null);
  useEffect(()=>{if(!draftRequest||draftRequest.nonce===handledSuggestion.current||!active||historyOnly||!current||current.id!==draftRequest.threadId||data?.scope!==scope||error)return;
   handledSuggestion.current=draftRequest.nonce;
-  const unchanged=(data.messages[0]?.id??null)===draftRequest.latestMessageId;
+  const unchanged=(data.messages.find(m=>m.direction!=='incoming'||!isCarrierTextNotice(m.body,m.attachments))?.id??null)===draftRequest.latestMessageId;
   if(unchanged&&!drafts[current.id]?.trim()&&!attempts.current[current.id]?.held&&!attempts.current[current.id]?.busy){setDrafts(d=>({...d,[current.id]:draftRequest.body}));setSuggestion(null);}
   else setSuggestion(draftRequest);
  },[draftRequest,active,historyOnly,current,data,scope,error,drafts]);
@@ -84,10 +85,10 @@ function Conversation({firstMessage,historyOnly=false,calls,callsUnavailable,onT
  const timeline=conversationTimeline(messages,calls);
  const log=useRef<HTMLDivElement>(null),nearLatest=useRef(true),[showLatest,setShowLatest]=useState(false);
  useEffect(()=>{if(nearLatest.current&&log.current)log.current.scrollTop=log.current.scrollHeight;},[timeline.at(-1)?.key,timeline.length]);
- return <div className="conversation-body">{firstMessage&&<details className="conversation-first-message"><summary>First message · {safeLocalTime(firstMessage.created_at)}</summary><strong>{messageSpeaker(firstMessage.direction,thread.party,firstMessage.author)}</strong><p>{firstMessage.body}</p><small>{firstMessage.direction==='outgoing'?textStateLabel(firstMessage.state):'Received'}</small></details>}<div className="conversation-log-wrap"><div ref={log} className="message-history" role="log" aria-live="polite" aria-label="Conversation history" onScroll={()=>{const node=log.current;if(node){nearLatest.current=node.scrollHeight-node.scrollTop-node.clientHeight<64;setShowLatest(!nearLatest.current);}}}>
+ return <div className="conversation-body">{firstMessage&&<details className="conversation-first-message"><summary>First message · {safeLocalTime(firstMessage.created_at)}</summary><strong>{firstMessage.direction==='incoming'&&isCarrierTextNotice(firstMessage.body,firstMessage.attachments)?'Automated notice':messageSpeaker(firstMessage.direction,thread.party,firstMessage.author)}</strong><p>{firstMessage.body}</p><small>{firstMessage.direction==='outgoing'?textStateLabel(firstMessage.state):'Received'}</small></details>}<div className="conversation-log-wrap"><div ref={log} className="message-history" role="log" aria-live="polite" aria-label="Conversation history" onScroll={()=>{const node=log.current;if(node){nearLatest.current=node.scrollHeight-node.scrollTop-node.clientHeight<64;setShowLatest(!nearLatest.current);}}}>
   {!timeline.length&&!callsUnavailable&&<p>No conversation yet.</p>}
   {timeline.map((entry,index)=>{const day=new Date(entry.at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});const previous=index?new Date(timeline[index-1].at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):null;const divider=day!==previous?<div className="conversation-date"><span>{day}</span></div>:null;if(entry.kind==='call')return <Fragment key={entry.key}>{divider}<CallConversation {...entry.call} onRefreshRecording={onSent}/></Fragment>;const message=entry.message;return <Fragment key={entry.key}>{divider}<article data-message-id={message.id} className={`message-bubble ${message.direction==='outgoing'?'message-outgoing':'message-incoming'}`}>
-   <strong className="message-speaker">{messageSpeaker(message.direction,thread.party,message.author)}</strong><p className="message-body" style={{whiteSpace:'pre-wrap'}}>{message.body}</p>
+   <strong className="message-speaker">{message.direction==='incoming'&&isCarrierTextNotice(message.body,message.attachments)?'Automated notice':messageSpeaker(message.direction,thread.party,message.author)}</strong><p className="message-body" style={{whiteSpace:'pre-wrap'}}>{message.body}</p>
    {message.direction==='incoming'&&message.attachments?.map((attachment,index)=>{
     let safe=false;try{const url=new URL(attachment.url);safe=url.protocol==='https:'&&url.hostname==='api.contiguity.com'&&url.pathname.startsWith('/attachments/')&&!url.username&&!url.password;}catch{}
     return safe?<p key={index}><a href={attachment.url} target="_blank" rel="noopener noreferrer" style={{color:'inherit'}}>View attachment {index+1}</a></p>:<p key={index}>Attachment held for review</p>;

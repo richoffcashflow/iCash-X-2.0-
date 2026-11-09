@@ -1,6 +1,6 @@
 // Authenticated, metadata-only deployment proof. No RPCs, provider calls, writes,
 // credential discovery, or customer identifiers in diagnostics/results.
-import {workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
+import {workspaceAttentionQuery,workspaceAttentionSource,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
 
 const discoveryLimit=12,retainedDiscoveryLimit=3,accountLimit=3,sampleLimit=24,retainedLimit=12,pageSize=7,badgeSize=6;
 const gapFields='id,account_id,screening_id,state,reason,stage,review_reason,expires_at,outgoing_id,updated_at';
@@ -10,7 +10,7 @@ const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 class AttentionReadbackError extends Error{}
 const fail=code=>{throw new AttentionReadbackError('Attention API verification failed: '+code+'.');};
-const path=(table,params)=>table+'?'+new URLSearchParams(params);
+const path=(table,params)=>workspaceAttentionSource(table)+'?'+new URLSearchParams(params);
 const inIds=ids=>'in.('+ids.join(',')+')';
 const unique=values=>[...new Set(values)];
 const fields=(row,names)=>record(row)&&Object.keys(row).length===names.split(',').length&&names.split(',').every(key=>Object.hasOwn(row,key));
@@ -31,7 +31,7 @@ const snapshot=rows=>JSON.stringify([...rows].sort((a,b)=>a.id.localeCompare(b.i
 // the shared receipt embed and predicate. The offline test executes that caller
 // and compares both URLs, so its real nested shape cannot silently drift.
 export function attentionBadgeReadbackQuery(accountId,propertyIds,now){
- const params=new URLSearchParams({account_id:'eq.'+accountId,id:inIds(propertyIds),select:`id,icash_seller_gaps!inner(${sellerReminderDeliveryEmbed})`,'icash_seller_gaps.account_id':'eq.'+accountId,'icash_seller_gaps.state':'eq.needs_review'});
+ const params=new URLSearchParams({account_id:'eq.'+accountId,id:inIds(propertyIds),select:`id,icash_seller_gaps:${workspaceAttentionSource('icash_seller_gaps')}!inner(${sellerReminderDeliveryEmbed})`,'icash_seller_gaps.account_id':'eq.'+accountId,'icash_seller_gaps.state':'eq.needs_review'});
  for(const [key,value] of sellerAttentionFilters(accountId,'icash_seller_gaps',now))params.set(key,value);
  params.set('limit',String(badgeSize));
  return 'icash_screening_jobs?'+params;
@@ -79,7 +79,7 @@ export async function checkWorkspaceAttentionReadback({env=process.env,fetcher=f
   let requests=0;
   async function read(query){
    const [table,search]=query.split('?'),params=new URLSearchParams(search),limit=Number(params.get('limit'));
-   if(!['icash_seller_gaps','icash_screening_jobs','icash_text_messages'].includes(table)||!Number.isInteger(limit)||limit<1||limit>sampleLimit+discoveryLimit+retainedDiscoveryLimit+retainedLimit||++requests>90)fail('read_bound');
+   if(!['icash_response_seller_gaps','icash_screening_jobs','icash_text_messages'].includes(table)||!Number.isInteger(limit)||limit<1||limit>sampleLimit+discoveryLimit+retainedDiscoveryLimit+retainedLimit||++requests>90)fail('read_bound');
    const response=await fetcher(base.origin+'/rest/v1/'+query,{method:'GET',headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY,Accept:'application/json'},redirect:'error',cache:'no-store',signal:AbortSignal.any([budget,AbortSignal.timeout(10000)])});
    if(!response.ok){
     await response.body?.cancel().catch(()=>{});
@@ -152,7 +152,7 @@ export async function checkWorkspaceAttentionReadback({env=process.env,fetcher=f
     // Freeze only the clock so every read checks the same expiry boundary.
     for(const [key,value] of sellerAttentionFilters(accountId,'',now))params.set(key,value);
     params.set('id',inIds(gapIds));
-    checkIds(await read('icash_seller_gaps?'+params),ordered.slice(offset,offset+pageSize).map(row=>row.id),'direct');
+    checkIds(await read(workspaceAttentionSource('icash_seller_gaps')+'?'+params),ordered.slice(offset,offset+pageSize).map(row=>row.id),'direct');
    }
    const active=properties.filter(row=>row.state==='complete').map(row=>row.id);
    // The production caller already selects complete properties. Keep the same

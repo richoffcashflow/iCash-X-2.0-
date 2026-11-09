@@ -1,0 +1,30 @@
+// Render the actual conversation component with synthetic history. No browser,
+// provider, send callback or customer data is used by this server-side render.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {createElement,Fragment,useEffect,useRef,useState} from 'react';
+import {jsx as _jsx,jsxs as _jsxs} from 'react/jsx-runtime';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {isCarrierTextNotice} from '../lib/carrier-text-notice.ts';
+import {conversationTimeline} from '../lib/conversation-timeline.ts';
+import {messageSpeaker,safeLocalTime} from '../components/workspace-view.ts';
+import {textStateLabel} from '../lib/text-send-state.ts';
+const deps={Fragment,useEffect,useRef,useState,_jsx,_jsxs,isCarrierTextNotice,conversationTimeline,messageSpeaker,safeLocalTime,textStateLabel};
+globalThis.__noticeRender=deps;
+let source=readFileSync(new URL('../components/deal-messages.tsx',import.meta.url),'utf8')+'\nexport {Conversation};';
+source=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText.replace(/^import .*;\s*$/gm,'');
+const {Conversation}=await import('data:text/javascript;base64,'+Buffer.from('const {'+Object.keys(deps).join(',')+'}=globalThis.__noticeRender;\n'+source).toString('base64'));
+const notice='Free Msg: Receiver 12025550123 unable to receive message - Message Blocking is active';
+const incoming={id:'notice',thread_id:'thread',created_at:'2026-11-08T12:00:00Z',direction:'incoming',author:'contact',body:notice,attachments:[],state:'received'};
+const props={firstMessage:incoming,historyOnly:true,calls:[],callsUnavailable:false,thread:{id:'thread',party:'seller',paused:true},messages:[incoming,{...incoming,id:'human',body:'I got '+notice+' but I can talk.'},{...incoming,id:'image',attachments:[{url:'https://example.invalid/image'}]},{...incoming,id:'outgoing',direction:'outgoing',state:'delivered',author:'you'}],onSent:()=>{throw Error('Rendering cannot send');},draft:'',onDraft:()=>{throw Error('Rendering cannot change draft');},attempts:{},stale:false};
+const html=renderToStaticMarkup(createElement(Conversation,props));
+assert.equal((html.match(/Automated notice/g)??[]).length,2,'First message and history label the saved carrier text neutrally');
+assert.equal((html.match(/class="message-speaker">Seller</g)??[]).length,2,'Mixed prose and attachment captions remain seller turns');
+assert.equal((html.match(/class="message-speaker">You</g)??[]).length,1,'Outgoing text is never reclassified');
+assert.equal((html.match(/Free Msg:/g)??[]).length,5,'All raw text stays present, including the original first message');
+assert(!html.includes('role="alert"'),'No new technical failure banner or customer action is introduced');
+assert(!html.includes('Retry text'),'A notice supplies no retry action');
+assert.equal(messageSpeaker('incoming','buyer','notice'),'Automated notice');
+delete globalThis.__noticeRender;
+console.log('PASS carrier notice rendering: actual conversation/first-message markup, neutral attribution, retained raw evidence, human quotes and attachments, outgoing author and no new retry/banner.');

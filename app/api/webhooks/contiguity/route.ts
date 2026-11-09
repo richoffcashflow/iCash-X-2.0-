@@ -1,3 +1,4 @@
+import {isCarrierTextNotice} from '@/lib/carrier-text-notice';
 import {replyToInstantLeadText} from '@/lib/meta-instant-text';
 import {NextResponse} from 'next/server';
 import {verifyContiguityWebhook,parseTextWebhook,parseSenderDelay,isServiceTextSender} from '@/lib/contiguity';
@@ -48,6 +49,14 @@ export async function POST(req:Request){
  // Acknowledge authenticated service notices after checking our destination.
  // Never persist verification codes or route short codes into customer work.
  if(inbound&&isServiceTextSender(event.data.from))return NextResponse.json({received:true});
+ // Save authenticated carrier evidence through the normal deduplicated inbox,
+ // without interpreting a delivery notice as any recipient's reply. Delivery
+ // callbacks and genuine STOP messages retain their existing handling below.
+ if(inbound&&!event.optOut&&isCarrierTextNotice(event.data.body,event.data.attachments??[])){
+  stage='property_ingestion';
+  await db('rpc/icash_ingest_text_event','POST',{p_event:event,p_optout:false});
+  return NextResponse.json({received:true});
+ }
  stage='lifecycle_routing';
  const role=inbound?await db<string>('rpc/icash_route_lifecycle_text','POST',{p_event:event,p_optout:event.optOut}):null;
  if(inbound)await db('rpc/icash_legacy_reply','POST',{p_phone:event.data.from,p_optout:event.optOut});

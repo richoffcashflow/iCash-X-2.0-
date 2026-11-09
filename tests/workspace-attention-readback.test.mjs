@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {checkWorkspaceAttentionReadback,attentionBadgeReadbackQuery,expectedAttentionRows} from '../scripts/check-workspace-attention-readback.mjs';
-import {workspaceAttentionQuery,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
+import {workspaceAttentionQuery,workspaceAttentionSource,sellerAttentionFilters,sellerReminderDeliveryEmbed} from '../lib/workspace-attention-query.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 
 const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -42,7 +42,7 @@ function fixture(options={}){
  const calls=[],cancelled=[];let metadataReads=0;
  const failedResponse=status=>new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('private failed response'));},cancel(){cancelled.push(status);}}),{status});
  const fetcher=async(url,request)=>{
-  const u=new URL(url),table=u.pathname.split('/rest/v1/')[1],q=u.searchParams;
+  const u=new URL(url),table=u.pathname.split('/rest/v1/')[1].replace('icash_response_','icash_'),q=u.searchParams;
   calls.push({table,q});
   assert.equal(u.origin,'https://database.example.test','No provider requests');
   assert.equal(request.method,'GET');assert.equal(request.body,undefined,'No RPCs or writes');
@@ -139,7 +139,7 @@ function fixture(options={}){
    return json(rows);
   }
   assert.equal(q.get('icash_seller_gaps.state'),'eq.needs_review');assert.equal(q.get('limit'),'6');
-  assert.equal(q.get('select'),`id,icash_seller_gaps!inner(${sellerReminderDeliveryEmbed})`);
+  assert.equal(q.get('select'),`id,icash_seller_gaps:icash_response_seller_gaps!inner(${sellerReminderDeliveryEmbed})`);
   assert(inFilter(q.get('icash_seller_gaps.id')).includes(gaps[0].id));
   const rows=properties.filter(p=>inFilter(q.get('id')).includes(p.id)&&(shown.some(g=>g.screening_id===p.id)||options.nestedMismatch)).map(p=>({id:p.id,icash_seller_gaps:[{}]}));
   return json(rows);
@@ -200,7 +200,7 @@ const cohortGap=(n,owner,retained=false)=>({...gaps[0],id:uuid(1000+n),account_i
 function cohortFixture({hidden=[],retained=[],generalSample=[],retainedSample=[]}={}){
  const calls=[],source=[...hidden,...retained,...generalSample,...retainedSample];
  const fetcher=async(url,request)=>{
-  const u=new URL(url),q=u.searchParams,table=u.pathname.split('/rest/v1/')[1];calls.push({table,q});
+  const u=new URL(url),q=u.searchParams,table=u.pathname.split('/rest/v1/')[1].replace('icash_response_','icash_');calls.push({table,q});
   assert.equal(u.origin,'https://database.example.test');assert.equal(request.method,'GET');assert.equal(request.body,undefined);
   assert.equal(request.redirect,'error');assert.equal(request.cache,'no-store');assert(request.signal instanceof AbortSignal);
   assert(Number(q.get('limit'))>0&&Number(q.get('limit'))<=51);
@@ -272,7 +272,7 @@ for(const retainedDiscovery of [
 // This uses no network and no duplicated application query implementation.
 const emitted=[];
 const {workspaceActivity}=await loadService('lib/workspace-activity-read.ts',{
- workspaceAttentionQuery,sellerAttentionFilters:(id,prefix)=>sellerAttentionFilters(id,prefix,now),sellerReminderDeliveryEmbed,
+ workspaceAttentionQuery,workspaceAttentionSource,sellerAttentionFilters:(id,prefix)=>sellerAttentionFilters(id,prefix,now),sellerReminderDeliveryEmbed,
  instantLeadsEnabled:()=>false,isConfirmedVoicemail:()=>false,attachTaskRecovery:async(_,rows)=>rows,
  NextResponse:{json:(body,options={})=>({body,status:options.status??200})},
  db:async(query,method)=>{
@@ -282,7 +282,7 @@ const {workspaceActivity}=await loadService('lib/workspace-activity-read.ts',{
  }
 });
 assert.equal((await workspaceActivity(new Request('https://example.invalid/api/work/activity'),account)).status,200);
-const actual=emitted.find(query=>query.includes('icash_seller_gaps!inner('));assert(actual);
+const actual=emitted.find(query=>query.includes('icash_seller_gaps:icash_response_seller_gaps!inner('));assert(actual);
 const canonical=query=>[...new URLSearchParams(query.split('?')[1])].sort(([a],[b])=>a.localeCompare(b));
 assert.deepEqual(canonical(attentionBadgeReadbackQuery(account,[properties[0].id],now)),canonical(actual));
 

@@ -1,5 +1,9 @@
 # Continuous reliability
 
+## November 8 carrier notice classification
+
+The [carrier notice repair](carrier-text-notice-classification.md) reproduces a whole automated message-blocking notice labeled as a seller reply. The fix separates immutable transport evidence from human-response projections, AI/action sources and current interest. It covers already-saved notices and retained SQL delegates without changing suppression, consent, original charges or uncertain sends. Sequential offline connected-flow tests and native admission/projection races are required. Release remains gated on independent review, exact-head normal checks, ordered database migration and actual PostgREST relationship readback. No carrier recovery, live customer result or deployment is claimed by offline passes.
+
 ## November 8 deferred text recovery
 
 The [deferred text recovery investigation](deferred-text-recovery.md) found stale
