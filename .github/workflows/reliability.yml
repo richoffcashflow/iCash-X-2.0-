@@ -154,6 +154,29 @@ jobs:
         run: python3 scripts/test-custom-voice-preview-postgres.py
       - name: Verify confirmed contract delivery under competing claims
         run: python3 scripts/test-confirmed-contract-delivery-postgres.py
+  seller-one-call-contention:
+    # Own database: this suite resets its schemas and must not run beside other fixtures.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_PASSWORD: isolated-fixture-only
+          POSTGRES_DB: icash_reliability
+        ports:
+          - 55443:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify source-bound one-call consent, final admission and concurrent preferences
+        run: python3 scripts/test-seller-one-call-consent-postgres.py
   outreach-preparation-contention:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {readFileSync,readdirSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const sql=read('config/seller-one-call-consent.sql');
+const migration=readdirSync(new URL('../supabase/migrations/',import.meta.url)).find(n=>/^\d+_seller_one_call_consent\.sql$/.test(n));
+assert(migration,'CLI-generated migration required');
+assert.equal(sql,read('supabase/migrations/'+migration));
+const before=JSON.parse(read('tests/fixtures/seller-one-call-before.json'));
+for(const name of ['icash_queue_seller_sms_call','icash_requested_seller_call_current','icash_claim_voice_job','icash_reserve_paced_voice','icash_seller_response_operation_allowed','icash_create_direct_recorded_call','icash_transition_call_recording','icash_seller_voice_permission_current','icash_seller_voice_permission_before_meta','icash_seller_sms_call_current','icash_seller_call_now_intent','icash_meta_observe_text','icash_seller_recorded_call_finished']){
+ const digest=createHash('md5').update(before[name]).digest('hex');
+ assert(sql.includes(digest),name+' must fail closed on exact predecessor drift');
+}
+assert(sql.indexOf('do $predecessors$')<sql.indexOf('create schema'));
+assert(sql.includes('enabled boolean not null default false'));
+assert(sql.includes('activated_at<=m.created_at'));
+assert(sql.includes('message_id uuid not null unique'));
+assert(sql.includes('meta_pause_known'));
+assert(sql.includes("v.channel='voice' and public.icash_operational_contact_current"));
+assert(sql.includes('v.source_hash=sms.source_hash'));
+assert(sql.includes('v.dnc_receipt_id=sms.dnc_receipt_id'));
+assert(sql.includes('preference_allows_job'));
+assert.equal((sql.match(/not public\.icash_seller_recorded_call_finished\(r\.account_id,r\.id\)/g)||[]).length,2);
+assert.equal(JSON.parse(read('tests/fixtures/seller-soft-text-modal-preferences.json')).length,36);
+assert(sql.includes("p_action<>''claim_dial''"));
+assert(sql.includes("'What day and time work for a call?'"));
+assert(!/voice_paused\s*=\s*false/i.test(sql));
+assert(!/create (?:or replace )?function public\.icash_seller_voice_permission_current/i.test(sql));
+assert(!/alter function public\.(?:icash_claim_voice_job|icash_reserve_paced_voice|icash_seller_response_operation_allowed).*security definer/i.test(sql));
+assert(sql.includes('revoke all on schema icash_seller_call_private from service_role'));
+assert(sql.includes('from public,anon,authenticated'));
+const native=read('scripts/test-seller-one-call-consent-postgres.py');
+for(const required of ['127.0.0.1','icash_reliability','set role service_role','ThreadPoolExecutor','boundary_race','Now works','pool-new-choice','source_locked','seller-soft-text-modal-preferences.json','terminal_receipt_pending','settled_cross_account','recording_only_ended'])assert(native.includes(required),required);
+assert(read('.github/workflows/reliability.yml').includes('test-seller-one-call-consent-postgres.py'));
+console.log('PASS one-call migration equality,13 exact source hashes,default-off/source binding/ACL/clock boundaries,native race coverage registration.');
