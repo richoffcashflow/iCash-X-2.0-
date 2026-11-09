@@ -23,9 +23,9 @@ alter table icash_voice_contact_targets add primary key(id),add column eligibili
 create table icash_voice_jobs(id uuid primary key default gen_random_uuid(),account_id uuid,permission_id uuid,operational_contact_id uuid,
  state text default 'ready',due_at timestamptz default now(),created_at timestamptz default now(),updated_at timestamptz default now(),operation_key text,
  callback_id uuid,sms_source_message_id uuid,sms_requested_at timestamptz,sms_requested_by uuid,cancellation_notice_id uuid,meta_offer_lead_id uuid,meta_followup_lead_id uuid,meta_retry_of uuid,
- provider_call_sid text,conversation_id text,outcome text,
- constraint icash_voice_sms_source check(sms_source_message_id is null or (permission_id is not null and operational_contact_id is null and callback_id is null and sms_requested_at is not null)));
-create unique index icash_voice_operational_first_once on icash_voice_jobs(operational_contact_id) where callback_id is null;
+ provider_call_sid text,conversation_id text,outcome text);
+-- The real SMS-source constraint is loaded from seller-one-call-sms-constraint-before.sql.
+-- The real operational-first index is loaded from seller-one-call-index-before.sql.
 create unique index icash_voice_sms_source_once on icash_voice_jobs(sms_source_message_id) where not(state='canceled' and outcome is not distinct from 'context_rejected_before_dial');
 create table icash_text_threads(id uuid primary key,account_id uuid,deal_id uuid,seller_intake_id uuid,operational_contact_id uuid,party text default 'seller',
  sender text default '+12025550101',recipient text,paused boolean default false,manual_only boolean default false,ai_mode text default 'auto',retired_at timestamptz);

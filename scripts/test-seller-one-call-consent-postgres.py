@@ -29,6 +29,10 @@ def check(query, expected='t'):
 assert sql('select current_database();') == 'icash_reliability'
 sql('drop schema if exists icash_seller_call_private cascade;drop schema if exists icash_recording_private cascade;drop schema if exists icash_text_receipt_private cascade;drop schema public cascade;create schema public;')
 sql((ROOT/'tests/fixtures/seller-one-call-foundation.sql').read_text())
+index_before=(ROOT/'tests/fixtures/seller-one-call-index-before.sql').read_text()
+sql(index_before)
+constraint_before=(ROOT/'tests/fixtures/seller-one-call-sms-constraint-before.sql').read_text()
+sql(constraint_before)
 recording = (ROOT/'config/required-call-recording.sql').read_text()
 recording = recording[recording.index('create table public.icash_call_recordings ('):recording.index('create index icash_recording_reconcile_due')]
 # Retain the real schema and replace only pre-direct-recording legacy constraints.
@@ -76,7 +80,55 @@ except AssertionError as error:
     assert 'Seller one-call predecessor changed' in str(error), str(error)
 check("select to_regnamespace('icash_seller_call_private') is null;")
 sql(before['icash_claim_voice_job'])
+# Index predicates are part of the predecessor contract too. A structurally
+# valid but unreviewed definition must abort before creating the private schema.
+sql('drop index public.icash_voice_operational_first_once;create unique index icash_voice_operational_first_once on public.icash_voice_jobs(operational_contact_id) where callback_id is null;')
+try:
+    sql(candidate)
+    raise AssertionError('Changed index predecessor unexpectedly installed')
+except AssertionError as error:
+    assert 'Seller one-call index predecessor changed' in str(error),str(error)
+check("select to_regnamespace('icash_seller_call_private') is null;")
+sql('drop index public.icash_voice_operational_first_once;'+index_before)
+# An added source restriction or an unvalidated check cannot be silently
+# replaced. Rejection must leave both the index and altered check untouched.
+for changed_constraint in [constraint_before.replace('CHECK (','CHECK (sms_source_message_id IS NULL AND ',1),constraint_before.replace(';',' NOT VALID;',1)]:
+    sql('alter table public.icash_voice_jobs drop constraint icash_voice_sms_source;'+changed_constraint)
+    changed_proof=sql("select pg_get_constraintdef(oid)||':'||convalidated from pg_constraint where conrelid='public.icash_voice_jobs'::regclass and conname='icash_voice_sms_source';")
+    try:
+        sql(candidate)
+        raise AssertionError('Changed constraint predecessor unexpectedly installed')
+    except AssertionError as error:
+        assert 'Seller one-call constraint predecessor changed' in str(error),str(error)
+    check("select to_regnamespace('icash_seller_call_private') is null;")
+    check("select pg_get_indexdef('public.icash_voice_operational_first_once'::regclass);",index_before.strip().removesuffix(';'))
+    check("select pg_get_constraintdef(oid)||':'||convalidated from pg_constraint where conrelid='public.icash_voice_jobs'::regclass and conname='icash_voice_sms_source';",changed_proof)
+    sql('alter table public.icash_voice_jobs drop constraint icash_voice_sms_source;'+constraint_before)
+# Existing cancellation notices may share a target with ordinary work. These
+# synthetic legacy rows must survive the index rebuild without being reclassified.
+structural_account=sql("select md5('index-boundary-account')::uuid;")
+structural_target=sql("select md5('index-boundary-target')::uuid;")
+sql(f"insert into icash_voice_jobs(account_id,operational_contact_id,cancellation_notice_id) values({lit(structural_account)},{lit(structural_target)},null),({lit(structural_account)},{lit(structural_target)},gen_random_uuid()),({lit(structural_account)},{lit(structural_target)},gen_random_uuid());")
+structural_history=sql(f"select jsonb_agg(to_jsonb(j) order by j.id)::text from icash_voice_jobs j where account_id={lit(structural_account)};")
 sql(candidate)
+check(f"select jsonb_agg(to_jsonb(j) order by j.id)::text from icash_voice_jobs j where account_id={lit(structural_account)};",structural_history)
+# One ordinary job remains unique. Cancellation/callback workflows keep their
+# exclusions; distinct SMS requests may share the target but never the source.
+def expect_unique_rejection(query,index_name):
+    try:
+        sql(query)
+        raise AssertionError('Duplicate voice boundary unexpectedly admitted')
+    except AssertionError as error:
+        assert index_name in str(error),str(error)
+ordinary_insert=f"insert into icash_voice_jobs(account_id,operational_contact_id) values({lit(structural_account)},{lit(structural_target)});"
+expect_unique_rejection(ordinary_insert,'icash_voice_operational_first_once')
+sql(f"insert into icash_voice_jobs(account_id,operational_contact_id,cancellation_notice_id) values({lit(structural_account)},{lit(structural_target)},gen_random_uuid());insert into icash_voice_jobs(account_id,operational_contact_id,callback_id) values({lit(structural_account)},{lit(structural_target)},gen_random_uuid());")
+source1=sql("select gen_random_uuid();")
+source2=sql("select gen_random_uuid();")
+for source in [source1,source2]:
+    sql(f"insert into icash_voice_jobs(account_id,operational_contact_id,sms_source_message_id,sms_requested_at) values({lit(structural_account)},{lit(structural_target)},{lit(source)},now());")
+expect_unique_rejection(f"insert into icash_voice_jobs(account_id,operational_contact_id,sms_source_message_id,sms_requested_at) values({lit(structural_account)},{lit(structural_target)},{lit(source1)},now());",'icash_voice_sms_source_once')
+check(f"select count(*) from icash_voice_jobs where account_id={lit(structural_account)};",'7')
 check("select not enabled and activated_at is null from icash_seller_call_private.settings;")
 # Exact original global voice predicate and all unrelated original gate checks survive.
 check("select pg_get_functiondef('icash_seller_voice_permission_current(uuid,uuid)'::regprocedure)="+lit(before['icash_seller_voice_permission_current'])+';')
@@ -492,4 +544,4 @@ for n,preference in [(130,'Text only'),(131,'The property is vacant')]:
     assert prepared['voiceJobId']==f['job'] and prepared['accountId']==f['account']
     check(f"select icash_seller_callback_voice_pending({lit(f['job'])});",'f')
     claim(f);assert create(f);check(transition(f,'claim_dial'))
-print('PASS native seller one-call consent: exact predecessor migration, ACLs, disabled/no-backfill, intake + operational 16-way request/dial races, actual reserve/claim/create/start, preserved held/started history, prospective untouched supersession and reservation races, actual ingress/slot/spacing/context and exact settled-terminal receipts, shared modal corpus, source/route/manual/consent/operational/quiet-hour/unknown/STOP checks. No provider calls.')
+print('PASS native seller one-call consent: exact function/index/constraint predecessor migration, preserved cancellation/SMS uniqueness, ACLs, disabled/no-backfill, intake + operational 16-way request/dial races, actual reserve/claim/create/start, preserved held/started history, prospective untouched supersession and reservation races, actual ingress/slot/spacing/context and exact settled-terminal receipts, shared modal corpus, source/route/manual/consent/operational/quiet-hour/unknown/STOP checks. No provider calls.')

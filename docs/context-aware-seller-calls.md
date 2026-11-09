@@ -80,6 +80,10 @@ Release order:
    exact-head canonical CI, including the dedicated `seller-one-call-contention`
    job on PostgreSQL 17.6. Read current predecessor definitions before installing;
    abort on drift rather than overwrite another repair.
+   The operational-first index and SMS-source check constraint are also guarded
+   against their exact, valid predecessors.
+   Its existing callback and cancellation exclusions are preserved while distinct
+   source-bound SMS requests gain their own uniqueness boundary.
 2. Install the approved `20261109043504_seller_one_call_consent.sql` migration
    while disabled. Verify the migration receipt, private ledger access rules,
    original global voice predicate and disabled setting. Do not backfill historical

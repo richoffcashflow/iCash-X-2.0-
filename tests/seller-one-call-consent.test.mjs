@@ -11,6 +11,15 @@ for(const name of ['icash_queue_seller_sms_call','icash_requested_seller_call_cu
  const digest=createHash('md5').update(before[name]).digest('hex');
  assert(sql.includes(digest),name+' must fail closed on exact predecessor drift');
 }
+const indexBefore=read('tests/fixtures/seller-one-call-index-before.sql').trim().replace(/;$/,'');
+assert(sql.includes(createHash('md5').update(indexBefore).digest('hex')),'Exact index predecessor must be guarded');
+assert(sql.includes('where callback_id is null and cancellation_notice_id is null and sms_source_message_id is null;'));
+assert(sql.includes('Seller one-call index predecessor changed'));
+const constraintBefore=read('tests/fixtures/seller-one-call-sms-constraint-before.sql').trim().replace(/^ALTER TABLE public.icash_voice_jobs ADD CONSTRAINT icash_voice_sms_source /,'').replace(/;$/,'');
+assert(sql.includes(createHash('md5').update(constraintBefore).digest('hex')),'Exact SMS-source constraint must be guarded');
+assert(sql.includes("c.conname='icash_voice_sms_source' and c.contype='c' and c.convalidated"));
+assert(sql.includes('Seller one-call constraint predecessor changed'));
+
 assert(sql.indexOf('do $predecessors$')<sql.indexOf('create schema'));
 assert(sql.includes('enabled boolean not null default false'));
 assert(sql.includes('activated_at<=m.created_at'));
@@ -30,7 +39,7 @@ assert(!/alter function public\.(?:icash_claim_voice_job|icash_reserve_paced_voi
 assert(sql.includes('revoke all on schema icash_seller_call_private from service_role'));
 assert(sql.includes('from public,anon,authenticated'));
 const native=read('scripts/test-seller-one-call-consent-postgres.py');
-for(const required of ['127.0.0.1','icash_reliability','set role service_role','ThreadPoolExecutor','boundary_race','Now works','pool-new-choice','source_locked','seller-soft-text-modal-preferences.json','terminal_receipt_pending','settled_cross_account','recording_only_ended','PGAPPNAME','application_name={lit(waiter_name)}','pg_blocking_pids(pid)','assert not future.done()'])assert(native.includes(required),required);
+for(const required of ['127.0.0.1','icash_reliability','set role service_role','ThreadPoolExecutor','boundary_race','Now works','pool-new-choice','source_locked','seller-soft-text-modal-preferences.json','terminal_receipt_pending','settled_cross_account','recording_only_ended','structural_history','Changed index predecessor unexpectedly installed','Changed constraint predecessor unexpectedly installed',' NOT VALID;','expect_unique_rejection','PGAPPNAME','application_name={lit(waiter_name)}','pg_blocking_pids(pid)','assert not future.done()'])assert(native.includes(required),required);
 assert(!native.includes("and query like '%"),'Race observation must not depend on multi-statement SQL text');
 assert(read('.github/workflows/reliability.yml').includes('test-seller-one-call-consent-postgres.py'));
-console.log('PASS one-call migration equality,13 exact source hashes,default-off/source binding/ACL/clock boundaries,native race coverage registration.');
+console.log('PASS one-call migration equality,13 exact function hashes + index/constraint predecessors,default-off/source binding/ACL/clock boundaries,native race coverage registration.');

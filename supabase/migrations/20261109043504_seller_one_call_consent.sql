@@ -28,6 +28,16 @@ begin
    raise exception 'Seller one-call predecessor changed: %',item.signature;
   end if;
  end loop;
+ if to_regclass('public.icash_voice_operational_first_once') is null
+  or md5(pg_get_indexdef(to_regclass('public.icash_voice_operational_first_once')))<>'14d531cb724f77b456c512b9240a8c15'
+  or not exists(select 1 from pg_index where indexrelid=to_regclass('public.icash_voice_operational_first_once') and indisvalid) then
+  raise exception 'Seller one-call index predecessor changed: public.icash_voice_operational_first_once';
+ end if;
+ if not exists(select 1 from pg_constraint c where c.conrelid='public.icash_voice_jobs'::regclass
+  and c.conname='icash_voice_sms_source' and c.contype='c' and c.convalidated
+  and md5(pg_get_constraintdef(c.oid))='2dfe63b48f6f1e739deae2e1058fc5d7') then
+  raise exception 'Seller one-call constraint predecessor changed: public.icash_voice_jobs.icash_voice_sms_source';
+ end if;
 end$predecessors$;
 create schema icash_seller_call_private;
 revoke all on schema icash_seller_call_private from public,anon,authenticated;
@@ -410,7 +420,7 @@ alter table public.icash_voice_jobs add constraint icash_voice_sms_source check(
  (((permission_id is null)<>(operational_contact_id is null)) and callback_id is null and sms_requested_at is not null));
 drop index public.icash_voice_operational_first_once;
 create unique index icash_voice_operational_first_once on public.icash_voice_jobs(operational_contact_id)
- where callback_id is null and sms_source_message_id is null;
+ where callback_id is null and cancellation_notice_id is null and sms_source_message_id is null;
 
 alter function public.icash_requested_seller_call_current(uuid,uuid) rename to icash_requested_seller_call_before_one_call;
 create function public.icash_requested_seller_call_current(p_account uuid,p_job uuid) returns boolean
