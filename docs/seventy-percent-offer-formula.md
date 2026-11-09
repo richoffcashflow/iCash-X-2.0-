@@ -14,7 +14,7 @@ Version `arv_70_less_repairs_v3` distinguishes new results. The property breakdo
 
 No migration rewrites rows, accepted prices, issued/signed agreements, original research or published buyer terms. A supported accepted price stays exact. An accepted amount above the new supported ceiling is held for reconciliation, never silently replaced. An issued agreement keeps its frozen terms, and a signed purchase does not start another offer sequence. Existing buyer package prices, fees and deposits remain unchanged.
 
-The append-only `20261109120000_seventy_percent_offer_formula.sql` changes the automatic voice price calculator and both buyer-assignment-pricing overloads. It retains current validation, permissions, source/account checks and the property-specific approved minimum-fee path. New publications describe the new budget; old evidence remains intact. Unexpected predecessor functions abort the transaction.
+The append-only `20261109155321_seventy_percent_offer_formula.sql` changes the automatic voice price calculator and both buyer-assignment-pricing overloads. It retains current validation, permissions, source/account checks and the property-specific approved minimum-fee path. New publications describe the new budget; old evidence remains intact. Unexpected predecessor functions abort the transaction.
 
 ## Release and verification
 

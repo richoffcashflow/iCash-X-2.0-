@@ -131,7 +131,7 @@ try{
  const records=async()=>Promise.all(protectedTables.map(async t=>(await q(`select to_jsonb(t) row from ${t} t order by to_jsonb(t)::text`)).rows));
  const protectedBefore=await records();
  const formulaMigration=readFileSync('config/seventy-percent-offer-formula.sql','utf8');
- assert.equal(formulaMigration,readFileSync('supabase/migrations/20261109120000_seventy_percent_offer_formula.sql','utf8'));
+ assert.equal(formulaMigration,readFileSync('supabase/migrations/20261109155321_seventy_percent_offer_formula.sql','utf8'));
  await pg.exec(formulaMigration);
  assert.deepEqual(await records(),protectedBefore,'migration never updates accepted/signed terms or published prices, fees, deposits and recovery receipts');
  assert.equal(await prep(legacy.deal),true);
@@ -148,8 +148,10 @@ try{
   if(calc.sellerCeilingCents>=100000){
    const price=Math.floor(calc.sellerCeilingCents/100000)*100000;
    for(const minimum of [undefined,1000000,500000]){
-    const args={p_price:price,p_snapshot:snap,p_fee:null,...(minimum===undefined?{}:{p_minimum:minimum})};
-    const plan=await rpc('icash_buyer_assignment_pricing',args);
+    // The fixture RPC adapter caches the original three-argument overload.
+    const plan=minimum===undefined
+     ?await rpc('icash_buyer_assignment_pricing',{p_price:price,p_snapshot:snap,p_fee:null})
+     :(await one('select public.icash_buyer_assignment_pricing($1::bigint,$2::jsonb,null::bigint,$3::bigint) plan',[price,snap,minimum])).plan;
     assert.equal(plan.ready,true);assert.equal(plan.buyerCeilingCents,calc.buyerCeilingCents);
     assert.equal(plan.assignmentFeeCents,calc.assignmentFeeCents);
    }
