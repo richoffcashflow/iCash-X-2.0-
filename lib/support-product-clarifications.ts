@@ -68,6 +68,9 @@ export function supportProductClarification(messages:Turn[]){
  // Preserve the established role answer before
  // matching incidental words such as "send contracts to title" in a recap.
  if(supportRoleQuestion(q))return null;
+ // A hypothetical unanswered text is a display question, not proof of a stall.
+ // Actual missing history, payment issues and delivery faults need investigation.
+ if(/\bif\b/i.test(q)&&/\b(?:seller|owner)\b/i.test(q)&&/\b(?:(?:does not|doesn[’']?t) text(?: the (?:ai|bot))? back|(?:has not|hasn[’']?t) replied|does not reply|doesn[’']?t reply)\b/i.test(q)&&/\bconversation\b/i.test(q)&&/\b(?:blank|empty)\b/i.test(q)&&!/\b(?:payment|charge|billing|refund|cancel|sign[ -]?in|log[ -]?in|code|checkout|missing|disappeared|failed|error|broken|not loading|not working|not sending)\b/i.test(q))return {reply:'No seller reply means no incoming answer is recorded; saved outgoing texts can still appear in the conversation. Open the property under Your leads and review Texts, including the selected contact and message status. A saved outgoing text does not prove delivery or seller interest. If the view is completely blank despite saved messages, that needs a separate check; I haven’t confirmed a display fault or a fix.',answered:false};
  // Clarify an unspecified business outcome without turning it into a page error.
  // Payment, search and specific failures retain their established routes.
  if(/\b(?:when|how soon|how long)\b/i.test(q)&&/\b(?:see(?:ing)?|get(?:ting)?|expect|start)\b.{0,35}\bresults?\b/i.test(q)&&!/\b(?:search|test|payment|charge|code|sign[ -]?in|error|failed|broken|not working|contracts?|agreements?|calls?|texts?)\b/i.test(q))return {reply:'Do you mean new leads, seller replies, or a signed contract? Those happen at different stages, and I can’t promise a timeline.',answered:false};

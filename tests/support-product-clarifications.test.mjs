@@ -1,11 +1,22 @@
 // Anonymous inbox wording; all responses and transport are exercised offline.
 import assert from 'node:assert/strict';
 import {replyToSupport,supportConversationFallback} from '../lib/support-conversation.ts';
+import {supportProductClarification} from '../lib/support-product-clarifications.ts';
 const user=content=>({role:'user',content}),assistant=content=>({role:'assistant',content});
 const env={...process.env};process.env.ICASH_SUPPORT_AI_ENABLED='true';process.env.OPENAI_API_KEY='fixture';process.env.ICASH_SUPPORT_AI_MODEL='fixture';
 let calls=0;const noAI=async()=>{calls++;throw Error('Known inbox answers must not depend on AI');};
 try{
  for(const kind of ['account','access']){
+  for(const question of ['If a seller does not text back, does the conversation stay blank?','Will the text conversation be empty if the owner has not replied?']){
+   const answer=await replyToSupport({kind,messages:[user(question)]},noAI);
+   assert.match(answer.reply,/saved outgoing texts/);assert.match(answer.reply,/does not prove delivery/);assert.notEqual(answer.status,'resolved');
+   assert.doesNotMatch(answer.reply,/recorded call attempts|new outreach hasn/);
+  }
+  const unansweredHistory=[{role:'operator',content:'The earlier work-cost reconciliation remains unresolved.'},user('If a seller does not text back, does the conversation stay blank?')];
+  assert.notEqual((await replyToSupport({kind,messages:unansweredHistory},noAI)).status,'resolved');
+  unansweredHistory.push(assistant('Open the property and review Texts.'),user('Where is the training course?'));
+  assert.doesNotMatch((await replyToSupport({kind,messages:unansweredHistory},noAI)).reply,/saved outgoing texts/);
+  for(const question of ['The seller replied but the text conversation is blank.','If a seller does not reply, is the conversation blank? Also cancel my subscription.','If a seller does not text back, is the conversation blank? My payment failed.','If the owner has not replied, is the conversation blank? Messages disappeared.','If a seller does not reply, is the conversation blank? I cannot sign in.'])assert.equal(supportProductClarification([user(question)]),null);
   for(const question of ['When should I expect to start seeing results?','How soon can I see results?']){
    const answer=await replyToSupport({kind,messages:[user(question)]},noAI);
    assert.match(answer.reply,/new leads, seller replies, or a signed contract/);assert.doesNotMatch(answer.reply,/Which page|verify your account|troubleshooting/);assert.notEqual(answer.status,'resolved');
