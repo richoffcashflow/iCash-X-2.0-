@@ -62,8 +62,12 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'account directory fits viewport');
   await page.getByRole('button',{name:'Open workspace for Example Customer'}).click();await page.getByText('Viewing Example Customer',{exact:true}).waitFor();
   await page.getByText('$123.45',{exact:true}).waitFor();await page.getByRole('heading',{name:'Bot activity',exact:true}).waitFor();await page.getByRole('heading',{name:'Your leads',exact:true}).waitFor();
-  await page.getByRole('group',{name:'Activity period'}).getByRole('button',{name:'7 days',exact:true}).click();await page.getByRole('region',{name:'Opportunity progress'}).getByText('7 days',{exact:true}).waitFor();
-  const progressRead=reads.findLast(u=>u.pathname===`/api/admin/accounts/view/${viewId}/progress`&&u.searchParams.get('days')==='7'),reportRead=reads.findLast(u=>u.pathname===`/api/admin/accounts/view/${viewId}/report`&&u.searchParams.get('days')==='7');assert(progressRead&&reportRead);assert.equal(progressRead.searchParams.get('timezone'),reportRead.searchParams.get('timezone'),'Owner inspection uses the same period and timezone in both panels');
+  await Promise.all([page.waitForResponse(r=>r.url().includes('/report?days=7')),page.getByRole('group',{name:'Activity period'}).getByRole('button',{name:'7 days',exact:true}).click()]);
+  const reportRead=reads.findLast(u=>u.pathname===`/api/admin/accounts/view/${viewId}/report`&&u.searchParams.get('days')==='7');assert(reportRead,'Owner inspection preserves its scoped period report');
+  assert.equal(await page.getByRole('region',{name:'Bot activity'}).count(),1);
+  assert.equal(await page.getByRole('region',{name:'Opportunity progress'}).count(),0);
+  assert.equal(await page.getByRole('region',{name:'Work credit receipt'}).count(),0);
+  assert(!reads.some(u=>u.pathname===`/api/admin/accounts/view/${viewId}/progress`),'Owner inspection does not poll removed progress cards');
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=responses')),page.getByRole('button',{name:'Seller responses',exact:true}).click()]);
   await Promise.all([page.waitForResponse(r=>r.url().includes('/activity?view=all')),page.getByRole('button',{name:'All activity',exact:true}).click()]);
   const card=page.locator('#property-'+screen);await card.getByRole('img',{name:'Street view of 123 Example Street, Dallas, TX'}).waitFor();
