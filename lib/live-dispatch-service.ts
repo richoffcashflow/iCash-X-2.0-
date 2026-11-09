@@ -1,3 +1,4 @@
+import {outboundSellerCadencePrompt} from './seller-call-cadence.ts';
 import {instantLeadPrompt} from './meta-instant-leads.ts';
 import {opportunityConversationInstructions} from './outreach-conversation.ts';
 import {efficientSellerPrompt} from './seller-conversation-efficiency.ts';
@@ -177,7 +178,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
   const guide=!intake&&!cancellation&&p.party==='seller'&&!automaticOfferPolicy(recordedReview.offerPolicy)?base+'\n'+opportunityConversationInstructions:base;
   const efficient=!intake&&!cancellation&&!limited&&p.party==='seller'?efficientSellerPrompt(guide):guide;
   const instructions=!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerCallerIdentityPrompt(efficient):efficient;
-  return instructions+(assigned?`\nREVIEWED INTEREST QUESTION (shared-v1/${limited?'limited':'reviewed'}): Only after the required identity and ownership checks, and only if interest is not already answered in the saved conversation, use this exact question: ${acquisitionOpeners[strategy]} Do not repeat it to a returning seller who already answered. All existing consent, stop, human handoff, offer authority and agreement requirements still apply.`:'');
+  return outboundSellerCadencePrompt(instructions+(assigned?`\nREVIEWED INTEREST QUESTION (shared-v1/${limited?'limited':'reviewed'}): After required identity/ownership checks, only if saved history has not answered interest, ask exactly: ${acquisitionOpeners[strategy]} Existing consent, stop, handoff, offer and agreement rules still apply.`:''),{party:p.party,intake:!!intake,limited:!!limited,cancellation:!!cancellation});
  };
  if(automaticContext&&p.party==='seller'){
   // Reserve space for the complete runtime instructions, then retain whole

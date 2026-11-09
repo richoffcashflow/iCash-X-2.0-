@@ -36,6 +36,7 @@ async function seed({qualified=true}={}){
  return c;
 }
 const db=async(path,method,body)=>{
+ if(path==='rpc/icash_outreach_voice_current')return false;
  if(path==='rpc/icash_seller_prior_call_context')return [];
  if(path==='rpc/icash_finish_seller_agreement'){await q('update icash_seller_agreement_private.confirmations set envelope_id=$1,state=\'ready\' where id=$2',[body.p_envelope,body.p_id]);return true;}
  if(path==='rpc/icash_fail_seller_agreement'){await q("update icash_seller_agreement_private.confirmations set state='needs_review' where id=$1",[body.p_id]);return true;}
