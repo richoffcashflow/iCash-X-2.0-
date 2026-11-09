@@ -6,6 +6,8 @@ On November 4, 2026, the owner approved the practice workspace update and reques
 
 The implementing agent completes the requested scope, reviews the final diff, runs relevant local checks, and resolves any database, provider or coordinated-release prerequisites. It then applies `auto-release` to the ready PR under the owner's standing authorization. Do not wait for the owner to repeat approval merely to add this label.
 
+The owner's November 9, 2026 UI-preservation instruction also applies to automatic releases: keep the existing interface unless the owner explicitly requested the specific visible change. Review each candidate against the current UI baseline in `AGENTS.md`; broad improvement, support-repair or shipping authorization does not permit a redesign or added UI. Restore accidental UI regressions to the approved baseline.
+
 Candidates target `main` in `richoffcashflow/iCash-X-2.0-`, are authored by the verified owner `richoffcashflow`, are from this same repository, are not drafts, and were created on or after November 4, 2026. PR #561 is the initial explicitly approved candidate. Future changes use the same path. Do not label historical held candidates without separately established scope and readiness.
 
 The label is a release-queue marker, not a substitute for review or test evidence. Reassess a changed head. `release-hold`, an unresolved requested change, an incomplete prerequisite or a failing check stops that candidate. Remove the hold only after its actual cause is resolved. Preserve unrelated work and other agents' releases.
