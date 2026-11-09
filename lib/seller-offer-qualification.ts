@@ -32,7 +32,7 @@ function latestQualificationQuestion(message:string):string{
 /** The caller's actual answers, never research, an opener, or an LLM summary.
  * Historical conversations must already be bound to this account/deal/contact.
  * An explicit unknown/refusal answers a personal question; do not interrogate. */
-export function sellerOfferQualification(current:unknown,history:unknown[]=[]):SellerQualification{
+export function sellerOfferQualification(current:unknown,history:unknown[]=[],channel:'voice'|'sms'='voice'):SellerQualification{
  const facts:Partial<Record<Fact,boolean>>={};let listed:boolean|null=null;
  for(const conversation of [...history,current]){
   // Reconfirm a prior refusal on a new conversation; never carry a past bad
@@ -52,7 +52,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[]):S
    if(ownerQuestion&&(yes.test(text)||no.test(text)))facts.ownership=!no.test(text);
    if(availabilityQuestion&&(yes.test(text)||no.test(text)))facts.availability=!no.test(text);
    if(availabilityQuestion&&/\b(?:not now|(?:can't|cannot) talk|not a good time|busy right now)\b/i.test(text))facts.availability=false;
-   if(/\b(?:i(?:'m| am) (?:the |an? )?owner|i own (?:it|this|the (?:house|property)))\b/i.test(text))facts.ownership=true;
+   if(/\b(?:i(?:'m| am) (?:the |an? )?owner|i (?:still )?own (?:it|this|the (?:house|property)))\b/i.test(text))facts.ownership=true;
    if(/\b(?:not (?:the )?owner|don['’]?t own|do not own|wrong (?:number|person|property)|no longer own)\b/i.test(text))facts.ownership=false;
    if(sellerRequestsPrice(text)||callSellerPriceEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text})!==null){
     facts.availability??=true;facts.interest??=true;
@@ -77,7 +77,10 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[]):S
    if(facts.availability===undefined&&(facts.situation||facts.condition||facts.occupancy||facts.timing))facts.availability=true;
   }
  }
- const missing=(Object.keys(questions) as Fact[]).filter(key=>facts[key]!==true);
+ // A source-bound SMS answer is already an active text conversation. Do not
+ // ask a phone-availability question as a prerequisite to continuing by text.
+ // An actual refusal still wins below; this creates no calling permission.
+ const missing=(Object.keys(questions) as Fact[]).filter(key=>facts[key]!==true&&(channel!=='sms'||key!=='availability'));
  if(facts.ownership===false||facts.interest===false||facts.availability===false||listed===true)return {ready:false,missing,stop:true,nextQuestion:listed?'This property is listed with an agent. Do not quote an offer; follow the listing policy and end politely.':'The caller has declined this property discussion. Acknowledge and stop the pitch.'};
  return missing.length?{ready:false,missing,nextQuestion:questions[missing[0]]}:{ready:true};
 }

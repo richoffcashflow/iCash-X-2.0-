@@ -8,7 +8,25 @@ type Dependencies={db:Database;dispatch:(account:string,id:string)=>Promise<{sta
 export async function processSellerTextOffer(context:TextOfferContext,d:Dependencies){
  const now=(d.now??Date.now)();
  const calls=await d.db<unknown[]>('rpc/icash_seller_prior_call_context','POST',{p_account:context.accountId,p_screening:context.screeningId,p_phone:context.phone});
- const plan=planSellerTextOffer({...context,history:Array.isArray(calls)?calls.map(c=>object(c).result):[]},now);
+ const bound={...context,history:Array.isArray(calls)?calls.map(c=>object(c).result):[],callInvitationAllowed:false};
+ let plan=planSellerTextOffer(bound,now);
+ // Offer a call only where the existing source-bound SMS callback workflow
+ // is available. These are read-only checks, never permission to dial: final
+ // request, recipient, hours, wallet and provider admission remain authoritative.
+ const candidate=planSellerTextOffer({...bound,callInvitationAllowed:true},now);
+ if(candidate.action==='invite_call'){
+  try{
+   if(await d.db('rpc/icash_outreach_voice_current','POST',{p_account:context.accountId})===true){
+    const conversation=await d.db('rpc/icash_seller_conversation_context','POST',{p_account:context.accountId,p_thread:context.threadId});
+    if(object(conversation).sellerConversation===true){
+     const permissions=await d.db<{id:string}[]>(`icash_contact_permissions?account_id=eq.${encodeURIComponent(context.accountId)}&screening_id=eq.${encodeURIComponent(context.screeningId)}&phone=eq.${encodeURIComponent(context.phone)}&party=eq.seller&select=id&limit=2`);
+     for(const permission of Array.isArray(permissions)?permissions.slice(0,2):[]){
+      if(await d.db('rpc/icash_seller_voice_permission_current','POST',{p_account:context.accountId,p_permission:permission.id})===true){plan=candidate;break;}
+     }
+    }
+   }
+  }catch{/* Missing/failed reads keep the supported text step moving. */}
+ }
  if(plan.kind==='agreement'){
   try{signingReadiness('purchase',plan.terms!,[{name:plan.terms!.seller,phone:context.phone}],context.principal,'draft',now);}
   catch{return {status:'text_ai_contract_terms_required'};}
