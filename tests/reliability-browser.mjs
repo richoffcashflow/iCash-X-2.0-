@@ -147,7 +147,7 @@ try{
    const panel=page.locator('section[aria-label="Workflow reliability"]');
    try{await panel.getByText('Workflow reliability · High priority').waitFor();}
    catch(error){console.error({engine:name,url:page.url(),errors,failures,body:await page.locator('body').innerText()});throw error;}
-   await panel.getByText('Review stalled work').click();
+   await panel.getByText('Review workflow alerts').click();
    await panel.getByText('High · Contract text awaiting delivery',{exact:true}).waitFor();
    assert.match(await panel.innerText(),/1 texts accepted, 0 delivery confirmations/);
    assert.match(await panel.innerText(),/AM|PM/);
@@ -159,7 +159,9 @@ try{
    reliability.snapshot.issueCount=4;
    await page.getByRole('button',{name:'Refresh',exact:true}).click();
    await panel.getByText('Workflow reliability · Critical priority',{exact:true}).waitFor();
-   await panel.getByText('3 funded accounts with blocked or stalled work',{exact:true}).waitFor();
+   await panel.getByText('3 accounts with work needing recovery',{exact:true}).waitFor();
+   assert.match(await panel.innerText(),/individual workflows and accounts that still need recovery/);
+   assert.match(await panel.innerText(),/Failed scheduler checks retry automatically/);
    await panel.getByText('Review affected accounts',{exact:true}).click();
    await panel.getByText('Research configuration expired',{exact:true}).waitFor();
    reliability.snapshot.incomingTexts={checkedAt:new Date().toISOString(),fresh:true,warningCount:1,lines:[{phone:'+17205550100',incomingStatus:'unverified',lastIncomingAt:new Date(Date.now()-25*3600000).toISOString(),propertyAccepted24h:1000,propertyDelivered24h:999,lastPropertyIncomingAt:null,propertyReplyRecipients24h:0,otherIncoming24h:2}]};

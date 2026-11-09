@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 globalThis.fetch=async()=>{throw Error('NETWORK DISABLED');};
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8'),pg=new PGlite(),q=(s,a=[])=>pg.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
-const migration=read('config/assistant-text-actions.sql');assert.equal(migration,read('supabase/migrations/20261109183449_assistant_text_actions.sql'));
+const migration=read('config/assistant-text-actions.sql');assert.equal(migration,read('supabase/migrations/20261109185851_assistant_text_actions.sql'));
 await pg.exec(read('tests/fixtures/assistant-text-actions.sql')+migration);
 const seed=async()=>{
  const c={a:uuid(),actor:uuid(),d:uuid(),s:uuid(),t:uuid(),source:uuid(),question:uuid(),key:uuid()};

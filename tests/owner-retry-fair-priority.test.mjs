@@ -40,7 +40,7 @@ try{
  const propertyAdded="\n  case when t.kind='contacts' and t.state='held' and t.outcome='owner_preview_rate_limited'\n   and t.owner_preview_deferrals between 1 and 7 and t.owner_preview_retry_after<=now() and t.owner_preview_retry_until>now()\n   then t.owner_preview_retry_after end nulls last,";
  assert.equal((await v("select pg_get_functiondef('icash_next_acquisition()'::regprocedure)")).replace(accountAdded,''),originals['public.icash_next_acquisition()'],'Exact issuer difference is only one ORDER BY expression');
  assert.equal((await v("select pg_get_functiondef('icash_enrichment_before_prospecting_budget(uuid)'::regprocedure)")).replace(propertyAdded,''),originals['public.icash_enrichment_before_prospecting_budget(uuid)'],'Exact property difference is only one ORDER BY expression');
- assert.equal(read('config/owner-retry-source-filter.sql'),read('supabase/migrations/20261109185116_owner_retry_source_filter.sql'));
+ assert.equal(read('config/owner-retry-source-filter.sql'),read('supabase/migrations/20261109185853_owner_retry_source_filter.sql'));
  await pg.exec(read('config/owner-retry-source-filter.sql'));
  // Moving history proof after source filtering must keep every same-property
  // exclusion, including a reservation attached to a different screening.

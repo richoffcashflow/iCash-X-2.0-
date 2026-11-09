@@ -121,7 +121,7 @@ await pg.exec('update icash_seller_progress_settings set voice_text_enabled_at=n
 assert.equal(await rpc('icash_claim_text',[cancelledVoice.a,cancelledOutput.messageId,'+15550000001']),null,'Feature rollback fences pending voice replies');
 await pg.exec("create table icash_customer_identities(account_id uuid primary key,principal text,company_name text);create function public.icash_conversation_street(s text) returns text language sql immutable as $$select split_part(s,',',1)$$;");
 const identitySQL=read('../config/seller-post-call-identity.sql');
-assert.equal(identitySQL,read('../supabase/migrations/20261109183418_seller_post_call_identity.sql'));
+assert.equal(identitySQL,read('../supabase/migrations/20261109185841_seller_post_call_identity.sql'));
 await pg.exec(identitySQL);
 const identitySeed=async()=>{const c=await voiceSeed();await q("insert into icash_customer_identities values($1,'Morgan Example','Example Homes')",[c.a]);await q("update icash_deal_files set terms='{\"address\":\"123 Example St, Example, TX\"}' where id=$1",[c.d]);return c;};
 const disabledIdentity=await identitySeed(),beforeIdentity=await incoming(disabledIdentity,'Hello :) who is this');
