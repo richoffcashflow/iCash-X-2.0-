@@ -28,10 +28,14 @@ missing time; it never dials. A bare no to the optional call question keeps the
 text conversation moving. Explicit refusal or STOP keeps the original review and
 suppression behavior. Unknown message or active-call receipts retain their holds.
 
-A bare “Sold” is clarified rather than promoted to ownership or acceptance. An
-explicit completed-sale statement stops the pitch. A later explicit correction
-can resolve the ambiguity. Prior source messages and delivery evidence are not
-edited. Regression fixtures use fictional names, addresses and identities.
+A bare “Sold” that reaches the planner is clarified rather than promoted to
+ownership or acceptance. An upstream source-bound decline, including “Sold” to
+a verified delivered ownership question, still stops admission and cannot be
+reopened by this clarification or a later price question. An explicit completed-sale
+statement stops the pitch. A later explicit correction can resolve planner-level
+ambiguity only when the original admission checks allow continuation. Prior source
+messages and delivery evidence are not edited. Regression fixtures use fictional
+names, addresses and identities.
 
 ## Speaking behavior
 

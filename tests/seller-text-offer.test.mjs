@@ -15,7 +15,7 @@ const rpc=async(n,args=[])=>Object.values(await one(`select ${n}(${args.map((_,i
 await pg.exec(fixture.slice(0,split)+read('./fixtures/seller-progress-original-functions.sql')+fixture.slice(split)+read('./helpers/seller-dialogue-fixture.sql')+read('./fixtures/seller-dialogue-original-functions.sql')+
  fn('seller-response-policy','icash_seller_direct_response_match')+fn('seller-response-policy','icash_seller_response_disposition')+fn('seller-gap-recovery','icash_seller_contact_stop')+
  'create trigger icash_text_ai_incoming after insert on icash_text_messages for each row execute function icash_enqueue_text_ai();'+read('../config/seller-reply-progress.sql')+read('../config/seller-dialogue.sql')+
- read('./helpers/seller-text-offer-fixture.sql')+read('./fixtures/seller-text-offer-original-functions.sql')+read('../config/seller-text-offer.sql')+read('../config/seller-offer-receipt-wait.sql')+read('../config/seller-offer-source-prices.sql'));
+ read('./helpers/seller-text-offer-fixture.sql')+read('./fixtures/seller-text-offer-original-functions.sql')+read('../config/seller-text-offer.sql')+read('../config/seller-offer-receipt-wait.sql')+read('../config/seller-offer-source-prices.sql')+read('./helpers/seller-call-terminal-fixture.sql')+read('../config/seller-call-terminal-progress.sql'));
 await pg.exec("update icash_seller_progress_settings set enabled=true,dialogue_enabled=true,offer_enabled=true,offer_enabled_at=now()-interval '2 hours'");
 let tick=0,sends=0,texts=0,dispatches=0,providerFailure=false,deliver=true;
 const at=()=>new Date(Date.now()-3600000+(++tick)*1000).toISOString();
@@ -125,7 +125,29 @@ await q("update icash_text_messages set state='delivered' where account_id=$1 an
 const resumed=await rpc('icash_resume_seller_text_ai',[receipt.a,r.j.id]);assert.equal(resumed.mode,'seller_offer');assert.equal(planSellerTextOffer(resumed.context).action,'legal_name');
 assert.equal((await processSellerTextOffer(resumed.context,dependencies)).status,'message_delivered');
 assert.equal((await rpc('icash_finish_seller_text_progress',[receipt.a,r.j.id,null])).reason,'awaiting_seller_reply');assert.equal(dispatches,before+1,'receipt wakes the same source exactly once');
-const active=await seed();await q("insert into icash_call_recordings values($1,$2,'seller',now(),null)",[active.a,active.s]);
+// Reproduce the production terminal-gate false active-call hold, then require
+// the exact settled carrier receipt before negotiation can advance.
+const terminal=await seed(),rid=randomUUID(),operation='voice:'+randomUUID();
+const terminalReceipt={providerAccountSid:'ACfixture',callSid:'CAfixture',fromPhone:'+15550000001',toPhone:terminal.phone,status:'no-answer'};
+await q("insert into icash_call_recordings(id,account_id,screening_id,party,dial_claimed_at,state,last_action,operation_key,provider_account_sid,call_sid,from_phone,to_phone) values($1,$2,$3,'seller',now()-interval '30 minutes','failed','gate_settled',$4,'ACfixture','CAfixture','+15550000001',$5)",[rid,terminal.a,terminal.s,operation,terminal.phone]);
+await q("insert into icash_operation_spend values($1,$2,'settled')",[operation,terminal.a]);
+const terminalSource=await incoming(terminal,'I need $210k');
+const ctx=()=>rpc('icash_seller_text_offer_context',[terminal.a,terminalSource.id]);
+assert.ok((await ctx()).activeCallSince,'State/last-action labels without the original receipt are insufficient');
+for(const receipt of [{...terminalReceipt,callSid:'CAforeign'},{...terminalReceipt,status:'in-progress'}]){
+ await q('insert into icash_recording_private.terminal_cost_receipts values($1,$2) on conflict(recording_id) do update set receipt=excluded.receipt',[rid,receipt]);
+ assert.ok((await ctx()).activeCallSince,'Mismatched/nonterminal receipts keep the hold');
+}
+await q('update icash_recording_private.terminal_cost_receipts set receipt=$2 where recording_id=$1',[rid,terminalReceipt]);
+assert.equal((await ctx()).activeCallSince,null,'The exact settled terminal receipt clears only the conversational wait');
+assert.equal(planSellerTextOffer(await ctx()).kind,'message');
+await q("update icash_operation_spend set state='reserved' where operation_key=$1",[operation]);assert.ok((await ctx()).activeCallSince,'Unknown money remains held');
+await q("update icash_operation_spend set state='settled' where operation_key=$1",[operation]);
+await q("update icash_call_recordings set conversation_id='conv_unresolved' where id=$1",[rid]);assert.ok((await ctx()).activeCallSince,'Contradictory started AI keeps the hold');
+await q('update icash_call_recordings set conversation_id=null where id=$1',[rid]);
+assert.equal(await rpc('icash_seller_recorded_call_finished',[randomUUID(),rid]),false,'Cross-account receipt lookup is isolated');
+assert.equal((await one('select call_ended_at from icash_call_recordings where id=$1',[rid])).call_ended_at,null,'No invented termination timestamp');
+const active=await seed();await q("insert into icash_call_recordings(account_id,screening_id,party,dial_claimed_at,call_ended_at) values($1,$2,'seller',now(),null)",[active.a,active.s]);
 r=await run(active,'I need $210k');assert.equal(r.progress.state,'waiting');assert.equal(r.progress.reason,'seller_call_active');
 await q('update icash_accounts set bot_paused=true where id=$1',[active.a]);
 assert.equal((await rpc('icash_finish_seller_text_progress',[active.a,r.j.id,null])).state,'needs_review','Pause overrides a stored wait');

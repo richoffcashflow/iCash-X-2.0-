@@ -267,3 +267,12 @@ its concurrent-index installation and production-ledger prerequisites remain
 explicit gates. A successful deploy or healthy heartbeat does not close that
 incident. Rejected unclassified messaging events also require payload-shape
 evidence before calling them lost seller replies.
+
+## November 8 seller action review
+
+See [the seller action audit](seller-action-audit-2026-11-08.md). The incident covers
+missed natural opt-outs, delivered-question refusals, false active-call offer
+holds, source-bound voice-to-text continuation, machine-answer classification
+and the actual outbound registration prompt. Focused replay fixtures and native
+reply/receipt races accompany the patches; explicit buyer test holds remain.
+Production behavior is verified only after the exact application release.
