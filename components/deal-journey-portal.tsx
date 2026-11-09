@@ -4,6 +4,7 @@ import {DateTimeInput} from './date-time-input';
 import {safeLocalTime} from './workspace-view';
 import styles from './deal-journey-portal.module.css';
 import {blockerKinds,blockerLabels,type BlockerKind,type JourneyBlocker} from '@/lib/deal-completion';
+import {buyerPackageLink,buyerNetworkLink} from '@/lib/buyer-links';
 type Showing={id:string;version:number;start:string;end:string;timezone:string;state:string;sellerConfirmed:boolean;buyerConfirmed:boolean};
 type Data={role:'buyer'|'seller';address:string;state:string;wantsAssignment:boolean;wantsViewing:boolean;detailsSubmitted?:boolean;askingPriceCents?:number;depositCents?:number;blocker?:JourneyBlocker|null;packageUrl?:string|null;showing:Showing|null;slots?:{startsAt:string;endsAt:string|null;timezone:string}[]};
 const money=(n:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:n%100?2:0}).format(n/100);
@@ -25,12 +26,12 @@ export function DealJourneyPortal({token}:{token:string}){
   if(!start||!end||start>=end||start.split('T')[0]!==end.split('T')[0]){setError('Choose a start and end on the same future date.');return;}
   const a=fmt(start),b=fmt(end);void save('availability',{windows:[`${a.day} ${a.time} to ${b.time} ${zones[zone]}`]});
  }
- const showing=data?.showing,active=showing&&['proposed','confirmed'].includes(showing.state);
+ const showing=data?.showing,active=showing&&['proposed','confirmed'].includes(showing.state),packageUrl=buyerPackageLink(data?.packageUrl);
  return <main className={styles.page}><article className={styles.card}><a className={styles.brand} href="/">iCash X</a><h1>Your next step</h1>{data&&<p className={styles.address}>{data.address}</p>}
  {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}{!data&&!error&&<p>Loading your next step…</p>}
  {data?.role==='buyer'&&<>
   {data.state!=='human_review'&&<ol className={styles.steps} aria-label="Purchase progress">{[{label:'Buyer details',done:!!data.detailsSubmitted},{label:'Assignment signed',done:['deposit_due','reserved'].includes(data.state)},{label:'Deposit confirmed',done:data.state==='reserved'}].map(s=><li key={s.label} className={s.done?styles.complete:undefined}>{s.done?'✓ ':''}{s.label}</li>)}</ol>}
-  {data.packageUrl&&/^https:\/\/homeoffernetwork\.com\/d\/[a-f0-9]{32}$/.test(data.packageUrl)&&<a className={styles.packageLink} href={data.packageUrl}>View property photos & package</a>}
+  {packageUrl&&<a className={styles.packageLink} href={packageUrl} referrerPolicy="no-referrer">View property photos & package</a>}
   {typeof data.askingPriceCents==='number'&&<p><strong>{money(data.askingPriceCents)}</strong> · Buyer pays all closing costs. The assignment fee is included in this price.</p>}
   {typeof data.depositCents==='number'&&<p>Non-refundable deposit: <strong>{money(data.depositCents)}</strong>, under the assignment agreement. Get payment details from your verified deal contact. A payment report does not confirm receipt.</p>}
   {!data.blocker&&data.state==='collecting'&&!data.wantsAssignment&&<button disabled={busy} onClick={()=>void save('request_assignment',{})}>I’m ready to buy</button>}
@@ -55,5 +56,6 @@ export function DealJourneyPortal({token}:{token:string}){
  </section>}
  {data?.role==='seller'&&<form onSubmit={e=>{e.preventDefault();availability();}}><h2>Good times for a viewing</h2><p>Share an available window. We’ll confirm a specific visit with you before anyone comes.</p><label>Timezone<select value={zone} onChange={e=>setZone(e.target.value as keyof typeof zones)}>{Object.entries(zones).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><DateTimeInput label="Available from" value={start} onChange={e=>setStart(e.target.value)} required/><DateTimeInput label="Available until" value={end} onChange={e=>setEnd(e.target.value)} required/><button disabled={busy}>Share availability</button></form>}
  {data&&<small>Need a person or a change to your agreement? Reply to the message that brought you here.</small>}
+ {data?.role==='buyer'&&<section><h2>Looking for your next property?</h2><p>Set your ZIP codes, budget and current buying capacity to receive matching deals.</p><a href={buyerNetworkLink} target="_blank" rel="noreferrer">Set my buying preferences</a><p><small>Free to join. Email verification and your contact choices are required. Funds and signing authority are reviewed separately.</small></p></section>}
  </article></main>;
 }

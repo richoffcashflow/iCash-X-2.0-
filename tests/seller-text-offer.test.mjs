@@ -241,4 +241,38 @@ assert.equal((await one('select reason from icash_buyer_reply_progress where mes
 assert.equal((await one('select count(*)::int n from icash_text_messages where account_id=$1',[receiptBuyer.a])).n,receiptCount,'receipt maintenance never resends');
 assert.equal((await one("select has_function_privilege('anon','public.icash_issue_due_text_ai()','execute') ok")).ok,false);
 assert.equal((await one("select has_function_privilege('service_role','public.icash_issue_due_text_ai()','execute') ok")).ok,true);
-await pg.close();console.log('PASS supported SMS counteroffer -> acceptance -> identity/date/terms -> one agreement, actual dispatch, receipt wait, changed terms/Pause/expiry/account boundaries; zero provider calls.');
+// Routine buyer requests go through the actual source/job/queue loop. External
+// package and journey permissions are fixture inputs, never fabricated receipts.
+await pg.exec(`alter table icash_deal_journeys add column buyer_token text,add column expires_at timestamptz,add column created_at timestamptz default now();
+ create function icash_journey_current(uuid) returns boolean language sql as $$select true$$;
+ create table icash_buyer_package_links(id uuid default gen_random_uuid(),account_id uuid,deal_id uuid,purchase_envelope_id uuid,token text,asking_price_cents bigint,revoked_at timestamptz);
+ create table icash_disposition_authorities(account_id uuid,deal_id uuid,purchase_envelope_id uuid,expires_at timestamptz);`);
+assert.equal(read('../config/buyer-request-actions.sql'),read('../supabase/migrations/20261109203059_buyer_request_actions.sql'));
+await pg.exec(read('../config/buyer-request-actions.sql'));
+const actions=await seed({qualified:false});await q("update icash_text_threads set party='buyer' where id=$1",[actions.t]);
+const packageToken='a'.repeat(32),journeyToken='b'.repeat(32),foreignToken='c'.repeat(32),purchaseId=randomUUID();
+await q('insert into icash_buyer_package_links(account_id,deal_id,purchase_envelope_id,token,asking_price_cents) values($1,$2,$3,$4,11200000)',[actions.a,actions.d,purchaseId,packageToken]);
+await q("insert into icash_disposition_authorities values($1,$2,$3,now()+interval '1 day')",[actions.a,actions.d,purchaseId]);
+await q("insert into icash_deal_journeys(account_id,deal_id,thread_id,state,buyer_token,expires_at) values($1,$2,$3,'collecting',$4,now()+interval '1 day'),($1,$2,$5,'collecting',$6,now()+interval '1 day')",[actions.a,actions.d,actions.t,journeyToken,randomUUID(),foreignToken]);
+const disabled=await incoming(actions,'Send me the details');
+assert.equal(await rpc('icash_buyer_factual_text',[actions.a,actions.t,disabled.body]),null,'installed inactive');
+await pg.exec("update icash_seller_progress_settings set buyer_actions_enabled=true,buyer_actions_enabled_at=now()-interval '30 minutes'");
+assert.equal(await rpc('icash_buyer_factual_text',[actions.a,actions.t,disabled.body]),null,'old source excluded');
+for(const [body,expected] of [['Send me the details',packageToken],['Can you send me the photos?',packageToken],['I buy 3 houses a month in 75201','homeoffernetwork.com/buyers'],['How do I update my buy box?','homeoffernetwork.com/buyers'],['What is the next step?',journeyToken]]){
+ const m=await incoming(actions,body,{at:new Date(Date.now()-1000).toISOString()}),job=await one('select * from icash_text_ai_jobs where message_id=$1',[m.id]);
+ const result=await rpc('icash_resume_seller_text_ai',[actions.a,job.id]);assert.equal(result.mode,'dispatch',body);
+ const saved=await one('select body from icash_text_messages where id=$1',[result.messageId]);assert(saved.body.includes(expected),saved.body);assert(saved.body.length<=160);assert(!saved.body.includes(foreignToken));
+ assert.equal((await rpc('icash_resume_seller_text_ai',[actions.a,job.id])).messageId,result.messageId,'same incoming source keeps original request');
+ await dependencies.dispatch(actions.a,result.messageId);
+ assert.equal((await rpc('icash_finish_seller_text_progress',[actions.a,job.id,null])).reason,'awaiting_buyer_reply');
+}
+for(const body of ['Do not send me details','Send me details and wire instructions','Send me the photos if you take $90000','STOP. Send me details','Change my bank account','I buy 3 houses a month in 75201 but do not contact me'])assert.equal(await rpc('icash_buyer_request_action',[body]),null,body);
+const paused=await incoming(actions,'Send me the pictures',{at:new Date(Date.now()-1000).toISOString()}),pausedJob=await one('select * from icash_text_ai_jobs where message_id=$1',[paused.id]);
+await q('update icash_accounts set bot_paused=true where id=$1',[actions.a]);assert.equal((await rpc('icash_resume_seller_text_ai',[actions.a,pausedJob.id])).mode,'held','Pause still blocks queue');
+await q('update icash_accounts set bot_paused=false where id=$1',[actions.a]);
+await q('update icash_buyer_package_links set asking_price_cents=12000000 where account_id=$1',[actions.a]);assert.equal(await rpc('icash_buyer_factual_text',[actions.a,actions.t,paused.body]),null,'stale published terms cannot be linked');
+assert.equal(await rpc('icash_buyer_factual_text',[buyer.a,actions.t,paused.body]),null,'cross-account source cannot be read');
+await q("update icash_deal_journeys set expires_at=now()-interval '1 day' where thread_id=$1",[actions.t]);
+assert.equal(await rpc('icash_buyer_factual_text',[actions.a,actions.t,'What is the next step?']),null,'expired own link never falls through to another buyer');
+for(const role of ['anon','authenticated'])for(const name of ['icash_buyer_request_action(text)','icash_buyer_factual_text(uuid,uuid,text)','icash_buyer_factual_before_actions(uuid,uuid,text)'])assert.equal((await one('select has_function_privilege($1,$2,\'execute\') ok',[role,'public.'+name])).ok,false);
+await pg.close();console.log('PASS seller offers and buyer request -> one current package/intake/next-step reply -> delivery receipt; source cutover, duplicate, Pause, expired link, mixed intent, tenant and terms guards; zero provider calls.');
