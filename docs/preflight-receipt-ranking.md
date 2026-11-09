@@ -33,8 +33,27 @@ and custom plans cannot push receipt validation before the materialized boundary
   completed, future or mismatched tickets return without entering that validator.
   Eligible waiting and ready cases still wait for proof, then return the same due
   times. No paid operations or external providers run.
-- The exact final head must pass all canonical Reliability jobs before release.
-  Database installation and production receipts are recorded below when verified.
+- Canonical Reliability run `42684971459` passed all six jobs for implementation
+  head `c64954cfd5f7b2838048049d8124ef4572e2e9e1` before installation. The final
+  receipt-reconciled head must pass the same checks before merging.
+
+## Installed database receipt
+
+Supabase recorded `20261109194729_preflight_receipt_ranking` on November 9 at
+19:47:29 UTC. The ledger contains the exact 2,848-byte reviewed SQL; the repository
+filename follows that server-issued version without rewriting the ledger. The
+installed function matches the expected patched definition byte-for-byte, with
+MD5 `5af0c8dd0a364999f031a76ea8fa89a2`. Its STABLE/security-definer attributes,
+empty search path and service-role-only application access remain unchanged.
+
+The first attempt hit the existing five-second lock timeout. Readback confirmed
+no migration receipt and the unchanged predecessor; one later attempt succeeded
+with the same SQL and lock bound. No live query was canceled to force installation.
+
+A single-account read sample took 25.831 ms before and 12.505 ms afterward,
+with 2,811 versus 2,277 shared buffer hits. This is a diagnostic sample, not a
+platform throughput measurement. Production web/worker release and subsequent
+workflow observations are tracked in PR #634 after final-head checks.
 
 ## Recovery
 
