@@ -36,7 +36,7 @@ try{
    refreshVoiceCapacity:async(_db,_reader,_review,onAgent)=>{stages.push('voice_read');await voiceWait;if(failure==='voice_read')throw Error('private provider');await onAgent({});return {status:'verified'};},
    readVoiceCapacityProvider:async()=>assert.fail('No live provider'),
    recoverVoiceConfiguration:async()=>{stages.push('voice_recovery');if(failure==='voice_recovery')throw Error('private recovery');return {status:'idle',requeued:0};},
-   refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),syncResearchExclusions:async()=>({status:'not_due'}),
+   refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),drainResearchExclusions:async()=>({status:'not_due'}),
    recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>({status:'not_due'}),
    retryVolumeDeferredText:async()=>{stages.push('senderVolume');return {status:'idle'};},
    recoverTextDeliveryReceipts:async()=>({status:failure==='text_configuration'?'configuration_unavailable':'idle',errors:0}),

@@ -14,7 +14,7 @@ import {processPurchaseAccessFollowups} from '@/lib/purchase-access-followups';
 import {authorizeOutboundBilling} from '@/lib/outbound-billing-service';
 import {maintenanceBatch} from '@/lib/maintenance-batch';
 import {refreshReliability} from '@/lib/reliability-monitor';
-import {syncResearchExclusions} from '@/lib/research-exclusions';
+import {drainResearchExclusions} from '@/lib/research-exclusions';
 import {recoverOwnerActiveExports} from '@/lib/owner-active-export';
 import {recoverOwnerExportCapacity} from '@/lib/owner-export-capacity-recovery';
 import {cleanupOwnerPreflight} from '@/lib/owner-export-preflight';
@@ -43,7 +43,7 @@ export async function GET(request:Request){
   return {...verified,change,eightyPercentChange,recovery};
  })().catch(error=>{capacityOk=false;console.error('Voice capacity verification unavailable',error instanceof Error&&/^VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'read_unavailable');return {status:'verification_unavailable'};});
  const inventory=refreshInventoryGeographyBatch(db).catch(()=>({status:'metadata_unavailable'}));
- const researchExclusions=syncResearchExclusions(db).catch(()=>({status:'sync_unavailable'}));
+ const researchExclusions=drainResearchExclusions(db).catch(()=>({status:'sync_unavailable'}));
  const ownerExports=recoverOwnerActiveExports(db).catch(()=>({status:'export_receipt_held'}));
  const ownerExportCapacity=recoverOwnerExportCapacity(db).catch(()=>({status:'capacity_review_held'}));
  const ownerPreflightCleanup=cleanupOwnerPreflight(db).catch(()=>({status:'cleanup_pending'}));

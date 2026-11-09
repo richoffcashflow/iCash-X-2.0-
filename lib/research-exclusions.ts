@@ -45,3 +45,20 @@ export async function syncResearchExclusions(db:ResearchDb,request:typeof fetch=
   return {status:'synced'};
  }catch(error){console.warn('research_exclusion_pending',{action:c.action,stage,quota:error instanceof DealMachineQuotaError});await finish({ok:false,unstarted:error instanceof DealMachineQuotaError}).catch(()=>null);return {status:'pending'};}
 }
+
+/** Drain only a small free maintenance batch. Every iteration uses the original
+ * lease, ordinary quota and provider acknowledgment; no starter capacity, paid
+ * lookup, fabricated sync timestamp or retry of an uncertain write. */
+export async function drainResearchExclusions(db:ResearchDb,request:typeof fetch=fetch,
+ wait:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms)),now:()=>number=Date.now){
+ const deadline=now()+60000;let batches=0;
+ for(let i=0;i<4;i++){
+  const result=await syncResearchExclusions(db,request);
+  if(result.status!=='synced')return {...result,batches};
+  batches++;
+  if(i===3||now()+25500>deadline)break;
+  // Original SQL schedules a successful list write at least ten seconds apart.
+  await wait(10500);
+ }
+ return {status:'synced',batches};
+}

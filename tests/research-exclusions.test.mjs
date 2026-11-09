@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {syncResearchExclusions} from '../lib/research-exclusions.ts';
+import {syncResearchExclusions,drainResearchExclusions} from '../lib/research-exclusions.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {maintenanceBatch} from '../lib/maintenance-batch.ts';
 process.env.DEALMACHINE_API_KEY='dm_sk_live_LOCAL_FIXTURE';
@@ -57,7 +57,7 @@ const route=await loadService('app/api/internal/maintenance/route.ts',{
  processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
  authorizeOutboundBilling:()=>authorized,maintenanceBatch,
  refreshReliability:async(_db,healthy)=>{assert.equal(healthy,true);maintenanceRuns++;return true;},
- recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>({status:'idle'}),syncResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
+ recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>({status:'idle'}),drainResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
  pruneUsageLoopObservations:async()=>null,outbound:ok,recording:ok,ownerRecording:ok,reception:ok,
  process:{env:{}},
 });
@@ -78,3 +78,17 @@ allowed=true;claimUnavailable=true;response=await run();assert.equal(response.st
 assert.equal((await response.json()).researchExclusions.status,'sync_unavailable');assert.equal(maintenanceRuns,4,'An exclusion failure cannot suppress unrelated maintenance');assert.equal(receiptRuns,4,'Receipt recovery remains independent of exclusion availability and quota');
 assert.equal(calls.length,0);
 console.log('Exclusion maintenance: authenticated free backfill without paid discovery, shared claim/quota guards, and independent maintenance through failures passed.');
+
+// Free backlog drain is bounded, paced, and stops on original quota/unknown holds.
+claim={action:'sync',token,name,listId:'fixture-list',ids:['prop_1']};allowed=true;timeout=false;
+let clock=0,waits=[];calls=[];
+const wait=async ms=>{waits.push(ms);clock+=ms;};
+assert.deepEqual(await drainResearchExclusions(db,fetch,wait,()=>clock),{status:'synced',batches:4});
+assert.equal(calls.length,4);assert.deepEqual(waits,[10500,10500,10500]);
+allowed=false;calls=[];waits=[];
+assert.equal((await drainResearchExclusions(db,fetch,wait,()=>clock)).status,'pending');assert.equal(calls.length,0);assert.equal(waits.length,0);
+allowed=true;timeout=true;calls=[];
+assert.equal((await drainResearchExclusions(db,fetch,wait,()=>clock)).batches,0);assert.equal(calls.length,1,'Uncertain request never loops');
+timeout=false;claim=null;calls=[];
+assert.deepEqual(await drainResearchExclusions(db,fetch,wait,()=>clock),{status:'not_due',batches:0});assert.equal(calls.length,0);
+console.log('PASS free exclusion drain: four original receipts maximum, ten-second spacing, ordinary quota and immediate stop on holds.');

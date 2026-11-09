@@ -49,7 +49,9 @@ Use `config/activate-dealmachine-list-quality.sql` with that actual release SHA.
 
 Keep the old `exclusions_enabled=false`. Enable only the separately reviewed free
 synchronization switch for the exact original ready provider list. Await original
-provider acknowledgments for all pending exclusions, then use the existing guarded
+provider acknowledgments for all pending exclusions. Authenticated maintenance drains
+at most four original free batches, ten seconds apart, stopping on quota, unknown
+results or a minute budget; it cannot use protected starter requests. Then use the existing guarded
 `activate-targeting-verified-query.sql` plan. Enable the three combined property
 audiences through `icash_configure_targeting`; do not enable every historical
 experiment or mark the untested provider `mobile_only` export flag verified. Mobile
