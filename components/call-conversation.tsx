@@ -38,13 +38,12 @@ export function CallConversation({apiBase='/api/work', id, source='outbound', in
     return () => {controller.abort(); running.current = false;};
   }, [apiBase, id, source, scope, open, before, attempt, transcriptAvailable]);
 
-  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call{source === 'reception' ? ' · Incoming' : ''}</strong>{transcriptAvailable&&<span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span>}</header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small><CallRecording apiBase={apiBase} key={`${source}:${recordingId ?? id}`} conversationId={id} recordingId={recordingId} receipt={recordingReceipt} onRefresh={onRefreshRecording} source={source}/>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}{transcriptAvailable&&<details open={open} onToggle={event => {
+  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call{source === 'reception' ? ' · Incoming' : ''}</strong>{transcriptAvailable&&<span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span>}</header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small>{summary && <p className="call-summary-copy">{conversationDisplaySummary(summary,party)}</p>}<CallRecording apiBase={apiBase} key={`${source}:${recordingId ?? id}`} conversationId={id} recordingId={recordingId} receipt={recordingReceipt} onRefresh={onRefreshRecording} source={source}/>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}{transcriptAvailable&&<details open={open} onToggle={event => {
     if (event.target !== event.currentTarget) return;
     setOpen(event.currentTarget.open);
     if (!event.currentTarget.open) {setData(null); setError(null);}
   }}>
     <summary>Call details and transcript</summary>
-    {summary && <p className="call-summary-copy">{conversationDisplaySummary(summary,party)}</p>}
     {open && <>
       {!current && (currentError ? <>
         <p role="alert">{currentError}</p>

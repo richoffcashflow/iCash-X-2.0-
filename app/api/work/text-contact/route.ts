@@ -10,11 +10,12 @@ export async function GET(req:Request){
  try{
   const {accountId}=await workAccount();const screeningId=z.guid().parse(new URL(req.url).searchParams.get('screeningId'));
   const [contacts,deals]=await Promise.all([
-   db<{phone:string;name:string;phone_type:string;blocked:boolean}[]>('rpc/icash_manual_contacts','POST',{p_account:accountId,p_screening:screeningId}),
+   db<{phone:string;name:string;phone_type:string;blocked:boolean}[]>('rpc/icash_manual_contacts','POST',{p_account:accountId,p_screening:screeningId}).catch(()=>null),
    db<{id:string}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${screeningId}&select=id&limit=1`)
   ]);
   const threadId=deals[0]?await db<string|null>('rpc/icash_latest_seller_text_thread','POST',{p_account:accountId,p_deal:deals[0].id}):null;
-  return NextResponse.json({contacts,dealId:threadId?deals[0].id:null,threadId},{headers});
+  if(contacts===null&&!threadId)throw Error();
+  return NextResponse.json({contacts:contacts??[],contactsUnavailable:contacts===null,dealId:threadId?deals[0].id:null,threadId},{headers});
  }catch{return NextResponse.json({error:'Could not load contacts.'},{status:503,headers});}
 }
 export async function POST(req:Request){

@@ -89,7 +89,7 @@ export function PropertyCallHistory({screeningId, conversations, apiBase='/api/w
   return <section aria-label="Call recordings">
     <div className="workspace-section-heading"><h4 className="call-history-title">Call recordings</h4><button type="button" className="workspace-quiet" onClick={reload}>Refresh recordings</button></div>
     {!current && error !== scope && <p role="status">Loading call recordings…</p>}
-    {current && !shownHistory.length && <div className="conversation-empty"><strong>{voicemailHistory.length?'Only voicemail in this view':'No call recordings yet'}</strong><p>{voicemailHistory.length?'Use Show voicemail below to view saved recordings.':'Recorded calls will appear here when audio is ready.'}</p></div>}
+    {current && !shownHistory.length && <div className="conversation-empty"><strong>{voicemailHistory.length?'No seller conversation in this view':'No call recordings yet'}</strong><p>{voicemailHistory.length?'Seller conversations appear here when someone answers.':'Recorded calls will appear here when audio is ready.'}</p></div>}
     {shownHistory.map(({key, recording, conversation}) => <CallConversation key={key} apiBase={apiBase}
       id={conversation?.id ?? recording!.conversationId ?? recording!.id} source={recording?.source ?? conversation?.source ?? 'outbound'}
       party={conversation?.party ?? recording!.party} summary={conversation?.summary}
@@ -97,7 +97,7 @@ export function PropertyCallHistory({screeningId, conversations, apiBase='/api/w
       nextAction={conversation?.nextAction} interested={conversation?.interested} optedOut={conversation?.optedOut} humanRequested={conversation?.humanRequested}
       transcriptAvailable={!!conversation || !!recording?.conversationId}
       recordingId={recording?.id} recordingReceipt={recording} onRefreshRecording={reload}/>)}
-    {voicemailHistory.length>0&&<label className="text-reply-filter voicemail-history"><input type="checkbox" checked={showVoicemail} onChange={e=>setShowVoicemail(e.target.checked)}/>Show {voicemailHistory.length} voicemail {voicemailHistory.length===1?'recording':'recordings'}</label>}
+    {voicemailHistory.length>0&&<details className="call-archive"><summary>Past automated recordings</summary><label className="text-reply-filter voicemail-history"><input type="checkbox" checked={showVoicemail} onChange={e=>setShowVoicemail(e.target.checked)}/>Show {voicemailHistory.length} automated {voicemailHistory.length===1?'recording':'recordings'}</label></details>}
     {(page > 0 || current?.next !== null && current?.next !== undefined) && <nav className="history-pages" aria-label="Call recording pages">
       {page > 0 && <button type="button" onClick={() => setPage({screeningId, page: 0})}>Latest recordings</button>}
       {current?.next !== null && current?.next !== undefined && <button type="button" onClick={() => setPage({screeningId, page: current.next!})}>Older recordings</button>}

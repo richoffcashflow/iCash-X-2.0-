@@ -4,16 +4,16 @@ import {useEffect,useEffectEvent,useRef,useState} from 'react';
 import {Mic,MicOff,Phone,PhoneOff} from 'lucide-react';
 import {BrowserCallSession,guardBrowserCallCallbacks,type BrowserCallPhase} from '@/lib/browser-call-session';
 type Contact={phone:string;name?:string;available:boolean;businessNumber?:string|null};
-export function BrowserCallControls({screeningId,contacts,activeCall,onStarted,onFinished,autoStart=false,onAutoStartHandled}:{screeningId:string;contacts:Contact[];activeCall?:{id:string;connection_type?:string;ended_at:string|null};onStarted?:()=>void;onFinished:()=>void;autoStart?:boolean;onAutoStartHandled?:()=>void}){
+export function BrowserCallControls({apiBase='/api/work',screeningId,contacts,activeCall,onStarted,onFinished,autoStart=false,onAutoStartHandled}:{apiBase?:string;screeningId:string;contacts:Contact[];activeCall?:{id:string;connection_type?:string;ended_at:string|null};onStarted?:()=>void;onFinished:()=>void;autoStart?:boolean;onAutoStartHandled?:()=>void}){
  const session=useRef<BrowserCallSession|null>(null),mounted=useRef(true),finishing=useRef(false),busy=useRef(false);
  const autoConsumed=useRef(false);
  const [contact,setContact]=useState<Contact|null>(null);
  const [phase,setPhase]=useState<BrowserCallPhase>('ended'),[error,setError]=useState(''),[muted,setMuted]=useState(false),[seconds,setSeconds]=useState(0);
  const active=['connecting','ringing','connected'].includes(phase);
  const previous=activeCall&&!activeCall.ended_at&&activeCall.id!==session.current?.id?activeCall:undefined;
- useEffect(()=>{mounted.current=true;const unload=()=>{if(session.current)navigator.sendBeacon('/api/work/browser-call',new Blob([JSON.stringify({action:'end',id:session.current.id})],{type:'application/json'}));};window.addEventListener('pagehide',unload);return()=>{mounted.current=false;window.removeEventListener('pagehide',unload);void session.current?.stop();};},[]);
+ useEffect(()=>{mounted.current=true;const unload=()=>{if(session.current)navigator.sendBeacon(`${apiBase}/browser-call`,new Blob([JSON.stringify({action:'end',id:session.current.id})],{type:'application/json'}));};window.addEventListener('pagehide',unload);return()=>{mounted.current=false;window.removeEventListener('pagehide',unload);void session.current?.stop();};},[apiBase]);
  useEffect(()=>{if(phase!=='connected')return;const started=Date.now(),timer=setInterval(()=>setSeconds(Math.floor((Date.now()-started)/1000)),1000);return()=>clearInterval(timer);},[phase]);
- async function post(body:unknown){const r=await fetch('/api/work/browser-call',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not connect the call.');return d;}
+ async function post(body:unknown){const r=await fetch(`${apiBase}/browser-call`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not connect the call.');return d;}
  async function start(phone:string){
   if(busy.current||finishing.current||previous)return;
   busy.current=true;
@@ -26,7 +26,7 @@ export function BrowserCallControls({screeningId,contacts,activeCall,onStarted,o
    microphone:async()=>{if(!navigator.mediaDevices?.getUserMedia)throw Error('Open iCash X in a browser with microphone access to call.');const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop());},
    createDevice:async(token)=>{const {Device}=await import('@twilio/voice-sdk');return new Device(token,{closeProtection:true,logLevel:0});},
    request:async(action,id)=>post(action==='end'?{action,id}:{action,requestKey:id,screeningId,phone}),
-   status:async(id)=>{const r=await fetch('/api/work/business-call?id='+id,{cache:'no-store'});if(!r.ok)throw Error();return r.json();},
+   status:async(id)=>{const r=await fetch(`${apiBase}/business-call?id=${id}`,{cache:'no-store'});if(!r.ok)throw Error();return r.json();},
    onState:callbacks.onState,
    onStarted:callbacks.onStarted,
   });session.current=call;await call.start();

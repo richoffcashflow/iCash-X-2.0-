@@ -92,7 +92,7 @@ export function customerPhoneRecordingReceipt(c:CustomerPhoneCall,r:Record<strin
 export function customerPhoneAudioAvailable(c:Pick<CustomerPhoneCall,'recording_required'|'recording_state'|'recording_sid'|'recording_deleted_at'|'recording_expires_at'>,now=Date.now()){
  return c.recording_required&&c.recording_state==='available'&&sid(c.recording_sid,'RE')&&!c.recording_deleted_at&&!!c.recording_expires_at&&Date.parse(c.recording_expires_at)>now;
 }
-export async function startCustomerPhoneCall(input:{accountId:string;userId:string;screeningId:string;phone:string;callbackPhone:string;requestKey:string;browser?:boolean}){
+export async function startCustomerPhoneCall(input:{accountId:string;userId:string;screeningId:string;phone:string;callbackPhone:string;requestKey:string;browser?:boolean;ownerView?:{viewId:string;sessionId:string}}){
  const {accountId,userId,screeningId,callbackPhone,requestKey}=input;
  if(!phone(input.phone)||!(input.browser?/^client:icash_[a-f0-9]{64}$/.test(callbackPhone):phone(callbackPhone))||input.phone===callbackPhone)throw Error('PHONE_DIFFERENT_NUMBER_REQUIRED');
  const prior=await getCustomerPhoneCall(requestKey,accountId);if(prior){if(prior.actor_id!==userId||prior.screening_id!==screeningId||prior.callback_phone!==callbackPhone||prior.recipient_phone!==input.phone)throw Error('PHONE_REQUEST_CONFLICT');return {id:prior.id,status:prior.state,parentSid:prior.parent_sid};}
@@ -104,7 +104,8 @@ export async function startCustomerPhoneCall(input:{accountId:string;userId:stri
  const p=customerPhoneProvider(),nonce=nonceFor(requestKey,p.secret);
  const [a,b,callerId]=await Promise.all([input.browser?Promise.resolve({browserMicrosPerMinute:4000,source:'https://www.twilio.com/en-us/voice/pricing/us',verified:'2026-10-13'}):p.price(callbackPhone,sender),p.price(input.phone,sender),p.callerId(sender)]);if(!callerId)throw Error('PHONE_SENDER_UNAVAILABLE');
  const quote={connectionType:input.browser?'browser':'phone',recordingPolicy:customerPhoneRecordingPolicy,currency:'USD',country:'US',from:sender,callback:callbackPhone,recipient:input.phone,checkedAt:new Date().toISOString(),callbackMicrosPerMinute:input.browser?4000:customerPhoneQuote(a,callbackPhone,sender),recipientMicrosPerMinute:customerPhoneQuote(b,input.phone,sender),receiptHash:hash(JSON.stringify([a,b]))};
- const result=await db<{created?:boolean;call?:CustomerPhoneCall;error?:string;holdCents?:number}>('rpc/icash_begin_customer_phone_call','POST',{p_actor:userId,p_account:accountId,p_screening:screeningId,p_recipient:input.phone,p_callback:callbackPhone,p_id:requestKey,p_sender:sender,p_provider_account:p.account,p_nonce_hash:hash(nonce),p_quote:quote});
+ const request={p_actor:userId,p_account:accountId,p_screening:screeningId,p_recipient:input.phone,p_callback:callbackPhone,p_id:requestKey,p_sender:sender,p_provider_account:p.account,p_nonce_hash:hash(nonce),p_quote:quote};
+ const result=await db<{created?:boolean;call?:CustomerPhoneCall;error?:string;holdCents?:number}>(input.ownerView?'rpc/icash_owner_contact_action':'rpc/icash_begin_customer_phone_call','POST',input.ownerView?{p_actor:userId,p_account:accountId,p_session:input.ownerView.sessionId,p_view:input.ownerView.viewId,p_action:'begin_call',p_request:request}:request);
  if(result.error)return {error:result.error};if(!result.call)throw Error('PHONE_SETUP_REQUIRED');if(!result.created)return {id:result.call.id,status:result.call.state,parentSid:result.call.parent_sid};
  try{
   const call=await p.dial(result.call,nonce);if(!bound(result.call,call))throw Error('PHONE_PROVIDER_OUTCOME_UNKNOWN');
