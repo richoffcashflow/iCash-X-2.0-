@@ -50,6 +50,13 @@ def main():
     assert outcomes.count('request') == 1 and outcomes.count('held') == 7, outcomes
     assert sql("select count(*) from icash_research_private.estimates where lease_until>now()+interval '80 seconds'") == '1'
     assert sql("select count(*) from icash_automation_tickets where state='issued'") == '0'
+    sql('alter table icash_research_private.estimates add shared_from_operation text;truncate icash_research_private.estimates;')
+    sql('create function icash_research_private.financial_query_valid(jsonb,jsonb,jsonb,jsonb) returns boolean language sql as $$select false$$;')
+    sql(json.loads(read('tests/fixtures/discovery-financial-estimate-before.json'))['definition'])
+    sql(read('config/discovery-hold-backoff.sql'))
+    outcomes = race(claim)
+    assert outcomes.count('request') == 1 and outcomes.count('held') == 7, outcomes
+    assert sql("select count(*) from icash_research_private.estimates where lease_until>now()+interval '80 seconds'") == '1'
     print('Native discovery backoff: concurrent independent work, one-use tickets, Pause, immutable holds and coalesced free leases passed.')
 
 

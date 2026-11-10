@@ -61,5 +61,22 @@ try{
  await db.exec(before.icash_claim_discovery_estimate.replace("'1 minute'","'2 minutes'"));
  await assert.rejects(db.exec(migration),/Unexpected icash_claim_discovery_estimate predecessor/);await db.exec('rollback');
  assert.equal(await value("select pg_get_functiondef('icash_next_acquisition()'::regprocedure)"),before.icash_next_acquisition);
+ // A concurrent financial-prefilter release adds validation and persists exact
+ // shared estimates. The timeout patch must preserve both additions verbatim.
+ await db.exec(`alter table icash_research_private.estimates add shared_from_operation text;
+ alter table fixture_acquisition add financial_valid boolean default false;
+ create function icash_research_private.financial_query_valid(jsonb,jsonb,jsonb,jsonb) returns boolean language sql as $$select bool_and(financial_valid) from public.fixture_acquisition$$;
+ truncate icash_research_private.estimates;`);
+ await db.exec(JSON.parse(read('tests/fixtures/discovery-financial-estimate-before.json')).definition);
+ await db.exec(migration);await db.exec(migration);
+ const financial=a=>value('select icash_claim_discovery_estimate($1,$2,null,$3,$4)',[a,scope,{version:'financial-prefilter-v1'},query]);
+ assert.equal((await financial(account)).status,'held','Existing financial query validation still blocks before the free lease');
+ await db.exec('update fixture_acquisition set financial_valid=true');
+ assert.equal((await financial(account)).status,'request');
+ assert(await value("select lease_until>now()+interval '89 seconds' from icash_research_private.estimates"));
+ const response={estimated_credits:{this_page:2,breakdown:{people:0}},totals:{properties:2},pagination:{total_results:2}};
+ await q('update icash_research_private.estimates set lease_until=null,response=$1,saved_at=now()',[response]);
+ assert.deepEqual((await financial(other)).response,response,'The financial policy keeps the full exact shared free estimate');
+ assert(await value('select shared_from_operation is not null from icash_research_private.estimates where account_id=$1',[other]));
  console.log('Discovery backoff: reproduced hot loop; bounded independent progress, original controls, coalesced free lease and atomic drift rejection passed.');
 }finally{await db.close();}
