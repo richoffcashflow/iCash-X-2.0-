@@ -67,7 +67,8 @@ try{
 
 const ownerInboundTarget={ownerUserId:'owner',accountId:'owner-account',ownerPhone:phone};let user=null;
 const route=load('app/api/demo/intake/route.ts',new Proxy({
- 'next/server':{},'next/headers':{},'node:crypto':require('node:crypto'),
+ 'next/server':{},'next/headers':{cookies:async()=>({get:()=>({value:'a'.repeat(64)})})},'node:crypto':require('node:crypto'),
+ '@/lib/funding':{validGuest:value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value)},
  '@/lib/dashboard-password':{dashboardCurrentUser:async()=>user},'@/lib/owner-inbound-acceptance':{ownerInboundTarget},
 }, {get:(obj,key)=>obj[key]??{},getOwnPropertyDescriptor:()=>({configurable:true,enumerable:true})}));
 for(const identity of [null,{id:'another-owner'},{id:'owner'}]){

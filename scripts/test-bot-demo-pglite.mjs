@@ -1,5 +1,6 @@
 // In-memory PostgreSQL only. No provider requests, messages or calls.
 import assert from 'node:assert/strict';
+import {assertOwnerDemoRestartParity} from '../tests/helpers/owner-demo-restart-parity.mjs';
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
@@ -225,4 +226,81 @@ try{
  const input={name:'Demo Seller',address:'45 Fixture Lane',phone:'2145550123',consented:true,consentVersion:botDemoConsentVersion,requestId:leadRequest};
  assert(botDemoSubmission.safeParse(input).success);assert(!botDemoSubmission.safeParse({...input,accountId:other}).success);assert(!botDemoSubmission.safeParse({...input,consented:false}).success);
  console.log('PASS: consent, ownership, retries, active duplicates, archived resubmission through lookup and assignment, account/source isolation, original network routing, and service-only permissions. No paid work.');
+ // New policy: independent demo intent, without archiving or resetting prior runs.
+ const signatures=['icash_submit_bot_demo_intake(uuid,uuid,uuid,text,text,text,text,boolean,text,text,text)','icash_finish_seller_lookup(uuid,uuid,jsonb)'];
+ const accessBefore=(await q("select oid::regprocedure::text name,proacl,prosecdef,proconfig from pg_proc where oid=any($1::regprocedure[]) order by 1",[signatures])).rows;
+ const history=async()=>JSON.stringify((await q('select to_jsonb(l) row from icash_seller_intakes l order by id')).rows);
+ const oldHistory=await history();
+ const originalLookup=(await one("select pg_get_functiondef('icash_finish_seller_lookup(uuid,uuid,jsonb)'::regprocedure) d")).d;
+ const newPolicy=read('config/distinct-demo-submissions.sql');
+ assertOwnerDemoRestartParity('distinct-demo-submissions');
+ await pg.exec(newPolicy);await pg.exec(newPolicy);
+ assert.equal(await history(),oldHistory,'installation does not rewrite old demos or replay work');
+ assert.deepEqual((await q("select oid::regprocedure::text name,proacl,prosecdef,proconfig from pg_proc where oid=any($1::regprocedure[]) order by 1",[signatures])).rows,accessBefore,'source-bound API permissions stay unchanged');
+ const legacyRequest=(await one('select request_id from icash_seller_intakes where id=$1',[again.id])).request_id;
+ assert.equal((await submit(args.map((v,i)=>i===2?legacyRequest:v))).id,again.id,'old duplicate requests remain their original receipts');
+ // Exercise the actual current Meta wrapper as well as the old unwrapped predecessor.
+ await pg.exec(originalLookup); // Re-test the live wrapper over the unpatched original.
+ const meta=read('supabase/migrations/20261018150000_meta_contact_first_intake.sql');
+ await pg.exec(meta.slice(meta.indexOf('alter function public.icash_finish_seller_lookup(uuid,uuid,jsonb) rename'),meta.indexOf('create function public.icash_meta_response_report')));
+ const wrapper=(await one("select pg_get_functiondef('icash_finish_seller_lookup(uuid,uuid,jsonb)'::regprocedure) d")).d;
+ await pg.exec(newPolicy);await pg.exec(newPolicy);
+ assert.equal((await one("select pg_get_functiondef('icash_finish_seller_lookup(uuid,uuid,jsonb)'::regprocedure) d")).d,wrapper,'Meta promotion wrapper is unchanged');
+ const beforeRuns=(await one('select count(*)::int n from icash_seller_matches')).n;
+ const priorActive=(await one('select state from icash_screening_jobs where id=$1',[currentScreen])).state;
+ const runIds=[],screenIds=[];
+ for(let attempt=0;attempt<3;attempt++){
+  const nextArgs=args.map((v,i)=>i===2?randomUUID():v);
+  const run=(await submit(nextArgs)).id;runIds.push(run);
+  assert.equal((await submit(nextArgs)).id,run,'same request returns the same receipt');
+  const intake=await one('select state,canonical_id from icash_seller_intakes where id=$1',[run]);
+  assert.deepEqual(intake,{state:'received',canonical_id:null},'same address and phone get a new run without reset');
+  await assert.rejects(submit(nextArgs.map((v,i)=>i===5?'99 Different Lane, Dallas, TX 75201':i===8?'9'.repeat(64):v)),/retry mismatch/);
+  const checkedRun=await finish(run);
+  assert.equal(checkedRun.state,'qualified');assert.equal(checkedRun.canonical_id,null,'provider property ID cannot swallow new demo');
+  assert.equal((await one('select icash_assign_seller_lead_for($1) r',[run])).r.accountId,account);
+  assert.equal((await one('select icash_assign_seller_lead_for($1) r',[run])).r,null,'exact run is assigned once');
+  const {screening_id:runScreen}=await one('select screening_id from icash_seller_matches where lead_id=$1',[run]);screenIds.push(runScreen);
+  assert((await one('select icash_seller_contact_evidence($1,$2,$3,$4) e',[account,runScreen,run,args[6]])).e);
+  assert.equal((await one('select icash_seller_contact_evidence($1,$2,$3,$4) e',[other,runScreen,run,args[6]])).e,null);
+  for(const [sql,params,label] of held.slice(0,2)){
+   await q('begin');try{await q(sql,params);assert.equal((await one('select icash_seller_contact_evidence($1,$2,$3,$4) e',[account,runScreen,run,args[6]])).e,null,label+' is not bypassed by new submission');}finally{await q('rollback');}
+  }
+ }
+ assert.equal(new Set(runIds).size,3);assert.equal(new Set(screenIds).size,3);
+ assert.equal((await one('select count(*)::int n from icash_seller_matches')).n,beforeRuns+3);
+ assert.equal((await one('select state from icash_screening_jobs where id=$1',[currentScreen])).state,priorActive,'prior active demo is never silently archived');
+ const publicRepeat=(await submit(args.map((v,i)=>i===2?randomUUID():v))).id;
+ await q("update icash_seller_intakes set contact_consent_scope='homeoffer_network_and_matched_buyers' where id=$1",[publicRepeat]);
+ assert.equal((await finish(publicRepeat)).canonical_id,id,'real seller provider-property deduplication is unchanged');
+ const isolated=(await submit(args.map((v,i)=>i===0?otherOwner:i===1?other:i===2?randomUUID():v))).id;
+ assert.equal((await finish(isolated)).canonical_id,null,'another account demo is never absorbed');
+ assert.equal((await one('select icash_assign_seller_lead_for($1) r',[isolated])).r.accountId,other);
+ // The actual response preparer creates a deal per new screening, never
+ // reuses the older demo's accepted/declined/no-response terms or provider state.
+ await pg.exec(`alter table icash_deal_files add column stage text default 'draft';
+ create unique index fixture_deal_per_screen on icash_deal_files(account_id,screening_id);
+ alter table icash_text_threads add column party text default 'seller',add column paused boolean default false,add column ai_mode text default 'auto';
+ alter table icash_text_messages add column provider_id text;
+ alter table icash_contact_permissions add column id uuid,add column party text,add column permission_until timestamptz;
+ create table icash_voice_configs(account_id uuid,enabled boolean);
+ create table icash_voice_jobs(id uuid default gen_random_uuid(),account_id uuid,permission_id uuid,callback_id uuid,state text default 'ready',due_at timestamptz default now(),created_at timestamptz default now(),updated_at timestamptz,provider_call_sid text,outcome text);
+ create table icash_property_controls(account_id uuid,property_id text,manual boolean);
+ create table icash_handoffs(account_id uuid,screening_id uuid,state text);`);
+ const responses=read('supabase/migrations/20261005124045_seller_response_handoff_and_activity.sql');
+ await pg.exec(responses.slice(responses.indexOf('create table public.icash_seller_responses'),responses.indexOf('create function public.icash_note_seller_response')));
+ await q("update icash_deal_files set stage='seller_signed',terms='{\"seller\":\"Previous signature\",\"priceCents\":12345}' where screening_id=$1",[currentScreen]);
+ for(const [state,outcome] of [['held','unknown_provider_outcome'],['held','seller_declined'],['dispatched','no_response']])await q('insert into icash_voice_jobs(account_id,state,outcome) values($1,$2,$3)',[account,state,outcome]);
+ const oldCalls=(await q('select to_jsonb(v) row from icash_voice_jobs v order by id')).rows;
+ const oldDeal=await one('select to_jsonb(d) row from icash_deal_files d where screening_id=$1',[currentScreen]);
+ for(const run of runIds){
+  await one('select icash_prepare_seller_responses($1) response',[run]);
+  const deal=await one('select d.* from icash_deal_files d join icash_seller_matches m on m.account_id=d.account_id and m.screening_id=d.screening_id where m.lead_id=$1',[run]);
+  assert.equal(deal.stage,'draft');assert.equal(deal.terms.priceCents,null);assert.equal(deal.terms.seller,'');assert.notEqual(deal.screening_id,currentScreen);
+ }
+ assert.deepEqual(await one('select to_jsonb(d) row from icash_deal_files d where screening_id=$1',[currentScreen]),oldDeal,'historical signed terms are unchanged');
+ assert.deepEqual((await q('select to_jsonb(v) row from icash_voice_jobs v order by id')).rows,oldCalls,'unknown/declined/no-response operations are not reset or replayed');
+ assert.equal((await one('select count(*)::int n from icash_manual_call_attempts')).n,0);
+ assert.equal((await one('select count(*)::int n from icash_text_messages')).n,0);
+ console.log('PASS: distinct repeated demo intents through real intake, lookup and assignment; idempotent retries, original history, Meta wrapper, opt-outs and customer isolation preserved.');
 }catch(error){console.error({message:error.message,detail:error.detail,where:error.where,position:error.position,stack:error.stack?.split('\n').slice(0,4)});process.exitCode=1;}finally{await pg.close();}
