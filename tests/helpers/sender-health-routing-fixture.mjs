@@ -5,7 +5,7 @@ export async function testSenderHealthRouting(f){
  const {db,q,one,account,screen,deal,recipient,sms,sender,thread,customer}=f;
  const before=JSON.parse(read('tests/fixtures/sender-health-routing-before.json'));
  const migration=read('config/sender-health-routing.sql');
- assert.equal(migration,read('supabase/migrations/20261110180400_sender_health_routing.sql'));
+ assert.equal(migration,read('supabase/migrations/20261110183250_sender_health_routing.sql'));
  await db.exec(`create schema icash_text_receipt_private;
  create table icash_text_events(id text,type text,payload jsonb);
  alter table icash_operation_spend add dispatched_at timestamptz;
