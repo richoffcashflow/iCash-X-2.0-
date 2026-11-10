@@ -16,6 +16,7 @@ export async function verifyConversationInbox(browser,base,options,name){
  messages.unshift(...Array.from({length:9},(_,i)=>({...first,id:'followup-'+i,body:'Saved outgoing follow-up '+i,created_at:`2026-10-21T14:${String(15-i).padStart(2,'0')}:00Z`})));
  const calls=[{id:rid,source:'outbound',party:'seller',completedAt:'2026-10-21T14:01:00Z',durationSeconds:42,recordingId:rid,transcriptAvailable:false,recordingReceipt:{id:rid,status:'available',durationSeconds:42,audioAvailable:true,audioExpiresAt:'2027-01-01T00:00:00Z'}}];
  calls.push({...calls[0],id:'44444444-4444-4444-8444-444444444444',source:'personal',completedAt:'2026-10-21T14:01:30Z',recordingId:undefined,recordingReceipt:{...calls[0].recordingReceipt,id:'44444444-4444-4444-8444-444444444444'}});
+ calls.push({...calls[0],id:'55555555-5555-4555-8555-555555555555',source:'reception',completedAt:'2026-10-21T14:01:45Z',recordingId:'55555555-5555-4555-8555-555555555555',transcriptAvailable:true,summary:'Seller asked to discuss the price.',nextAction:'Review the price with the seller.',recordingReceipt:{...calls[0].recordingReceipt,id:'55555555-5555-4555-8555-555555555555'}});
  data.conversations=[{id:rid,source:'outbound',screening_id:screenId,party:'seller',completed_at:'2026-10-21T14:01:00Z',durationSeconds:42,summary:'Seller said: I would consider a cash offer.',voicemail:false},{id:'99999999-9999-4999-8999-999999999999',source:'outbound',screening_id:screenId,party:'seller',completed_at:'2026-10-21T14:00:00Z',summary:'Automated voicemail greeting.',voicemail:true}];
  page.on('pageerror',e=>errors.push(e.message));
  await context.route('**/*',async route=>{
@@ -79,6 +80,24 @@ export async function verifyConversationInbox(browser,base,options,name){
   await log.locator('audio[src*="business-call"]').waitFor();
   const replyBox=await log.getByText(reply.body,{exact:true}).boundingBox(),historyBox=await log.boundingBox();assert(replyBox.y>=historyBox.y&&replyBox.y< historyBox.y+historyBox.height,'Seller reply opens in view despite later outgoing activity');
   assert((await dialog.getByRole('button',{name:'Call seller',exact:true}).boundingBox()).y<historyBox.y,'Call action is above the thread');assert.equal(await log.getByText('Call details and transcript',{exact:true}).count(),0);
+  const incomingCall=log.locator('.conversation-call-entry[data-direction="incoming"]'),outgoingCalls=log.locator('.conversation-call-entry[data-direction="outgoing"]');
+  assert.equal(await outgoingCalls.count(),2,'AI and personal outgoing calls share the outgoing direction');
+  assert.equal(await incomingCall.getByText('Incoming call',{exact:true}).count(),1);
+  assert.equal(await outgoingCalls.getByText('Outgoing call',{exact:true}).count(),2);
+  assert.equal(await log.locator('.call-summary-card').count(),0,'Texts show compact call entries instead of full summary cards');
+  assert.equal(await incomingCall.locator('audio').getAttribute('src'),'/api/work/reception-recording/audio?id=55555555-5555-4555-8555-555555555555');
+  assert.equal(await log.getByText('Listen to call recording',{exact:true}).count(),0);
+  assert.equal(await incomingCall.getByText('Seller asked to discuss the price.',{exact:true}).count(),0,'Summary stays out of the collapsed timeline');
+  for(const entry of await log.locator('.conversation-call-entry').all()){
+   const entryBox=await entry.boundingBox();assert(entryBox.width<=320&&entryBox.height<150,'Inline calls leave room for the text thread');
+   assert(entryBox.x>=historyBox.x&&entryBox.x+entryBox.width<=historyBox.x+historyBox.width,'Call player fits the thread');
+  }
+  await incomingCall.scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/icash-inline-recording-${name.startsWith('mobile')?'mobile':'desktop'}.png`});
+  await incomingCall.getByText('Call details',{exact:true}).click();
+  await incomingCall.getByText('Seller asked to discuss the price.',{exact:true}).waitFor();
+  await incomingCall.getByText('I would consider a cash offer.',{exact:true}).waitFor();
+  assert(await incomingCall.locator('audio').isVisible(),'Opening the transcript keeps its recording visible');
+  await incomingCall.getByText('Call details',{exact:true}).click();
   assert.equal(sends.length,0);assert(!otherWrites.includes('/api/work/text-contact'),'Opening existing history sends and creates nothing');
   await page.waitForFunction(()=>!document.querySelector('.seller-text-alert'));assert.deepEqual(readRequests.flat(),[replyId]);assert(await dialog.isVisible(),'Reading keeps the conversation open after leaving the unread list');
   await textbox.fill('Can we talk about your property this afternoon?');
