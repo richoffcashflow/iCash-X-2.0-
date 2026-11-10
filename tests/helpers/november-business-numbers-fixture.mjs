@@ -31,6 +31,13 @@ export async function testNovemberNumbers(f){
  await assert.rejects(db.exec(migration),/November number boundary changed/);await q('rollback');
  assert.equal((await one("select count(*)::int n from icash_text_senders where phone=$1",[novemberBusinessPhones[0]])).n,0,'Drift rolls back registration');
  await db.exec(selector);await db.exec(migration);
+ const additional=readFileSync('config/november-additional-business-numbers.sql','utf8');
+ const current=(await one("select pg_get_functiondef('icash_business_conversation_sender(uuid,uuid,text,boolean)'::regprocedure) definition")).definition;
+ await db.exec(current.replace("'+16462494809')","'+16462494808')"));
+ await assert.rejects(db.exec(additional),/Additional number boundary changed/);await q('rollback');
+ assert.equal((await one("select count(*)::int n from icash_text_senders where phone in ('+15056019451','+15055072937','+15127791343')")).n,0,'New registration rolls back on drift');
+ await db.exec(current);await db.exec(additional);
+ assert.equal((await one("select count(*)::int n from icash_text_senders where phone in ('+15056019451','+15055072937','+15127791343') and not enabled")).n,3,'All new leases install disabled');
  assert.deepEqual((await metadata()).rows,before,'Function metadata and prior ACLs are preserved');
  const save=(phone,forwarding,enabled,id=null)=>q('select icash_save_business_voice_number($1,$2,$3,$4,$5)',[ac,id,forwarding,enabled,phone]);
  for(const phone of novemberBusinessPhones){

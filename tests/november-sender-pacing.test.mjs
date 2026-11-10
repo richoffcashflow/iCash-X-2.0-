@@ -16,6 +16,7 @@ try{
  const migration=read('supabase/migrations/'+readdirSync('supabase/migrations').find(p=>p.endsWith('_november_sender_200.sql')));
  assert.equal(migration,read('config/november-sender-200.sql'));
  await db.exec(migration);
+ await db.exec(read('config/november-additional-sender-pacing.sql'));
  assert.deepEqual(await one('select jsonb_agg(u order by source_id) from icash_sender_private.uses u'),before,'Existing usage survives the limit change');
  assert.equal(await one("select pg_get_functiondef('icash_sender_private.take(text,uuid,text,boolean,uuid,uuid,text,boolean)'::regprocedure)"),takeBefore,'Shared locking and admission receipts are unchanged');
  // Freeze only the clock in the real shared gate, after checking its predecessor.
