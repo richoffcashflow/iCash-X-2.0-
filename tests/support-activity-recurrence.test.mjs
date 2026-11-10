@@ -43,3 +43,58 @@ for(const q of ['How do I cancel my subscription?','Where is the course?','The s
 assert.equal(supportAccountReviewReply({kind:'account',messages:[user('On the home page')],evidence})?.managementReview??false,false);
 assert.equal(supportAccountReviewReply({kind:'account',messages:[...pendingHistory,operator('A separate billing finding is under review.'),user('On the home page')],evidence})?.managementReview??false,false);
 assert.equal(modelCalls,0);
+
+// Fictional workspace progress reports must not fall through to generic help.
+for(const question of [
+ 'My app has been running since yesterday without any movement or updates.',
+ 'The workspace is running but there is no progress.',
+ 'My bot has been running for hours without activity.'
+]){
+ const r=await ask([user(question)]);
+ assert.equal(r.managementReview,true,question);assert.equal(r.status,'open');
+ assert.match(r.reply,/setting alone does not prove/);assert.doesNotMatch(r.reply,/What are you trying|restart|refresh/i);
+ const page=await ask([user(question),assistant('Which page are you looking at?'),user('Home')]);
+ assert.equal(page.managementReview,true);assert.equal(page.status,'open');
+ const thanks=await ask([user(question),assistant(r.reply),user('Thanks')]);
+ assert.notEqual(thanks.status,'resolved');
+}
+for(const question of [
+ 'The app is running fine. How do I update my name?',
+ 'The app has been running without updates to the seller price.',
+ 'My browser is running without any movement.',
+ 'The course video is running without any movement.',
+ 'The app video is running without progress.',
+ 'Can I keep the app running without activity?',
+ 'The app has been running without progress, but it is working now.',
+ 'How do I keep the app running without installing updates?'
+])assert.equal(supportAccountReviewReply({kind:'account',messages:[user(question)],evidence})?.managementReview??false,false,question);
+const stalledApp=[user('My app has been running all day without progress.'),assistant('Which page is open?')];
+for(const tail of [
+ [user('Where is the course?')],
+ [operator('A separate browser problem remains under review.'),user('Home')],
+ [user('The app is working now.'),assistant('Glad that worked.'),user('Home')]
+])assert.equal(supportAccountReviewReply({kind:'account',messages:[...stalledApp,...tail],evidence})?.managementReview??false,false);
+assert.match((await ask([...stalledApp,user('Cancel my subscription')])).reply,/Cancel subscription/);
+assert.equal(modelCalls,0);
+console.log('PASS running workspace progress complaints and negative/topic/operator boundaries');
+
+// Fictional current-status questions must use evidence even after side topics.
+const stalledEvidence=[...evidence,{key:'outreach',status:'attention',code:'fixture',detail:'Saved activity.',source:'fixture',observedAt:'2026-11-10T19:00:00Z',outreach:{callsStarted:0,textsSent:0,textReplies:0,progress:{status:'ready',health:{status:'blocked',reason:'no_completed_work'}}}}];
+for(const question of ['Is my bot actually working?','Is the AI really running?','Is my bot working right now?']){
+ for(const messages of [[user(question)],[...history,user('Where is the course?'),assistant('Open Course.'),user(question)]]){
+  const r=await replyToSupport({kind:'account',messages,evidence:stalledEvidence},async()=>{modelCalls++;throw Error('External model forbidden');});
+  assert.equal(r.managementReview,true,question);assert.equal(r.status,'open');
+  assert.match(r.reply,/setting alone does not prove/);assert.match(r.reply,/no completed work/i);
+  assert.doesNotMatch(r.reply,/hasn.t found|will show activity only|working normally|Open a property/i);
+ }
+}
+for(const question of ['Is my bot working now?','Is the bot running?']){
+ const r=await ask([user(question)]);assert.equal(r.status,'open');assert.match(r.reply,/can.t verify/);assert.notEqual(r.managementReview,true);
+}
+for(const question of ['Is the bot working with title companies?','Is the bot working in Ohio?','Is the bot running while I am offline?','My bot is working now.','Is my browser really working?','Cancel my subscription']){
+ assert.equal(supportAccountReviewReply({kind:'account',messages:[...history,user(question)],evidence:stalledEvidence}),null,question);
+}
+const intervening=await ask([...history,operator('A separate browser problem is under review.'),user('Where is the course?')]);
+assert.doesNotMatch(intervening.reply,/no completed work|lack of progress/);
+assert.equal(modelCalls,0);
+console.log('PASS direct current-status questions, verified blockage, unknown evidence and topic boundaries');

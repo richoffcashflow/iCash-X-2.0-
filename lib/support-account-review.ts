@@ -7,10 +7,14 @@ const existingOutreachConcern=(text:string)=>/\b(?:ai|bot|automated|automation|r
  * and failure in one sentence, and let an explicit successful result reset it. */
 export function supportMissingActivityConcern(text:string){
  if(/\b(?:(?:it|(?:the |my )?(?:bot|ai)) (?:is )?working (?:now|fine|well)|problem solved|fixed now|all fixed)[.!\s]*$/i.test(text)&&!/\b(?:not working (?:now|fine|well)|not fixed|isn[’']?t working (?:now|fine|well))\b/i.test(text))return false;
+ // A running workspace with no progress is an activity complaint. Require
+ // that complete statement, not unrelated browser/video or software updates.
+ if(/\b(?:app|apps|workspace|bot|ai) (?:is|has been|have been|was|had been) running\b[^.!?\n]{0,65}\b(?:without (?:any )?|no )(?:movement|progress|activity)(?: or updates?)?[.!?\s]*$/i.test(text))return true;
  return /\b(?:early|earlier|previous|unfinished) work (?:is )?(?:awaiting|waiting for) (?:final (?:cost )?confirmation|confirmation|costs?)\b|\b(?:early|earlier) work is awaiting\b/i.test(text)||existingOutreachConcern(text)||/\b(?:ai|bot|automation)\b[^.!?]{0,85}\b(?:not do(?:ing)? anything|didn[’']?t do anything|did not do anything|has(?:n[’']?t| not) done anything|nothing (?:(?:has|had) )?(?:happened|happens|occurred|occured))\b/i.test(text);
 }
 const outreachConcern=supportMissingActivityConcern;
 const activityPage=(text:string)=>/^(?:(?:on )?the |on )?(?:all activity|your leads|home|dashboard)(?: (?:page|screen|view))?[.!\s]*$/i.test(text.trim());
+const currentActivityQuestion=(text:string)=>/^is (?:my |the )?(?:ai bot|bot|ai) (?:really |actually )?(?:working|running|active)(?: (?:right )?now)?[?!\s]*$/i.test(text.trim());
 const activityProofQuestion=(text:string)=>/\b(?:how|when)(?: can| do| will)? i (?:tell|know|see)\b.{0,35}\b(?:ai|bot)\b.{0,30}\b(?:doing (?:anything|something)|working|work|active)\b/i.test(text);
 function missingActivityFollowup(context:SupportContext){
  const turns=context.messages.slice(-9),latest=turns.at(-1);
@@ -52,7 +56,7 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const state=paused?'Your bot is paused. This chat has not resumed it or authorized new work.':work?.code==='not_paused'&&work.status==='ok'?'Your bot is switched on; that setting alone does not prove outreach is running.':'I can’t confirm the current Run/Pause setting from these checks.';
  const totals=o?`${o.callsStarted} call attempts and ${o.textsSent} texts are recorded overall, with ${o.textReplies} text replies. These totals do not prove seller interest or recent automatic outreach.`:'I can’t verify the call and text records from the available checks.';
  const voice=context.evidence?.find(e=>e.key==='voice'&&e.status==='attention');
- const blocker=paused?'The pause explains why new work is stopped now, but not why outreach was missing before it.':voice?.detail??(o?.progress?.status==='settling'?'Earlier work is awaiting final cost confirmation.':o?.progress?.status==='budget_reached'?'Available work credits do not cover the next task.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='pending_work'?'An earlier task is awaiting confirmation.':context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New property research is waiting for capacity.':'I haven’t verified the specific cause of the missing or slow activity.');
+ const blocker=paused?'The pause explains why new work is stopped now, but not why outreach was missing before it.':voice?.detail??(o?.progress?.status==='settling'?'Earlier work is awaiting final cost confirmation.':o?.progress?.status==='budget_reached'?'Available work credits do not cover the next task.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='pending_work'?'An earlier task is awaiting confirmation.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='no_completed_work'?'The saved checks report no completed work and flag the activity as blocked; I haven’t verified the specific cause or a restart time.':context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New property research is waiting for capacity.':'I haven’t verified the specific cause of the missing or slow activity.');
  const automatedQuestion=/\b(?:automated|automatic|automatically|ai|bot)\b/i.test(q)&&/\b(?:calls?|calling|sms|texts?|texting|outreach|speak)\b/i.test(q)&&/\b(?:available|availability|enabled|able|blocker|missing setup|bot to speak|bot to conduct|no recorded|0 calls|zero calls)\b/i.test(q);
  if(automatedQuestion){
   const capability='Eligible seller calls and texts can run automatically; the property’s Call button is for you to speak through your browser microphone.';
@@ -73,7 +77,7 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   return answer(/^nothing/i.test(q)?'Understood. The activity problem you reported remains open; you do not need to repeat it.':'I understand why you’re frustrated. Your report of slow or missing activity remains unresolved; I haven’t confirmed a fix or restart time.',true);
  if(/\b(?:searching|looking) for a deal\b/i.test(q)&&/\b(?:waiting|status|says|shows)\b/i.test(q))
   return answer('“Searching for a deal” is the workspace status label. It does not prove that a task is actively running or that outreach has started. '+state+' '+totals+' '+blocker);
- if(activityProofQuestion(q)||/\b(?:what|how do i know)\b.{0,45}\b(?:currently|right now)\b.{0,25}\b(?:working|doing)\b|\bwhat is (?:my |the )?bot doing (?:currently|now)\b/i.test(q))
-  return answer(state+' '+totals+' '+blocker+' Open a property’s Calls or Texts to review its saved activity. A researched property is not a confirmed interested seller.');
+ if(currentActivityQuestion(q)||activityProofQuestion(q)||/\b(?:what|how do i know)\b.{0,45}\b(?:currently|right now)\b.{0,25}\b(?:working|doing)\b|\bwhat is (?:my |the )?bot doing (?:currently|now)\b/i.test(q))
+  return answer(state+' '+totals+' '+blocker+(o?.progress?.health?.status==='blocked'?'':' Open a property’s Calls or Texts to review its saved activity. A researched property is not a confirmed interested seller.'),o?.progress?.health?.status==='blocked');
  return null;
 }
