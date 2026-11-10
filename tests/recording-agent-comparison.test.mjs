@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {automaticOfferGuardrails} from '../lib/automatic-offer-policy.ts';
 import {canonical,sha,recordingAgentMatches,recordingConfigHashMatches,recordingPolicy,readRecordingReview} from '../lib/required-call-recording.ts';
-import {outboundParallelApproval as parallel} from '../lib/outbound-parallel-approval.ts';
+import {outboundParallelApproval as parallel,outboundEightyPercentApproval as eighty} from '../lib/outbound-parallel-approval.ts';
 
 // Synthetic, offline fixtures only. Keep all historical hash representations
 // pinned independently of the comparison so this never changes stored reviews.
@@ -36,6 +36,52 @@ const listHash='5c5b0c31aad194adca4b9c67786f1bfb21764ad75d7d6ea023ad8c3a0d71bc54
 const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82';
 const representations=[[false,false],[true,false],[false,true],[true,true]];
 const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
+
+test('November 10 disabled voice-detection representation retains full approval and active controls',()=>{
+ for(const olderDefaults of [false,true])for(const capacity of [false,true]){
+  const pair=olderDefaults?renamedVoiceFixture():{old:fixture(),current:fixture()};
+  for(const a of [pair.old,pair.current]){
+   a.platform_settings.guardrails=automaticOfferGuardrails({synthetic_voice:{is_enabled:false,trigger_action:{type:'end_call'}}});
+   a.conversation_config.agent.prompt.tool_ids.push('tool_contract');
+   if(capacity){
+    Object.assign(a,{agent_id:eighty.agentId,branch_id:eighty.branchId,version_id:eighty.versionId});
+    Object.assign(a.platform_settings.call_limits,{agent_concurrency_limit:eighty.previousLimit,daily_limit:eighty.previousDailyLimit});
+   }
+  }
+  const review={...reviewFor(pair.old),offerPolicy:'automatic_offer_v9',contractToolId:'tool_contract',toolIds:[...pair.old.conversation_config.agent.prompt.tool_ids]};
+  const current=pair.current,guardrails=current.platform_settings.guardrails;
+  delete guardrails.synthetic_voice.trigger_action;guardrails.human_voice={is_enabled:false};
+  if(capacity)current.platform_settings.call_limits.agent_concurrency_limit=eighty.limit;
+  const saved=structuredClone({review,current});
+  assert.equal(recordingAgentMatches(review,current),true,'The unchanged approved configuration is usable');
+  const incoming=a=>({...a,workflow:null,procedures:null}),incomingHash=sha(JSON.stringify(canonical(incoming(pair.old))));
+  assert.equal(recordingConfigHashMatches(incomingHash,incoming(current)),!capacity,'The shared comparison does not authorize outbound capacity for incoming agents');
+  assert.deepEqual({review,current},saved,'No approval, provider setting or source evidence is mutated');
+  assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},current),false);
+  assert.equal(recordingAgentMatches({...review,configHash:configHash(current)},pair.old),false,'Never synthesize the newer representation in reverse');
+  assert.equal(recordingAgentMatches({...review,configHash:configHash(current)},current),true,'Exact newer approvals remain valid');
+  for(const mutate of [
+   a=>delete a.platform_settings.guardrails.human_voice,
+   ...[null,[],false,{}, {is_enabled:true},{is_enabled:'false'},{is_enabled:false,extra:null}].map(value=>a=>a.platform_settings.guardrails.human_voice=value),
+   ...[null,[],false,{}, {is_enabled:true},{is_enabled:'false'},{is_enabled:false,extra:null},{is_enabled:false,trigger_action:{type:'end_call'}}].map(value=>a=>a.platform_settings.guardrails.synthetic_voice=value),
+   a=>a.platform_settings.guardrails.extra=null,
+   a=>a.platform_settings.guardrails.focus.is_enabled=false,
+   a=>a.platform_settings.guardrails.custom.config.configs[0].prompt+=' changed',
+   a=>a.conversation_config.agent.prompt.prompt+=' changed',
+   a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+   a=>a.platform_settings.privacy.record_voice=true,
+   a=>a.platform_settings.auth.enable_auth=false,
+   a=>a.platform_settings.call_limits.daily_limit=1001,
+   a=>a.platform_settings.call_limits.bursting_enabled=true,
+   a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',
+  ]){
+   const changed=structuredClone(current);mutate(changed);
+   assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());
+  }
+  const changed=structuredClone(current);changed.platform_settings.guardrails.focus.is_enabled=false;
+  assert.equal(recordingAgentMatches({...review,configHash:configHash(changed)},changed),false,'Even an exact hash cannot override the active price policy');
+ }
+});
 
 test('November 5 empty avatar and disabled reasoning override preserve the exact original approval',()=>{
  for(const olderDefaults of [false,true]){
