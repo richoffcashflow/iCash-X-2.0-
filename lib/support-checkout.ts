@@ -3,6 +3,32 @@ import type {SupportContext,SupportReply,SupportTurn} from './support-conversati
 const offer=(text:string)=>/\b(?:two|2)[ -](?:calendar[ -])?months?\b.{0,30}\bfree\b|\bfree\b.{0,25}\b(?:two|2)[ -](?:calendar[ -])?months?\b|\b(?:returning|legacy|welcome.back)\b.{0,25}\boffer\b/i.test(text);
 const problem=(text:string)=>/check.?out|accept(?:ing)?|not going through|did not go through|doesn[’']?t work|not work|failed|cannot|can[’']?t|error|stuck|support/i.test(text);
 
+/** A code requested during an offer may belong to checkout recovery, not a
+ * completed purchase. Keep that distinction until the stage is established. */
+export function supportOfferCodeReply(messages:SupportTurn[]):SupportReply|null{
+ let start=-1;
+ const code=(text:string)=>/\bcode\b/i.test(text)&&!/\b(?:promo|coupon|discount|zip|area|source) code\b/i.test(text);
+ const completed=(text:string)=>{
+  const claim=text.match(/\b(?:checkout|purchase|offer)\b[^.!?]{0,35}\b(?:completed|successful|confirmed)\b/i)?.[0];
+  return !!claim&&!/\b(?:not|never|isn[’']t|wasn[’']t)\b/i.test(claim);
+ };
+ for(let i=0;i<messages.length;i++){
+  const m=messages[i];
+  if(m.role==='operator'){start=-1;continue;}
+  if(m.role!=='user')continue;
+  const recovered=/\b(?:that worked|it worked|signed in|got in)\b/i.test(m.content)&&!/\b(?:not|never|still|but|haven[’']t|didn[’']t)\b/i.test(m.content);
+  if(completed(m.content)||/\b(?:refund|cancel|charged twice|duplicate charge|unrecognized charge|course|leads?|seller|buyer|bot|contract)\b/i.test(m.content)||recovered){start=-1;continue;}
+  if(code(m.content)&&(offer(m.content)||/\blegacy checkout\b/i.test(m.content))){if(start<0)start=i;continue;}
+  if(start>=0&&/\b(?:management review|manager|support representative|human support)\b/i.test(m.content))continue;
+  if(start>=0&&!code(m.content)&&!supportContinuation(m.content)&&!/^(?:no|nothing|email|text|sms|i checked|it says|it keeps|secure checkout|resume a checkout|(?:the |iCash X )?sign[ -]?in page|the (?:offer|checkout|page|button))\b/i.test(m.content.trim()))start=-1;
+ }
+ if(start<0)return null;
+ const active=messages.slice(start);
+ const asked=active.some(m=>m.role==='assistant'&&/which page.*code/i.test(m.content));
+ if(asked)return {reply:'The offer’s code step is still unresolved. Your earlier details and failed steps are saved here. This chat hasn’t sent a code or changed software access; don’t keep requesting codes or start another checkout to troubleshoot this.',status:'open',ai:false};
+ return {reply:'A code request during an offer does not by itself confirm that checkout finished. Which page is asking for the code: secure checkout, “Resume a checkout from another device,” or the iCash X sign-in page? Please leave out the code and payment details; don’t start another checkout to troubleshoot this.',status:'waiting_on_customer',ai:false};
+}
+
 /** Follow-ups retain the failed offer, including sign-in confusion caused by an
  * earlier reply. New substantive topics and explicit code-delivery faults end it. */
 export function currentOfferProblem(messages:SupportTurn[]){
@@ -18,6 +44,7 @@ export function currentOfferProblem(messages:SupportTurn[]){
 }
 
 export function supportCheckoutReply(context:SupportContext):SupportReply|null{
+ const offerCode=supportOfferCodeReply(context.messages);if(offerCode)return offerCode;
  const active=currentOfferProblem(context.messages);if(!active.length)return null;
  const users=active.filter(m=>m.role==='user'),last=users.at(-1)?.content??'',history=users.map(m=>m.content).join('\n');
  const identity=context.kind==='account'?'This chat is connected to your signed-in account. ':context.contactKnown?'I have the email attached to this chat. ':'';
