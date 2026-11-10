@@ -4,7 +4,7 @@ set local lock_timeout='5s';
 set local statement_timeout='60s';
 create table icash_research_private.financial_settings(
  id integer primary key check(id=1),enabled boolean not null default false,
- as_of date,release_sha text,activated_at timestamptz,
+ as_of date,release_sha text,activated_at timestamptz,metadata_next_at timestamptz not null default now(),
  check(not enabled or(as_of is not null and release_sha ~ '^[a-f0-9]{40}$' and activated_at is not null))
 );
 insert into icash_research_private.financial_settings(id) values(1);
@@ -69,6 +69,19 @@ language sql stable security definer set search_path='' as $$
   'tier',coalesce((select max(w.tier)+1 from icash_research_private.financial_widenings w where w.account_id=p_account and w.revision=p_revision),0))
  from icash_research_private.financial_settings s where s.id=1 and s.enabled and s.as_of<=current_date;
 $$;
+
+-- One bounded GET-only catalog refresh across workers, with failure backoff.
+create function public.icash_claim_financial_metadata() returns boolean
+language plpgsql security definer set search_path='' as $$
+begin
+ if exists(select 1 from public.icash_integration_checks where provider='dealmachine_targeting'
+  and checked_at between now()-interval '1 day' and now() and result->>'status'='verified' and result->'catalogVersion'='4'::jsonb) then return false;end if;
+ update icash_research_private.financial_settings set metadata_next_at=now()+interval '15 minutes'
+  where id=1 and enabled and metadata_next_at<=now();
+ return found;
+end $$;
+revoke all on function public.icash_claim_financial_metadata() from public,anon,authenticated;
+grant execute on function public.icash_claim_financial_metadata() to service_role;
 
 create function icash_research_private.financial_query_valid(p_query jsonb,p_policy jsonb,p_plan jsonb,p_scope jsonb) returns boolean
 language plpgsql immutable set search_path='' as $$

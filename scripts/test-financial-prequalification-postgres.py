@@ -12,7 +12,7 @@ spec = importlib.util.spec_from_file_location('opener_fixture', ROOT/'scripts/te
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
 sql = fixture.sql
-DATA = json.loads(subprocess.check_output(['node', '--experimental-strip-types', str(ROOT/'tests/helpers/financial-prequalification-fixture.mjs')], text=True))
+DATA = json.loads(subprocess.check_output(['node', str(ROOT/'tests/helpers/financial-prequalification-fixture.mjs')], text=True))
 
 
 def literal(value):
@@ -106,5 +106,14 @@ def widen(_):
 with ThreadPoolExecutor(max_workers=2) as pool:
     assert sorted(pool.map(widen, range(2))) == ['f', 't']
 assert sql('select count(*) from icash_research_private.financial_widenings;') == '1'
+assert sql('select count(*) from public.icash_operation_spend;') == '0'
+setup()
+sql("update icash_integration_checks set checked_at=now()-interval '8 days';")
+barrier = Barrier(2)
+def refresh(_):
+    barrier.wait(timeout=5)
+    return sql('select public.icash_claim_financial_metadata();')
+with ThreadPoolExecutor(max_workers=2) as pool:
+    assert sorted(pool.map(refresh, range(2))) == ['f', 't']
 assert sql('select count(*) from public.icash_operation_spend;') == '0'
 print('PASS native financial prequalification: concurrent paid claims, Pause and policy fences, original receipt preservation, and one free-only widening. No provider requests.')

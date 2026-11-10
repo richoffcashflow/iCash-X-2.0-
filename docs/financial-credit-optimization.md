@@ -32,6 +32,8 @@ The API documents a flat AND filter list, not nested OR or field-to-field arithm
 
 This matters in the November 10 audit: all 8,250 recently eligible samples had a null open-lien count, while 6,938 of 7,641 held samples had a known count. Forcing open-lien-count `=0` without verified missing-value semantics could discard the eligible inventory. Missing lien amounts are not zero. Continue the existing hold when any purchased record reports an open lien or tax issue; never buy its contacts or sum overlapping mortgage/lien totals as if they were independent debts.
 
+A held query can refresh expired catalog evidence with GET-only reads. A database claim permits one refresh across workers and imposes a fifteen-minute retry interval; existing shared provider quotas still apply. Preview deployments cannot write production metadata. A successful refresh is used on a later pass, never to replay a paid request.
+
 ## Bounded preference widening
 
 All tiers keep the mandatory 70% equity, single-family, off-market, viable-value, repair and active-lien/tax filters. Tier 0 adds 90% equity, last sale over ten years ago and absentee ownership. Tier 1 adds 80% equity and last sale over seven years ago. Tier 2 retains the mandatory financial filters.

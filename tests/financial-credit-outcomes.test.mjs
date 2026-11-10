@@ -4,6 +4,7 @@ import {PGlite} from '@electric-sql/pglite';
 import * as f from './helpers/financial-prequalification-fixture.mjs';
 import {selectDiscoveryFilter,discoveryStrategies} from '../lib/discovery-filters.ts';
 import {selectTargetingPlan} from '../lib/dealmachine-targeting.ts';
+import {refreshFinancialMetadata} from '../lib/financial-metadata-refresh.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const pg=new PGlite(),q=(s,a=[])=>pg.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0])[0];
 const id=n=>`90000000-0000-4000-8000-${String(n).padStart(12,'0')}`,owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
@@ -24,6 +25,7 @@ try{
  create function icash_screening_wrong_number(uuid,uuid,timestamptz) returns boolean language sql as $$select false$$;
  `);
  await pg.exec(JSON.parse(read('tests/fixtures/financial-learning-before.json')).definition);
+ await pg.exec(read('config/financial-credit-outcomes.sql'));
  await pg.exec(read('config/financial-credit-outcomes.sql'));
  await assert.rejects(v('select icash_financial_credit_report($1,$2)',[f.other,f.account]),/Owner required/);
  await assert.rejects(v('select icash_financial_credit_report($1,$2,181)',[owner,f.account]),/Bounded account/);
@@ -71,5 +73,10 @@ try{
  const stats=discoveryStrategies.map(strategy=>({strategy,nextPage:1,pages:5,exhausted:false,attempted:10000,matureAttempts:10000,pendingAttempts:0,interested:strategy==='vacant'?5000:1,optedOut:0,costCents:100000,costsComplete:true,recentUnproductivePages:0}));
  assert.equal(selectDiscoveryFilter(stats,2).mode,'learned');
  assert.equal(selectTargetingPlan(stats,2,[],{queryContext:{policy:f.policy}},f.account,'75217').mode,'explore','A new financial query cannot inherit legacy winners');
+ let metadataReads=0;const metadata=async()=>{metadataReads++;return {status:'verified',catalogVersion:4}};
+ assert.equal(await refreshFinancialMetadata(async()=>false,metadata,{}),false);assert.equal(metadataReads,0);
+ assert.equal(await refreshFinancialMetadata(async()=>true,metadata,{VERCEL_ENV:'preview'}),false);assert.equal(metadataReads,0);
+ assert.equal(await refreshFinancialMetadata(async()=>true,metadata,{}),true);assert.equal(metadataReads,1);
+ assert.equal(await refreshFinancialMetadata(async()=>true,async()=>{throw Error('provider timeout')},{}),false);
  console.log('PASS financial credit outcomes: exact cohorts, duplicate-page costs, missing costs, no subtotal inflation, carrier-only attempts, verified proceeds and legacy-winner isolation.');
 }finally{await pg.close();}

@@ -8,6 +8,7 @@ import {dealMachineRequest} from './dealmachine-request.ts';
 import {researchQueryPolicyValid,type ResearchQueryPolicy} from './research-query-policy.ts';
 import {syncResearchExclusions} from './research-exclusions.ts';
 import {requestDiscoveryEstimate,DiscoveryEstimateHeld} from './discovery-estimate.ts';
+import {refreshFinancialMetadata} from './financial-metadata-refresh.ts';
 type Config={account_id:string;enabled:boolean;zip:string;rate_id:string;property_credit_micros:number;data_rights_until:string;per_page:number;next_page:number;revision:string;exhausted:boolean;research_version?:number;research_list_id?:string|null};
 class DiscoveryProviderRequestError extends Error{
  constructor(readonly stage:'estimate'|'paid',readonly httpStatus:number|null){super('DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY');}
@@ -42,6 +43,10 @@ export async function discoverForAccount(accountId:string){
  const state=await db<unknown>('rpc/icash_discovery_filter_state_v2','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page});
  const shared=state===null?[]:await db('rpc/icash_discovery_shared_evidence','POST',{p_account:accountId,p_zip:c.zip}).catch(()=>[]);
  const targeting=await db<{queryContext?:{required:boolean;ready:boolean;policy:unknown}}> ('rpc/icash_targeting_state','POST',{p_account:accountId,p_revision:c.revision,p_page:c.next_page}).catch(()=>null);
+ if(targeting?.queryContext?.required===true&&targeting.queryContext.ready===false){
+  await refreshFinancialMetadata(db).catch(()=>false);
+  return {status:'inventory_held'};
+ }
  const filterPlan=state===null?undefined:selectTargetingPlan(state,c.next_page,shared,targeting,accountId,c.zip);
  if(filterPlan===null){
   if(Array.isArray(state)&&state.some(s=>s?.blocked===true&&s?.exhausted===false))return {status:'inventory_held'};

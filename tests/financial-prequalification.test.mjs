@@ -15,9 +15,11 @@ const scenario=async fn=>{await pg.exec('begin');try{await fn();}finally{await p
 assert.equal((await context()).required,false);
 await scenario(async()=>assert.equal(await reserve({version:'research-efficiency-v2',exclusionListId:null}),true));
 await pg.exec(f.activateSql);assert.deepEqual((await context()).policy,f.policy);assert.equal((await context()).required,true);
+await scenario(async()=>{assert.equal(await value('select icash_claim_financial_metadata()'),false);await pg.exec("update icash_integration_checks set checked_at=now()-interval '8 days'");assert.equal(await value('select icash_claim_financial_metadata()'),true);assert.equal(await value('select icash_claim_financial_metadata()'),false);assert.equal(await value('select count(*)::int from icash_operation_spend'),0);});
 assert.equal(await reserve({version:'research-efficiency-v2',exclusionListId:'fixture-list'}),false,'Old workers cannot skip new prefilters');
 assert.equal(await reserve(),false,'No purchase without exact estimate');
 const query=await f.queryFor();
+assert.deepEqual(query,JSON.parse(readFileSync(new URL('./fixtures/financial-free-query.json',import.meta.url),'utf8')),'Dependency-free native fixture matches the actual service query');
 assert.equal(await value('select icash_research_private.financial_query_valid($1,$2,$3,$4)',[query,f.policy,f.plan,f.scope]),true);
 for(const change of [{contact_audience:'owners'},{page:2},{fields:['estimated_value']},{filters:query.filters.slice(1)},{filters:[...query.filters].reverse()},{exclude_lists:{property_list_ids:['foreign']}}])assert.equal((await claim({...query,...change})).status,'held');
 for(let tier=0;tier<3;tier++){

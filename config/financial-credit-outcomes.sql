@@ -9,6 +9,7 @@ do $patch$
 declare d text;needle text;
 begin
  d:=pg_get_functiondef('public.icash_targeting_learning_evidence(uuid,text,uuid)'::regprocedure);
+ if md5(d)='dccbe762e4f16bb2164a88df58ae3c83' then return;end if;
  if md5(d)<>'272162f19f5dcec30539310b97fb8e80' then raise exception 'Financial learning prerequisite changed';end if;
  needle:='    union all select o.dispatched_at from public.icash_deal_files d';
  if strpos(d,needle)=0 then raise exception 'Financial attempt boundary changed';end if;
@@ -38,7 +39,13 @@ $new$||needle);
  execute d;
 end $patch$;
 
-create function public.icash_financial_credit_report(p_actor uuid,p_account uuid,p_days integer default 90) returns jsonb
+-- Resume only these exact reviewed definitions after a migration-ledger collision.
+do $guard$
+begin
+ if to_regprocedure('public.icash_financial_credit_report(uuid,uuid,integer)') is not null
+  and md5(pg_get_functiondef(to_regprocedure('public.icash_financial_credit_report(uuid,uuid,integer)')))<>'0474e294bd7fa6d43263885f493fd443' then raise exception 'Financial report prerequisite changed';end if;
+end $guard$;
+create or replace function public.icash_financial_credit_report(p_actor uuid,p_account uuid,p_days integer default 90) returns jsonb
 language plpgsql stable security definer set search_path='' set statement_timeout='20s' as $$
 declare report jsonb;
 begin
@@ -101,7 +108,7 @@ begin
   select k.cohort,coalesce(sum(c.amount) filter(where c.amount>=0 and c.units='provider_credits'),0) known_credits,
    coalesce(sum(c.amount) filter(where k.kind='property' and c.amount>=0 and c.units='provider_credits'),0) property_credits,
    coalesce(sum(c.amount) filter(where k.kind='contact' and c.amount>=0 and c.units='provider_credits'),0) contact_credits,
-   bool_and(coalesce(case when o.operation_key is null then not k.required when o.state='cancelled' then not k.required and c.event_key is null
+   bool_and(coalesce(case when o.operation_key is null then not k.required and c.event_key is null when o.state='cancelled' then not k.required and c.event_key is null
     else o.state='settled' and o.actual_micros is not null and o.charged_cents is not null and c.amount>=0 and c.units='provider_credits' end,false)) complete
   from operation_keys k left join public.icash_operation_spend o on o.operation_key=k.operation_key and o.account_id=p_account
   left join public.icash_cost_observations c on c.provider='dealmachine' and c.event_key=k.operation_key

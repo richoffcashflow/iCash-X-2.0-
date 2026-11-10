@@ -9,7 +9,7 @@ let targeting=null,filterState=[],plan,requests=[],rpc=[],estimateFails=false;
 const legacy={version:'seller-filters-v1',strategy:'baseline',providerPage:1,mode:'explore'};
 const target={version:'seller-targeting-v1',strategy:'target_00000000-0000-4000-8000-000000000010',providerPage:1,mode:'explore',targeting:{id:'00000000-0000-4000-8000-000000000010',segment:'vacant_absentee',asOf:'2026-10-30'}};
 const policy={version:'research-efficiency-v2',exclusionListId:'verified-fixture-list'};
-const svc=await loadService('lib/discovery-service.ts',{
+const svc=await loadService('lib/discovery-service.ts',{refreshFinancialMetadata:async()=>false,
  researchQueryPolicyValid,discoverPage,DiscoveryFilterUnavailable,DiscoveryEstimateHeld,
  discoveryWorkEnabled:()=>true,liveWorkReady:()=>true,propertyResearchMarketKnown:async()=>true,syncResearchExclusions:async()=>null,
  selectTargetingPlan:()=>plan,requestDiscoveryEstimate:async(_db,_a,_s,_p,_q,_body,request)=>request(),dealMachineRequest:async(_db,_purpose,request)=>{const r=await request();return {status:r.status,ok:r.ok,raw:await r.json()};},
