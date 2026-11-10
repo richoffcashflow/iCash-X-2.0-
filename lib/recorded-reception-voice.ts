@@ -1,4 +1,4 @@
-import {inspectReceptionAgent} from './general-reception.ts';
+import {inspectRecordedReceptionAgent} from './recorded-reception.ts';
 import {object} from './required-call-recording.ts';
 import type {RecordedReceptionConfig} from './recorded-reception.ts';
 
@@ -18,9 +18,11 @@ export async function selectedRecordedReceptionVoice(accountId:string,config:Rec
   if(!voiceId||!/^[A-Za-z0-9_-]{5,100}$/.test(voiceId)||deadline.aborted)return null;
   const agent=await deps.agent(config,deadline);
   const overrides=object(object(object(agent.platform_settings).overrides).conversation_config_override);
-  // Admission already reviewed the complete configuration and tools. Match that
-  // exact executable fingerprint again; this never approves a changed branch.
-  if(agent.agent_id!==config.agent_id||agent.branch_id!==config.branch_id||agent.version_id!==config.reviewed_version_id||inspectReceptionAgent(config,agent,null).hash!==config.config_hash||object(overrides.tts).voice_id!==true||deadline.aborted)return null;
+  // Admission already reviewed the complete configuration and tools. Reuse its
+  // fingerprint comparison so exact empty/disabled provider defaults cannot
+  // discard an otherwise valid custom voice. Actual configuration changes fail.
+  const approved=inspectRecordedReceptionAgent(config,agent,null,false).checks.approvedHashMatches;
+  if(agent.agent_id!==config.agent_id||agent.branch_id!==config.branch_id||agent.version_id!==config.reviewed_version_id||!approved||object(overrides.tts).voice_id!==true||deadline.aborted)return null;
   return voiceId;
  }catch{return null;}
 }
