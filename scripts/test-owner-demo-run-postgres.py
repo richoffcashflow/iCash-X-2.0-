@@ -161,7 +161,9 @@ def main():
     cases = [
         ('budget', "select id from icash_operating_budget where id=1 for update;", 'unknown-voice'),
         ('account', f"select id from icash_accounts where id='{A}' for update;", 'pause'),
-        ('route', 'select pg_advisory_xact_lock(818,1);', 'unknown-text'),
+        # Current contact preparation and message admission acquire budget first.
+        # Taking818 then inserting a message invents the opposite trigger order.
+        ('route', 'select id from icash_operating_budget where id=1 for update;select pg_advisory_xact_lock(818,1);', 'unknown-text'),
         ('phone', f"select pg_advisory_xact_lock(hashtextextended('{PHONE}',74));", 'active-call'),
     ]
     for name, lock, hold in cases:
@@ -191,6 +193,23 @@ def main():
         finally:
             holder.close()
             worker.close()
+
+    # A routing selector may hold818 without budget. It does not insert a text
+    # afterward in this synthetic transaction: that would invert the real
+    # budget-first producer order. Prove activation actually waits, then resumes.
+    reset()
+    old, new = fresh(), assigned()
+    holder, worker = Session('demo_routing_selector'), Session('demo_waiting_for_selector')
+    try:
+        holder.query('begin;select pg_advisory_xact_lock(818,1);')
+        worker.start(activate(new))
+        blocked(worker)
+        holder.query('commit;')
+        assert worker.finish() == 't'
+        assert sql(f"select retired_at is not null from icash_text_threads where id='{old['thread']}';") == 't'
+    finally:
+        holder.close()
+        worker.close()
 
     # Two deliberate requests race while the prior provider call is active.
     # Only the latest can activate after the original call is terminal AND its
@@ -305,6 +324,26 @@ values('{record}','{A}','{newest['job']}','{newest['permission']}','{newest['scr
     assert sql(activate(pending)) == 'f'
     assert sql('select count(*) from fixture_reservation_attempts;') == '1'
     assert sql(f"select count(*) from icash_call_recordings where dial_claimed_at is not null and call_sid is null;") == '1'
+    # STOP can arrive while the actual final dial waits on its recipient lock.
+    # It must be re-read after the wait, not accepted from preflight evidence.
+    reset()
+    current = fresh()
+    record = str(uuid.uuid4())
+    sql(f"""update icash_voice_jobs set state='issued' where id='{current['job']}';
+insert into icash_operation_spend(operation_key,account_id,state,permission_until) values('voice:{current['job']}','{A}','dispatched',now()+interval '2 minutes');
+insert into icash_call_recordings(id,account_id,voice_job_id,permission_id,screening_id,from_phone,to_phone,party,state,operation_key,consent_deadline_at,row_version)
+values('{record}','{A}','{current['job']}','{current['permission']}','{current['screen']}','{SENDER}','{PHONE}','seller','consent_pending','voice:{current['job']}',now()+interval '1 minute',0);""")
+    holder, final = Session('demo_late_stop'), Session('demo_final_claim')
+    try:
+        holder.query(f"begin;select pg_advisory_xact_lock(hashtextextended('{PHONE}',74));")
+        final.start(f"select icash_transition_call_recording('{record}','{A}','voice:{current['job']}','consent_pending','claim_dial','{{}}') is null;")
+        blocked(final)
+        holder.query(f"insert into icash_text_suppressions(phone) values('{PHONE}');commit;")
+        assert final.finish() == 't'
+        assert sql(f"select dial_claimed_at is null from icash_call_recordings where id='{record}';") == 't'
+    finally:
+        holder.close()
+        final.close()
     print('PASS native owner demo: simultaneous retries/distinct runs, atomic retirement, budget/account lock order, routing/phone races, late final-dial rejection, actual reservation/dial contention, and active/unknown holds without expiry renewal. Credit calculation is isolated; no providers.')
 
 
