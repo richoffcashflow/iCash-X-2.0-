@@ -38,6 +38,19 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
  }
  const question=context.messages[index].content;
  const previous=context.messages.slice(0,index).findLast(turn=>turn.role==='assistant'||turn.role==='operator');
+ // Operator replies can clear the queue flag without resolving purchase access.
+ // Only an immediate, explicitly access-related timing follow-up uses this record.
+ const operator=context.messages[index-1];
+ if(operator?.role==='operator'&&/\breview\b/i.test(operator.content)&&/\b(?:access|checkout email|email correction)\b/i.test(operator.content)
+  &&/no confirmed completion time/i.test(operator.content)
+  &&!/access (?:is|was|has been) (?:restored|granted)|(?:access|email correction) review (?:is |was )?(?:complete|closed|resolved)/i.test(operator.content)
+  &&/(?:not|haven[’']t|hasn[’']t).{0,70}(?:restored|granted|changed)|access.{0,40}(?:unconfirmed|not)/i.test(operator.content)
+  &&/\b(?:timeframe|time frame|how long|when|completion time)\b/i.test(question)
+  &&/\b(?:access|email correction|sign[ -]?in)\b/i.test(question)
+  &&!/\b(?:refund|cancel|seller|buyer|bot|contract|credits?|course|vip)\b/i.test(question)
+  &&!/access (?:is|was|has been) (?:restored|granted)|i[’']?m in|that worked/i.test(question)){
+  return {reply:'The operator’s last update says your access review is still open, with no confirmed completion time. I can’t give you a reliable timeframe yet or confirm that the email has changed or access has been restored. Your earlier details remain in this conversation for management review.',status:'open',managementReview:true,ai:false};
+ }
  const reviewFollowup=/management review|flagged this conversation/i.test(previous?.content??'')||/\b(?:management|review|any update|anything yet)\b/i.test(question);
  if(context.handedOff&&reviewFollowup&&/^(?:for what|why|review|what (?:is|does) (?:the |management )?review(?: mean)?|why (?:is|was) (?:it|this|my case) (?:in |under )?review|anything yet|any update|how long(?: will (?:it|this) take)?|will i be contacted|will (?:someone|management) (?:reply|respond|contact me)|what happens now)[.!?\s]*$/i.test(question.trim())){
   return {reply:reviewExplanation(context,question),status:'open',managementReview:true,ai:false};
