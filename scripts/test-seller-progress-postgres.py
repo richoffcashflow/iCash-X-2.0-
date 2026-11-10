@@ -305,3 +305,43 @@ assert terminal_results == ['t'] * 16
 assert sql(f"select call_ended_at is null from icash_call_recordings where id='{VR}'") == 't'
 assert sql("select has_function_privilege('anon','public.icash_seller_recorded_call_finished(uuid,uuid)','execute')") == 'f'
 print('PASS native voice-to-text: 16 webhook/recovery/final-claim races, committed terminal-receipt visibility and immutable original termination evidence.')
+
+# A source arriving before the original call ends retains one bounded pending job.
+sql((ROOT / 'config/seller-voice-text-receipt-wait.sql').read_text())
+WA, WT, WD, WS, WU, WR = [f'40000000-0000-4000-8000-{n:012d}' for n in range(1, 7)]
+sql(f"""update icash_seller_progress_settings set voice_receipt_wait_enabled_at=now()-interval '1 minute';
+insert into auth.users(id,email) values('{WU}','wait-fixture@example.invalid');
+insert into icash_accounts(id,owner_user_id) values('{WA}','{WU}');
+insert into icash_customer_identities values('{WA}','Fixture Buyer');
+insert into icash_screening_jobs(id,account_id,snapshot,result) values('{WS}','{WA}','{json.dumps(snapshot)}'::jsonb||jsonb_build_object('fetchedAt',now()),'{{"financialCheck":{{"status":"eligible"}}}}');
+insert into icash_deal_files(id,account_id,screening_id,terms) values('{WD}','{WA}','{WS}','{{"address":"45 Oak Road","buyer":"Fixture Buyer"}}');
+insert into icash_text_threads(id,account_id,deal_id,recipient) values('{WT}','{WA}','{WD}','+12145550555');
+insert into icash_sms_routes(sender,recipient,account_id) values('+15550000001','+12145550555','{WA}');
+insert into icash_call_recordings(id,account_id,screening_id,party,dial_claimed_at,call_sid,provider_account_sid,from_phone,to_phone,operation_key)
+ values('{WR}','{WA}','{WS}','seller',now()-interval '30 seconds','CAwaitfixture','ACfixture','+15550000001','+12145550555','voice:{WR}');""")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    list(pool.map(lambda _: sql(f"insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values('{WA}','{WT}','incoming','received','Please text me.','voice-wait-original') on conflict(event_id) do nothing;"), range(16)))
+WJ = sql(f"select id from icash_text_ai_jobs where account_id='{WA}'")
+assert sql(f"select count(*) from icash_text_ai_jobs where account_id='{WA}' and state='pending'") == '1'
+assert sql(f"select count(*) from icash_text_messages where account_id='{WA}' and direction='outgoing'") == '0'
+writer = Session('voice-wait-receipt-writer')
+try:
+    writer.query(f"begin; update icash_call_recordings set call_ended_at=now() where id='{WR}';")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+        held = list(pool.map(lambda _: json.loads(sql(f"select icash_resume_seller_text_ai('{WA}','{WJ}')")), range(16)))
+    assert all(r['mode'] == 'held' for r in held)
+    assert sql(f"select state from icash_text_ai_jobs where id='{WJ}'") == 'pending'
+    writer.query('commit;')
+finally:
+    writer.close()
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    resumed = list(pool.map(lambda _: json.loads(sql(f"select icash_resume_seller_text_ai('{WA}','{WJ}')")), range(16)))
+assert len({r['messageId'] for r in resumed}) == 1
+WO = resumed[0]['messageId']
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    claims = list(pool.map(lambda _: sql(f"select icash_claim_text('{WA}','{WO}','+15550000001')"), range(16)))
+assert sum(bool(r) for r in claims) == 1
+assert sql(f"select count(*) from icash_offer_authorities where account_id='{WA}'") == '0'
+assert sql(f"select analysis->'voiceReceiptWait'->>'recordingId' from icash_text_ai_jobs where id='{WJ}'") == WR
+assert sql("select has_function_privilege('anon','public.icash_seller_voice_text_wait_call(uuid,uuid)','execute')") == 'f'
+print('PASS native call receipt wait: 16 duplicate arrivals, uncommitted terminal receipts stay held, one resumed message and one final claim; original source preserved.')
