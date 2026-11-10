@@ -21,7 +21,7 @@ const suites = [
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
  'validation-compatibility',
  'buyer-contact-quality', 'buyer-links', 'buyer-funnel-evidence', 'deal-learning-report',
- 'call-contact-evidence', 'support-review-20261105', 'support-review-20261107', 'support-review-20261108', 'support-running-continuity', 'support-custom-voice', 'customer-phone-maintenance',
+ 'call-contact-evidence', 'support-review-20261105', 'support-review-20261107', 'support-review-20261108', 'support-running-continuity', 'support-activity-recurrence', 'support-custom-voice', 'customer-phone-maintenance',
  'close-capacity', 'parallel-capacity-provider', 'nationwide-inventory', 'close-conversion-database', 'close-conversion-routes',
  'owner-accounts-database', 'owner-accounts-routes',
  'seller-interest-experiments', 'shared-learning-policy', 'shared-learning-database', 'shared-learning-routes',
