@@ -81,7 +81,16 @@ export async function discoverForAccount(accountId:string){
   },
   persist:async result=>{const queued=await db<number>(queryPolicy?'rpc/icash_save_research_discovery':filterPlan?'rpc/icash_save_filtered_discovery':'rpc/icash_save_discovery','POST',{p_account:accountId,p_operation:operationKey,p_revision:c.revision,p_page:c.next_page,p_result:result});await db('rpc/icash_settle_dealmachine_usage','POST',{p_operation:operationKey});return queued;},
  });
- if(result.status==='empty')await finishEmpty('empty');
+ if(result.status==='empty'){
+  // Only the exact saved zero-result FREE estimate can widen preferences.
+  // A provider error, zero billed credits, or uncertain paid operation cannot.
+  if(queryPolicy?.version==='financial-prefilter-v1'&&queryPolicy.tier<2&&filterPlan?.strategy==='baseline'){
+   const widened=await db<boolean>('rpc/icash_widen_financial_query','POST',{p_account:accountId,p_scope:scope,p_plan:filterPlan??null,p_policy:queryPolicy});
+   if(widened)return {status:'financial_preferences_widened'};
+   return {status:'inventory_held'};
+  }
+  await finishEmpty('empty');
+ }
  return result;
- }catch(error){if(error instanceof DiscoveryEstimateHeld)return {status:'inventory_held'};if(error instanceof DiscoveryFilterUnavailable){await finishEmpty('unavailable');return {status:'empty'};}throw error;}
+ }catch(error){if(error instanceof DiscoveryEstimateHeld)return {status:'inventory_held'};if(error instanceof DiscoveryFilterUnavailable){if(queryPolicy?.version==='financial-prefilter-v1')return {status:'inventory_held'};await finishEmpty('unavailable');return {status:'empty'};}throw error;}
 }

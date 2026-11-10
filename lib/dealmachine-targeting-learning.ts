@@ -1,11 +1,12 @@
 import {z} from 'zod';
+import {researchQueryPolicySchema} from './research-query-policy.ts';
 
 export const targetingLearningVersion='seller-targeting-learning-v1';
 const count=z.number().int().nonnegative();
 const arm=z.object({strategy:z.string(),attempts:count,matureAttempts:count,interested:count,optedOut:count,wrongNumbers:count.optional(),
  contractTrials:count,contracts:count,closingTrials:count,closings:count,costCents:count,providerCostMicros:count,costsComplete:z.boolean()}).strict()
  .refine(s=>s.matureAttempts<=s.attempts&&s.interested<=s.matureAttempts&&s.optedOut<=s.attempts&&(s.wrongNumbers??0)<=s.attempts&&s.contracts<=s.contractTrials&&s.closings<=s.closingTrials);
-export const targetingLearningContext=z.object({accountId:z.uuid(),zip:z.string().regex(/^\d{5}$/),pageSize:z.number().int().min(1).max(100),queryPolicy:z.object({version:z.literal('research-efficiency-v2'),exclusionListId:z.string().min(1)}).strict()}).strict();
+export const targetingLearningContext=z.object({accountId:z.uuid(),zip:z.string().regex(/^\d{5}$/),pageSize:z.number().int().min(1).max(100),queryPolicy:researchQueryPolicySchema.refine(p=>p.version!=='research-efficiency-v1'&&p.exclusionListId!==null)}).strict();
 const evidence=z.object({version:z.literal(targetingLearningVersion),context:targetingLearningContext,startedAt:z.iso.datetime({offset:true}),checkedAt:z.iso.datetime({offset:true}),baseline:arm,candidate:arm}).strict();
 type Arm=z.infer<typeof arm>;
 export type TargetingLearningDecision={status:'collecting'|'invalid'|'costs_incomplete'|'opt_out_hold'|'wrong_number_hold'|'baseline_preferred'|'candidate_supported';objective:'interest'|'contracts'|'closings';value:number;hold:boolean};
@@ -20,7 +21,7 @@ export function targetingLearningDecision(raw:unknown,context:unknown,strategy:s
  const parsed=evidence.safeParse(raw),scope=targetingLearningContext.safeParse(context);
  if(!parsed.success||!scope.success)return result('invalid');
  const e=parsed.data,c=e.context;
- if(c.accountId!==scope.data.accountId||c.zip!==scope.data.zip||c.pageSize!==scope.data.pageSize||c.queryPolicy.version!==scope.data.queryPolicy.version||c.queryPolicy.exclusionListId!==scope.data.queryPolicy.exclusionListId
+ if(c.accountId!==scope.data.accountId||c.zip!==scope.data.zip||c.pageSize!==scope.data.pageSize||JSON.stringify(c.queryPolicy)!==JSON.stringify(scope.data.queryPolicy)
   ||e.baseline.strategy!=='baseline'||e.candidate.strategy!==strategy||Date.parse(e.startedAt)>Date.parse(e.checkedAt)||Date.parse(e.checkedAt)>now||Date.parse(e.checkedAt)<=now-5*60000)return result('invalid');
  const a=e.candidate,b=e.baseline;
  if(a.attempts>=20&&a.optedOut>=3&&a.optedOut/a.attempts>0.05)return result('opt_out_hold');

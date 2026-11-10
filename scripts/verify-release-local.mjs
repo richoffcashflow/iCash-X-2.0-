@@ -3,6 +3,7 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'assistant-text-actions', 'assistant-text-action-route', 'property-followthrough',
+ 'financial-prequalification', 'financial-credit-outcomes',
  'cash-offer-math', 'offer-policy', 'screening-job', 'screening-recalculation', 'automatic-call-offer', 'seller-text-offer', 'free-sample',
  'support-manual-contact', 'support-account-deletion', 'support-center',
  'http-response-lifecycle', 'deferred-text-recovery',

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 10, 2026 the owner required DealMachine financial prequalification before paid pulls, strict deduplication and outcome-based credit efficiency. Use the verified `financial-prefilter-v1` contract, exact free estimates and existing final spend locks; never widen mandatory financial filters or retry an uncertain paid request. Separate stale/missing/conflicting data from financial rejection, preserve original timestamps and budgets, and count real carrier costs and verified proceeds. No paid demonstrations or UI changes. See docs/financial-credit-optimization.md for staged activation and source limits.
+
 - On November 9, 2026 the owner refined the contact panel: open the seller thread with replies first, keep a slim reply bar at the bottom, place Call above the conversation, and show recordings inline with texts by default. Calling stays above the visible thread. Preserve exact selected-recipient routing, drafts, owner account/view/session boundaries and the simple main workspace.
 
 - On November 9, 2026 the owner explicitly requested fixes to the text/call panels, a manual reply bar and working Call controls in the customer account view. Keep the simple main workspace unchanged. Owner contact actions must use the exact selected account/view/session, retain the real actor and private audit, and preserve ordinary admission, billing, opt-out and handoff checks. Other customer-view controls stay read-only. Saved conversation reads must not depend on sending availability. Preserve actual human replies and keep confirmed automated recordings in history. See docs/seller-contact-controls.md.
