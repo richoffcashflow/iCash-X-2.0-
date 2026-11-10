@@ -80,6 +80,7 @@ export async function verifyConversationInbox(browser,base,options,name){
   await log.locator('audio[src*="business-call"]').waitFor();
   const replyBox=await log.getByText(reply.body,{exact:true}).boundingBox(),historyBox=await log.boundingBox();assert(replyBox.y>=historyBox.y&&replyBox.y< historyBox.y+historyBox.height,'Seller reply opens in view despite later outgoing activity');
   assert((await dialog.getByRole('button',{name:'Call seller',exact:true}).boundingBox()).y<historyBox.y,'Call action is above the thread');assert.equal(await log.getByText('Call details and transcript',{exact:true}).count(),0);
+  await page.waitForFunction(()=>!document.querySelector('.seller-text-alert'));assert.deepEqual(readRequests.flat(),[replyId]);assert(await dialog.isVisible(),'Reading keeps the conversation open after leaving the unread list');
   const incomingCall=log.locator('.conversation-call-entry[data-direction="incoming"]'),outgoingCalls=log.locator('.conversation-call-entry[data-direction="outgoing"]');
   assert.equal(await outgoingCalls.count(),2,'AI and personal outgoing calls share the outgoing direction');
   assert.equal(await incomingCall.getByText('Incoming call',{exact:true}).count(),1);
@@ -95,11 +96,10 @@ export async function verifyConversationInbox(browser,base,options,name){
   await incomingCall.scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/icash-inline-recording-${name.startsWith('mobile')?'mobile':'desktop'}.png`});
   await incomingCall.getByText('Call details',{exact:true}).click();
   await incomingCall.getByText('Seller asked to discuss the price.',{exact:true}).waitFor();
-  await incomingCall.getByText('I would consider a cash offer.',{exact:true}).waitFor();
+  await incomingCall.locator('.conversation-messages .message-bubble').filter({hasText:'I would consider a cash offer.'}).waitFor();
   assert(await incomingCall.locator('audio').isVisible(),'Opening the transcript keeps its recording visible');
   await incomingCall.getByText('Call details',{exact:true}).click();
   assert.equal(sends.length,0);assert(!otherWrites.includes('/api/work/text-contact'),'Opening existing history sends and creates nothing');
-  await page.waitForFunction(()=>!document.querySelector('.seller-text-alert'));assert.deepEqual(readRequests.flat(),[replyId]);assert(await dialog.isVisible(),'Reading keeps the conversation open after leaving the unread list');
   await textbox.fill('Can we talk about your property this afternoon?');
   await dialog.getByRole('button',{name:/^Calls/}).click();
   await dialog.getByText('Seller said: I would consider a cash offer.',{exact:true}).waitFor();
