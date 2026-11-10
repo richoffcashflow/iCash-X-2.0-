@@ -32,7 +32,9 @@ export function BrowserCallControls({apiBase='/api/work',screeningId,contacts,ac
   });session.current=call;await call.start();
  }
  const startRequestedCall=useEffectEvent(()=>{onAutoStartHandled?.();const available=contacts.filter(c=>c.available);if(available.length===1)void start(available[0].phone);});
- useEffect(()=>{if(!autoStart){autoConsumed.current=false;return;}if(autoConsumed.current)return;autoConsumed.current=true;startRequestedCall();},[autoStart]);
+ // Let mount/Activity effect cleanup finish before consuming the explicit click.
+ // A closed panel cancels this task; Strict Mode cannot leave a stopped call connecting.
+ useEffect(()=>{if(!autoStart){autoConsumed.current=false;return;}if(autoConsumed.current)return;const timer=setTimeout(()=>{autoConsumed.current=true;startRequestedCall();},0);return()=>clearTimeout(timer);},[autoStart]);
  async function end(){finishing.current=true;try{if(previous){await post({action:'end',id:previous.id});if(mounted.current)onFinished();}else await session.current?.stop();}catch{setError('Could not confirm the call ended. Try End call again.');}finally{finishing.current=false;}}
  return <div className="browser-call-controls">
   <p className="contact-help">Keep this window open while you talk.</p>

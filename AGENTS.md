@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 9, 2026 the owner refined the contact panel: open the seller thread with replies first, keep a slim reply bar at the bottom, place Call above the conversation, and show recordings inline with texts by default. Calling stays above the visible thread. Preserve exact selected-recipient routing, drafts, owner account/view/session boundaries and the simple main workspace.
+
 - On November 9, 2026 the owner explicitly requested fixes to the text/call panels, a manual reply bar and working Call controls in the customer account view. Keep the simple main workspace unchanged. Owner contact actions must use the exact selected account/view/session, retain the real actor and private audit, and preserve ordinary admission, billing, opt-out and handoff checks. Other customer-view controls stay read-only. Saved conversation reads must not depend on sending availability. Preserve actual human replies and keep confirmed automated recordings in history. See docs/seller-contact-controls.md.
 
 - The same request replaced ownership-check introductions with direct cash-sale questions. Use prospective `cash-question-v6` assignments and fresh identity-reply cutovers; never relabel old sends or treat a yes to selling interest as proof of ownership. Compare mature source-bound replies, positive selling responses and opt-outs separately; no winning-template claim without evidence. Keep truthful AI disclosure when asked, original contact/offer/signing authority and test holds. No paid demonstrations or retrospective outreach.
