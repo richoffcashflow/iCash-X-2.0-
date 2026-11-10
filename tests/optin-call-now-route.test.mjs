@@ -30,7 +30,7 @@ const deps={
  dispatchLiveVoice:async(account,id)=>{assert.equal(account,ownerInboundTarget.accountId);assert.equal(id,'fixture-voice');events.push({kind:'voice'});return {status:'call_started'};},
  db:async(path,method,body)=>{
   events.push({kind:path,method,body});
-  if(path==='rpc/icash_submit_bot_demo_intake'||path==='rpc/icash_submit_seller_contact_intake')return 'fixture-lead';
+  if(path==='rpc/icash_submit_limited_bot_demo_intake'||path==='rpc/icash_submit_seller_contact_intake')return 'fixture-lead';
   if(path==='icash_seller_intakes?id=eq.fixture-lead&select=state&limit=1')return [{state:duplicate?'duplicate':'received'}];
   if(path==='rpc/icash_request_optin_call_now'){if(failRequest)throw Error('Cannot save explicit request');return true;}
   if(path==='rpc/icash_record_seller_measurement')return duplicate?null:'keypath:12345678-1234-4234-8234-123456789abc';

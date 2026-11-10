@@ -58,8 +58,17 @@ jobs:
         run: python3 scripts/test-preflight-quota-postgres.py
       - name: Verify new-user research reserve under concurrent transactions
         run: python3 scripts/test-new-user-request-reserve-postgres.py
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Verify distinct demo intents and idempotent concurrent retries
+        run: python3 scripts/test-distinct-demo-submissions-postgres.py
+      - name: Verify atomic owner demo restarts under concurrent locks and late holds
+        run: python3 scripts/test-owner-demo-run-postgres.py
       - name: Verify one-use owner demo research allowance under concurrent transactions
         run: python3 scripts/test-owner-demo-request-postgres.py
+      - name: Verify demo retry accounting under concurrent requests
+        run: python3 scripts/test-bot-demo-retry-accounting-postgres.py
       - name: Verify delayed contact checks survive concurrent cleanup
         run: python3 scripts/test-preflight-waiting-postgres.py
       - name: Verify original list indexing, bounded polling and fair concurrent progress

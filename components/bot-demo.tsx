@@ -44,8 +44,8 @@ export function BotDemo(){
     <span className="demo-success-mark"><Check size={26}/></span><div role="status" aria-live="polite"><h1 ref={success} tabIndex={-1}>{progress?.title??'Your property is in.'}</h1><p className="demo-intro">{progress?.message??'Your request is saved.'}</p></div>
     <div className="demo-property"><House size={20}/><span>{address}</span></div>
     <a className="demo-submit" href="/">Watch in your workspace <ArrowUpRight size={18}/></a>
-    {progress?.phase==='archived_demo'&&<button className="demo-secondary" onClick={()=>{changed();setConsent(false);setProgress(null);setStep('contact');requestAnimationFrame(()=>nameInput.current?.focus());}}>Start a new demo</button>}
-    {progress?.phase==='address_review'?<button className="demo-secondary" onClick={()=>{setStep('address');setProgress(null);changed();}}>Update address</button>:!polling&&!progress?.terminal?<button className="demo-secondary" onClick={()=>setRound(v=>v+1)}>Check progress</button>:null}
+    {progress?.terminal&&progress.phase!=='address_review'&&<button className="demo-secondary" onClick={()=>{changed();setConsent(false);setProgress(null);setStep('contact');requestAnimationFrame(()=>nameInput.current?.focus());}}>Start a new demo</button>}
+    {progress?.phase==='address_review'?<button className="demo-secondary" onClick={()=>{setStep('address');setConsent(false);setProgress(null);changed();}}>Update address</button>:!polling&&!progress?.terminal?<button className="demo-secondary" onClick={()=>setRound(v=>v+1)}>Check progress</button>:null}
    </div>:<>
     <h1>{step==='address'?<>One property.<br/><span>See what your bot can do.</span></>:<>Let’s start<br/><span>the conversation.</span></>}</h1>
     <p className="demo-intro">{step==='address'?'Enter a property, add your number, and follow the activity in your iCash X workspace.':'Add the name and number you want to use for this property.'}</p>

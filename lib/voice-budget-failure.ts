@@ -1,3 +1,4 @@
+import {BotDemoRateLimitError} from './bot-demo-rate-limit.ts';
 /** Only this exact, atomic Postgres reservation rejection is safe to classify.
  * Network/HTTP ambiguity and all other failures retain reconciliation behavior. */
 export class VoiceActivationBudgetError extends Error {
@@ -12,6 +13,11 @@ export class SellerInventoryUnavailableError extends Error {
  constructor(){super('Seller inventory unavailable');this.name='SellerInventoryUnavailableError';}
 }
 export async function voiceReservationFailure(path:string,status:number,response:Response):Promise<Error>{
+ if(path==='rpc/icash_submit_limited_bot_demo_intake'&&status===429){
+  try{const body=await response.json();
+   if(body?.code==='PT429'&&body?.message==='Demo submission limit reached')return new BotDemoRateLimitError();
+  }catch{/* An unreadable response remains an uncertain submission. */}
+ }
  const voice=['rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice'].includes(path);
  if(status===400&&(voice||['rpc/icash_reserve_operation','rpc/icash_reserve_and_claim_property_discovery','rpc/icash_reserve_and_claim_filtered_discovery','rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path))){
   try{const body=await response.json();

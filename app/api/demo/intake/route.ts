@@ -18,7 +18,14 @@ export const maxDuration=60;
 const headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'};
 async function presenter(){const user=await currentUser(true);return user?.id===ownerInboundTarget.ownerUserId?user:null;}
 export async function GET(){
- try{const user=await presenter();return Response.json({ready:!!user,privateDemoPhone:user?ownerInboundTarget.ownerPhone:null},{headers});}
+ try{
+  const user=await presenter();
+  // Readiness establishes the guest binding before a POST can be committed.
+  // Losing a POST response must not also lose its only Set-Cookie receipt.
+  if(user){const jar=await cookies();if(!validGuest(jar.get('keypath_seller')?.value))
+   jar.set('keypath_seller',randomBytes(32).toString('hex'),{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:86400*30});}
+  return Response.json({ready:!!user,privateDemoPhone:user?ownerInboundTarget.ownerPhone:null},{headers});
+ }
  catch{return Response.json({error:'Sign in to your workspace to start the demo.'},{status:503,headers});}
 }
 export async function POST(req:Request){
@@ -31,14 +38,17 @@ export async function POST(req:Request){
   if(!parsed.success)return Response.json({error:'Enter a full address, valid US phone number, and accept the contact agreement.'},{status:400,headers});
   const i=parsed.data;
   if(i.honeypot)return Response.json({received:true},{headers});
-  const jar=await cookies();let token=jar.get('keypath_seller')?.value;
-  if(!validGuest(token)){token=randomBytes(32).toString('hex');jar.set('keypath_seller',token,{httpOnly:true,secure:true,sameSite:'lax',path:'/',maxAge:86400*30});}
-  await limitRequest(req,'bot-demo',user.id,5,3600);
-  const leadId=await db<string>('rpc/icash_submit_bot_demo_intake','POST',{
+  const jar=await cookies(),token=jar.get('keypath_seller')?.value;
+  if(!validGuest(token))return Response.json({error:'Refresh this page to prepare your demo, then try again.'},{status:409,headers});
+  // Transport abuse is bounded separately. The atomic RPC charges the original
+  // five/hour new-demo buckets only once per validated request identity.
+  await limitRequest(req,'bot-demo-attempt',user.id,60,3600);
+  const leadId=await db<string>('rpc/icash_submit_limited_bot_demo_intake','POST',{
    p_actor:user.id,p_account:ownerInboundTarget.accountId,p_request:i.requestId,p_guest:guestHash(token),
    p_name:i.name,p_address:i.address,p_phone:i.phone,p_consented:i.consented,
    p_duplicate:createHash('sha256').update('icash-x-demo:'+ownerInboundTarget.accountId+':'+sellerDuplicateKeyInput(i.address,i.phone)).digest('hex'),
    p_timezone:i.contactTimezone??'America/Chicago',p_agent_hash:guestHash(req.headers.get('user-agent')||'unknown'),
+   p_ip_hash:guestHash(req.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim()||'unknown'),
   });
   const [receipt]=await db<{state:string}[]>(`icash_seller_intakes?id=eq.${leadId}&select=state&limit=1`);
   if(receipt?.state==='duplicate')return Response.json({received:true,progress:sellerSubmissionStatus('duplicate_demo')},{headers});
@@ -51,5 +61,9 @@ export async function POST(req:Request){
    await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,leadId);
   }catch{console.error('iCash X demo processing deferred to queue');}});
   return Response.json({received:true,progress:sellerSubmissionStatus('received')},{headers});
- }catch{return Response.json({error:'Could not confirm your submission. Retry with the same details.'},{status:503,headers});}
+ }catch(error){
+  if(error instanceof Error&&'status' in error&&error.status===429)
+   return Response.json({error:'Too many demo attempts. Please wait before trying again.'},{status:429,headers:{...headers,'Retry-After':'3600'}});
+  return Response.json({error:'Could not confirm your submission. Retry with the same details.'},{status:503,headers});
+ }
 }
