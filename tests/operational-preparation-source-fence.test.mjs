@@ -167,6 +167,7 @@ create function icash_dealmachine_credit_manifest_hash(operation text) returns t
  assert.equal((await one("select has_function_privilege('service_role','icash_prepare_operational_contacts_before_dm_observations(uuid)','execute') allowed")).allowed,true);
  await assert.rejects(pg.exec(sql),/Preparation source fence prerequisite changed/);await pg.exec('rollback');
 
+ await (await import('./helpers/scheduler-preparation-speed-fixture.mjs')).verifySchedulerPreparationSpeed(f);
  if(native)await (await import('./helpers/preparation-native-contention.mjs')).verifyPreparationContention(f);
  const performance={fanout:positiveTiming};
  console.log(`Preparation source fence: exact cold/warm/missing-channel/account/gate equivalence; 600 foreign bindings and 105 invalid proofs do not starve the authentic candidate; warm real manifest proof calls ${oldCalls}->${newCalls}; absent-source phones, malformed sources and legacy ordering preserved; insertion, validator, wallet and private ACLs preserved. Local fixture diagnostics only: ${JSON.stringify(performance)}.`);
