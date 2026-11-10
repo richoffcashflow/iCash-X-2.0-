@@ -99,7 +99,20 @@
 .personalized-workspace .property-contact-dialog .text-contact-picker{flex:none;max-height:150px;overflow:auto;margin:0;padding:8px 18px;border-top:1px solid #eee}
 .personalized-workspace .property-contact-dialog .conversation-date{flex:none;display:flex;align-items:center;justify-content:center;gap:14px;color:#777;font-size:11px;margin:4px 0 8px}
 .personalized-workspace .conversation-date::before,.personalized-workspace .conversation-date::after{content:'';height:1px;background:#e8e8e8;flex:1}
-.personalized-workspace .property-contact-dialog .message-history>.call-summary-card{flex:none;width:100%;margin:0;border-radius:12px;box-sizing:border-box}
+/* Calls are compact timeline entries; full summaries stay in the Calls view. */
+.conversation-body .conversation-call-entry{flex:none;align-self:flex-end;width:320px;max-width:88%;min-width:0;margin:0;padding:0;border:0;background:none;color:#444;overflow-wrap:anywhere}
+.conversation-body .conversation-call-entry[data-direction=incoming]{align-self:flex-start}
+.conversation-call-entry>header strong{display:flex;align-items:center;gap:7px;font-size:12px;line-height:1.5;font-weight:600}
+.conversation-call-entry>header svg{flex:none}
+.conversation-call-entry>small{display:block;font-size:10px;line-height:1.5;color:#777;margin:3px 0 7px}
+.conversation-call-entry .conversation-call-player-compact{margin:0;padding:0;background:none;border:0;border-radius:0}
+.conversation-call-entry .conversation-call-player-compact audio{height:40px;min-width:0;color-scheme:light}
+.conversation-call-entry .conversation-call-player-compact p,.conversation-call-entry .conversation-call-note{font-size:12px;line-height:1.5;margin:4px 0;color:#666}
+.conversation-call-entry .conversation-call-details{margin-top:4px}
+.conversation-call-entry .conversation-call-details>summary{width:fit-content;min-height:32px;padding:5px 0;align-content:center;font-size:11px;line-height:1.5;color:#666;cursor:pointer}
+.conversation-call-entry .conversation-call-details>summary:focus-visible{outline:2px solid #171717;outline-offset:3px}
+.conversation-call-entry .conversation-call-details p{font-size:12px;line-height:1.5;margin:8px 0}
+.conversation-call-entry .conversation-call-details .conversation-messages{flex:none;max-height:200px;overflow:auto;padding:10px 0}
 .personalized-workspace .message-composer-heading{display:flex;align-items:center;gap:7px;margin-bottom:10px;color:#333;font-size:12px;font-weight:600}
 .personalized-workspace .message-composer-heading label{margin:0;font:inherit}
 .personalized-workspace .message-composer-heading span{margin-left:auto;font-size:11px;font-weight:400;color:#777}

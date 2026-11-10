@@ -22,7 +22,7 @@ export async function setupOwnerDemoRunFixture({pg,account,owner,other,phone,sen
  create table icash_recorded_reception_private.sessions(from_phone text,call_ended_at timestamptz,settled_at timestamptz);
  create table icash_timezone_names(name text);insert into icash_timezone_names values('America/Chicago');
  create table icash_sms_routes(sender text,recipient text,account_id uuid,needs_review boolean default false,revision bigint default 1,primary key(sender,recipient));
- create table icash_text_events(id text primary key,type text,payload jsonb);
+ create table icash_text_events(id text primary key,type text,payload jsonb,received_at timestamptz default now());
  create table icash_text_senders(phone text primary key,enabled boolean);
  create function icash_seller_voice_permission_current(p_account uuid,p_permission uuid) returns boolean language sql as $$select exists(select 1 from public.icash_contact_permissions where id=p_permission and account_id=p_account and revoked_at is null)$$;
  create function icash_prepare_seller_contacts(p_account uuid,p_lead uuid,p_screening uuid,p_deal uuid) returns void language plpgsql as $$declare e jsonb:='{}';begin

@@ -8,11 +8,12 @@ export async function testOwnerDemoConfirmedSender(f){
  await f.reset();
  await db.exec(`alter table icash_seller_intakes add created_at timestamptz default now();
  alter table icash_optin_call_requests add requested_at timestamptz default now();
- alter table icash_text_messages add last_delivery_at timestamptz;
+ alter table icash_text_messages add last_delivery_at timestamptz,add body text default '',add event_id text;
+ alter table icash_text_threads add ai_mode text default 'auto';
  alter table icash_operation_spend add dispatched_at timestamptz;
  alter table icash_call_recordings add provider_started_at timestamptz,add call_ended_at timestamptz;
  create schema icash_text_receipt_private;
- create table icash_text_events(id text primary key,type text,payload jsonb);
+ create table icash_text_events(id text primary key,type text,payload jsonb,received_at timestamptz default now());
  create table icash_seller_opener_assignments(thread_id uuid,account_id uuid,message_id uuid,created_at timestamptz);
  `);
  const delay=readFileSync('supabase/migrations/20261106170821_sender_delay_opener_recovery.sql','utf8');
@@ -53,7 +54,7 @@ export async function testOwnerDemoConfirmedSender(f){
  };
  const sameThread=phone=>q("insert into icash_text_threads(account_id,deal_id,sender,recipient,party) values($1,$2,$3,$4,'seller')",[owner,deal,phone,recipient]);
  await reset();const fallback=await sms();await evidence(a,3,2);await evidence(b,8,5);await evidence(c,5,3);
- assert.deepEqual(await rank(b),[1,5,13]);assert.equal(await sms(),b);assert.equal(await voice(),b,'Fresh voice-first and text-first choose the same jointly ready proven line');
+ assert.deepEqual(await rank(b),[1,0,5,13]);assert.equal(await sms(),b);assert.equal(await voice(),b,'Fresh voice-first and text-first choose the same jointly ready proven line');
  await evidence(disabled,12,12);assert.equal(await sms(),b,'Disabled sender cannot win on history');
  await evidence(voiceOnly,14,14);assert.equal(await voice(),b,'Voice-only sender cannot bind a fresh dual-channel demo');
  await evidence(smsOnly,20,0);assert.equal(await sms(),b,'Unverified caller cannot win on SMS history');
@@ -68,26 +69,26 @@ export async function testOwnerDemoConfirmedSender(f){
  await reset();await evidence(b,8,5);await q('insert into role_conflicts values($1,$2)',[b,recipient]);assert.notEqual(await sms(),b);
  for(const table of ['icash_text_suppressions','icash_webinar_phone_suppressions']){await reset();await evidence(b,1,1);await q(`insert into ${table} values($1)`,[recipient]);assert.equal(await sms(),null);assert.equal(await voice(),null);}
  await reset();await evidence(b,1,1);await q("insert into icash_contact_suppressions values(encode(sha256(convert_to($1,'UTF8')),'hex'))",[recipient]);assert.equal(await sms(),null);
- await reset();await evidence(b,8,5,'8 days');assert.deepEqual(await rank(b),[1,0,0]);assert.equal(await sms(),fallback,'Stale-only pool retains deterministic fallback');
+ await reset();await evidence(b,8,5,'8 days');assert.deepEqual(await rank(b),[1,0,0,0]);assert.equal(await sms(),fallback,'Stale-only pool retains deterministic fallback');
  for(const change of [
   "update icash_text_messages set state='accepted'", "update icash_text_messages set provider_id=null", "update icash_text_messages set last_delivery_at=now()+interval '1 hour'",
   "update icash_operation_spend set dispatched_at=null where operation_key like 'text:%'", "update icash_operation_spend set account_id='"+owner+"' where operation_key like 'text:%'", "update icash_text_messages set account_id='"+owner+"'",
   "update icash_operation_spend set dispatched_at=now() where operation_key like 'text:%'"
- ]){await reset();await evidence(b,2,0);await db.exec(change);assert.deepEqual(await rank(b),[1,0,0],change);}
+ ]){await reset();await evidence(b,2,0);await db.exec(change);assert.deepEqual(await rank(b),[1,0,0,0],change);}
  for(const change of [
   'update icash_call_recordings set call_sid=null', 'update icash_call_recordings set provider_started_at=null','update icash_call_recordings set call_ended_at=null',
   "update icash_call_recordings set call_ended_at=now()+interval '1 hour'", "update icash_operation_spend set account_id='"+owner+"'",'update icash_operation_spend set dispatched_at=null',
   "update icash_business_voice_numbers set caller_id_sid='PN'||repeat('c',32)","update icash_business_voice_numbers set provider_account_sid='AC'||repeat('c',32)"
- ]){await reset();await q('update icash_business_voice_numbers set provider_account_sid=$1',[ac]);await evidence(b,0,2);await db.exec(change);assert.deepEqual(await rank(b),[1,0,0],change);}
+ ]){await reset();await q('update icash_business_voice_numbers set provider_account_sid=$1',[ac]);await evidence(b,0,2);await db.exec(change);assert.deepEqual(await rank(b),[1,0,0,0],change);}
  await q('update icash_business_voice_numbers set provider_account_sid=$1',[ac]);
  // Bounded DISTINCT counts have no timing/order preference: once saturated, the
  // number of confirmations is capped, not weighted by which row was scanned.
- await reset();await evidence(b,502,0);assert.deepEqual(await rank(b),[1,0,500]);
- await q("update icash_text_messages set last_delivery_at=last_delivery_at+interval '1 minute'");assert.deepEqual(await rank(b),[1,0,500]);
+ await reset();await evidence(b,502,0);assert.deepEqual(await rank(b),[1,0,0,500]);
+ await q("update icash_text_messages set last_delivery_at=last_delivery_at+interval '1 minute'");assert.deepEqual(await rank(b),[1,0,0,500]);
  await reset();await evidence(a,2,2);await evidence(b,8,5);
  const delayed=await one('select m.provider_id,m.id from icash_text_messages m join icash_text_threads t on t.id=m.thread_id where t.sender=$1 limit 1',[b]);
  await q('update icash_operation_spend set dispatched_at=now()-interval \'2 minutes\' where operation_key=$1',['text:'+delayed.id]);
- const eventId='fixture-delay';await q("insert into icash_text_events values($1,'numbers.delayed',jsonb_build_object('id',$1::text,'type','numbers.delayed','timestamp',extract(epoch from now()-interval '1 minute'),'data',jsonb_build_object('reason','number_temporary_unavailable','original_number',$2::text,'affected_id',$3::text)))",[eventId,b,delayed.provider_id]);
+ const eventId='fixture-delay';await q("insert into icash_text_events(id,type,payload) values($1,'numbers.delayed',jsonb_build_object('id',$1::text,'type','numbers.delayed','timestamp',extract(epoch from now()-interval '1 minute'),'data',jsonb_build_object('reason','number_temporary_unavailable','original_number',$2::text,'affected_id',$3::text)))",[eventId,b,delayed.provider_id]);
  assert.equal((await rank(b))[0],0);assert.equal(await sms(),a,'Fresh verified carrier delay outranks older high counts');
  await q('update icash_text_messages set last_delivery_at=now() where id=$1',[delayed.id]);assert.equal((await rank(b))[0],0,'Late older-send confirmation does not clear newer failure');
  await q("update icash_text_events set payload=jsonb_set(payload,'{timestamp}',to_jsonb(extract(epoch from now()-interval '6 minutes'))) where id=$1",[eventId]);
@@ -100,7 +101,7 @@ export async function testOwnerDemoConfirmedSender(f){
  assert.equal((await rank(b))[0],1,'Notice penalty has a bounded one-hour freshness');
  // Changed sender capability is authoritative regardless of history.
  await q('update icash_business_voice_numbers set outbound_enabled=false where phone=$1',[b]);assert.notEqual(await sms(),b);assert.notEqual(await voice(),b);
- await reset();await evidence(f.primary,2,2);assert.deepEqual(await rank(f.primary),[1,0,2],'Primary old calls lack current registered provider proof');
+ await reset();await evidence(f.primary,2,2);assert.deepEqual(await rank(f.primary),[1,0,0,2],'Primary old calls lack current registered provider proof');
  await q('update icash_text_senders set enabled=(phone=$1)',[f.primary]);assert.equal(await sms(),f.primary);assert.equal(await voice(),f.primary,'Primary remains eligible deterministic fallback');
  await reset();await evidence(b,8,5);
  for(const [change,restore] of [
@@ -114,11 +115,12 @@ export async function testOwnerDemoConfirmedSender(f){
   // predecessor ordinary pool. Compare directly against the exact predecessor.
   const current=await def();await db.exec(old);const ordinary=await sms();await db.exec(current);assert.equal(await sms(),ordinary,'No fresh exact intent: '+change);await db.exec(restore);
  }
+ await (await import('./owner-demo-inbound-fixture.mjs')).testOwnerDemoInbound({...f,rank,sms,voice,reset,evidence,sameThread,a,b,c,smsOnly,disabled,voiceOnly});
  const current=await def();await db.exec(old);const oldForeign=(await one('select icash_business_conversation_sender($1,$2,$3) sender',[f.account,f.screen,recipient])).sender;const otherPhone='+12025550199';await q('update icash_seller_intakes set phone=$1',[otherPhone]);await q('update icash_optin_call_requests set phone=$1',[otherPhone]);const nonself=await sms(otherPhone);await db.exec(current);assert.equal(await sms(otherPhone),nonself,'Owner nonself phone keeps predecessor behavior');assert.equal((await one('select icash_business_conversation_sender($1,$2,$3) sender',[f.account,f.screen,recipient])).sender,oldForeign,'Other account keeps predecessor hash');
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'icash_owner_demo_sender_rank(text)','execute') allowed",[role])).allowed,false);
  assert.equal((await one("select has_function_privilege('service_role','icash_owner_demo_sender_rank(text)','execute') allowed")).allowed,true);
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'icash_owner_demo_sender_recovered(text)','execute') allowed",[role])).allowed,false);
- for(const name of ['icash_owner_demo_sender_rank','icash_owner_demo_sender_recovered']){
+ for(const name of ['icash_owner_demo_sender_rank','icash_owner_demo_sender_recovered','icash_owner_demo_sender_inbound_at']){
   const helper=await one("select provolatile,prosecdef,proconfig,pg_get_functiondef(oid) d from pg_proc where oid=$1::regprocedure",[name+'(text)']);assert.equal(helper.provolatile,'s');assert.equal(helper.prosecdef,false);assert.deepEqual(helper.proconfig,['search_path=\"\"']);
   assert(!/pg_advisory|for update|for share|insert into|update public|delete from/i.test(helper.d));
  }

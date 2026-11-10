@@ -39,8 +39,68 @@ end $fn$;
 revoke all on function public.icash_owner_demo_sender_recovered(text) from public,anon,authenticated;
 grant execute on function public.icash_owner_demo_sender_recovered(text) to service_role;
 
+-- Recent inbound transport evidence is separate from outbound acceptance/delivery.
+-- Use the active sender-pair and account/thread received-message cursor indexes.
+-- Read at most 500 recent candidates per active thread, then verify only the
+-- newest 500 across the sender. All reads use the last 24 hours; a candidate cap
+-- can omit evidence, never invent it. Source event time, not ingestion time,
+-- ranks confirmations. Do not infer a human identity or delivery guarantee.
+create or replace function public.icash_owner_demo_sender_inbound_at(p_sender text) returns bigint
+language sql stable security invoker set search_path='' as $fn$
+ with recent as materialized (
+  select m.*,t.sender,t.recipient
+  from public.icash_text_threads t
+  cross join lateral (
+   select m.id,m.account_id,m.thread_id,m.event_id,m.provider_id,m.body,m.created_at
+   from public.icash_text_messages m
+   where m.account_id=t.account_id and m.thread_id=t.id and m.direction='incoming' and m.state='received'
+    and m.created_at between now()-interval '24 hours' and now()
+   order by m.created_at desc,m.id desc limit 500
+  ) m
+  where t.sender=p_sender and t.party='seller' and t.retired_at is null
+   and not t.paused and not t.manual_only and t.ai_mode='auto'
+   and exists(select 1 from public.icash_non_test_text_threads nt where nt.id=t.id and nt.account_id=t.account_id)
+  order by m.created_at desc,m.id desc limit 500
+ ), source as (
+  select m.*,e.payload,e.received_at,
+   case when jsonb_typeof(e.payload->'timestamp')='number' then (e.payload->>'timestamp')::numeric end source_at
+  from recent m join public.icash_text_events e on e.id=m.event_id
+  where e.type in ('text.incoming.sms','text.incoming.mms')
+   and e.payload->>'id'=e.id and e.payload->>'type'=e.type
+   and e.payload#>>'{data,from}'=m.recipient and e.payload#>>'{data,to}'=m.sender
+   and jsonb_typeof(e.payload#>'{data,body}')='string' and e.payload#>>'{data,body}'=m.body
+   and (m.provider_id is null or m.provider_id=e.payload#>>'{data,message_id}')
+   and e.received_at between now()-interval '24 hours' and now()
+   and m.body ~ '[[:alnum:]]'
+   and m.body !~* '(^[[:space:]]*Free[[:space:]]+Msg[[:space:]]*:|Message[[:space:]]+Blocking[[:space:]]+is[[:space:]]+active|verification[[:space:]]+code|one.time[[:space:]]+(password|code)|automated[[:space:]]+message|automatic[[:space:]]+reply|auto[ -]?reply|do[[:space:]]+not[[:space:]]+reply)'
+   and exists(select 1 from public.icash_sms_routes r where r.sender=m.sender and r.recipient=m.recipient
+    and r.account_id=m.account_id and not r.needs_review)
+   and not exists(select 1 from public.icash_text_threads other where other.sender=m.sender and other.recipient=m.recipient
+    and other.retired_at is null and other.id<>m.thread_id)
+ )
+ select coalesce(floor(max(source_at))::bigint,0) from source
+ where source_at between extract(epoch from now()-interval '24 hours') and extract(epoch from now())
+  and source_at<=extract(epoch from least(created_at,received_at))+5
+  -- The webhook parser retains raw aliases. Match the original receipt too,
+  -- and do not count normalized iMessage traffic as cellular SMS/MMS evidence.
+  and ((not payload?'providerEvent' and not payload?'channel') or (
+   payload->>'channel'=case payload->>'type' when 'text.incoming.sms' then 'sms' else 'mms' end
+   and payload#>>'{providerEvent,type}'=case payload->>'type' when 'text.incoming.sms' then 'communications.incoming.sms' else 'communications.incoming.mms' end
+   and payload#>>'{providerEvent,id}'=event_id
+   and payload#>>'{providerEvent,data,from}'=recipient and payload#>>'{providerEvent,data,to}'=sender
+   and payload#>'{providerEvent,data,body}'=payload#>'{data,body}'
+   and payload#>'{providerEvent,data,message_id}' is not distinct from payload#>'{data,message_id}'
+   and case when jsonb_typeof(payload#>'{providerEvent,timestamp}')='number' then
+    case when (payload#>>'{providerEvent,timestamp}')::numeric>=1e12 then (payload#>>'{providerEvent,timestamp}')::numeric/1000
+     else (payload#>>'{providerEvent,timestamp}')::numeric end end=source_at
+  ));
+$fn$;
+revoke all on function public.icash_owner_demo_sender_inbound_at(text) from public,anon,authenticated;
+grant execute on function public.icash_owner_demo_sender_inbound_at(text) to service_role;
+
 -- Lexicographic evidence, not a predicted success rate: current delay readiness,
--- confirmations on the less-observed channel, then total confirmations. Counts
+-- latest verified inbound transport, confirmations on the less-observed channel,
+-- then total confirmations. Counts
 -- are bounded at 500 per channel and expire after seven days. Accepted-only SMS,
 -- unstarted/unfinished calls and unrelated/missing dispatch receipts earn nothing.
 -- Source uniqueness (provider ID, provider account + call SID, operation key)
@@ -75,7 +135,7 @@ language sql stable security invoker set search_path='' as $$
   ) recent
  )
  select array[case when public.icash_owner_demo_sender_recovered(p_sender) then 1 else 0 end::bigint,
-  least(sms.n,calls.n),sms.n+calls.n] from sms cross join calls;
+  public.icash_owner_demo_sender_inbound_at(p_sender),least(sms.n,calls.n),sms.n+calls.n] from sms cross join calls;
 $$;
 revoke all on function public.icash_owner_demo_sender_rank(text) from public,anon,authenticated;
 grant execute on function public.icash_owner_demo_sender_rank(text) to service_role;
