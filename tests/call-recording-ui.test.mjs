@@ -231,4 +231,23 @@ calls[0].resolve(Response.json({transcript:[{role:'agent',message:'Outbound only
 view.props({id:conversationId,source:'reception',party:'seller'});assert.doesNotMatch(text(view.tree),/Outbound only/,'source switches never show the old transcript');
 await view.flush();view.unmount();
 
-console.log('Call player/transcript: authenticated playback, lazy audio, sanitized states, inbound/outbound routes, contact-switch races, retries and transcript pagination passed.');
+// Inline playback uses the same authenticated player without a second card or heading.
+view=harness(recordingSource,'CallRecording',{recordingId,receipt:readReceipt(fixture),compact:true,apiBase:'/api/admin/accounts/scoped/work'});
+await view.flush();assert.match(view.markup(),/\/api\/admin\/accounts\/scoped\/work\/recording\/audio/);
+assert.match(view.markup(),/<audio[^>]*controls=""[^>]*preload="none"/);
+assert.doesNotMatch(view.markup(),/Listen to call recording|Available until/);view.unmount();
+view=harness(recordingSource,'CallRecording',{recordingId,receipt:readReceipt({...fixture,status:'absent',callOutcome:'no-answer'}),compact:true});
+await view.flush();assert.match(view.markup(),/No answer · No recording/);assert.doesNotMatch(view.markup(),/<audio/);view.unmount();
+for(const source of ['outbound','reception','personal']){
+ calls=queuedFetch();view=harness(conversationSource,'CallConversation',{id:conversationId,source,inline:true,party:'seller',summary:'Saved call summary',recordingId,recordingReceipt:readReceipt(fixture),transcriptAvailable:source!=='personal'},dependencies);
+ await view.flush();assert.equal(calls.length,0,'Inline transcripts remain lazy');
+ assert.match(text(view.tree),source==='reception'?/Incoming call/:/Outgoing call/);
+ assert.doesNotMatch(text(view.tree),/Saved call summary/,'Inline summaries start collapsed');
+ assert.equal(elements(view.tree).find(node=>node.type===recordingStub).props.compact,true);
+ toggle(true);await view.flush();assert.match(text(view.tree),/Saved call summary/);
+ if(source!=='personal')assert.equal(calls[0].url,`/api/work/conversation?id=${conversationId}&source=${source}`);
+ else assert.equal(calls.length,0,'A personal call summary does not request an AI transcript');
+ view.unmount();
+}
+
+console.log('Call player/transcript: compact inline directions, authenticated playback, lazy audio, sanitized states, inbound/outbound routes, contact-switch races, retries and transcript pagination passed.');
