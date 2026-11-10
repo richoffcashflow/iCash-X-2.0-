@@ -1,0 +1,106 @@
+{
+  "locations": [
+    {
+      "type": "zip_code",
+      "code": "75217"
+    }
+  ],
+  "anchor": "properties",
+  "contact_audience": "none",
+  "filters": [
+    {
+      "filter_id": "property_type",
+      "operator": "contains_any",
+      "value": [
+        1
+      ]
+    },
+    {
+      "filter_id": "estimated_equity_percentage",
+      "operator": "greater_than_or_equal",
+      "value": 70
+    },
+    {
+      "filter_id": "has_active_lien",
+      "value": false
+    },
+    {
+      "filter_id": "has_hoa_lien",
+      "value": false
+    },
+    {
+      "filter_id": "is_tax_delinquent",
+      "value": false
+    },
+    {
+      "filter_id": "market_status",
+      "operator": "contains_any",
+      "value": [
+        6
+      ]
+    },
+    {
+      "filter_id": "estimated_value",
+      "operator": "greater_than",
+      "value": 14285.72
+    },
+    {
+      "filter_id": "estimated_repair_cost",
+      "operator": "greater_than_or_equal",
+      "value": 0
+    },
+    {
+      "filter_id": "num_total_active_liens",
+      "operator": "less_than_or_equal",
+      "value": 0
+    },
+    {
+      "filter_id": "estimated_equity_percentage",
+      "operator": "greater_than_or_equal",
+      "value": 90
+    },
+    {
+      "filter_id": "last_sale_date",
+      "operator": "is_before",
+      "value": "2016-11-10"
+    },
+    {
+      "filter_id": "has_absentee_owners",
+      "value": true
+    }
+  ],
+  "fields": [
+    "dm_property_id",
+    "full_address",
+    "legal_description",
+    "address",
+    "city",
+    "state",
+    "zip",
+    "estimated_value",
+    "estimated_equity_percentage",
+    "estimated_equity_amount",
+    "total_estimated_loan_balance",
+    "has_active_lien",
+    "has_hoa_lien",
+    "num_total_active_liens",
+    "num_total_open_liens",
+    "total_open_lien_amount",
+    "is_tax_delinquent",
+    "is_free_and_clear",
+    "estimated_repair_cost",
+    "building_condition",
+    "living_area_sqft",
+    "num_bedrooms",
+    "num_bathrooms",
+    "year_built"
+  ],
+  "page": 1,
+  "per_page": 5,
+  "exclude_lists": {
+    "property_list_ids": [
+      "fixture-list"
+    ]
+  },
+  "estimate_cost": true
+}

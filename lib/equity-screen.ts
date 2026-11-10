@@ -24,7 +24,11 @@ export function screenEquity(d:Record<string,unknown>,buyerCeilingCents:number|n
  const activeLiens=count(d.num_total_active_liens),openLiens=count(d.num_total_open_liens);
  const activeLien=bool(d.has_active_lien),hoaLien=bool(d.has_hoa_lien),taxDelinquent=bool(d.is_tax_delinquent),freeAndClear=bool(d.is_free_and_clear);
  const lienFlag=activeLien===true||hoaLien===true||(activeLiens??0)>0||(openLiens??0)>0||(lienAmountCents??0)>0;
- const inconsistent=(freeAndClear===true&&((loanCents??0)>0||lienFlag))||(derived!==null&&derived<0);
+ // A malformed reported number cannot silently become a favorable derived one.
+ const invalidEstimate=['estimated_value','total_estimated_loan_balance'].some(k=>d[k]!=null&&money(d[k])===null)
+  ||d.estimated_equity_amount!=null&&money(d.estimated_equity_amount,true)===null
+  ||d.estimated_equity_percentage!=null&&(typeof d.estimated_equity_percentage!=='number'||!Number.isFinite(d.estimated_equity_percentage)||d.estimated_equity_percentage>100);
+ const inconsistent=invalidEstimate||(freeAndClear===true&&((loanCents??0)>0||lienFlag))||(derived!==null&&derived<0);
  const above=buyerCeilingCents!==null&&loanCents!==null&&loanCents>=buyerCeilingCents;
  const status=inconsistent?'conflicting_data':above?'payoff_may_exceed_budget':lienFlag||taxDelinquent===true?'title_review_needed':loanCents===null?'debt_unknown':'payoff_verification_needed';
  const reasons:string[]=[];

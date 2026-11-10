@@ -57,7 +57,9 @@ export type TargetingState={enabled:boolean;capabilities:unknown;dedupReady:bool
  * A supported winner gets at most three of five experimental slots. */
 export function selectTargetingPlan(legacy:unknown,sequence:number,shared:unknown,raw:unknown,accountId:string,zip:string,now=Date.now()):AnyDiscoveryPlan|null{
  // Validate legacy state even on an experimental slot; never bypass its holds.
- const original=selectDiscoveryFilter(legacy,sequence,shared),fallback=()=>original;
+ const scopedPolicy=(raw as {queryContext?:{policy?:{version?:string}}}|null)?.queryContext?.policy?.version;
+ const legacyLearning=scopedPolicy!=='financial-prefilter-v1';
+ const original=selectDiscoveryFilter(legacy,sequence,shared,legacyLearning),fallback=()=>original;
  const s=raw as TargetingState|null;
  if(s?.enabled!==true||s.dedupReady!==true||!Array.isArray(s.experiments))return fallback();
  const learningContext=s.learningContext&&typeof s.learningContext==='object'?{...s.learningContext,accountId,zip}:null;
@@ -72,7 +74,7 @@ export function selectTargetingPlan(legacy:unknown,sequence:number,shared:unknow
    &&!targetingLearningDecision(e.learningEvidence,learningContext,'target_'+d.id,now).hold;
  });
  if(sequence%4===0&&Array.isArray(legacy)){
-  const baseline=selectDiscoveryFilter(legacy.map(x=>({...x,blocked:x.blocked===true||x.strategy!=='baseline'})),sequence,shared);
+  const baseline=selectDiscoveryFilter(legacy.map(x=>({...x,blocked:x.blocked===true||x.strategy!=='baseline'})),sequence,shared,legacyLearning);
   if(baseline)return {...baseline,mode:'explore'};
  }
  if(!eligible.length||sequence%2===0&&original)return fallback();

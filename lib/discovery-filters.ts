@@ -37,7 +37,7 @@ function localDiscoveryWinner(stats:DiscoveryFilterStat[]){
 /** Local and shared promotion require resolved evidence, complete costs and a
  * 95% cost-adjusted comparison. Otherwise balance the existing audiences.
  * Three duplicate/no-owner pages still earn periodic probes, not retirement. */
-export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown=[]):DiscoveryFilterPlan|null{
+export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown=[],allowLearning=true):DiscoveryFilterPlan|null{
  if(!integer(sequence)||sequence<1||!Array.isArray(raw)||raw.length!==4)throw Error('DISCOVERY_FILTER_STATE_INVALID');
  const seen=new Set<string>();
  const stats=raw.map((row):DiscoveryFilterStat=>{
@@ -68,7 +68,8 @@ export function selectDiscoveryFilter(raw:unknown,sequence:number,shared:unknown
  const localWinner=cold.length?undefined:localDiscoveryWinner(productive);
  const decision=sharedLearningDecision(shared,productive.map(s=>s.strategy));
  const sharedWinner=decision.status==='shared'?productive.find(s=>s.strategy===decision.winner):undefined;
- const winner=sharedWinner??localWinner;
+ // Different query policies cannot inherit a winner. Keep safety holds and cooling.
+ const winner=allowLearning?(sharedWinner??localWinner):undefined;
  const learned=!!winner&&sequence%5<3;
  // Qualified winners do not also consume challenger slots. Cold-start and
  // duplicate-waste probes keep their existing preference among challengers.

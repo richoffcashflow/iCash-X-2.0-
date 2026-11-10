@@ -1,4 +1,4 @@
-import {runScreeningJob} from '../lib/screening-job.ts';
+import {runQueuedScreening} from '../lib/screening-job.ts';
 // Deliberately exclude provider bodies, URLs, tokens and customer data from logs.
 export class WorkerOperationError extends Error{
  constructor(code,operation,httpStatus=null,databaseCode=null,requestCode=null){super(code);this.code=code;this.operation=operation;this.httpStatus=httpStatus;this.databaseCode=databaseCode;this.requestCode=requestCode;}
@@ -28,7 +28,7 @@ async function databaseFailureCode(response){
   return databaseFailureCodes.has(code)?code:null;
  }catch{return null;}finally{try{await reader.cancel();}catch{/* Diagnostic failure preserves the original HTTP failure. */}reader.releaseLock();}
 }
-export async function tick(rpc, screen=runScreeningJob){
+export async function tick(rpc, screen=runQueuedScreening){
  const job=await rpc('icash_claim_screening',{});
  if(!job)return false;
  let result=null,error=null;

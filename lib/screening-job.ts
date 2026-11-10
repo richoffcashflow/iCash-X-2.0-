@@ -1,6 +1,7 @@
 import {propertyContext} from './property-context.ts';
 import {sellerCallFinancialGate} from './equity-screen.ts';
 import {cashOfferPolicy} from './cash-offer-math.ts';
+import {classifyFinancialScreening} from './financial-screening-classification.ts';
 /** Recalculate the operator-selected cash offer from a fresh server-owned snapshot. Never authorizes outreach, signing or title clearance. */
 export function runScreeningJob(snapshot: unknown, now=Date.now()) {
  const s=snapshot as {propertyId?:string;fetchedAt?:string;propertyType?:string;raw?:unknown;assignmentFeeCents?:number;sellerCostReserveCents?:number};
@@ -16,9 +17,32 @@ export function runScreeningJob(snapshot: unknown, now=Date.now()) {
  const financialCheck=s.propertyType!=='house'
   ?{status:'hold' as const,checkedAt:now,reason:'Separate land underwriting required.'}
   :sellerCallFinancialGate(property.financialScreening,{sellerOfferCents,sellerCostReserveCents:reserve??null,checkedAt:now});
- return {property,financialCheck,preliminarySellerCeilingCents:sellerOfferCents,calculationVersion:cashOfferPolicy.version,calculatedAt:new Date(now).toISOString(),
+ const classification=classifyFinancialScreening({property,financialCheck,preliminarySellerCeilingCents:sellerOfferCents},snapshot);
+ const calc=property.offerCalculation;
+ const investorEconomics=calc&&sellerOfferCents!==null?{
+  estimatedBuyerAcquisitionCents:sellerOfferCents+calc.assignmentFeeCents,
+  estimatedRepairsCents:calc.repairCents,estimatedWholesaleFeeCents:calc.assignmentFeeCents,
+  estimatedGrossBuyerSpreadCents:calc.arvCents-calc.repairCents-sellerOfferCents-calc.assignmentFeeCents,
+  estimatedGrossBuyerMarginPercent:(calc.arvCents-calc.repairCents-sellerOfferCents-calc.assignmentFeeCents)/calc.arvCents*100,
+  excludedCosts:['closing','holding','financing','resale','unexpected repairs'],verified:false as const,
+ }:null;
+ return {property,financialCheck:{...financialCheck,...classification},preliminarySellerCeilingCents:sellerOfferCents,calculationVersion:cashOfferPolicy.version,calculatedAt:new Date(now).toISOString(),
+  investorEconomics,
   nextAction:financialCheck.status==='eligible'?'permission_and_cost_check':'review',
   cashOfferPriceCents:financialCheck.status==='eligible'?sellerOfferCents:null,offerAuthorized:financialCheck.status==='eligible'&&sellerOfferCents!==null,outreachAuthorized:false};
+}
+
+/** Queue arithmetic has no provider side effects. Old paid data can still be
+ * diagnosed without pretending it is fresh or renewing outreach authority. */
+export function runQueuedScreening(snapshot:unknown,now=Date.now()){
+ const fetched=Date.parse((snapshot as {fetchedAt?:string})?.fetchedAt??'');
+ if(!Number.isFinite(fetched)||fetched>now)return runScreeningJob(snapshot,now);
+ if(now-fetched<=86400000)return runScreeningJob(snapshot,now);
+ const result=runScreeningJob(snapshot,fetched);
+ return {...result,calculatedAt:new Date(now).toISOString(),
+  financialCheck:{status:'hold' as const,checkedAt:fetched,category:'missing_financial_information' as const,code:'research_stale',reason:'Saved research is stale; current verification is required before automated contact.'},
+  savedFinancialClassification:{category:result.financialCheck.category,code:result.financialCheck.code},
+  nextAction:'review',cashOfferPriceCents:null,offerAuthorized:false,outreachAuthorized:false};
 }
 
 /** Recalculate arithmetic from an old snapshot without making its research fresh. */

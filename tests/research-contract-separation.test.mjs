@@ -7,7 +7,7 @@ import {dealTermsSchema} from '../lib/deal-documents.ts';
 import {signingReadiness} from '../lib/signing-policy.ts';
 Object.assign(process.env,{ICASH_LIVE_WORK_READY:'true',DEALMACHINE_API_KEY:'dm_sk_live_SIMULATION_NO_NETWORK',DOCUSEAL_MODE:'live',DOCUSEAL_API_KEY:'SIMULATION_NO_NETWORK'});
 let marketKnown=true,paused=false,rights='2099-01-01',calls=[],pages=0;
-const discovery=await loadService('lib/discovery-service.ts',{
+const discovery=await loadService('lib/discovery-service.ts',{refreshFinancialMetadata:async()=>false,
  syncResearchExclusions:async()=>null,discoveryWorkEnabled,liveWorkReady,propertyResearchMarketKnown:async()=>marketKnown,
  acquisitionContractCoverage:async()=>{throw Error('Property research must not query contract coverage');},
  db:async path=>{

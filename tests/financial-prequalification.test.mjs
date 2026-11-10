@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import {PGlite} from '@electric-sql/pglite';
+import * as f from './helpers/financial-prequalification-fixture.mjs';
+import {financialPrefilters,researchQueryPolicyValid} from '../lib/research-query-policy.ts';
+import {runScreeningJob,runQueuedScreening} from '../lib/screening-job.ts';
+import {readFileSync} from 'node:fs';
+const pg=new PGlite();await pg.exec('create role anon;create role authenticated;create role service_role;');await pg.exec(f.setupSql);await pg.exec(f.migration);await pg.exec(f.seedSql);
+const value=async(sql,args=[])=>Object.values((await pg.query(sql,args)).rows[0])[0];
+const context=()=>value('select icash_targeting_query_context($1,$2,1)',[f.account,f.revision]);
+const claim=(query,policy=f.policy,account=f.account,scope=f.scope)=>value('select icash_claim_discovery_estimate($1,$2,$3,$4,$5)',[account,scope,f.plan,policy,query]);
+const finish=(token,response,account=f.account)=>value('select icash_finish_discovery_estimate($1,$2,$3)',[account,token,response]);
+const reserve=(policy=f.policy,account=f.account,scope=f.scope)=>value('select icash_reserve_research_discovery($1,$2,$3,$4)',[account,scope,f.plan,policy]);
+const widen=(policy=f.policy)=>value('select icash_widen_financial_query($1,$2,$3,$4)',[f.account,f.scope,f.plan,policy]);
+const scenario=async fn=>{await pg.exec('begin');try{await fn();}finally{await pg.exec('rollback');}};
+assert.equal((await context()).required,false);
+await scenario(async()=>assert.equal(await reserve({version:'research-efficiency-v2',exclusionListId:null}),true));
+await pg.exec(f.activateSql);assert.deepEqual((await context()).policy,f.policy);assert.equal((await context()).required,true);
+await scenario(async()=>{assert.equal(await value('select icash_claim_financial_metadata()'),false);await pg.exec("update icash_integration_checks set checked_at=now()-interval '8 days'");assert.equal(await value('select icash_claim_financial_metadata()'),true);assert.equal(await value('select icash_claim_financial_metadata()'),false);assert.equal(await value('select count(*)::int from icash_operation_spend'),0);});
+assert.equal(await reserve({version:'research-efficiency-v2',exclusionListId:'fixture-list'}),false,'Old workers cannot skip new prefilters');
+assert.equal(await reserve(),false,'No purchase without exact estimate');
+const query=await f.queryFor();
+assert.deepEqual(query,JSON.parse(readFileSync(new URL('./fixtures/financial-free-query.json',import.meta.url),'utf8')),'Dependency-free native fixture matches the actual service query');
+assert.equal(await value('select icash_research_private.financial_query_valid($1,$2,$3,$4)',[query,f.policy,f.plan,f.scope]),true);
+for(const change of [{contact_audience:'owners'},{page:2},{fields:['estimated_value']},{filters:query.filters.slice(1)},{filters:[...query.filters].reverse()},{exclude_lists:{property_list_ids:['foreign']}}])assert.equal((await claim({...query,...change})).status,'held');
+for(let tier=0;tier<3;tier++){
+ const p={...f.policy,tier};assert.equal(researchQueryPolicyValid(p),true);
+ assert.deepEqual(await value('select icash_research_private.financial_filters($1,$2)',[p,f.plan]),financialPrefilters(p));
+ const repairs={...f.plan,strategy:'repairs'};assert.deepEqual(await value('select icash_research_private.financial_filters($1,$2)',[p,repairs]),financialPrefilters(p,25000));
+}
+assert.equal(researchQueryPolicyValid({...f.policy,arbitraryFilter:'unsafe'}),false);
+await scenario(async()=>{const c=await claim(query);assert.equal(c.status,'request');assert.equal((await claim(query)).status,'held');assert.equal(await finish(c.token,f.positive),true);assert.equal(await reserve(),true);assert.equal(await reserve(),false);assert.equal(await widen(),false);});
+await scenario(async()=>{const c=await claim(query);await finish(c.token,f.empty);assert.equal(await widen(),true);assert.equal(await widen(),false);assert.equal((await context()).policy.tier,1);assert.equal(await reserve(),false,'Old tier cannot spend');const p={...f.policy,tier:1};const c2=await claim(await f.queryFor(p),p);await finish(c2.token,f.empty);assert.equal(await widen(p),true);assert.equal((await context()).policy.tier,2);assert.equal(await widen({...f.policy,tier:2}),false);assert.equal(await value('select count(*)::int from icash_operation_spend'),0);assert.equal(await value('select count(*)::int from icash_research_private.financial_widenings'),2);});
+for(const response of [{...f.empty,totals:{properties:5}}, {...f.empty,pagination:{total_results:1}}, {estimated_credits:f.empty.estimated_credits},f.positive])await scenario(async()=>{const c=await claim(query);await finish(c.token,response);assert.equal(await widen(),false,'Zero credits alone is not proof of an empty audience');});
+for(const sql of ["update icash_accounts set bot_paused=true", "update fixture_gates set allowed=false where name='membership'", "update icash_research_private.exclusions set last_synced_at=now()+interval '1 second'", "update icash_research_private.estimates set saved_at=now()-interval '6 minutes'", "update icash_integration_checks set checked_at=now()-interval '8 days'"]){await scenario(async()=>{const c=await claim(query);await finish(c.token,f.positive);await pg.exec(sql);assert.equal(await reserve(),false,sql);});}
+await scenario(async()=>{const c=await claim(query);await finish(c.token,f.positive);const otherScope={...f.scope,p_revision:f.other};const shared=await claim(query,f.policy,f.other,otherScope);assert.equal(shared.status,'cached');assert.equal(await value('select count(*)::int from icash_research_private.estimates where shared_from_operation is not null'),1);assert.equal(await reserve(f.policy,f.other,otherScope),true,'Exact shared free estimate survives final admission');});
+await scenario(async()=>{await pg.exec("update icash_integration_checks set result=jsonb_set(result,'{filters,0,is_premium_filter}','true')");assert.equal((await context()).ready,false);assert.equal(await reserve(),false);});
+for(const role of ['anon','authenticated'])assert.equal(await value('select has_function_privilege($1,$2,$3)',[role,'public.icash_widen_financial_query(uuid,jsonb,jsonb,jsonb)','EXECUTE']),false);
+const now=Date.now(),snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_123',full_address:'Fictional test',estimated_value:200000,estimated_repair_cost:30000,total_estimated_loan_balance:10000}}};
+const screen=patch=>runScreeningJob({...snapshot,raw:{data:{...snapshot.raw.data,...patch}}},now);
+assert.equal(screen({}).financialCheck.category,'qualified');
+ assert.equal(screen({}).investorEconomics.estimatedGrossBuyerSpreadCents,6000000);assert.equal(screen({}).investorEconomics.estimatedGrossBuyerMarginPercent,30);assert.equal(screen({}).investorEconomics.verified,false);
+assert.equal(screen({estimated_repair_cost:null}).financialCheck.category,'missing_financial_information');
+assert.equal(screen({estimated_repair_cost:-1}).financialCheck.category,'inconsistent_financial_calculation');
+ const invalidDebt=screen({total_estimated_loan_balance:-1,estimated_equity_amount:190000});assert.equal(invalidDebt.financialCheck.category,'inconsistent_financial_calculation');assert.equal(invalidDebt.financialCheck.status,'hold');assert.equal(invalidDebt.offerAuthorized,false);
+assert.equal(screen({estimated_repair_cost:150000}).financialCheck.category,'financial_rejection');
+assert.equal(screen({num_total_open_liens:1}).financialCheck.code,'lien_tax_payoff_verification');
+const stale=runQueuedScreening(snapshot,now+86400001);assert.equal(stale.financialCheck.code,'research_stale');assert.equal(stale.property.fetchedAt,snapshot.fetchedAt);assert.equal(stale.outreachAuthorized,false);assert.equal(stale.offerAuthorized,false);assert.throws(()=>runScreeningJob(snapshot,now+86400001));
+const recovery=readFileSync(new URL('../config/financial-screening-recovery.sql',import.meta.url),'utf8');
+const predecessor=JSON.parse(readFileSync(new URL('./fixtures/financial-prequalification-before.json',import.meta.url),'utf8')).find(x=>x.proname==='icash_finish_screening');await pg.exec(predecessor.definition);await pg.exec(recovery);
+await scenario(async()=>{await pg.query("insert into icash_screening_jobs(id,account_id,state,attempts,lease_token,lease_until,snapshot) values($1,$2,'running',1,$1,now()+interval '1 minute',$3)",[f.revision,f.account,snapshot]);for(let attempt=1;attempt<=3;attempt++){if(attempt>1)await pg.query("update icash_screening_jobs set state='running',attempts=$1,lease_token=id,lease_until=now()+interval '1 minute'",[attempt]);assert.equal(await value("select icash_finish_screening($1,$1,null,'SCREENING_FAILED')",[f.revision]),true);assert.equal(await value('select state from icash_screening_jobs'),attempt<3?'queued':'failed');assert.equal(await value("select icash_finish_screening($1,$1,null,'SCREENING_FAILED')",[f.revision]),false);}assert.equal(await value('select count(*)::int from icash_research_private.screening_attempts'),3);assert.equal(await value('select snapshot from icash_screening_jobs').then(s=>s.fetchedAt),snapshot.fetchedAt);});
+await scenario(async()=>{
+ await pg.query("insert into icash_screening_jobs(id,account_id,state,attempts,error_code,snapshot) values($1,$2,'failed',1,'INVALID_SNAPSHOT',$3)",[f.revision,f.account,snapshot]);
+ const hash=await value('select md5(snapshot::text) from icash_screening_jobs');
+ const retry=(actor='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',h=hash)=>value("select icash_retry_saved_screening($1,$2,$3,'INVALID_SNAPSHOT')",[actor,f.revision,h]);
+ await assert.rejects(retry(f.other),/Owner required/);
+});
+await scenario(async()=>{
+ await pg.query("insert into icash_screening_jobs(id,account_id,state,attempts,error_code,snapshot) values($1,$2,'failed',1,'INVALID_SNAPSHOT',$3)",[f.revision,f.account,snapshot]);
+ const hash=await value('select md5(snapshot::text) from icash_screening_jobs');
+ const retry=h=>value("select icash_retry_saved_screening('592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',$1,$2,'INVALID_SNAPSHOT')",[f.revision,h]);
+ assert.equal(await retry('wrong'),false);assert.equal(await retry(hash),true);assert.equal(await retry(hash),false);
+ assert.equal(await value('select attempts from icash_screening_jobs'),1);
+ assert.equal(await value('select snapshot from icash_screening_jobs').then(s=>s.fetchedAt),snapshot.fetchedAt);
+ assert.equal(await value("select original_job->>'error_code' from icash_research_private.screening_recoveries"),'INVALID_SNAPSHOT');
+});
+for(const role of ['anon','authenticated'])assert.equal(await value('select has_function_privilege($1,$2,$3)',[role,'public.icash_retry_saved_screening(uuid,uuid,text,text)','EXECUTE']),false);
+await pg.close();console.log('PASS financial prequalification: exact query/estimate binding, free-only widening, shared estimates, old-worker fences, original gates, stale diagnostics, bounded local retries and one-use reviewed recovery.');
