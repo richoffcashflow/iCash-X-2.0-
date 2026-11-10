@@ -77,3 +77,24 @@ for(const tail of [
 assert.match((await ask([...stalledApp,user('Cancel my subscription')])).reply,/Cancel subscription/);
 assert.equal(modelCalls,0);
 console.log('PASS running workspace progress complaints and negative/topic/operator boundaries');
+
+// Fictional current-status questions must use evidence even after side topics.
+const stalledEvidence=[...evidence,{key:'outreach',status:'attention',code:'fixture',detail:'Saved activity.',source:'fixture',observedAt:'2026-11-10T19:00:00Z',outreach:{callsStarted:0,textsSent:0,textReplies:0,progress:{status:'ready',health:{status:'blocked',reason:'no_completed_work'}}}}];
+for(const question of ['Is my bot actually working?','Is the AI really running?','Is my bot working right now?']){
+ for(const messages of [[user(question)],[...history,user('Where is the course?'),assistant('Open Course.'),user(question)]]){
+  const r=await replyToSupport({kind:'account',messages,evidence:stalledEvidence},async()=>{modelCalls++;throw Error('External model forbidden');});
+  assert.equal(r.managementReview,true,question);assert.equal(r.status,'open');
+  assert.match(r.reply,/setting alone does not prove/);assert.match(r.reply,/no completed work/i);
+  assert.doesNotMatch(r.reply,/hasn.t found|will show activity only|working normally|Open a property/i);
+ }
+}
+for(const question of ['Is my bot working now?','Is the bot running?']){
+ const r=await ask([user(question)]);assert.equal(r.status,'open');assert.match(r.reply,/can.t verify/);assert.notEqual(r.managementReview,true);
+}
+for(const question of ['Is the bot working with title companies?','Is the bot working in Ohio?','Is the bot running while I am offline?','My bot is working now.','Is my browser really working?','Cancel my subscription']){
+ assert.equal(supportAccountReviewReply({kind:'account',messages:[...history,user(question)],evidence:stalledEvidence}),null,question);
+}
+const intervening=await ask([...history,operator('A separate browser problem is under review.'),user('Where is the course?')]);
+assert.doesNotMatch(intervening.reply,/no completed work|lack of progress/);
+assert.equal(modelCalls,0);
+console.log('PASS direct current-status questions, verified blockage, unknown evidence and topic boundaries');
