@@ -602,9 +602,51 @@ test('inbound custom voice requires the receiving account and unchanged approved
  assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,{...deps,selectVoice:async()=>{throw Error('provider unavailable');}}),null);
  assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,deps,AbortSignal.abort()),null);
 });
+test('inbound custom voice accepts only the same provider-default representations as call admission',async()=>{
+ const cfg=configuration(),voice='voice_custom_fixture';
+ cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:true};
+ cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
+ const originalHash=cfg.c.config_hash;
+ const select=agent=>selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,{selectVoice:async()=>voice,agent:async()=>agent});
+ for(const field of [null,'pvc_strength','clone_strength']){
+  const current=clone(cfg.agent);current.conversation_config.agent.subagents=[];
+  if(field){current.conversation_config.tts[field]=0;current.platform_settings.overrides.conversation_config_override.tts[field]=false;}
+  const before=clone(current),admission=inspectRecordedReceptionAgent(cfg.c,current,cfg.branch,true,cfg.tool);
+  assert.equal(admission.safe,true);assert.notEqual(admission.hash,originalHash);
+  assert.equal(await select(current),voice,'Accepted serialization must not silently replace the custom voice');
+  assert.deepEqual(current,before);assert.equal(cfg.c.config_hash,originalHash,'Neither provider evidence nor approval is rewritten');
+ }
+ cfg.agent.conversation_config.tts.pvc_strength=0;
+ cfg.agent.platform_settings.overrides.conversation_config_override.tts.pvc_strength=false;
+ cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
+ const renamed=clone(cfg.agent);delete renamed.conversation_config.tts.pvc_strength;
+ delete renamed.platform_settings.overrides.conversation_config_override.tts.pvc_strength;
+ renamed.conversation_config.tts.clone_strength=0;
+ renamed.platform_settings.overrides.conversation_config_override.tts.clone_strength=false;
+ assert.equal(await select(renamed),voice);
+ for(const mutate of [
+  a=>{a.conversation_config.tts.clone_strength=0.1;},
+  a=>{a.platform_settings.overrides.conversation_config_override.tts.clone_strength=true;},
+  a=>{a.conversation_config.tts.pvc_strength=0;},
+  a=>{a.platform_settings.overrides.conversation_config_override.tts.voice_id=false;},
+  a=>{a.conversation_config.agent.prompt.prompt+=' Unapproved instructions.';},
+  a=>{a.conversation_config.agent.prompt.tool_ids.push('tool_unapproved');},
+  a=>{a.version_id='agtvrsn_unapproved';},a=>{a.branch_id='agtbrch_unapproved';},
+ ]){const changed=clone(renamed);mutate(changed);assert.equal(await select(changed),null,'Actual configuration changes still fail closed');}
+ const parent=new AbortController();
+ assert.equal(await selectedRecordedReceptionVoice(cfg.c.account_id,cfg.c,{selectVoice:async()=>voice,agent:async()=>{parent.abort();return renamed;}},parent.signal),null);
+});
 for(const direct of [false,true])test('inbound '+(direct?'direct':'consent')+' calls register the account voice and ignore caller-selected voices',async()=>{
  const selections=[];
- const f=fixture({direct,selectVoice:async(account,config)=>{selections.push({account,config:config.id});return 'voice_custom_fixture';}});
+ const f=fixture({direct,mutate:cfg=>{
+  cfg.agent.platform_settings.overrides.conversation_config_override.tts={voice_id:true};
+  cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
+  cfg.agent.conversation_config.tts.clone_strength=0;
+  cfg.agent.platform_settings.overrides.conversation_config_override.tts.clone_strength=false;
+ },selectVoice:async(account,config)=>{
+  selections.push({account,config:config.id});
+  return selectedRecordedReceptionVoice(account,config,{selectVoice:async()=> 'voice_custom_fixture',agent:async()=>f.agent});
+ }});
  await f.admit();
  const response=direct?await f.service.connect(signed('connect?id='+id+'&nonce='+f.nonce,{CallStatus:'in-progress',VoiceId:'foreign_voice',AccountId:foreignAccount})):await f.consent({SpeechResult:'yes',Confidence:'.99',VoiceId:'foreign_voice',AccountId:foreignAccount});
  assert.match(await response.text(),/<Connect>/);

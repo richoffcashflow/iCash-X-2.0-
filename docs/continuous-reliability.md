@@ -1,5 +1,23 @@
 # Continuous reliability
 
+## November 10 incoming custom voice
+
+Incoming call admission accepted the provider's already-supported empty and
+disabled voice-field defaults, but custom-voice selection compared only the raw
+hash and silently fell back to the standard voice. The selector now reuses the
+same complete approved-fingerprint comparison as admission. Account, VIP, clone
+verification, branch/version, voice-override permission and the four-second
+deadline remain mandatory. No provider snapshot or saved approval is rewritten.
+
+The regression failed before the change and passed afterward through both direct
+and spoken-consent entry paths, including real voice selection and registration.
+Changed prompts, tools, identities, enabled defaults and revoked override access
+still fail closed. Existing recording, custom-voice and private-preview suites
+also pass. Live preview authorization is separate from incoming call selection;
+preview playback does not prove an inbound call used the clone. Production still
+requires the exact-head and exact-main release gates and a real call receipt for
+an end-to-end claim.
+
 ## November 9 workflow selection
 
 The [workflow isolation repair](workflow-stall-isolation-2026-11-09.md) removes
