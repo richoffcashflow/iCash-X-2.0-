@@ -123,7 +123,7 @@ export function LiveWorkspace({apiBase='/api/work',readOnly=false,onAccessLost,o
 }
 function PropertyCard({assistantRequest,apiBase='/api/work',readOnly=false,onAsk,assistantVipLocked=false,property:p,work,textRequest,principal,active,visited,onToggle,onRefresh,hidden,photoRefresh=0,botPaused=false,botAvailable=false,stale=false,promising=false}:{assistantRequest?:AssistantPropertyRequest|null;apiBase?:string;readOnly?:boolean;assistantVipLocked?:boolean;onAsk?:(id:string,address:string)=>void;botPaused?:boolean;botAvailable?:boolean;stale?:boolean;promising?:boolean;photoRefresh?:number;property:Property;work:Work;textRequest?:TextRequest|null;principal:string;hidden:boolean;active:boolean;visited:boolean;onToggle:(open:boolean)=>void;onRefresh:()=>void}){
  const initialManual=work.controls.some(c=>c.property_id===p.result.property.propertyId);
- const [manual,setManual]=useState(initialManual),[controlBusy,setControlBusy]=useState(false),[controlMessage,setControlMessage]=useState(''),[preparingContract,setPreparingContract]=useState(false),[contactView,setContactView]=useState<'texts'|'calls'|null>(null),[contactVisited,setContactVisited]=useState(false),[callRequested,setCallRequested]=useState(false);
+ const [manual,setManual]=useState(initialManual),[controlBusy,setControlBusy]=useState(false),[controlMessage,setControlMessage]=useState(''),[preparingContract,setPreparingContract]=useState(false),[contactView,setContactView]=useState<'texts'|'calls'|null>(null),[contactVisited,setContactVisited]=useState(false),[callRequested,setCallRequested]=useState(false),[callPanelOpen,setCallPanelOpen]=useState(false),[callPhone,setCallPhone]=useState(''),[selectedPhone,setSelectedPhone]=useState('');
  const contactDialog=useRef<HTMLDialogElement>(null),controlInFlight=useRef(false),handledTextRequest=useRef(0);
  const sellerText=work.sellerTexts?.find(r=>r.screening_id===p.id);
  const [requestedThread,setRequestedThread]=useState('');
@@ -143,7 +143,9 @@ function PropertyCard({assistantRequest,apiBase='/api/work',readOnly=false,onAsk
  useEffect(()=>setManual(initialManual),[initialManual]);
  const deal=work.deals.find(d=>d.screening_id===p.id),calls=work.conversations.filter(c=>c.screening_id===p.id);
  const lookups=work.contacts.filter(c=>c.screening_id===p.id);
- function openContact(view:'texts'|'calls'){if(view==='texts')setRequestedThread(sellerText?.thread_id??'');setCallRequested(view==='calls');setContactVisited(true);setContactView(view);}
+ function openContact(view:'texts'|'calls'){setRequestedThread('');setSelectedPhone('');setCallPhone('');setCallPanelOpen(view==='calls');setCallRequested(view==='calls');setContactVisited(true);setContactView('texts');}
+ function closeContact(){setContactView(null);setCallRequested(false);setCallPanelOpen(false);}
+ function callSelectedContact(){setCallPhone(selectedPhone);setCallPanelOpen(true);setCallRequested(true);}
  function tookOver(){setManual(true);setControlMessage('');onRefresh();}
  const nextStep=propertyNextAction(p,work);
  const contractReady=showPropertyContract(deal,work.signing)||!!deal&&['fulfillment','closing','coordination','cancellation'].includes(nextStep.target??'');
@@ -185,11 +187,12 @@ function PropertyCard({assistantRequest,apiBase='/api/work',readOnly=false,onAsk
 
    </div></Activity>}
   </div>
-  <dialog ref={contactDialog} className="property-contact-dialog" aria-labelledby={`contact-heading-${p.id}`} onClose={()=>{setContactView(null);setCallRequested(false);}} onCancel={()=>{setContactView(null);setCallRequested(false);}}>
-   <div className="contact-dialog-heading"><div><h3 id={`contact-heading-${p.id}`}>{address.street}</h3><small>{owner?`${owner} · `:''}{address.location}</small></div><button className="contact-dialog-close" aria-label="Close conversation" onClick={()=>{setContactView(null);setCallRequested(false);}}><X size={20}/></button></div>
+  <dialog ref={contactDialog} className="property-contact-dialog" aria-labelledby={`contact-heading-${p.id}`} onClose={closeContact} onCancel={closeContact}>
+   <div className="contact-dialog-heading"><div><h3 id={`contact-heading-${p.id}`}>{address.street}</h3><small>{owner?`${owner} · `:''}{address.location}</small></div><div className="contact-dialog-actions"><button className="conversation-call-action" disabled={callPanelOpen} onClick={callSelectedContact} aria-label="Call seller"><Phone size={16}/>Call</button><button className="contact-dialog-close" aria-label="Close conversation" onClick={closeContact}><X size={20}/></button></div></div>
    {contactVisited&&<Activity mode={contactView&&!hidden?'visible':'hidden'}>    <section className="property-conversations" id={`conversation-${p.id}`} aria-label="Property conversations"><div className="workspace-section-heading"><div className="conversation-switch"><button aria-pressed={contactView==='texts'} onClick={()=>{setContactView('texts');setCallRequested(false);}}><MessageCircle size={16}/>Texts</button><button aria-pressed={contactView==='calls'} onClick={()=>setContactView('calls')}><Phone size={16}/>Calls{calls.filter(c=>!c.voicemail).length?` (${calls.filter(c=>!c.voicemail).length})`:''}</button></div></div><div className="conversation-control"><span>{manual?'You’re handling this lead':'Bot manages this lead'}</span>{manual&&<button className="workspace-quiet" disabled={controlUnavailable||controlBusy} onClick={()=>void control(true)}>{controlBusy?'Saving…':'Return to bot'}</button>}</div>{controlMessage&&<p className="control-result" role="status">{controlMessage}</p>}
-    <div className="contact-text-view" hidden={contactView!=='texts'}><PropertyMessages apiBase={readOnly?`${apiBase}/contact`:apiBase} markRead={!readOnly} knownDealId={deal?.id} draftRequest={assistantRequest?.draft} screeningId={p.id} preferredThreadId={requestedThread} active={contactView==='texts'&&!hidden} onTakeover={tookOver}/></div>
-    {contactView==='calls'&&<div className="property-call-list"><ManualCallOptions apiBase={readOnly?`${apiBase}/contact`:apiBase} screeningId={p.id} onTakeover={tookOver} autoStart={callRequested} onAutoStartHandled={()=>setCallRequested(false)}/><PropertyCallHistory apiBase={apiBase} screeningId={p.id} conversations={calls}/></div>}
+    {callPanelOpen&&<section className="conversation-call-panel" aria-label="Seller call"><button className="conversation-call-close" onClick={()=>{setCallPanelOpen(false);setCallRequested(false);}}>End &amp; close</button><ManualCallOptions compact preferredPhone={callPhone} apiBase={readOnly?`${apiBase}/contact`:apiBase} screeningId={p.id} onTakeover={tookOver} autoStart={callRequested} onAutoStartHandled={()=>setCallRequested(false)}/></section>}
+    <div className="contact-text-view" hidden={contactView!=='texts'}><PropertyMessages onRecipientChange={setSelectedPhone} apiBase={readOnly?`${apiBase}/contact`:apiBase} markRead={!readOnly} knownDealId={deal?.id} draftRequest={assistantRequest?.draft} screeningId={p.id} preferredThreadId={requestedThread} active={contactView==='texts'&&!hidden} onTakeover={tookOver}/></div>
+    {contactView==='calls'&&<div className="property-call-list"><PropertyCallHistory apiBase={apiBase} screeningId={p.id} conversations={calls}/></div>}
     </section>
 </Activity>}
   </dialog>

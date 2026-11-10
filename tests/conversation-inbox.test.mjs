@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {z} from 'zod';
 import {createHash} from 'node:crypto';
+import {threadPersonalCalls} from '../lib/thread-personal-calls.ts';
 import {threadConversationCalls} from '../lib/thread-conversation-calls.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 const account='11111111-1111-4111-8111-111111111111',screen='22222222-2222-4222-8222-222222222222',recording='33333333-3333-4333-8333-333333333333',deal='44444444-4444-4444-8444-444444444444',conversation='55555555-5555-4555-8555-555555555555',threadId='66666666-6666-4666-8666-666666666666',actor='77777777-7777-4777-8777-777777777777';
@@ -17,6 +18,8 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_screening_jobs?'))return [{id:screen}];
  if(path.startsWith('icash_call_recordings?')){assert.equal(q.get('screening_id'),'eq.'+screen);assert.equal(q.get('contact_key'),'eq.'+contactKey);assert.equal(q.get('party'),'eq.seller');assert.equal(q.get('call_sid'),'not.is.null');if(failedRecordings)throw Error('fixture');return records;}
  if(path.startsWith('icash_live_conversations?'))return linked;
+ if(path.startsWith('icash_customer_phone_calls?')){assert.equal(q.get('recipient_phone'),'eq.'+phone);return [];}
+
  throw Error(path);
 };
 test('initial call audio appears without a finished transcript and never exposes provider fields',async()=>{
@@ -46,4 +49,14 @@ test('text history defaults to seller, labels human/AI authors, preserves first 
  let response=await route.GET(new Request('https://example.invalid/api/work/messages?dealId='+deal));assert.equal(response.status,200);const data=await response.json();assert.equal(data.threadId,threadId);assert.equal(data.messages[0].author,'you');assert.equal(data.messages[1].author,'bot');assert.equal(data.firstMessage.body,first.body);assert(!JSON.stringify(data).includes('customer_author_id'));assert.equal(queueCalls,0,'viewing does not queue or take over');
  assert.equal(callLoads,0,'The default text view does not fetch recordings');response=await route.GET(new Request('https://example.invalid/api/work/messages?dealId='+deal+'&includeCalls=true'));assert.equal(response.status,200);assert.equal(callLoads,1);
  selectedMissing=true;response=await route.GET(new Request('https://example.invalid/api/work/messages?dealId='+deal+'&threadId='+threadId));assert.equal(response.status,400);
+});
+
+test('personal call recordings stay with the exact account/property/recipient and never disclose provider fields',async()=>{
+ const personal={id:recording,account_id:account,screening_id:screen,recipient_phone:phone,created_at:at,ended_at:at,state:'completed',recording_required:true,recording_state:'available',recording_sid:'RE'+'c'.repeat(32),recording_expires_at:'2027-01-01T00:00:00Z',recording_deleted_at:null,duration:35};
+ let rows=[personal];const before='2026-10-22T00:00:00Z',after='2026-10-21T00:00:00Z';
+ const saved=async(path,method)=>{assert.equal(method,undefined,'History is read only');const q=new URLSearchParams(path.split('?')[1]);assert.equal(q.get('account_id'),'eq.'+account);assert.equal(q.get('screening_id'),'eq.'+screen);assert.equal(q.get('recipient_phone'),'eq.'+phone);assert.deepEqual(q.getAll('created_at'),['lt.'+before,'gte.'+after]);assert.equal(q.get('limit'),'20');return rows;};
+ let result=await threadPersonalCalls(saved,account,screen,phone,before,after,Date.parse(at));assert.equal(result[0].source,'personal');assert.equal(result[0].recordingReceipt.status,'available');assert.equal(result[0].durationSeconds,35);assert.equal(result[0].transcriptAvailable,false);assert(!JSON.stringify(result).includes(personal.recording_sid));assert(!JSON.stringify(result).includes(phone));
+ for(const patch of [{account_id:actor},{screening_id:actor},{recipient_phone:'+12025550199'},{created_at:before},{ended_at:null}]){rows=[{...personal,...patch}];await assert.rejects(threadPersonalCalls(saved,account,screen,phone,before,after),/OWNED_CONTACT_CALLS_REQUIRED/);}
+ for(const [patch,status] of [[{recording_expires_at:at},'expired'],[{recording_deleted_at:at},'deleted'],[{recording_state:'pending',recording_sid:null},'processing'],[{recording_required:false},'not_recorded']]){rows=[{...personal,...patch}];result=await threadPersonalCalls(saved,account,screen,phone,before,after,Date.parse(at));assert.equal(result[0].recordingReceipt.status,status);}
+ const mixed=await threadConversationCalls(async(path,...args)=>path.startsWith('icash_customer_phone_calls?')?[personal]:db(path,...args),account,thread,null,null,true);assert(mixed.calls.some(c=>c.source==='personal'&&c.id===recording));
 });

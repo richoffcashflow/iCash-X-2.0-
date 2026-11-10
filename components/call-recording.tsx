@@ -19,7 +19,7 @@ const recordingStates = {
 } as const;
 
 type RecordingStatus = keyof typeof recordingStates;
-export type RecordingSource = 'outbound' | 'reception';
+export type RecordingSource = 'outbound' | 'reception' | 'personal';
 export type RecordingReceipt = {id: string | null; status: RecordingStatus; durationSeconds: number | null; audioExpiresAt: string | null; callOutcome?: 'no-answer' | 'busy'};
 export type ReceiptResult = RecordingReceipt | {status: 'not_recorded'};
 type ReceiptState = {scope: string; phase: 'loading' | 'error' | 'ready'; receipt?: ReceiptResult};
@@ -49,7 +49,7 @@ function ReceiptDetails({apiBase='/api/work', receipt, source='outbound', playba
     {receipt.status !== 'available' && <p>{recordingStates[receipt.status]}</p>}
     {receipt.status === 'available' && 'id' in receipt && receipt.id && <>
       <audio key={`${receipt.id}:${playbackAttempt}`} controls preload="none" aria-label="Call recording" onError={onPlaybackError}
-        src={`${apiBase}/${source === 'reception' ? 'reception-recording' : 'recording'}/audio?id=${encodeURIComponent(receipt.id)}`} style={{width:'100%'}}>
+        src={source==='personal'?`${apiBase}/business-call?id=${encodeURIComponent(receipt.id)}&audio=1`:`${apiBase}/${source === 'reception' ? 'reception-recording' : 'recording'}/audio?id=${encodeURIComponent(receipt.id)}`} style={{width:'100%'}}>
         Your browser does not support audio playback.
       </audio>
       {receipt.audioExpiresAt && <small>Available until {dateLabel(receipt.audioExpiresAt)}.</small>}
@@ -71,6 +71,7 @@ export function CallRecording({apiBase='/api/work', conversationId, recordingId,
 
   useEffect(() => {
     if (receipt !== undefined) return;
+    if (source === 'personal') {setState({scope, phase:'ready', receipt:{status:'not_recorded'}});return;}
     const controller = new AbortController();
     running.current = true;
     setState({scope, phase: 'loading'});

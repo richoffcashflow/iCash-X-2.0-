@@ -13,6 +13,10 @@ The November 9 owner screenshots showed a customer account view with saved text/
 
 The top funded account audit found 511 accepted/delivered outgoing texts and zero recorded incoming texts, including no matching ingress events for its sender/recipient pairs. The interface cannot manufacture absent replies. Confirmed automated call fragments were reproduced with fictional numbers; original recordings remain intact.
 
+The owner's follow-up selected a conversation layout with Call above the thread, recordings among texts by default and a slim bottom composer. Generic Texts entry reselects the latest seller-reply thread; explicit thread links remain exact. Selection stays pinned during a session so polling cannot move a draft to another contact. Reopening preserves each contact's draft. Initial scrolling shows the latest seller text; scrolling or sending returns control to the user.
+
+Call history loads separately from texts and admission checks. Browser/manual call recordings use saved account/property/recipient-bound rows and the existing authenticated audio endpoint; playback still verifies original provider evidence. Failed/expired audio never appears as playable. The top Call action uses the selected conversation's exact number, with no fallback to another saved contact. Active call controls stay above the thread when switching tabs. No schema, provider configuration or activation change is required for this follow-up.
+
 ## Direct cash questions
 
 New `cash-question-v6` assignments use three fixed reviewed variants:

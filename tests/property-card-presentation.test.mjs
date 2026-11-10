@@ -34,7 +34,8 @@ assert.match(text(summary),/100 Example Street/);assert.match(text(summary),/Dem
 assert.match(text(summary),/Open lead/);
 assert.equal(nodes.filter(n=>n.props?.className==='property-details').length,0,'unvisited properties do not mount expensive detail work');
 assert.equal(all(summary.props.children).filter(n=>n.type==='button').length,0,'the disclosure has no nested interactive buttons');
-assert.equal(nodes.filter(n=>n.type==='button'&&n.props.className!=='contact-dialog-close').length,4,'property disclosure, Call, Text and View deal controls are visible while collapsed');
+const closedDialogNodes=new Set(all(nodes.find(n=>n.type==='dialog')));
+assert.equal(nodes.filter(n=>n.type==='button'&&!closedDialogNodes.has(n)).length,4,'property disclosure, Call, Text and View deal controls are visible while collapsed');
 assert(nodes.some(n=>n.type==='button'&&text(n).trim()==='Take over'),'takeover remains accessible beside contact actions');
 assert.equal(nodes.find(n=>n.type==='svg').props['aria-hidden'],'true');
 assert.equal(nodes.find(n=>n.props?.['aria-label']===`Text conversation for ${property.result.property.address.split(',')[0]}`).props['data-credit-action'],undefined,'Reading seller texts does not require funded credits');
