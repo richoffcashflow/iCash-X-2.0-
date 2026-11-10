@@ -75,7 +75,23 @@ function recordingEmptyAgentHashMatches(configHash:string,snapshot:Record<string
  if(variants.slice(1).some(alternate=>matches({...snapshot,conversation_config:{...config,agent:alternate}})))return true;
  return false;
 }
+function recordingDisabledVoiceSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
+ const platform=object(snapshot.platform_settings),guardrails=object(platform.guardrails);
+ const human=object(guardrails.human_voice),synthetic=object(guardrails.synthetic_voice);
+ if(human.is_enabled!==false||Object.keys(human).length!==1
+  ||synthetic.is_enabled!==false||Object.keys(synthetic).length!==1)return null;
+ const previous:Record<string,unknown>={...guardrails,synthetic_voice:{is_enabled:false,trigger_action:{type:'end_call'}}};
+ delete previous.human_voice;
+ return {...snapshot,platform_settings:{...platform,guardrails:previous}};
+}
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
+ // November 10 changed only the serialization of two disabled detectors:
+ // human_voice=false appeared; the inactive synthetic end_call action vanished.
+ // Reconstruct that exact pair and require the complete original fingerprint.
+ // Removing human_voice bounds recursion to one level. No provider write or
+ // enabled/malformed/extended detector, price policy or approval is normalized.
+ const previousVoice=recordingDisabledVoiceSnapshot(snapshot);
+ if(previousVoice&&recordingConfigHashMatches(configHash,previousVoice))return true;
  // Fixed representations, each with up to four empty-agent
  // variants. Never ignore arbitrary fields or rewrite a saved approval.
  const snapshots=[snapshot];
