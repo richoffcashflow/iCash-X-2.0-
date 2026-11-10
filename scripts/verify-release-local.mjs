@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 const suites = [
  'assistant-text-actions', 'assistant-text-action-route', 'property-followthrough',
  'cash-offer-math', 'offer-policy', 'screening-job', 'screening-recalculation', 'automatic-call-offer', 'seller-text-offer', 'free-sample',
- 'support-account-deletion', 'support-center',
+ 'support-manual-contact', 'support-account-deletion', 'support-center',
  'http-response-lifecycle', 'deferred-text-recovery',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
  'scheduler-reliability', 'workflow-stall-isolation', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database',
