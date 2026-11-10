@@ -4,6 +4,17 @@ import {cashOfferPolicy} from './cash-offer-math.ts';
 import {supportRoleQuestion} from './support-product-guide.ts';
 type Turn={role:string;content:string};
 const dollars=(cents:number)=>(cents/100).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
+const exhaustedCredits=(q:string)=>/\b(?:(?:work )?credits? (?:run(?:s)? out|ran out|(?:are |is )?exhausted)|(?:no|zero) (?:work )?credits?(?: left)?|(?:credit )?balance (?:is |becomes? )?empty)\b/i.test(q)&&!/\b(?:won[’']?t|will not|never|not going to) run out\b/i.test(q);
+
+function creditExhaustionQuestion(messages:Turn[]){
+ const last=messages.findLastIndex(m=>m.role==='user'),q=messages[last]?.content??'';
+ if(/\b(?:refund|cancel|charged|billed|payment|purchase|missing|error|failed|sign[ -]?in)\b/i.test(q))return false;
+ if(exhaustedCredits(q))return true;
+ // A short continuation belongs only to the immediately preceding credit issue.
+ // An operator finding or a changed topic must not be replaced with generic policy.
+ const prior=messages.slice(0,last),previous=prior.findLastIndex(m=>m.role==='user');
+ return previous>=0&&exhaustedCredits(prior[previous].content)&&!prior.slice(previous+1).some(m=>m.role==='operator')&&/^(?:so )?(?:will|does) (?:it|the bot|my bot|the ai) (?:still|keep) (?:contact(?:ing)?|talk(?:ing)? to|text(?:ing)?) (?:them|the sellers?|existing sellers?)[?.!\s]*$/i.test(q.trim());
+}
 
 /** App capabilities are source-backed answers, not account activity or authority
  * to change an offer, deliver a document or spend the customer's money. */
@@ -68,6 +79,7 @@ export function supportProductClarification(messages:Turn[]){
  // Preserve the established role answer before
  // matching incidental words such as "send contracts to title" in a recap.
  if(supportRoleQuestion(q))return null;
+ if(creditExhaustionQuestion(messages))return {reply:'New paid work cannot start with an empty credit balance, including another call or text to a seller already in a conversation. An earlier payment does not prepay unlimited follow-up. A call or task already started has its own saved status; that does not guarantee the next reply or call can start. Run/Pause and the other work checks still apply. This explains the general rule; your current balance and a particular seller conversation need their own recorded checks.',answered:false};
  // A hypothetical unanswered text is a display question, not proof of a stall.
  // Actual missing history, payment issues and delivery faults need investigation.
  if(/\bif\b/i.test(q)&&/\b(?:seller|owner)\b/i.test(q)&&/\b(?:(?:does not|doesn[’']?t) text(?: the (?:ai|bot))? back|(?:has not|hasn[’']?t) replied|does not reply|doesn[’']?t reply)\b/i.test(q)&&/\bconversation\b/i.test(q)&&/\b(?:blank|empty)\b/i.test(q)&&!/\b(?:payment|charge|billing|refund|cancel|sign[ -]?in|log[ -]?in|code|checkout|missing|disappeared|failed|error|broken|not loading|not working|not sending)\b/i.test(q))return {reply:'No seller reply means no incoming answer is recorded; saved outgoing texts can still appear in the conversation. Open the property under Your leads and review Texts, including the selected contact and message status. A saved outgoing text does not prove delivery or seller interest. If the view is completely blank despite saved messages, that needs a separate check; I haven’t confirmed a display fault or a fix.',answered:false};
