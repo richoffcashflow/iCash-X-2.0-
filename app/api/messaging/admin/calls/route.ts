@@ -5,7 +5,7 @@ import {additionalBusinessPhones,secondaryBusinessPhone} from '@/lib/business-ph
 import {webinarOwner,webinarOrigin,webinarBody,webinarHeaders,webinarError,WebinarError} from '@/lib/webinar-server';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
-export const maxDuration=45;
+export const maxDuration=75;
 const visible=({callerIdSid,providerAccountSid,...result}:Awaited<ReturnType<typeof inspectBusinessPhone>>)=>result;
 function error(e:unknown){return webinarError(e instanceof BusinessPhoneError?new WebinarError(503,e.message):e);}
 const number=z.enum(additionalBusinessPhones).default(secondaryBusinessPhone);

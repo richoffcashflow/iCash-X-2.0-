@@ -16,7 +16,9 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,target
  const account=env.TWILIO_ACCOUNT_SID!,auth='Basic '+Buffer.from(account+':'+env.TWILIO_AUTH_TOKEN).toString('base64');
  async function read(url:string,headers:Record<string,string>,body?:unknown){
   const label=url.includes('OutgoingCallerIds')?'Twilio caller ID':url.includes('IncomingPhoneNumbers')?'Twilio reception':url.includes('call_forwarding')?`Contiguity call routing ${body===undefined?'check':'update'}`:'Contiguity leased numbers';
-  const signal=AbortSignal.timeout(8000);
+  // Carrier forwarding setup can take longer than a read. Keep ordinary
+  // admission checks short while giving the explicit owner update time to finish.
+  const signal=AbortSignal.timeout(body===undefined?8000:30000);
   let r:Response;
   try{r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{...headers,Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal});}
   catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out':'could not be reached'}. ${body===undefined?'Refresh to check again.':'Refresh before retrying the change.'}`);}

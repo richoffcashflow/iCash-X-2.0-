@@ -11,7 +11,7 @@ function PhoneConnection({phone}:{phone:string}){
  const endpoint='/api/messaging/admin/calls?phone='+encodeURIComponent(phone);
  async function check(connect=false){
   setBusy(true);setError('');setSaved(false);
-  try{const s=await webinarRequest<Status>(endpoint,connect?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'connect',phone})}:{cache:'no-store'});setStatus(s);setSaved(connect);}
+  try{const s=await webinarRequest<Status>(endpoint,connect?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'connect',phone})}:{cache:'no-store'},connect?70000:25000);setStatus(s);setSaved(connect);}
   catch(e){setError(e instanceof Error?e.message:'Could not check this number.');}
   finally{setBusy(false);}
  }
