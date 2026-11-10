@@ -303,3 +303,10 @@ The worker and maintenance components recovered after the timeout repair. Overal
 health remains degraded by separate unresolved workflow evidence, including
 number-verification and agent-review holds. Preserve those original holds;
 scheduler speed is not proof that blocked calls or historical receipts succeeded.
+
+November 10 call continuation: [disabled voice-detector compatibility](disabled-voice-guardrail-compatibility.md)
+addresses a separate approved-fingerprint mismatch after the provider changed
+two inactive defaults on the same reviewed version. The exact original full
+fingerprint and all independent active controls remain required. Synthetic
+reproduction and the actual metadata inspector are covered; closure requires
+the exact production release, fresh full comparison and ordinary call receipts.
