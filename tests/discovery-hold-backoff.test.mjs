@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const migration=read('config/discovery-hold-backoff.sql');
-assert.equal(migration,read('supabase/migrations/20261110180000_discovery_hold_backoff.sql'));
+assert.equal(migration,read('supabase/migrations/20261110183238_discovery_hold_backoff.sql'));
 const before=JSON.parse(read('tests/fixtures/discovery-hold-before.json'));
 const db=new PGlite(),q=(s,a=[])=>db.query(s,a),value=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 try{
