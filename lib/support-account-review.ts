@@ -7,10 +7,10 @@ const existingOutreachConcern=(text:string)=>/\b(?:ai|bot|automated|automation|r
  * and failure in one sentence, and let an explicit successful result reset it. */
 export function supportMissingActivityConcern(text:string){
  if(/\b(?:(?:it|(?:the |my )?(?:bot|ai)) (?:is )?working (?:now|fine|well)|problem solved|fixed now|all fixed)[.!\s]*$/i.test(text)&&!/\b(?:not working (?:now|fine|well)|not fixed|isn[’']?t working (?:now|fine|well))\b/i.test(text))return false;
- return existingOutreachConcern(text)||/\b(?:ai|bot|automation)\b[^.!?]{0,85}\b(?:not do(?:ing)? anything|didn[’']?t do anything|did not do anything|has(?:n[’']?t| not) done anything|nothing (?:(?:has|had) )?(?:happened|happens|occurred|occured))\b/i.test(text);
+ return /\b(?:early|earlier|previous|unfinished) work (?:is )?(?:awaiting|waiting for) (?:final (?:cost )?confirmation|confirmation|costs?)\b|\b(?:early|earlier) work is awaiting\b/i.test(text)||existingOutreachConcern(text)||/\b(?:ai|bot|automation)\b[^.!?]{0,85}\b(?:not do(?:ing)? anything|didn[’']?t do anything|did not do anything|has(?:n[’']?t| not) done anything|nothing (?:(?:has|had) )?(?:happened|happens|occurred|occured))\b/i.test(text);
 }
 const outreachConcern=supportMissingActivityConcern;
-const activityPage=(text:string)=>/^(?:the )?(?:all activity|your leads)(?: (?:page|screen|view))?[.!\s]*$/i.test(text.trim());
+const activityPage=(text:string)=>/^(?:(?:on )?the |on )?(?:all activity|your leads|home|dashboard)(?: (?:page|screen|view))?[.!\s]*$/i.test(text.trim());
 const activityProofQuestion=(text:string)=>/\b(?:how|when)(?: can| do| will)? i (?:tell|know|see)\b.{0,35}\b(?:ai|bot)\b.{0,30}\b(?:doing (?:anything|something)|working|work|active)\b/i.test(text);
 function missingActivityFollowup(context:SupportContext){
  const turns=context.messages.slice(-9),latest=turns.at(-1);

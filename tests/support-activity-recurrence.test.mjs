@@ -36,3 +36,10 @@ const canceled=await ask([...history,user('Cancel my subscription')]);assert.mat
 const confirmed=await ask([...history,user('My bot is working now.')]);assert.equal(confirmed.status,'resolved');
 assert.equal(modelCalls,0);
 console.log('PASS activity complaint recurrence, page continuations, result evidence and negative/operator/topic boundaries; offline only');
+const pendingHistory=[user('How does my membership discount apply?'),operator('Eligible new usage is discounted automatically; older work keeps its original pricing.'),user('Earlier work is awaiting confirmation on my screen.'),assistant('Which page shows that message?')];
+const pending=await ask(pendingHistory.slice(0,-1));assert.equal(pending.managementReview,true);
+const home=await ask([...pendingHistory,user('On the home page')]);assert.equal(home.managementReview,true);assert.equal(home.status,'open');assert.doesNotMatch(home.reply,/discount|lead price/i);
+for(const q of ['How do I cancel my subscription?','Where is the course?','The seller is awaiting a contract.'])assert.equal(supportAccountReviewReply({kind:'account',messages:[...pendingHistory,user(q)],evidence})?.managementReview??false,false);
+assert.equal(supportAccountReviewReply({kind:'account',messages:[user('On the home page')],evidence})?.managementReview??false,false);
+assert.equal(supportAccountReviewReply({kind:'account',messages:[...pendingHistory,operator('A separate billing finding is under review.'),user('On the home page')],evidence})?.managementReview??false,false);
+assert.equal(modelCalls,0);
