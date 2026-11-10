@@ -74,6 +74,8 @@ jobs:
         run: python3 scripts/test-owner-preflight-ready-postgres.py
       - name: Verify indexed acquisition selection preserves active ticket guards
         run: python3 scripts/test-acquisition-active-ticket-index-postgres.py
+      - name: Verify held discovery preserves concurrent independent progress
+        run: python3 scripts/test-discovery-hold-postgres.py
       - name: Verify indexed property evidence preserves all original holds
         run: python3 scripts/test-acquisition-property-history-index-postgres.py
       - name: Verify global text history exclusion uses the thread index

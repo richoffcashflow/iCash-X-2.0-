@@ -14,7 +14,9 @@ class DiscoveryProviderRequestError extends Error{
 }
 /** Called only with a server-resolved authenticated account. All policy lives in service-only DB rows. */
 export async function discoverForAccount(accountId:string){
- const providerDeadline=AbortSignal.timeout(90000);
+ // Free estimates can take longer than 20 seconds for otherwise valid searches.
+ // Keep one bounded attempt and enough total time for the separately claimed page.
+ const providerDeadline=AbortSignal.timeout(120000);
  if(!discoveryWorkEnabled())return {status:'live_work_not_ready'};
  if(process.env.ICASH_ACQUISITION_MODE==='hybrid'&&!await db<boolean>('rpc/icash_outbound_search_due','POST',{p_account:accountId}))return {status:'supply_target_met'};
  await syncResearchExclusions(db,fetch,accountId).catch(()=>null);
@@ -63,7 +65,7 @@ export async function discoverForAccount(accountId:string){
   request:async body=>{
    const stage=(body as {estimate_cost?:boolean}).estimate_cost===true?'estimate':'paid';let httpStatus:number|null=null;
    const requestOnce=async()=>{try{
-    const r=await dealMachineRequest(db,stage==='estimate'?'search_estimate':'property_search',()=>fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.any([providerDeadline,AbortSignal.timeout(stage==='estimate'?20000:60000)])}),{accountId,operationKey});
+    const r=await dealMachineRequest(db,stage==='estimate'?'search_estimate':'property_search',()=>fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',cache:'no-store',signal:AbortSignal.any([providerDeadline,AbortSignal.timeout(stage==='estimate'?45000:60000)])}),{accountId,operationKey});
     httpStatus=r.status;
     if(!r.ok){
      // An unsupported FREE estimate may retire a test arm. A paid request,
