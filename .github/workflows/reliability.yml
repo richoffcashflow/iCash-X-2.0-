@@ -90,6 +90,8 @@ jobs:
         run: python3 scripts/test-seller-opener-footer-free-postgres.py
       - name: Verify ordinary calling hours avoid unrelated owner evidence locks
         run: python3 scripts/test-outreach-predicates-postgres.py
+      - name: Verify exact voice holds and fresh final admission under concurrent receipts
+        run: python3 scripts/test-voice-contact-holds-postgres.py
       - name: Verify workflow selection skips unrelated locked capacity and history
         run: python3 scripts/test-workflow-stall-postgres.py
       - name: Verify bounded configuration recovery and concurrent admission
