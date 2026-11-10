@@ -1,5 +1,20 @@
 # Four November business numbers
 
+## November 10 additions
+
+The owner added (505) 601-9451, (505) 507-2937 and (512) 779-1343 to the same
+pool. `november_additional_business_numbers` extends only the existing exact
+number boundaries and installs these three SMS rows disabled. The separate
+`november_additional_sender_pacing` migration applies the existing 200/day,
+20/hour, three-minute spacing and daytime policy to all three. Prior usage,
+disabled lines, conversations and caller-ID verification requirements remain.
+After the matching production release, connect each from the existing Calls
+screen, confirm its active lease and forwarding, and then enable its SMS row.
+Outgoing calls require an actual verified Twilio caller ID; registration alone
+does not prove calling or text delivery.
+
+## Original November 8 additions
+
 The owner requested (646) 295-9838, (862) 381-2530, (786) 672-7869 and
 (646) 249-4809, with the provider's warning against overnight bursts.
 
