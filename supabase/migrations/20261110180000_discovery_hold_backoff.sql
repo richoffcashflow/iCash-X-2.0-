@@ -31,10 +31,10 @@ end $patch$;
 do $patch$
 declare source text:=pg_get_functiondef('public.icash_claim_discovery_estimate(uuid,jsonb,jsonb,jsonb,jsonb)'::regprocedure);
 begin
- if md5(source)='da303ff6d69e242a92d7b84e0a4bdf54' then return;end if;
- if md5(source)<>'760292449e06f417895203534592aacd' then raise exception 'Unexpected icash_claim_discovery_estimate predecessor';end if;
+ if md5(source) in ('da303ff6d69e242a92d7b84e0a4bdf54','72f06a3af226068aa5485d7746bf068a') then return;end if;
+ if md5(source) not in ('760292449e06f417895203534592aacd','67c5feb3f5e1f71126fd6c923fc593f7') then raise exception 'Unexpected icash_claim_discovery_estimate predecessor';end if;
  source:=replace(source,$before$lease_until=now()+interval '1 minute',retry_at=null$before$,$after$lease_until=now()+interval '90 seconds',retry_at=null$after$);
- if md5(source)<>'da303ff6d69e242a92d7b84e0a4bdf54' then raise exception 'Unexpected icash_claim_discovery_estimate replacement';end if;
+ if md5(source) not in ('da303ff6d69e242a92d7b84e0a4bdf54','72f06a3af226068aa5485d7746bf068a') then raise exception 'Unexpected icash_claim_discovery_estimate replacement';end if;
  execute source;
 end $patch$;
 commit;
