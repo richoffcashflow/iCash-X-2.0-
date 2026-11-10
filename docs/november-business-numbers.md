@@ -13,6 +13,14 @@ screen, confirm its active lease and forwarding, and then enable its SMS row.
 Outgoing calls require an actual verified Twilio caller ID; registration alone
 does not prove calling or text delivery.
 
+If the forwarding update loses its response or returns malformed data, the
+connection action makes one fresh readback without repeating the update. Only
+the exact active lease, reception and destination checks can save readiness;
+a queued result remains pending. Owner-only errors identify the provider step
+without exposing response values or credentials. An unresolved update leaves
+the number held. This does not clear any separately disabled or carrier-blocked
+SMS sender.
+
 ## Original November 8 additions
 
 The owner requested (646) 295-9838, (862) 381-2530, (786) 672-7869 and

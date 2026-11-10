@@ -15,8 +15,11 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,target
  if(typeof window!=='undefined'||!env.CONTIGUITY_API_KEY||!/^AC[a-f\d]{32}$/i.test(env.TWILIO_ACCOUNT_SID??'')||!env.TWILIO_AUTH_TOKEN)throw new BusinessPhoneError('The calling connection is unavailable.');
  const account=env.TWILIO_ACCOUNT_SID!,auth='Basic '+Buffer.from(account+':'+env.TWILIO_AUTH_TOKEN).toString('base64');
  async function read(url:string,headers:Record<string,string>,body?:unknown){
-  const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{...headers,Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(8000)});
-  const label=url.includes('OutgoingCallerIds')?'Twilio caller ID':url.includes('IncomingPhoneNumbers')?'Twilio reception':url.includes('call_forwarding')?'Contiguity call routing':'Contiguity leased numbers';
+  const label=url.includes('OutgoingCallerIds')?'Twilio caller ID':url.includes('IncomingPhoneNumbers')?'Twilio reception':url.includes('call_forwarding')?`Contiguity call routing ${body===undefined?'check':'update'}`:'Contiguity leased numbers';
+  const signal=AbortSignal.timeout(8000);
+  let r:Response;
+  try{r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{...headers,Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal});}
+  catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out':'could not be reached'}. ${body===undefined?'Refresh to check again.':'Refresh before retrying the change.'}`);}
   if(!r.ok){
    let reason='';
    try{
@@ -31,10 +34,18 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,target
    throw new BusinessPhoneError(`${label} returned HTTP ${r.status}${reason?': '+reason:'.'} ${body===undefined?'':'Refresh before retrying the change.'}`.trim());
   }
   if(r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??''))throw new BusinessPhoneError(`${label} returned an unexpected response.`);
-  return JSON.parse((await boundedBytes(r,262144)).toString('utf8')) as unknown;
+  try{return JSON.parse((await boundedBytes(r,262144)).toString('utf8')) as unknown;}
+  catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out while reading the response':'returned an unreadable response'}. Refresh before retrying.`);}
  }
- async function forwarding(){const r=forwardingSchema.parse(await read(`https://api.contiguity.com/numbers/lease/${encodeURIComponent(targetPhone)}/call_forwarding`,{Authorization:'Bearer '+env.CONTIGUITY_API_KEY}));if(r.data.number!==targetPhone)throw new BusinessPhoneError('The provider returned a different number.');return r.data.call_forwarding;}
- async function leased(){const r=leaseSchema.parse(await read('https://api.contiguity.com/numbers/leased',{Authorization:'Token '+env.CONTIGUITY_API_KEY}));return r.data.numbers.some(n=>n.number.e164===targetPhone&&n.lease_status==='active'&&n.capabilities.channels.includes('sms'));}
+ function parseForwarding(value:unknown,action:'check'|'update'){
+  const r=forwardingSchema.safeParse(value);
+  // Use only fixed schema field names, never provider values or Zod messages.
+  if(!r.success){const fields=['number','enabled','to','status','estimated_completion'];const field=fields.find(field=>r.error.issues.some(issue=>issue.path.at(-1)===field));throw new BusinessPhoneError(`Contiguity call routing ${action} returned an invalid${field?' '+field:''} response. Refresh before retrying.`);}
+  if(r.data.data.number!==targetPhone)throw new BusinessPhoneError('The provider returned a different number.');
+  return r.data.data.call_forwarding;
+ }
+ async function forwarding(){return parseForwarding(await read(`https://api.contiguity.com/numbers/lease/${encodeURIComponent(targetPhone)}/call_forwarding`,{Authorization:'Bearer '+env.CONTIGUITY_API_KEY}),'check');}
+ async function leased(){const r=leaseSchema.safeParse(await read('https://api.contiguity.com/numbers/leased',{Authorization:'Token '+env.CONTIGUITY_API_KEY}));if(!r.success)throw new BusinessPhoneError('Contiguity leased numbers returned an invalid response.');return r.data.data.numbers.some(n=>n.number.e164===targetPhone&&n.lease_status==='active'&&n.capabilities.channels.includes('sms'));}
  async function callerId(){
   const r=obj(await read(`https://api.twilio.com/2010-04-01/Accounts/${account}/OutgoingCallerIds.json?PhoneNumber=${encodeURIComponent(targetPhone)}&PageSize=2`,{Authorization:auth}));
   if(!Array.isArray(r.outgoing_caller_ids)||r.outgoing_caller_ids.length>1||r.next_page_uri!==null)throw new BusinessPhoneError('Caller ID could not be verified.');
@@ -47,8 +58,8 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,target
  }
  return {account,forwarding,leased,callerId,ingress,enable:async()=>{
   if(env.VERCEL_ENV!=='production')throw new BusinessPhoneError('Connect this number from the live admin page.');
-  const r=forwardingSchema.parse(await read(`https://api.contiguity.com/numbers/lease/${encodeURIComponent(targetPhone)}/call_forwarding/enable`,{Authorization:'Bearer '+env.CONTIGUITY_API_KEY},{to:businessVoiceIngress}));
-  if(r.data.number!==targetPhone||!r.data.call_forwarding.enabled||r.data.call_forwarding.to!==businessVoiceIngress)throw new BusinessPhoneError('The provider has not confirmed incoming routing.');return r.data.call_forwarding;
+  const r=parseForwarding(await read(`https://api.contiguity.com/numbers/lease/${encodeURIComponent(targetPhone)}/call_forwarding/enable`,{Authorization:'Bearer '+env.CONTIGUITY_API_KEY},{to:businessVoiceIngress}),'update');
+  if(!r.enabled||r.to!==businessVoiceIngress)throw new BusinessPhoneError('The provider has not confirmed incoming routing.');return r;
  }};
 }
 export async function inspectBusinessPhone(env:Env,fetcher:typeof fetch=fetch,targetPhone:string=secondaryBusinessPhone){
@@ -62,8 +73,15 @@ export async function connectBusinessPhone(database:Database,env:Env,fetcher:typ
  const before=await inspectBusinessPhone(env,fetcher,targetPhone);
  if(!before.leaseActive||!before.ingressReady)throw new BusinessPhoneError('The number or AI reception is not ready.');
  if(before.differentDestination)throw new BusinessPhoneError('This number already forwards somewhere else. Review that destination first.');
- if(!before.incoming&&!before.incomingPending)await businessVoiceProviders(env,fetcher,targetPhone).enable();
+ let updateError:BusinessPhoneError|undefined;
+ if(!before.incoming&&!before.incomingPending){
+  try{await businessVoiceProviders(env,fetcher,targetPhone).enable();}
+  catch(e){if(!(e instanceof BusinessPhoneError))throw e;updateError=e;}
+ }
+ // An update can finish even when its response is lost or malformed. Read once
+ // without repeating the POST, and require the same exact provider checks.
  const checked=await inspectBusinessPhone(env,fetcher,targetPhone);
+ if(updateError&&(!checked.leaseActive||!checked.ingressReady||!checked.incoming&&!checked.incomingPending))throw updateError;
  await database('rpc/icash_save_business_voice_number','POST',{p_phone:targetPhone,p_account_sid:checked.providerAccountSid,p_caller_id_sid:checked.callerIdSid,p_forwarding:checked.incoming,p_enabled:checked.incoming&&checked.callerIdVerified});
  return checked;
 }
