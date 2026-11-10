@@ -231,8 +231,8 @@
 .workspace.workspace.workspace :global(.console-header img){width:138px;height:74px}
 .workspace.workspace.workspace :global(.brand-version){font-size:19px;font-weight:750;letter-spacing:0;color:#111}
 .workspace.workspace.workspace :global(.console-main){max-width:1360px;padding:0 40px 32px;margin:0 auto}
-.workspace.workspace.workspace :global(.workspace-course-launcher){font-size:15px;color:#fff;background:#171717;font-weight:650;gap:10px;padding:10px 14px}
-.workspace.workspace.workspace :global(.workspace-course-launcher:hover){background:#333;color:#fff}
+.workspace.workspace.workspace :global(.workspace-course-launcher){font-size:15px;color:#171717;background:#fff;border:1px solid #d4d4d4;font-weight:650;gap:10px;padding:10px 14px}
+.workspace.workspace.workspace :global(.workspace-course-launcher:hover){background:#fff;border-color:#a3a3a3;color:#171717}
 .workspace.workspace.workspace :global(.workspace-course-launcher:focus-visible){outline:2px solid #171717;outline-offset:4px}
 .courseUpdateBadge{display:inline-block;flex:none;padding:3px 7px;border:1px solid #d4d4d4;border-radius:20px;background:#fff;color:#171717;font-size:11px;font-weight:700;line-height:1.2;white-space:nowrap}
 .workspace :global(.workspace-account-options) .courseUpdateBadge{margin-inline-start:auto}
