@@ -9,6 +9,9 @@ const one=async(sql,args=[])=>Object.values((await db.query(sql,args)).rows[0])[
 const schema=readFileSync(new URL('../config/usage-loop-tracking.sql',import.meta.url),'utf8');
 assert.equal(schema,readFileSync(new URL('../supabase/migrations/20261015075651_usage_loop_tracking.sql',import.meta.url),'utf8'));
 try{
+ // Fixtures use the same calendar as the report, including DST transitions.
+ await db.exec("set time zone 'America/Chicago'");
+ assert.equal(await one("select count(distinct (d at time zone 'America/Chicago')::date) from (values ('2026-11-10 05:04:00+00'::timestamptz - interval '9 days'),('2026-11-10 05:04:00+00'::timestamptz - interval '8 days')) v(d)"),2,'fixture days remain distinct across the fall-back transition');
  await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
  create table public.icash_accounts(id uuid primary key,owner_user_id uuid not null);
  create table public.icash_funding_orders(id uuid primary key,account_id uuid,mode text,state text,paid_at timestamptz,credited_at timestamptz,price_cents bigint,stripe_payment_id text,daily_plan_id uuid);
