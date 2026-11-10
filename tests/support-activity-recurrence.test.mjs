@@ -43,3 +43,37 @@ for(const q of ['How do I cancel my subscription?','Where is the course?','The s
 assert.equal(supportAccountReviewReply({kind:'account',messages:[user('On the home page')],evidence})?.managementReview??false,false);
 assert.equal(supportAccountReviewReply({kind:'account',messages:[...pendingHistory,operator('A separate billing finding is under review.'),user('On the home page')],evidence})?.managementReview??false,false);
 assert.equal(modelCalls,0);
+
+// Fictional workspace progress reports must not fall through to generic help.
+for(const question of [
+ 'My app has been running since yesterday without any movement or updates.',
+ 'The workspace is running but there is no progress.',
+ 'My bot has been running for hours without activity.'
+]){
+ const r=await ask([user(question)]);
+ assert.equal(r.managementReview,true,question);assert.equal(r.status,'open');
+ assert.match(r.reply,/setting alone does not prove/);assert.doesNotMatch(r.reply,/What are you trying|restart|refresh/i);
+ const page=await ask([user(question),assistant('Which page are you looking at?'),user('Home')]);
+ assert.equal(page.managementReview,true);assert.equal(page.status,'open');
+ const thanks=await ask([user(question),assistant(r.reply),user('Thanks')]);
+ assert.notEqual(thanks.status,'resolved');
+}
+for(const question of [
+ 'The app is running fine. How do I update my name?',
+ 'The app has been running without updates to the seller price.',
+ 'My browser is running without any movement.',
+ 'The course video is running without any movement.',
+ 'The app video is running without progress.',
+ 'Can I keep the app running without activity?',
+ 'The app has been running without progress, but it is working now.',
+ 'How do I keep the app running without installing updates?'
+])assert.equal(supportAccountReviewReply({kind:'account',messages:[user(question)],evidence})?.managementReview??false,false,question);
+const stalledApp=[user('My app has been running all day without progress.'),assistant('Which page is open?')];
+for(const tail of [
+ [user('Where is the course?')],
+ [operator('A separate browser problem remains under review.'),user('Home')],
+ [user('The app is working now.'),assistant('Glad that worked.'),user('Home')]
+])assert.equal(supportAccountReviewReply({kind:'account',messages:[...stalledApp,...tail],evidence})?.managementReview??false,false);
+assert.match((await ask([...stalledApp,user('Cancel my subscription')])).reply,/Cancel subscription/);
+assert.equal(modelCalls,0);
+console.log('PASS running workspace progress complaints and negative/topic/operator boundaries');
