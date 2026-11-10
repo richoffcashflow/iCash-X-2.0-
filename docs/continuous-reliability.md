@@ -291,3 +291,15 @@ holds, source-bound voice-to-text continuation, machine-answer classification
 and the actual outbound registration prompt. Focused replay fixtures and native
 reply/receipt races accompany the patches; explicit buyer test holds remain.
 Production behavior is verified only after the exact application release.
+
+## November 10 scheduler latency
+
+| Failure observed | Change | Closure evidence |
+| --- | --- | --- |
+| General/message scheduling times out while repeatedly scanning historical sender and export records | [Routing lookup indexes](scheduler-routing-lookup-indexes.md) serve the original exact predicates without changing receipt or admission rules. | Production indexes are valid. A rolled-back general-lane profile improved from 7.317 to 3.189 seconds. Ordinary work subsequently saved new contact results and recorded accepted and delivered texts; empty/held results are not counted as outreach. |
+| Selection still fully validates hundreds of known ineligible contacts and repeatedly prepares existing channel pairs | [Fast selection](scheduler-fast-selection.md) adds a conservative, read-only quality hint and skips only already-present exact voice/SMS pairs. | Real quality-rule equivalence, cold/warm/missing-channel/account/source cases, generic plans, atomic drift rejection, unchanged final gates and native competing queues/Pause/receipt revocation. The deployment record and measured live profile are recorded in the linked change note. |
+
+The worker and maintenance components recovered after the timeout repair. Overall
+health remains degraded by separate unresolved workflow evidence, including
+number-verification and agent-review holds. Preserve those original holds;
+scheduler speed is not proof that blocked calls or historical receipts succeeded.
