@@ -27,6 +27,23 @@ test('seven fixed reads return exact canonical hash without review, prompt or se
  const a=f[0];assert.equal(result.observedConfigHash,sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:null,procedures:null}))));
  for(const text of ['PRIVATE_PROMPT',key,accountSid,'secret__','request_headers','reviewedAt','reviewedUntil','enabled'])assert(!JSON.stringify(result).includes(text),text);
 });
+test('provider readiness accepts the exact disabled-detector representation using the original review',async()=>{
+ const f=fixtures(),a=f[0];
+ a.platform_settings.guardrails={synthetic_voice:{is_enabled:false,trigger_action:{type:'end_call'}}};
+ const hash=sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:null,procedures:null})));
+ const review={...t,enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+3600000).toISOString(),configHash:hash,providerAccountSid:accountSid,toolIds:[t.callbackToolId,t.handoffToolId,t.stopToolId,t.contractToolId],approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:'required-audio-30d-speech-v1'};
+ delete a.platform_settings.guardrails.synthetic_voice.trigger_action;
+ a.platform_settings.guardrails.human_voice={is_enabled:false};
+ const saved=structuredClone({f,review}),env={RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review)};
+ const good=await inspect(f,undefined,env);
+ assert.equal(good.result.providerChecksPass,true);assert.equal(good.result.checks.activeReviewMatches,true);
+ assert.notEqual(good.result.observedConfigHash,hash,'Report the actual observed hash without replacing the original approval');
+ assert.equal(good.calls.length,7);assert.deepEqual({f,review},saved);
+ for(const mutate of [x=>x[0].platform_settings.guardrails.human_voice.is_enabled=true,x=>x[0].conversation_config.agent.prompt.prompt+=' changed',x=>x[4].tool_config.api_schema.url='https://foreign.invalid']){
+  const changed=structuredClone(f);mutate(changed);
+  assert.equal((await inspect(changed,undefined,env)).result.providerChecksPass,false,'Actual provider inspection retains independent checks');
+ }
+});
 test('drift, wrong branch/version, tool substitution, assignments and partial evidence fail closed',async()=>{
  const changes=[f=>f[0].version_id='agtvrsn_other',f=>f[0].branch_id='agtbrch_other',f=>f[0].conversation_config.conversation.max_duration_seconds=60,f=>f[0].platform_settings.privacy.record_voice=true,f=>f[0].platform_settings.call_limits.bursting_enabled=true,f=>f[0].conversation_config.agent.prompt.tool_ids.push('tool_extra'),f=>f[0].phone_numbers.push({secret:'unreturned'}),f=>f[1].results[0].draft_exists=true,f=>f[1].results[0].current_live_percentage=1,f=>f[1].meta.total=2,f=>f[1].results.push({...f[1].results[0]}),f=>f[3].tool_config.api_schema.request_headers.Authorization={secret_id:'DO_NOT_EXPOSE'},f=>f[4].tool_config.api_schema.url='https://foreign.invalid',f=>f[4].tool_config.api_schema.request_headers.Extra='secret',f=>f[2].webhooks.post_call_webhook_id='hook'];
  for(const mutate of changes){const f=fixtures();mutate(f);const {result}=await inspect(f);assert.equal(result.providerChecksPass,false);assert(!JSON.stringify(result).includes('DO_NOT_EXPOSE'));}
