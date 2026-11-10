@@ -5,19 +5,27 @@ export async function verifyConversationInbox(browser,base,options,name){
  page.setDefaultTimeout(12000);
  const data=makeWorkspaceFixture({count:1});data.textAttention=[];data.propertyAttentionIds=[];data.conversations=[];
  const dealId=data.deals[0].id,screenId=data.properties[0].id,tid='66666666-6666-4666-8666-666666666666',rid='33333333-3333-4333-8333-333333333333',phone='+12025550101';
- let manual=false,blocked=false,zeroCredits=false;const read=new Set(),readRequests=[];const replyId='77777777-7777-4777-8777-777777777777';
+ let manual=false,blocked=false,zeroCredits=false,contactFailure=true,availabilityFailure=false;
+ let releaseAvailability;const availabilityWait=new Promise(resolve=>{releaseAvailability=resolve;});
+ const read=new Set(),readRequests=[];const replyId='77777777-7777-4777-8777-777777777777';
  const first={id:'initial',thread_id:tid,direction:'outgoing',author:'bot',body:'Hi Alex, would you consider a cash offer for 100 Example Street?',state:'delivered',created_at:'2026-10-21T14:00:00Z'};
  const messages=[{...first,id:replyId,direction:'incoming',author:'contact',body:'Yes, I would like to hear more.',state:'received',created_at:'2026-10-21T14:02:00Z'},first];
  const calls=[{id:rid,source:'outbound',party:'seller',completedAt:'2026-10-21T14:01:00Z',durationSeconds:42,recordingId:rid,transcriptAvailable:false,recordingReceipt:{id:rid,status:'available',durationSeconds:42,audioAvailable:true,audioExpiresAt:'2027-01-01T00:00:00Z'}}];
+ data.conversations=[{id:rid,source:'outbound',screening_id:screenId,party:'seller',completed_at:'2026-10-21T14:01:00Z',durationSeconds:42,summary:'Seller said: I would consider a cash offer.',voicemail:false},{id:'99999999-9999-4999-8999-999999999999',source:'outbound',screening_id:screenId,party:'seller',completed_at:'2026-10-21T14:00:00Z',summary:'Automated voicemail greeting.',voicemail:true}];
  page.on('pageerror',e=>errors.push(e.message));
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url()),p=url.pathname;
   if(url.origin!==base)return route.abort();
   if(!p.startsWith('/api/'))return route.continue();
   if(p==='/api/work/messages/read'){const body=req.postDataJSON();assert.equal(body.threadId,tid);readRequests.push(body.messageIds);body.messageIds.forEach(id=>read.add(id));return route.fulfill({json:{saved:true}});}
+  if(p==='/api/work/messages/availability'){
+   await availabilityWait;
+   if(availabilityFailure)return route.fulfill({status:503,json:{error:'Unavailable'}});
+   return route.fulfill({json:{threadId:tid,manualReply:true,sendReason:blocked?'This contact asked not to be texted.':null}});
+  }
   if(p==='/api/work/messages'){
    if(req.method()==='POST'){const body=req.postDataJSON();sends.push(body);manual=true;messages.unshift({...first,id:'manual',author:'you',body:body.message,created_at:'2026-10-21T14:03:00Z'});return route.fulfill({json:{manual:true,status:'message_accepted',state:'delivered'}});}
-   return route.fulfill({json:{threads:[{id:tid,recipient:phone,party:'seller',paused:manual,manualReply:true,sendReason:blocked?'This contact asked not to be texted.':null}],threadId:tid,messages,calls:url.searchParams.get('includeCalls')==='true'?calls:[],callsUnavailable:false,next:null,nextThread:null,firstMessage:first}});
+   return route.fulfill({json:{availabilityRequired:true,threads:[{id:tid,recipient:phone,party:'seller',paused:manual,manualReply:false,sendReason:'Checking text availability…'}],threadId:tid,messages,calls:url.searchParams.get('includeCalls')==='true'?calls:[],callsUnavailable:false,next:null,nextThread:null,firstMessage:first}});
   }
   if(req.method()!=='GET'){
    if(p==='/api/work/control'){manual=false;return route.fulfill({json:{saved:true}});}
@@ -27,10 +35,11 @@ export async function verifyConversationInbox(browser,base,options,name){
   if(p==='/api/work/activity'){
    const unread=messages.filter(m=>m.direction==='incoming'&&!read.has(m.id)).length;
    const omitted=url.searchParams.get('view')==='unread'&&!unread&&!url.searchParams.has('screeningId');
-   return route.fulfill({json:{...data,properties:omitted?[]:data.properties,sellerTexts:omitted?[]:[{screening_id:screenId,thread_id:tid,message_id:replyId,preview:'Yes, I would like to hear more.',received_at:'2026-10-21T14:02:00Z',unread_count:unread}],textReplyCounts:{properties:1,unreadProperties:unread?1:0,unreadMessages:unread},replyOrder:omitted?[]:[screenId],controls:manual?[{property_id:data.properties[0].result.property.propertyId}]:[]}});
+   return route.fulfill({json:{...data,conversations:omitted?[]:data.conversations,properties:omitted?[]:data.properties,sellerTexts:omitted?[]:[{screening_id:screenId,thread_id:tid,message_id:replyId,preview:'Yes, I would like to hear more.',received_at:'2026-10-21T14:02:00Z',unread_count:unread}],textReplyCounts:{properties:1,unreadProperties:unread?1:0,unreadMessages:unread},replyOrder:omitted?[]:[screenId],controls:manual?[{property_id:data.properties[0].result.property.propertyId}]:[]}});
   }
-  if(p==='/api/work/text-contact')return route.fulfill({json:{dealId,threadId:tid,contacts:[{phone,name:'Alex Seller',phone_type:'wireless',blocked:false}]}});
-  if(p==='/api/work/call-history')return route.fulfill({json:{recordings:[],next:null}});
+  if(p==='/api/work/text-contact')return contactFailure?route.fulfill({status:503,json:{error:'Unavailable'}}):route.fulfill({json:{dealId,threadId:tid,contacts:[{phone,name:'Alex Seller',phone_type:'wireless',blocked:false}]}});
+  if(p==='/api/work/call-history')return route.fulfill({json:{recordings:[{...calls[0].recordingReceipt,source:'outbound',party:'seller',createdAt:'2026-10-21T14:01:00Z',conversationId:rid,voicemail:false}],next:null}});
+  if(p==='/api/work/conversation')return route.fulfill({json:{transcript:[{role:'user',message:'I would consider a cash offer.'}],next:null}});
   if(p==='/api/work/manual-call')return route.fulfill({json:{contacts:[],personalCalls:[]}});
   if(p==='/api/work/browser-call')return route.fulfill({json:{ready:false}});
   if(p==='/api/work/property-photo')return route.fulfill({json:{photo:null}});
@@ -48,13 +57,24 @@ export async function verifyConversationInbox(browser,base,options,name){
   const card=page.locator('#property-'+screenId);await card.getByRole('button',{name:'Open seller reply, 1 unread text'}).click();
   const dialog=page.getByRole('dialog'),log=dialog.getByRole('log',{name:'Conversation history'});
   await log.getByText(first.body,{exact:true}).waitFor();await log.getByText('AI bot',{exact:true}).waitFor();
+  await log.getByText(messages[0].body,{exact:true}).waitFor();
+  const textbox=dialog.getByRole('textbox',{name:'Text message',exact:true});
+  await textbox.fill('Can we talk about your property this afternoon?');
+  assert(await dialog.getByRole('button',{name:'Send text',exact:true}).isDisabled(),'Replies load before contact and sending availability recover');
+  availabilityFailure=true;releaseAvailability();
+  await dialog.getByText('Text sending is temporarily unavailable. Your conversation and draft are saved.',{exact:true}).waitFor();
+  assert.equal(await textbox.inputValue(),'Can we talk about your property this afternoon?');assert(await log.getByText(messages[0].body,{exact:true}).isVisible());
+  availabilityFailure=false;contactFailure=false;
   assert.equal(await log.locator('audio').count(),0,'Texts stay separate from calls by default');
   await page.screenshot({path:`/tmp/icash-texts-default-${name.startsWith('mobile')?'mobile':'desktop'}.png`});
   await dialog.getByRole('checkbox',{name:'Include calls',exact:true}).check();await log.locator('audio[aria-label="Call recording"]').waitFor();assert.equal(await log.getByText('Call details and transcript',{exact:true}).count(),0);
   assert.equal(sends.length,0);assert(!otherWrites.includes('/api/work/text-contact'),'Opening existing history sends and creates nothing');
   await page.waitForFunction(()=>!document.querySelector('.seller-text-alert'));assert.deepEqual(readRequests.flat(),[replyId]);assert(await dialog.isVisible(),'Reading keeps the conversation open after leaving the unread list');
-  const textbox=dialog.getByRole('textbox',{name:'Text message',exact:true});await textbox.fill('Can we talk about your property this afternoon?');
-  await dialog.getByRole('button',{name:'Calls',exact:true}).click();
+  await textbox.fill('Can we talk about your property this afternoon?');
+  await dialog.getByRole('button',{name:/^Calls/}).click();
+  await dialog.getByText('Seller said: I would consider a cash offer.',{exact:true}).waitFor();
+  assert.equal(await dialog.getByText('Automated voicemail greeting.',{exact:true}).count(),0);
+  await page.screenshot({path:`/tmp/icash-calls-${name.startsWith('mobile')?'mobile':'desktop'}.png`});
   const laterId='88888888-8888-4888-8888-888888888888';messages.unshift({...messages[0],id:laterId,body:'Can we discuss the price?',created_at:'2026-10-21T14:02:30Z'});
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await page.locator('.seller-text-alert').waitFor({state:'attached'});
   assert(!read.has(laterId),'A reply arriving while viewing calls stays unread');

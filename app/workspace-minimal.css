@@ -185,6 +185,16 @@
 
 .minimal-workspace .contact-dialog-heading>div{min-width:0;overflow-wrap:anywhere}
 .minimal-workspace .contact-dialog-close{width:44px;height:44px;min-width:44px;flex:none}
+.minimal-workspace .property-contact-dialog .contact-dialog-heading{padding:14px 20px}
+.minimal-workspace .property-contact-dialog .conversation-control{padding:8px 20px;font-size:12px}
+.minimal-workspace .property-contact-dialog .conversation-thread-heading{padding:10px 20px}
+.minimal-workspace .property-contact-dialog .property-messages{overflow:hidden}
+.minimal-workspace .property-contact-dialog .contact-recovery{align-self:flex-start;flex:none;margin:4px 16px;font-size:12px;min-height:32px;padding:4px 8px}
+.minimal-workspace .property-contact-dialog .call-summary-copy{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.6;margin:12px 0;max-height:150px;overflow:auto;color:#333}
+.minimal-workspace .property-contact-dialog .call-archive{margin-top:18px;font-size:12px;color:#777}
+.minimal-workspace .property-contact-dialog .call-archive summary{cursor:pointer;min-height:40px;align-content:center}
+.minimal-workspace .property-contact-dialog .call-summary-card{margin:12px 0;padding:16px;border:1px solid #e6e6e6;border-radius:12px;background:#fff;box-shadow:none}
+.minimal-workspace .property-contact-dialog .manual-call-options{padding:14px;margin:12px 0 20px}
 .minimal-workspace .property-contact-dialog .seller-contact-identity>div{min-width:0;overflow-wrap:anywhere}
 @media(max-width:600px){
  .minimal-workspace .contact-dialog-heading{padding-top:max(16px,env(safe-area-inset-top))}

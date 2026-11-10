@@ -6,7 +6,7 @@ import {twilioUsdChargeMicros,twilioUnansweredCall} from '../lib/twilio-usd-cost
 import {boundedBytes,createRecordingProviders} from '../lib/required-call-recording-provider.ts';
 const originalFetch=globalThis.fetch,oldAccount=process.env.TWILIO_ACCOUNT_SID,oldSecret=process.env.TWILIO_AUTH_TOKEN;
 const ac='AC'+'a'.repeat(32),ca='CA'+'b'.repeat(32),child='CA'+'c'.repeat(32),secret='fixture-auth-token-for-browser',account='11111111-1111-4111-8111-111111111111',actor='22222222-2222-4222-8222-222222222222',screen='33333333-3333-4333-8333-333333333333',id='44444444-4444-4444-8444-444444444444',business='+12025550101',recipient='+12025550102',callback='client:icash_'+'a'.repeat(64),created=new Date().toISOString();
-let row=null,dials=0,claims=0,reads=0;
+let row=null,dials=0,claims=0,reads=0,ownerContext=null;
 const parent={sid:ca,from:business,to:callback,account_sid:ac,direction:'outbound-api',date_created:created,status:'in-progress'};
 try{
  process.env.TWILIO_ACCOUNT_SID=ac;process.env.TWILIO_AUTH_TOKEN=secret;
@@ -22,6 +22,7 @@ try{
   if(path==='rpc/icash_manual_contacts')return [{phone:recipient,blocked:false}];
   if(path==='rpc/icash_manual_contact_reason')return null;
   if(path==='rpc/icash_customer_call_sender'){assert.deepEqual(body,{p_account:account,p_screening:screen,p_recipient:recipient});return business;}
+  if(path==='rpc/icash_owner_contact_action'){assert.deepEqual({actor:body.p_actor,account:body.p_account,view:body.p_view,session:body.p_session,action:body.p_action},{actor,account,view:ownerContext.viewId,session:ownerContext.sessionId,action:'begin_call'});body=body.p_request;path='rpc/icash_begin_customer_phone_call';}
   if(path==='rpc/icash_begin_customer_phone_call'){assert.equal(body.p_quote.connectionType,'browser');assert.equal(body.p_quote.callbackMicrosPerMinute,4000);row={id,account_id:account,actor_id:actor,screening_id:screen,callback_phone:callback,recipient_phone:recipient,business_phone:business,provider_account_sid:ac,nonce_hash:body.p_nonce_hash,connection_type:'browser',recording_required:true,max_seconds:600,created_at:created,state:'dispatching',parent_sid:null,ended_at:null,connected_at:null};return {created:true,call:{...row}};}
   if(path==='rpc/icash_connect_customer_phone_call'){claims++;if(row.connected_at)return false;row.connected_at=created;row.state='connecting';return true;}
   throw Error('Unexpected fixture database call '+path);
@@ -36,5 +37,6 @@ try{
  assert(!(await (await m.customerPhoneWebhook(request('answer'),'answer')).text()).includes('<Dial'),'Connect receipt is single use');
  assert(!(await (await m.customerPhoneWebhook(request('connect',ca,true,{Digits:'1'}),'connect')).text()).includes('<Dial'),'Phone connect endpoint cannot replay a browser call');
  assert.match(await (await m.customerPhoneWebhook(request('notice',child),'notice')).text(),/being recorded/);
+ row=null;ownerContext={viewId:'55555555-5555-4555-8555-555555555555',sessionId:'66666666-6666-4666-8666-666666666666'};const ownerStarted=await m.startCustomerPhoneCall({...input,ownerView:ownerContext});assert.equal(ownerStarted.parentSid,ca);assert.equal(dials,2);await m.startCustomerPhoneCall({...input,ownerView:ownerContext});assert.equal(dials,2,'Owner click retry uses the same call receipt');
  console.log('PASS browser service: client destination, verified business caller ID, recorded bounded call, idempotent start, account scope, signed webhook, single-use direct connect and seller notice.');
 }finally{globalThis.fetch=originalFetch;if(oldAccount===undefined)delete process.env.TWILIO_ACCOUNT_SID;else process.env.TWILIO_ACCOUNT_SID=oldAccount;if(oldSecret===undefined)delete process.env.TWILIO_AUTH_TOKEN;else process.env.TWILIO_AUTH_TOKEN=oldSecret;}

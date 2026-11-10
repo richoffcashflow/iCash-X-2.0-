@@ -20,7 +20,14 @@ for(const dir of ['admin','owner-reception','owner-inbound-acceptance','owner-re
   const source=readFileSync(new URL(file,root),'utf8');
   if(dir==='admin'&&file.startsWith('accounts/')){
    assert.match(source,/from '@\/lib\/owner-account-access'/,file);
-   assert.match(source,/await ownerAccount(?:Actor|View)\(/,file);
+   if(file==='accounts/view/[viewId]/contact/[...action]/route.ts'){
+    assert.match(source,/from '@\/lib\/owner-contact-access'/,file);
+    assert.match(source,/await ownerContactAccess\(/,file);
+    assert.match(source,/await ownerContactEndAccess\(/,file);
+    const contactAccess=readFileSync(new URL('../lib/owner-contact-access.ts',import.meta.url),'utf8');
+    assert.match(contactAccess,/await ownerAccountView\(viewId\)/);
+    assert.match(contactAccess,/await ownerAccountActor\(\)/);
+   }else assert.match(source,/await ownerAccount(?:Actor|View)\(/,file);
    assert.match(readFileSync(new URL('../lib/owner-account-access.ts',import.meta.url),'utf8'),/await dashboardCurrentUser\(true\)/);
   }else assert.match(source,/from '@\/lib\/dashboard-password'/,dir+'/'+file);
  }

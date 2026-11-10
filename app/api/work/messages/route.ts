@@ -30,11 +30,12 @@ export async function GET(req:Request){
  requestKey?db<{state:string;request_key:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&customer_author_id=eq.${userId}&request_key=eq.${requestKey}&select=state,request_key&limit=1`):Promise.resolve([]),
  db<Message[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threadId}&select=${messageFields}&order=created_at.asc,id.asc&limit=1`)
  ]):[[],[],[]];
- const present=({customer_author_id,request_key,...message}:Message)=>({...message,author:message.direction==='incoming'?'contact':customer_author_id?'you':'bot',retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null});
+ const present=({customer_author_id,request_key,...message}:Message)=>({...message,author:message.direction==='incoming'?'contact':customer_author_id===userId?'you':customer_author_id?'operator':'bot',retryKey:customer_author_id===userId&&message.state==='ready'?request_key:null});
  const messages=rows.slice(0,20).map(present),last=messages.at(-1),current=threads.find(t=>t.id===threadId);
  const callsResult=current&&params.get('includeCalls')==='true'?threadConversationCalls(db,accountId,{...current,dealId},before??null,rows.length>20&&last?last.created_at:null,process.env.ICASH_RECORDING_RECEIPTS_READY==='true'):Promise.resolve({calls:[],callsUnavailable:false});
- const sendReason=threadId?await db<string|null>('rpc/icash_manual_text_reason','POST',{p_account:accountId,p_thread:threadId}):null;
- return NextResponse.json({...await callsResult,threads:threads.map(t=>({...t,reply:summaries.find(s=>s.thread_id===t.id)??null,manualReply:true,sendReason:t.id===threadId?sendReason:null})),threadId,messages,firstMessage:firstRows[0]?present(firstRows[0]):null,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threadRows[19].id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
+ // Reading saved messages must not depend on a live spending/contact admission
+ // check. The composer checks availability separately; POST keeps final admission.
+ return NextResponse.json({...await callsResult,availabilityRequired:true,threads:threads.map(t=>({...t,reply:summaries.find(s=>s.thread_id===t.id)??null,manualReply:false,sendReason:t.id===threadId?'Checking text availability…':null})),threadId,messages,firstMessage:firstRows[0]?present(firstRows[0]):null,receipt:requestKey?(receipts[0]??{state:'not_found',request_key:requestKey}):null,nextThread:threadRows.length>20?threadRows[19].id:null,next:rows.length>20&&last?{before:last.created_at,beforeId:last.id}:null},{headers});
  }catch{return NextResponse.json({error:'Messages unavailable'},{status:400,headers});}
 }
 export async function POST(req:Request){

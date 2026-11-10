@@ -11,9 +11,9 @@ import {conversationTimeline,type ConversationCall} from '@/lib/conversation-tim
 import {createPollCadence} from '@/lib/poll-cadence';
 import {messageSpeaker,safeLocalTime} from './workspace-view';
 type Thread={reply?:{preview:string;received_at:string;unread_count:number}|null;id:string;recipient:string;paused:boolean;manualReply?:boolean;sendReason?:string|null;name?:string;party?:string};
-type Message={author?:'bot'|'you'|'contact';id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;retryKey?:string|null;attachments?:{url:string;filename?:string}[]};
-type Data={threads:Thread[];messages:Message[];firstMessage?:Message|null;calls?:ConversationCall[];callsUnavailable?:boolean;receipt?:TextReceipt|null;threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
-export function DealMessages({draftRequest,dealId,initialThreadId='',contactNames={},active=true,onTakeover,historyOnly=false}:{draftRequest?:AssistantDraft;dealId:string;historyOnly?:boolean;initialThreadId?:string;contactNames?:Record<string,string>;active?:boolean;onTakeover?:()=>void}){
+type Message={author?:'bot'|'you'|'contact'|'customer'|'operator';id:string;thread_id:string;direction:string;body:string;state:string;created_at:string;retryKey?:string|null;attachments?:{url:string;filename?:string}[]};
+type Data={availabilityRequired?:boolean;threads:Thread[];messages:Message[];firstMessage?:Message|null;calls?:ConversationCall[];callsUnavailable?:boolean;receipt?:TextReceipt|null;threadId?:string;nextThread:string|null;next:{before:string;beforeId:string}|null};
+export function DealMessages({apiBase='/api/work',markRead=true,draftRequest,dealId,initialThreadId='',contactNames={},active=true,onTakeover,historyOnly=false}:{apiBase?:string;markRead?:boolean;draftRequest?:AssistantDraft;dealId:string;historyOnly?:boolean;initialThreadId?:string;contactNames?:Record<string,string>;active?:boolean;onTakeover?:()=>void}){
  const [data,setData]=useState<(Data&{scope:string})|null>(null),[error,setError]=useState(''),[threadId,setThreadId]=useState(initialThreadId),[afterThread,setAfterThread]=useState(''),[page,setPage]=useState<{before:string;beforeId:string}|null>(null),[refresh,setRefresh]=useState(0),[drafts,setDrafts]=useState<Record<string,string>>({});
  const [includeCalls,setIncludeCalls]=useState(false);
  const container=useRef<HTMLDivElement>(null);
@@ -27,7 +27,7 @@ export function DealMessages({draftRequest,dealId,initialThreadId='',contactName
   if(!active)return;const controller=new AbortController(),cadence=createPollCadence();let inFlight=false,timer:ReturnType<typeof setTimeout>|undefined,delay=5000;
   async function load(){if(document.hidden||inFlight)return;inFlight=true;try{
    const pending=attempts.current[threadId||selectedThread.current];
-   const q=new URLSearchParams({dealId,...(includeCalls?{includeCalls:'true'}:{}),...(afterThread?{afterThread}:{}),...(threadId?{threadId}:{}),...(pending?{requestKey:pending.key}:{}),...page});const response=await fetch(`/api/work/messages?${q}`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20000)]),cache:'no-store'});if(!response.ok)throw Error();const next=await response.json() as Data;if(!controller.signal.aborted){
+   const q=new URLSearchParams({dealId,...(includeCalls?{includeCalls:'true'}:{}),...(afterThread?{afterThread}:{}),...(threadId?{threadId}:{}),...(pending?{requestKey:pending.key}:{}),...page});const response=await fetch(`${apiBase}/messages?${q}`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20000)]),cache:'no-store'});if(!response.ok)throw Error();const next=await response.json() as Data;if(!controller.signal.aborted){
     selectedThread.current=next.threadId??'';
     const attempt=next.threadId?attempts.current[next.threadId]:undefined;
     if(attempt&&reconcileTextAttempt(attempt,next.receipt))setDrafts(d=>d[next.threadId!]?.trim()===attempt.body?{...d,[next.threadId!]:''}:d);
@@ -39,10 +39,31 @@ export function DealMessages({draftRequest,dealId,initialThreadId='',contactName
   const poll=async()=>{await load();if(!controller.signal.aborted)timer=setTimeout(poll,delay);};
   const visible=()=>{if(!document.hidden&&!inFlight){clearTimeout(timer);delay=5000;void poll();}};
   const unsubscribe=subscribeWorkspaceChanges(visible);void poll();document.addEventListener('visibilitychange',visible);return()=>{controller.abort();unsubscribe();clearTimeout(timer);document.removeEventListener('visibilitychange',visible);};
- },[active,dealId,threadId,page,afterThread,refresh,scope,includeCalls]);
+ },[apiBase,active,dealId,threadId,page,afterThread,refresh,scope,includeCalls]);
  const current=data?.scope===scope?data.threads.find(t=>t.id===data.threadId):undefined;
+ const [availability,setAvailability]=useState<{scope:string;sendReason:string|null;manualReply:boolean}|null>(null);
+ const availabilityScope=current?`${dealId}:${current.id}`:'';
  useEffect(()=>{
-  if(!active||!current||data?.scope!==scope||error)return;
+  if(!active||historyOnly||!data?.availabilityRequired||!current?.id)return;
+  setAvailability(null);
+  const controller=new AbortController(),id=current.id;let timer:ReturnType<typeof setTimeout>|undefined;
+  async function check(){
+   if(document.hidden){timer=setTimeout(()=>void check(),10000);return;}
+   try{
+    const response=await fetch(`${apiBase}/messages/availability?threadId=${encodeURIComponent(id)}`,{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
+    const next=await response.json();
+    if(!response.ok||next.threadId!==id||next.manualReply!==true||(next.sendReason!==null&&typeof next.sendReason!=='string'))throw Error();
+    if(!controller.signal.aborted)setAvailability({scope:availabilityScope,sendReason:next.sendReason,manualReply:true});
+   }catch{if(!controller.signal.aborted)setAvailability({scope:availabilityScope,sendReason:'Text sending is temporarily unavailable. Your conversation and draft are saved.',manualReply:false});}
+   if(!controller.signal.aborted)timer=setTimeout(()=>void check(),10000);
+  }
+  void check();return()=>{controller.abort();clearTimeout(timer);};
+ },[apiBase,active,historyOnly,data?.availabilityRequired,current?.id,availabilityScope,refresh]);
+ const conversationThread=current&&data?.availabilityRequired&&!historyOnly?{...current,
+  manualReply:availability?.scope===availabilityScope&&availability.manualReply,
+  sendReason:availability?.scope===availabilityScope?availability.sendReason:'Checking text availability…'}:current;
+ useEffect(()=>{
+  if(!markRead||!active||!current||data?.scope!==scope||error)return;
   const candidates=data.messages.filter(m=>m.direction==='incoming'&&m.state==='received'&&!readIds.current.has(m.id)).map(m=>m.id);
   if(!candidates.length)return;
   const log=container.current?.querySelector<HTMLElement>('.message-history');if(!log)return;
@@ -50,14 +71,14 @@ export function DealMessages({draftRequest,dealId,initialThreadId='',contactName
    const bounds=log.getBoundingClientRect();
    const ids=candidates.filter(id=>{const node=log.querySelector<HTMLElement>(`[data-message-id="${id}"]`);if(!node)return false;const box=node.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>Math.max(0,bounds.top)&&box.top<Math.min(window.innerHeight,bounds.bottom);});
    if(!ids.length)return;readInFlight.current=true;try{
-    const response=await fetch('/api/work/messages/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:current.id,messageIds:ids}),signal:AbortSignal.timeout(10000)});
+    const response=await fetch(`${apiBase}/messages/read`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:current.id,messageIds:ids}),signal:AbortSignal.timeout(10000)});
     if(!response.ok)throw Error();ids.forEach(id=>readIds.current.add(id));notifyWorkspaceChanges();
    }catch{/* Keep unconfirmed messages unread; the next view or refresh can retry. */}finally{readInFlight.current=false;}};
   let timer:ReturnType<typeof setTimeout>;
   const schedule=()=>{clearTimeout(timer);timer=setTimeout(()=>void save(),300);};
   schedule();document.addEventListener('visibilitychange',schedule);log.addEventListener('scroll',schedule);window.addEventListener('resize',schedule);
   return()=>{clearTimeout(timer);document.removeEventListener('visibilitychange',schedule);log.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
- },[active,current,data,scope,error]);
+ },[apiBase,markRead,active,current,data,scope,error]);
  const handledSuggestion=useRef(0);
  const [suggestion,setSuggestion]=useState<AssistantDraft|null>(null);
  useEffect(()=>{if(!draftRequest||draftRequest.nonce===handledSuggestion.current||!active||historyOnly||!current||current.id!==draftRequest.threadId||data?.scope!==scope||error)return;
@@ -76,17 +97,22 @@ export function DealMessages({draftRequest,dealId,initialThreadId='',contactName
  <div className="conversation-thread-pane">
  {suggestion&&current?.id===suggestion.threadId&&<section className="assistant-draft-review" aria-label="Suggested reply"><strong>Review your suggested reply</strong><p>The conversation changed or you already have a draft. Read the latest messages before using this suggestion.</p><blockquote>{suggestion.body}</blockquote><button type="button" disabled={!!error||!active||!!attempts.current[current.id]?.busy||!!attempts.current[current.id]?.held} onClick={()=>{if(drafts[current.id]?.trim()&&!window.confirm('Replace your unsent draft with this suggested reply?'))return;setDrafts(d=>({...d,[current.id]:suggestion.body}));setSuggestion(null);}}>Use suggested reply</button><button type="button" onClick={()=>setSuggestion(null)}>Keep my draft</button></section>}
  {!current&&!error&&(!data||data.scope!==scope)&&<p className="conversation-loading" role="status">Loading conversation…</p>}
- {current&&<><div className="conversation-thread-heading"><div><strong>{contactNames[current.recipient]??(current.party==='buyer'?'Buyer':'Seller')}</strong><span><PrivatePhone>{current.recipient}</PrivatePhone></span></div><label className="conversation-call-toggle"><input type="checkbox" checked={includeCalls} onChange={e=>setIncludeCalls(e.target.checked)}/>Include calls</label></div><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest activity</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older messages</button>}</div><Conversation firstMessage={firstMessage} historyOnly={historyOnly} calls={active&&includeCalls?(data?.calls??[]).filter(c=>!c.voicemail):[]} callsUnavailable={includeCalls&&(data?.callsUnavailable??false)} onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} thread={current} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
+ {current&&<><div className="conversation-thread-heading"><div><strong>{contactNames[current.recipient]??(current.party==='buyer'?'Buyer':'Seller')}</strong><span><PrivatePhone>{current.recipient}</PrivatePhone></span></div><label className="conversation-call-toggle"><input type="checkbox" checked={includeCalls} onChange={e=>setIncludeCalls(e.target.checked)}/>Include calls</label></div><div className="history-pages">{page&&<button onClick={()=>setPage(null)}>Latest activity</button>}{data?.next&&<button onClick={()=>setPage(data.next)}>Older messages</button>}</div><Conversation apiBase={apiBase} active={active} firstMessage={firstMessage} historyOnly={historyOnly} calls={active&&includeCalls?(data?.calls??[]).filter(c=>!c.voicemail):[]} callsUnavailable={includeCalls&&(data?.callsUnavailable??false)} onTakeover={onTakeover} key={current.id} attempts={attempts.current} stale={!!error||!active} draft={drafts[current.id]??''} onDraft={value=>setDrafts(d=>({...d,[current.id]:value}))} thread={conversationThread!} messages={data?.messages.slice().reverse()??[]} onSent={()=>{setPage(null);setRefresh(v=>v+1);}}/></>}
  </div></div>
  </div>;
 }
-function Conversation({firstMessage,historyOnly=false,calls,callsUnavailable,onTakeover,thread,messages,onSent,draft,onDraft,attempts,stale}:{firstMessage:Message|null;historyOnly?:boolean;calls:ConversationCall[];callsUnavailable:boolean;onTakeover?:()=>void;thread:Thread;messages:Message[];onSent:()=>void;draft:string;onDraft:(value:string)=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
+function Conversation({apiBase,active,firstMessage,historyOnly=false,calls,callsUnavailable,onTakeover,thread,messages,onSent,draft,onDraft,attempts,stale}:{apiBase:string;active:boolean;firstMessage:Message|null;historyOnly?:boolean;calls:ConversationCall[];callsUnavailable:boolean;onTakeover?:()=>void;thread:Thread;messages:Message[];onSent:()=>void;draft:string;onDraft:(value:string)=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
  const timeline=conversationTimeline(messages,calls);
  const log=useRef<HTMLDivElement>(null),nearLatest=useRef(true),[showLatest,setShowLatest]=useState(false);
- useEffect(()=>{if(nearLatest.current&&log.current)log.current.scrollTop=log.current.scrollHeight;},[timeline.at(-1)?.key,timeline.length]);
- return <div className="conversation-body">{firstMessage&&<details className="conversation-first-message"><summary>First message · {safeLocalTime(firstMessage.created_at)}</summary><strong>{messageSpeaker(firstMessage.direction,thread.party,firstMessage.author)}</strong><p>{firstMessage.body}</p><small>{firstMessage.direction==='outgoing'?textStateLabel(firstMessage.state):'Received'}</small></details>}<div className="conversation-log-wrap"><div ref={log} className="message-history" role="log" aria-live="polite" aria-label="Conversation history" onScroll={()=>{const node=log.current;if(node){nearLatest.current=node.scrollHeight-node.scrollTop-node.clientHeight<64;setShowLatest(!nearLatest.current);}}}>
+ useEffect(()=>{
+  const node=log.current;if(!active||!node)return;
+  const follow=()=>{if(nearLatest.current&&node.clientHeight){node.scrollTop=node.scrollHeight;setShowLatest(false);}};
+  follow();const observer=new ResizeObserver(follow);observer.observe(node);Array.from(node.children).forEach(child=>observer.observe(child));
+  return()=>observer.disconnect();
+ },[active,timeline.at(-1)?.key,timeline.length]);
+ return <div className="conversation-body">{firstMessage&&<details className="conversation-first-message"><summary>First message · {safeLocalTime(firstMessage.created_at)}</summary><strong>{messageSpeaker(firstMessage.direction,thread.party,firstMessage.author)}</strong><p>{firstMessage.body}</p><small>{firstMessage.direction==='outgoing'?textStateLabel(firstMessage.state):'Received'}</small></details>}<div className="conversation-log-wrap"><div ref={log} className="message-history" role="log" aria-live="polite" aria-label="Conversation history" onScroll={()=>{const node=log.current;if(active&&node?.clientHeight){nearLatest.current=node.scrollHeight-node.scrollTop-node.clientHeight<64;setShowLatest(!nearLatest.current);}}}>
   {!timeline.length&&!callsUnavailable&&<p>No conversation yet.</p>}
-  {timeline.map((entry,index)=>{const day=new Date(entry.at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});const previous=index?new Date(timeline[index-1].at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):null;const divider=day!==previous?<div className="conversation-date"><span>{day}</span></div>:null;if(entry.kind==='call')return <Fragment key={entry.key}>{divider}<CallConversation {...entry.call} onRefreshRecording={onSent}/></Fragment>;const message=entry.message;return <Fragment key={entry.key}>{divider}<article data-message-id={message.id} className={`message-bubble ${message.direction==='outgoing'?'message-outgoing':'message-incoming'}`}>
+  {timeline.map((entry,index)=>{const day=new Date(entry.at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});const previous=index?new Date(timeline[index-1].at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):null;const divider=day!==previous?<div className="conversation-date"><span>{day}</span></div>:null;if(entry.kind==='call')return <Fragment key={entry.key}>{divider}<CallConversation apiBase={apiBase.replace(/\/contact$/,'')} {...entry.call} onRefreshRecording={onSent}/></Fragment>;const message=entry.message;return <Fragment key={entry.key}>{divider}<article data-message-id={message.id} className={`message-bubble ${message.direction==='outgoing'?'message-outgoing':'message-incoming'}`}>
    <strong className="message-speaker">{messageSpeaker(message.direction,thread.party,message.author)}</strong><p className="message-body" style={{whiteSpace:'pre-wrap'}}>{message.body}</p>
    {message.direction==='incoming'&&message.attachments?.map((attachment,index)=>{
     let safe=false;try{const url=new URL(attachment.url);safe=url.protocol==='https:'&&url.hostname==='api.contiguity.com'&&url.pathname.startsWith('/attachments/')&&!url.username&&!url.password;}catch{}
@@ -96,10 +122,10 @@ function Conversation({firstMessage,historyOnly=false,calls,callsUnavailable,onT
    {message.retryKey&&<button type="button" className="message-retry" disabled={stale||attempts[thread.id]?.busy||attempts[thread.id]?.held} onClick={()=>{if(draft.trim()&&draft.trim()!==message.body&&!window.confirm('Replace your draft with this unsent text?'))return;attempts[thread.id]={key:message.retryKey!,body:message.body,busy:false,held:false,retryable:true,status:''};onDraft(message.body);document.getElementById(`reply-${thread.id}`)?.focus();}}>Retry text</button>}
   </article></Fragment>;})}
   </div>{showLatest&&<button type="button" className="conversation-latest" onClick={()=>{nearLatest.current=true;setShowLatest(false);if(log.current)log.current.scrollTop=log.current.scrollHeight;}}><ArrowDown size={14}/>Latest activity</button>}</div>
-  {historyOnly?<p>Automatic intake messages. Manual replies become available after the property is matched.</p>:<TextComposer onTakeover={onTakeover} attempts={attempts} stale={stale} thread={thread} message={draft} setMessage={onDraft} onSent={()=>{nearLatest.current=true;onSent();}}/>}
+  {historyOnly?<p>Automatic intake messages. Manual replies become available after the property is matched.</p>:<TextComposer apiBase={apiBase} onTakeover={onTakeover} attempts={attempts} stale={stale} thread={thread} message={draft} setMessage={onDraft} onSent={()=>{nearLatest.current=true;onSent();}}/>}
  </div>;
 }
-function TextComposer({onTakeover,thread,message,setMessage,onSent,attempts,stale}:{onTakeover?:()=>void;thread:Thread;message:string;setMessage:(value:string)=>void;onSent:()=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
+function TextComposer({apiBase,onTakeover,thread,message,setMessage,onSent,attempts,stale}:{apiBase:string;onTakeover?:()=>void;thread:Thread;message:string;setMessage:(value:string)=>void;onSent:()=>void;attempts:Record<string,SendAttempt>;stale:boolean}){
  const [,update]=useState(0);
  const attempt=attempts[thread.id],busy=attempt?.busy??false,held=attempt?.held??false,status=attempt?.status??'';
  const replyBlocked=!!thread.sendReason||(thread.paused&&!thread.manualReply);
@@ -110,7 +136,7 @@ function TextComposer({onTakeover,thread,message,setMessage,onSent,attempts,stal
   const prior=attempts[thread.id];
   const request:SendAttempt={key:prior?.retryable&&prior.body===body?prior.key:crypto.randomUUID(),body,busy:true,held:false,status:''};attempts[thread.id]=request;update(n=>n+1);
   try{
-   const response=await fetch('/api/work/messages',{method:'POST',signal:AbortSignal.timeout(45000),headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,requestKey:request.key,message:body})});const result=await response.json();
+   const response=await fetch(`${apiBase}/messages`,{method:'POST',signal:AbortSignal.timeout(45000),headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,requestKey:request.key,message:body})});const result=await response.json();
    if(result.manual===true)onTakeover?.();
    if(result.notSent){request.status=result.error||'Text not sent. Your draft is saved.';request.retryable=result.state==='ready';return;}
    if(!response.ok)throw Error();
