@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {dispatchReliabilityAlerts} from '../lib/reliability-alerts-service.ts';
+import {dispatchReliabilityAlerts,reliabilityNotificationContext} from '../lib/reliability-alerts-service.ts';
 import {ownerInboundTarget} from '../lib/owner-inbound-acceptance.ts';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const env={VERCEL_ENV:'production',ICASH_RELIABILITY_EMAIL_ENABLED:'true',ICASH_RELIABILITY_FROM_EMAIL:'noreply@example.invalid',RESEND_API_KEY:'fixture',SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SECRET_KEY:'fixture'};
@@ -17,6 +17,7 @@ const transport=async(url,options)=>{
  if(String(url).includes('/auth/v1/admin/users/')){assert.equal(new URL(url).pathname,'/auth/v1/admin/users/'+ownerInboundTarget.ownerUserId);return Response.json(ownerValue);}
  assert.equal(url,'https://api.resend.com/emails');providerCalls++;
  const payload=JSON.parse(options.body);assert.deepEqual(payload.to,[owner.email]);assert.equal(options.headers['Idempotency-Key'],'reliability-'+claim.id);
+ assert(payload.text.includes(`Incident started: ${claim.openedAt}`));assert.match(payload.text,/Current impact: unverified/);
  if(event==='detected'){assert.equal(payload.subject,'iCash X · Minor priority');assert.match(payload.text,/Minor priority/);assert.match(payload.text,/Core background checks are healthy/);}
  else{assert.match(payload.text,/Reviewed historical alerts may still have unresolved provider receipts or blocked work/);assert.match(payload.text,/does not confirm every message was delivered/);}
  assert(!JSON.stringify(payload).includes('customer'));assert(!JSON.stringify(payload).includes('server-account'));assert(payload.text.includes('https://www.geticashx.com/admin'));
@@ -34,4 +35,12 @@ assert.equal(await run(),'idle');assert.equal(providerCalls,1);
 claimed=false;event='recovered';assert.equal(await run(),'accepted');assert.equal(providerCalls,2);
 claimed=false;failProvider=true;assert.equal(await run(),'needs_review');assert.equal(providerCalls,3);assert.equal(calls.at(-1).body.p_provider,null);
 assert.equal(await run(),'idle');assert.equal(providerCalls,3,'Uncertain provider outcome is not replayed');
+const now=Date.now(),at=new Date(now).toISOString();
+const report={fresh:true,status:'degraded',components:{worker:{status:'ok',checkedAt:at},maintenance:{status:'degraded',checkedAt:at}},snapshot:{checkedAt:at,issueCount:2,issues:[],texts:{accepted:7,delivered:4,review:0},contracts:{created:1,completed:0,review:1},accountProgress:{checkedAt:at,affectedAccounts:5,stalledAccounts:2,pendingAccounts:3,expiredConfigurations:0,unexpectedPauses:0,samples:[]}}};
+const context=reliabilityNotificationContext(report,now);
+assert.match(context,/Stalled accounts: 2/);assert.match(context,/pending work or receipts: 3/);assert.match(context,/not a count of confirmed outages/);
+assert.match(context,/worker: ok; maintenance: degraded/);assert.match(context,/7 texts accepted, 4 delivered/);
+for(const invalid of [null,{...report,fresh:false},{...report,snapshot:{...report.snapshot,checkedAt:'2020-01-01T00:00:00Z'}},{...report,snapshot:{...report.snapshot,checkedAt:new Date(now+60000).toISOString()}}])assert.match(reliabilityNotificationContext(invalid,now),/unverified/);
+assert.match(reliabilityNotificationContext({...report,snapshot:{...report.snapshot,accountProgress:{...report.snapshot.accountProgress,checkedAt:'2020-01-01T00:00:00Z'}}},now),/Account impact and interrupted work: unverified/);
+claimed=false;failProvider=false;event='detected';assert.equal(await run({db:async(...args)=>{if(args[0].endsWith('icash_reliability_status'))throw Error('unavailable');return db(...args);}}),'accepted','Unavailable context cannot suppress incident delivery');
 console.log('PASS production-only owner alerts, verified recipient, explicit missing configuration, deterministic provider key, detected/recovered messages and receipt-only retry. No live provider requests.');

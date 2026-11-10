@@ -57,8 +57,8 @@ try{
  };
  const pending=svc.discoverForAccount('account');
  while(!paidSignal)await new Promise(r=>setImmediate(r));
- assert(clocks.has(60000));assert(clocks.has(90000));assert(!clocks.has(15000));
- clocks.get(20000).abort();assert.equal(paidSignal.aborted,false,'The completed estimate deadline cannot cancel the paid request');
+ assert(clocks.has(60000));assert(clocks.has(120000));assert(!clocks.has(20000));
+ clocks.get(45000).abort();assert.equal(paidSignal.aborted,false,'The completed estimate deadline cannot cancel the paid request');
  finishPaid();assert.equal((await pending).status,'no_new_properties');
  assert.deepEqual(events,['estimate','claim','paid']);assert(rpc.some(x=>x.path==='rpc/icash_save_discovery'));
  paidSignal=null;events=[];rpc=[];clocks.clear();
@@ -67,8 +67,26 @@ try{
  clocks.get(60000).abort(new DOMException('Fixture timeout','TimeoutError'));await timeout;
  assert.deepEqual(events,['estimate','claim','paid']);assert(!rpc.some(x=>x.path==='rpc/icash_save_discovery'));
  events=[];rpc=[];clocks.clear();
- globalThis.fetch=async(url,opt)=>{const response=await originalFetch(url,opt);clocks.get(90000).abort(new DOMException('Fixture deadline','TimeoutError'));return response;};
+ globalThis.fetch=async(url,opt)=>{const response=await originalFetch(url,opt);clocks.get(120000).abort(new DOMException('Fixture deadline','TimeoutError'));return response;};
  await assert.rejects(svc.discoverForAccount('account'),e=>e.name==='TimeoutError');
  assert.deepEqual(events,['estimate'],'An expired total deadline cannot reserve or start a paid request');
+ events=[];rpc=[];clocks.clear();let estimateSignal,finishEstimate;
+ globalThis.fetch=async(url,opt)=>{
+  if(!JSON.parse(opt.body).estimate_cost)return originalFetch(url,opt);
+  events.push('estimate');estimateSignal=opt.signal;
+  return new Promise((resolve,reject)=>{finishEstimate=()=>resolve(Response.json({estimated_credits:{this_page:1,breakdown:{people:0}}}));opt.signal.addEventListener('abort',()=>reject(opt.signal.reason),{once:true});});
+ };
+ const slowEstimate=svc.discoverForAccount('account');
+ while(!estimateSignal)await new Promise(r=>setImmediate(r));
+ for(const [ms,clock] of clocks)if(ms<=30000)clock.abort();
+ assert.equal(estimateSignal.aborted,false,'A free response after 30 seconds must still be usable');
+ finishEstimate();assert.equal((await slowEstimate).status,'no_new_properties');
+ assert.deepEqual(events,['estimate','claim','paid']);
+ events=[];rpc=[];clocks.clear();estimateSignal=null;
+ const estimateTimeout=assert.rejects(svc.discoverForAccount('account'),e=>e.stage==='estimate'&&e.httpStatus===null);
+ while(!estimateSignal)await new Promise(r=>setImmediate(r));
+ clocks.get(45000).abort(new DOMException('Fixture timeout','TimeoutError'));await estimateTimeout;
+ assert.deepEqual(events,['estimate'],'An expired free estimate cannot purchase or replay a page');
+ assert(rpc.some(x=>x.path==='rpc/icash_finish_discovery_estimate'&&x.body.p_response===null),'Persist the existing free-request backoff');
 }finally{AbortSignal.timeout=originalTimeout;globalThis.fetch=originalFetch;}
 console.log('Filter service: bounded longer search, deadline admission, settlement and no replay after uncertain paid requests passed.');

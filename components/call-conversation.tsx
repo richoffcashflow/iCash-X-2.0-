@@ -1,12 +1,13 @@
 'use client';
 import {useEffect, useRef, useState} from 'react';
+import {PhoneIncoming, PhoneOutgoing} from 'lucide-react';
 import {safeLocalTime} from './workspace-view';
 import {CallRecording, type ReceiptResult} from './call-recording';
 import {conversationDisplaySummary} from '@/lib/conversation-display';
 
 type TranscriptPage = {scope: string; before: number | null; transcript: {role: string; message: string}[]; next: number | null};
 
-export function CallConversation({apiBase='/api/work', id, source='outbound', initiallyOpen=false, recordingId, recordingReceipt, onRefreshRecording, transcriptAvailable=true, party, summary, completedAt, durationSeconds, nextAction, interested, optedOut, humanRequested}: {apiBase?:string; initiallyOpen?:boolean; id: string; source?: 'outbound'|'reception'|'personal'; recordingId?: string; recordingReceipt?: ReceiptResult; onRefreshRecording?: () => void; transcriptAvailable?: boolean; party: string; summary?: string; completedAt?: string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean}) {
+export function CallConversation({apiBase='/api/work', id, source='outbound', inline=false, initiallyOpen=false, recordingId, recordingReceipt, onRefreshRecording, transcriptAvailable=true, party, summary, completedAt, durationSeconds, nextAction, interested, optedOut, humanRequested}: {apiBase?:string; inline?:boolean; initiallyOpen?:boolean; id: string; source?: 'outbound'|'reception'|'personal'; recordingId?: string; recordingReceipt?: ReceiptResult; onRefreshRecording?: () => void; transcriptAvailable?: boolean; party: string; summary?: string; completedAt?: string;durationSeconds?:number;nextAction?:string;interested?:boolean;optedOut?:boolean;humanRequested?:boolean}) {
   const scope = `${apiBase}:${source}:${id}`;
   const [open, setOpen] = useState(initiallyOpen);
   const [data, setData] = useState<TranscriptPage | null>(null);
@@ -38,13 +39,23 @@ export function CallConversation({apiBase='/api/work', id, source='outbound', in
     return () => {controller.abort(); running.current = false;};
   }, [apiBase, id, source, scope, open, before, attempt, transcriptAvailable]);
 
-  return <article className="call-summary-card"><header><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call{source === 'reception' ? ' · Incoming' : source==='personal'?' · You':''}</strong>{transcriptAvailable&&<span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span>}</header><small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small>{summary && <p className="call-summary-copy">{conversationDisplaySummary(summary,party)}</p>}<CallRecording apiBase={apiBase} key={`${source}:${recordingId ?? id}`} conversationId={id} recordingId={recordingId} receipt={recordingReceipt} onRefresh={onRefreshRecording} source={source}/>{nextAction&&<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>}{transcriptAvailable&&<details open={open} onToggle={event => {
+  const incoming=source==='reception';
+  const summaryContent=summary?<p className="call-summary-copy">{conversationDisplaySummary(summary,party)}</p>:null;
+  const nextStep=nextAction?<div className="call-next-step"><strong>Next step</strong><p>{nextAction}</p></div>:null;
+  return <article className={inline?'conversation-call-entry':'call-summary-card'} data-direction={inline?(incoming?'incoming':'outgoing'):undefined}>
+    <header>{inline?<strong>{incoming?<PhoneIncoming size={15} aria-hidden="true"/>:<PhoneOutgoing size={15} aria-hidden="true"/>}{incoming?'Incoming call':'Outgoing call'}</strong>:<><strong>{party === 'seller' ? 'Seller' : party === 'buyer' ? 'Buyer' : 'Contact'} call{incoming ? ' · Incoming' : source==='personal'?' · You':''}</strong>{transcriptAvailable&&<span>{optedOut?'Do not contact':humanRequested?'Needs you':interested?'Interested':'Completed'}</span>}</>}</header>
+    <small>{completedAt ? safeLocalTime(completedAt) : 'Time not recorded'}{typeof durationSeconds==='number'&&Number.isFinite(durationSeconds)&&durationSeconds>=0?` · ${Math.floor(durationSeconds/60)}m ${Math.floor(durationSeconds%60)}s`:''}</small>
+    {!inline&&summaryContent}
+    <CallRecording apiBase={apiBase} key={`${source}:${recordingId ?? id}`} conversationId={id} recordingId={recordingId} receipt={recordingReceipt} onRefresh={onRefreshRecording} source={source} compact={inline}/>
+    {!inline&&nextStep}
+    {(transcriptAvailable||inline&&(summary||nextAction))&&<details className={inline?'conversation-call-details':undefined} open={open} onToggle={event => {
     if (event.target !== event.currentTarget) return;
     setOpen(event.currentTarget.open);
     if (!event.currentTarget.open) {setData(null); setError(null);}
   }}>
-    <summary>Call details and transcript</summary>
-    {open && <>
+    <summary>{inline?'Call details':'Call details and transcript'}</summary>
+    {inline&&open&&<>{summaryContent}{nextStep}{(optedOut||humanRequested||interested)&&<p>{optedOut?'Do not contact':humanRequested?'Needs you':'Interested'}</p>}</>}
+    {open && transcriptAvailable && <>
       {!current && (currentError ? <>
         <p role="alert">{currentError}</p>
         <button type="button" onClick={() => {

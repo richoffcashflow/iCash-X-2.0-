@@ -44,7 +44,7 @@ function dateLabel(value: string | null) {
   return new Date(value).toLocaleString('en-US',{hour12:true});
 }
 
-function ReceiptDetails({apiBase='/api/work', receipt, source='outbound', playbackAttempt=0, onPlaybackError}: {apiBase?:string; receipt: ReceiptResult; source?: RecordingSource; playbackAttempt?: number; onPlaybackError?: () => void}) {
+function ReceiptDetails({apiBase='/api/work', receipt, source='outbound', compact=false, playbackAttempt=0, onPlaybackError}: {apiBase?:string; receipt: ReceiptResult; source?: RecordingSource; compact?:boolean; playbackAttempt?: number; onPlaybackError?: () => void}) {
   return <>
     {receipt.status !== 'available' && <p>{recordingStates[receipt.status]}</p>}
     {receipt.status === 'available' && 'id' in receipt && receipt.id && <>
@@ -52,15 +52,15 @@ function ReceiptDetails({apiBase='/api/work', receipt, source='outbound', playba
         src={source==='personal'?`${apiBase}/business-call?id=${encodeURIComponent(receipt.id)}&audio=1`:`${apiBase}/${source === 'reception' ? 'reception-recording' : 'recording'}/audio?id=${encodeURIComponent(receipt.id)}`} style={{width:'100%'}}>
         Your browser does not support audio playback.
       </audio>
-      {receipt.audioExpiresAt && <small>Available until {dateLabel(receipt.audioExpiresAt)}.</small>}
+      {!compact && receipt.audioExpiresAt && <small>Available until {dateLabel(receipt.audioExpiresAt)}.</small>}
     </>}
   </>;
 }
 
 /** Audio stays visible independently of the optional transcript. */
-export function CallRecording({apiBase='/api/work', conversationId, recordingId, source='outbound', receipt, onRefresh}: {
+export function CallRecording({apiBase='/api/work', conversationId, recordingId, source='outbound', compact=false, receipt, onRefresh}: {
   apiBase?:string; conversationId?: string; recordingId?: string; source?: RecordingSource;
-  receipt?: ReceiptResult; onRefresh?: () => void;
+  compact?:boolean; receipt?: ReceiptResult; onRefresh?: () => void;
 }) {
   const scope = `${apiBase}:${source}:${recordingId ?? conversationId ?? ''}`;
   const [state, setState] = useState<ReceiptState>({scope, phase: 'loading'});
@@ -104,16 +104,16 @@ export function CallRecording({apiBase='/api/work', conversationId, recordingId,
   // A changed property or source must never display the previous call's audio.
   const current = receipt !== undefined ? {phase: 'ready' as const, receipt} : state.scope === scope ? state : {phase: 'loading' as const};
   const callOutcome=current.phase==='ready'&&current.receipt&&'callOutcome' in current.receipt&&['failed','absent'].includes(current.receipt.status)?current.receipt.callOutcome:null;
-  if(callOutcome)return <section className="conversation-call-update" aria-label="Call update"><strong>{callOutcome==='no-answer'?'Not answered yet':'Line was busy'}</strong><p>{callOutcome==='no-answer'?'This call wasn’t answered, so there’s no recording.':'The line was busy, so there’s no recording.'} The lead and this contact attempt are saved.</p></section>;
-  return <section className="conversation-call-player" aria-label="Call recording">
-    <h4>Listen to call recording</h4>
+  if(callOutcome)return compact?<p className="conversation-call-note">{callOutcome==='no-answer'?'No answer · No recording':'Busy · No recording'}</p>:<section className="conversation-call-update" aria-label="Call update"><strong>{callOutcome==='no-answer'?'Not answered yet':'Line was busy'}</strong><p>{callOutcome==='no-answer'?'This call wasn’t answered, so there’s no recording.':'The line was busy, so there’s no recording.'} The lead and this contact attempt are saved.</p></section>;
+  return <section className={`conversation-call-player${compact?' conversation-call-player-compact':''}`} aria-label="Call recording">
+    {!compact && <h4>Listen to call recording</h4>}
     {current.phase === 'loading' && <p role="status">Loading recording…</p>}
     {current.phase === 'error' && <>
       <p role="alert">Could not load this recording.</p>
       <button type="button" onClick={retry}>Retry recording</button>
     </>}
     {current.phase === 'ready' && 'receipt' in current && current.receipt && <>
-      <ReceiptDetails apiBase={apiBase} receipt={current.receipt} source={source} playbackAttempt={playbackAttempt} onPlaybackError={() => setPlaybackError(scope)}/>
+      <ReceiptDetails apiBase={apiBase} receipt={current.receipt} source={source} compact={compact} playbackAttempt={playbackAttempt} onPlaybackError={() => setPlaybackError(scope)}/>
       {current.receipt.status === 'available' && playbackError === scope && <>
         <p role="alert">Audio could not play. Try loading the recording again.</p>
         <button type="button" onClick={() => {setPlaybackError(''); setPlaybackAttempt(value => value + 1); retry();}}>Retry playback</button>
