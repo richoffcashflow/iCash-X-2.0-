@@ -54,3 +54,45 @@ for(const phone of [...voiceOnlyBusinessPhones,...novemberBusinessPhones]){
  await assert.rejects(connectBusinessPhone(db,env,fetcher,phone));assert.equal(writes.length,0);assert(requests.every(r=>r.method==='GET'));
 }
 console.log('PASS both new business numbers: verified outbound only, provider revocation, exact forwarding, queued idempotency and existing-destination protection.');
+
+// Recover an uncertain update only from fresh, exact provider reads. None of
+// these fixtures place a call, send a message, or retry the configuration POST.
+target='+15055072937';
+for(const outcome of ['active','queued','disabled','different destination','expired lease','wrong ingress','unreadable check']){
+ reset();
+ const uncertain=async(url,init)=>{
+  if(url.endsWith('/enable')){
+   await fetcher(url,init);
+   if(outcome==='queued')f.status='queued';
+   if(outcome==='disabled')f.enabled=false;
+   if(outcome==='different destination')f.to=first;
+   if(outcome==='expired lease')lease=false;
+   if(outcome==='wrong ingress')route=false;
+   throw new TypeError('private transport detail '+env.CONTIGUITY_API_KEY);
+  }
+  if(outcome==='unreadable check'&&f.enabled&&url.endsWith('/call_forwarding'))return Response.json({private:env.TWILIO_AUTH_TOKEN});
+  return fetcher(url,init);
+ };
+ if(outcome==='active'||outcome==='queued'){
+  const recovered=await connectBusinessPhone(db,env,uncertain,target);
+  assert.equal(recovered.incoming,outcome==='active');assert.equal(recovered.incomingPending,outcome==='queued');
+  assert.equal(writes.length,1);assert.equal(writes[0].body.p_forwarding,outcome==='active');assert.equal(writes[0].body.p_enabled,false);
+ }else{
+  await assert.rejects(connectBusinessPhone(db,env,uncertain,target),e=>e.message.startsWith('Contiguity call routing')&&!e.message.includes('private')&&!e.message.includes(env.CONTIGUITY_API_KEY)&&!e.message.includes(env.TWILIO_AUTH_TOKEN));
+  assert.equal(writes.length,0,'Unconfirmed routing never changes saved readiness');
+ }
+ assert.equal(requests.filter(r=>r.method==='POST').length,1,'Recovery performs no second configuration mutation');
+}
+for(const response of [()=>new Response('{bad-json',{headers:{'Content-Type':'application/json'}}),()=>Response.json({object:'response',data:{number:target,call_forwarding:{...f,estimated_completion:'not-a-number'}}})]){
+ reset();
+ const malformed=async(url,init)=>{const r=await fetcher(url,init);return url.endsWith('/enable')?response():r;};
+ assert.equal((await connectBusinessPhone(db,env,malformed,target)).incoming,true,'Fresh active confirmation recovers malformed update receipts');
+ assert.equal(writes.length,1);assert.equal(requests.filter(r=>r.method==='POST').length,1);
+}
+reset();
+await assert.rejects(connectBusinessPhone(db,env,async(url,init)=>{
+ if(url.endsWith('/enable')){requests.push({url,method:init.method});return Response.json({object:'response',data:{number:target,call_forwarding:{...f,estimated_completion:'private '+env.CONTIGUITY_API_KEY}}});}
+ return fetcher(url,init);
+},target),/Contiguity call routing update returned an invalid estimated_completion response/);
+assert.equal(writes.length,0);
+console.log('PASS connection recovery: one update, exact fresh readback, queued holds, malformed/lost responses, redacted errors and no false readiness.');
