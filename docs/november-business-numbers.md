@@ -21,6 +21,12 @@ without exposing response values or credentials. An unresolved update leaves
 the number held. This does not clear any separately disabled or carrier-blocked
 SMS sender.
 
+Live verification of (505) 507-2937 exposed an eight-second timeout in the
+forwarding update. Explicit setup now allows thirty seconds for that one POST;
+ordinary provider reads retain their eight-second bound. The owner action has
+matching browser and route budgets for precheck, update, readback and save.
+Timeouts still trigger only a readback, never a second update or false readiness.
+
 ## Original November 8 additions
 
 The owner requested (646) 295-9838, (862) 381-2530, (786) 672-7869 and

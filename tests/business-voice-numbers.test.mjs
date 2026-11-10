@@ -96,3 +96,19 @@ await assert.rejects(connectBusinessPhone(db,env,async(url,init)=>{
 },target),/Contiguity call routing update returned an invalid estimated_completion response/);
 assert.equal(writes.length,0);
 console.log('PASS connection recovery: one update, exact fresh readback, queued holds, malformed/lost responses, redacted errors and no false readiness.');
+
+// Reproduce carrier setup that exceeds the former eight-second read deadline.
+// The provider only applies the update if its request remains connected.
+reset();
+const slowSetup=async(url,init)=>{
+ if(url.endsWith('/enable'))await new Promise((resolve,reject)=>{
+  const abort=()=>{clearTimeout(timer);reject(init.signal.reason);};
+  const timer=setTimeout(()=>{init.signal.removeEventListener('abort',abort);resolve();},9000);
+  if(init.signal.aborted)abort();else init.signal.addEventListener('abort',abort,{once:true});
+ });
+ return fetcher(url,init);
+};
+assert.equal((await connectBusinessPhone(db,env,slowSetup,target)).incoming,true);
+assert.equal(writes.length,1);assert.equal(writes[0].body.p_forwarding,true);
+assert.equal(requests.filter(r=>r.method==='POST').length,1);
+console.log('PASS slow forwarding setup: finishes beyond eight seconds, verifies the result and saves once without a second POST.');
