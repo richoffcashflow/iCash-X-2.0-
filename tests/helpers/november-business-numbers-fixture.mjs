@@ -65,4 +65,5 @@ export async function testNovemberNumbers(f){
  await assert.rejects(save('+12025550999',true,true,pn),/phone_check/);
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'icash_business_conversation_sender(uuid,uuid,text,boolean)','execute') allowed",[role])).allowed,false);
  console.log('PASS November numbers: exact leases, inactive installation, SMS/incoming distinction, verified-only outbound, callback receipts, Pause, suppression, continuity and atomic drift rejection.');
+ if(process.env.SENDER_HEALTH_ROUTING==='1')await (await import('./sender-health-routing-fixture.mjs')).testSenderHealthRouting(f);
 }
