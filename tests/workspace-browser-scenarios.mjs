@@ -421,23 +421,23 @@ export async function verifyWorkspace(browser,base,options,name){
     assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),1,'one phone-icon click starts browser audio once');
     assert.equal(await dialog.locator('input[type="tel"],a[href^="tel:"]').count(),0);
     assert.doesNotMatch(await dialog.innerText(),/Use my phone|Call through my phone|press 1/i);
-    await dialog.getByRole('button',{name:'Call seller',exact:true}).click();
+    await dialog.getByRole('region',{name:'Seller call',exact:true}).getByRole('button',{name:'Call seller',exact:true}).click();
     assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'explicit retry starts once');
     await dialog.getByRole('button',{name:'Close conversation'}).click();
     callMode='blocked';await card.getByRole('button',{name:/^Call /}).click();
     await dialog.getByText('This contact asked not to be called.',{exact:true}).waitFor();
-    assert.equal(await dialog.getByRole('button',{name:'Call seller',exact:true}).count(),0);
+    assert.equal(await dialog.getByRole('region',{name:'Seller call',exact:true}).getByRole('button',{name:'Call seller',exact:true}).count(),0);
     assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'actual opt-out never opens audio');
     await dialog.getByRole('button',{name:'Close conversation'}).click();
     callMode='unavailable';await card.getByRole('button',{name:/^Call /}).click();
     await dialog.getByText('Calling is temporarily unavailable.',{exact:true}).waitFor();
     callMode='single';await dialog.getByRole('button',{name:'Retry',exact:true}).click();
-    await dialog.getByRole('button',{name:'Call seller',exact:true}).waitFor();
+    await dialog.getByRole('region',{name:'Seller call',exact:true}).getByRole('button',{name:'Call seller',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'readiness recovery cannot revive an earlier call click');
     await dialog.getByRole('button',{name:'Close conversation'}).click();
     callMode='multiple';await card.getByRole('button',{name:/^Call /}).click();
     await dialog.getByText('Other Seller',{exact:true}).waitFor();
-    assert.equal(await dialog.getByRole('button',{name:'Call seller',exact:true}).count(),2);
+    assert.equal(await dialog.getByRole('region',{name:'Seller call',exact:true}).getByRole('button',{name:'Call seller',exact:true}).count(),2);
     assert.equal(await page.evaluate(()=>window.fixtureMicrophoneRequests),2,'multiple numbers require choosing a recipient');
     await dialog.getByRole('button',{name:'Close conversation'}).click();callMode='unavailable';
    }
