@@ -69,6 +69,11 @@ export function supportVipPurchaseReply(context:PurchaseContext){
  return {reply:prefix+(migration?policy+' ':'')+'If your payment was specifically for 2.0 VIP, don’t buy it again before that purchase is verified. '+next,status:sent?'open' as const:'waiting_on_customer' as const,ai:false};
 }
 
+/** A checkout-email correction needs ownership review, not another code request. */
+export function supportPurchaseEmailCorrection(text:string){
+ return /\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|correct|change|update)\b.{0,35}\b(?:checkout |purchase |sign[ -]?in )?email\b|\bemail\b.{0,35}\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|corrected)\b/i.test(text)&&!/\b(?:seller|buyer|bot|contact|settings)\b/i.test(text);
+}
+
 /** Purchase and checkout problems are not proof that a sign-in code arrived. */
 export function supportPurchaseHelp(messages:Turn[]){
  const users=messages.filter(m=>m.role==='user'),q=users.at(-1)?.content??'';
@@ -81,8 +86,7 @@ export function supportPurchaseHelp(messages:Turn[]){
   const asked=messages.some(m=>m.role!=='user'&&/exact message.*checkout/i.test(m.content));
   return {reply:asked?'The offer checkout has not been confirmed as complete. I can’t establish an active subscription or a code-delivery problem from that error. Your earlier details are saved; don’t submit another payment to troubleshoot this.':'The offer checkout needs to complete before it can grant software access. What exact message appears on the checkout page when it fails? Please leave out payment details; don’t submit another payment to troubleshoot this.',status:asked?'open' as const:'waiting_on_customer' as const};
  }
- const wrongEmail=/\b(?:wrong|incorrect|typo|misspelled|correct|change|update)\b.{0,35}\b(?:checkout |purchase |sign[ -]?in )?email\b|\bemail\b.{0,35}\b(?:wrong|incorrect|typo|misspelled|corrected)\b/i;
- if(wrongEmail.test(q)&&!/\b(?:seller|buyer|bot|contact|settings)\b/i.test(q)){
+ if(supportPurchaseEmailCorrection(q)){
   const requested=messages.some(m=>m.role!=='user'&&/\b(?:receipt|purchase)\b.{0,100}\b(?:email|correction|correct|verify|match)\b/i.test(m.content));
   return {reply:requested?'The purchase needs to be matched and ownership verified before its checkout email can be corrected. Your earlier proof details are already in this conversation. I haven’t confirmed an email change or restored access; repeating code requests won’t correct a wrong email.':`A wrong checkout email needs a purchase-ownership check before it can be corrected. Email your merchant receipt to ${supportLegacyProofEmail} with the purchase date, amount, order reference if available, and the email you intended to use. This chat has not changed the email; don’t pay again or share sign-in codes.`,status:requested?'open' as const:'waiting_on_customer' as const};
  }

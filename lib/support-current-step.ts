@@ -5,6 +5,7 @@ import {hasRecordedAccessPaymentCheck,missingAccessCodeReply} from './support-ac
 import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-reply-style.ts';
 import {supportCustomVoiceReply} from './support-custom-voice.ts';
 import {supportOfferCodeReply} from './support-checkout.ts';
+import {supportPurchaseEmailCorrection} from './support-purchase-help.ts';
 
 /** Source-backed answers to the customer's current step. Prior assistant text
  * supplies a topic only, never proof of payment, authority, delivery or a fix. */
@@ -28,11 +29,30 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
   const supplied=access.some(turn=>turn.role==='user'&&/\$\s*\d|\b\d+(?:\.\d{2})? dollars\b/i.test(turn.content));
   return {...answer('You haven’t received a purchase receipt, so I won’t ask you to check it. Don’t pay again. '+(supplied?'The payment details you shared still need to be matched to a purchase before access can be confirmed.':asked?'If no receipt arrived, the payment date and amount can come from your bank or card statement. Leave out card and account numbers.':'What payment date and amount appear on your bank or card statement? Leave out card and account numbers.'),supplied?'open':'waiting_on_customer'),...(supplied?{managementReview:true}:{})};
  }
- if(access.length&&supportCodeDelivery(access)==='missing'&&!/\b(?:wrong|incorrect|change|update)\b.{0,25}\bemail\b|\b(?:name|where|link|address|url)\b.{0,35}\b(?:sign[ -]?in|log[ -]?in)\b/i.test(q)){
+ if(access.length&&supportCodeDelivery(access)==='missing'&&!supportPurchaseEmailCorrection(q)&&!/\b(?:name|where|link|address|url)\b.{0,35}\b(?:sign[ -]?in|log[ -]?in)\b/i.test(q)){
   return missingAccessCodeReply(context.messages,context.accessInvestigation);
  }
  if(context.kind==='access')return null;
  const customVoice=supportCustomVoiceReply(context);if(customVoice)return customVoice;
+
+ // The manual composer availability read is not a worker dispatch receipt.
+ // Keep a missing seller reply distinct from account-wide call/text totals.
+ const sellerTextFailure=(text:string)=>/\b(?:bot|ai|software)\b.{0,55}\b(?:has not|hasn[’']t|did not|didn[’']t|never|not|isn[’']t)\b.{0,35}\b(?:texted|texting|sent|sending|replied|reply|responded|responding)\b/i.test(text)&&/\b(?:seller|text|texted|texting|message|reply)\b/i.test(text)&&!/\b(?:buyer|contract|agreement|sign[ -]?in)\b/i.test(text);
+ const textAvailability=(text:string)=>/checking text availability/i.test(text);
+ let missingText=false,checkingAvailability=false,propertyProvided=false;
+ for(const turn of context.messages){
+  if(turn.role==='operator'){missingText=false;checkingAvailability=false;propertyProvided=false;continue;}
+  if(turn.role!=='user')continue;
+  if(sellerTextFailure(turn.content)){missingText=true;continue;}
+  if(textAvailability(turn.content)){checkingAvailability=true;continue;}
+  if((missingText||checkingAvailability)&&/^\d{1,6}\s+[\w .'-]+\b(?:street|st|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|way|blvd|boulevard)\b(?:[,\n ]+[A-Za-z .'-]+,? [A-Z]{2}(?: \d{5}(?:-\d{4})?)?)?[.! ]*$/i.test(turn.content.trim())){propertyProvided=true;continue;}
+  if(!/^(?:please|yes|ok(?:ay)?|what|why|so what (?:am i supposed to|should i) do|help check what(?:'s| is) happening next|is that why there(?:'s| is) no automatic response)[?!.\s]*$/i.test(turn.content.trim())){missingText=false;checkingAvailability=false;propertyProvided=false;}
+ }
+ if(missingText||checkingAvailability)return answer([
+  missingText?'The missing automatic reply is still unresolved.':'',
+  checkingAvailability?'“Checking text availability” describes the text composer’s availability check. It does not establish why an automatic reply is missing or whether a message was sent.':'',
+  propertyProvided?'The property details you shared still need to be matched to its saved conversation and sending records. I haven’t confirmed the cause or a successful send.':missingText?'Which property is affected, and approximately when did you expect the reply? The specific property’s conversation and saved sending records need to be checked. A resolution note does not send the reply or fix its cause.':'Which property shows that message, and does it stay there when you open its Texts panel?'
+ ].filter(Boolean).join(' '));
 
  const failure=/\b(?:error|failed|broken|blocked|stuck|missing|not working|not calling|not texting|not sending|cannot|can[’']?t|doesn[’']?t|won[’']?t)\b/i.test(q);
  if(/\bfollow[ -]?up\b/i.test(issue)&&/\bblocked\b/i.test(issue)&&!/\b(?:contact checks?|expired|refund|cancel)\b/i.test(issue))return answer('The follow-up is still blocked. A resolution note only records follow-up you actually completed; it does not restart outreach or clear the underlying contact checks. What reason is shown beside that blocked follow-up?');
