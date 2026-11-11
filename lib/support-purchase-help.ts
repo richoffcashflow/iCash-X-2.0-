@@ -1,10 +1,41 @@
 import {supportLegacyProofEmail} from './support-legacy-migration.ts';
-import type {SupportEvidence} from './support-policy.ts';
+import {supportRenewalCancellationRequested,type SupportEvidence} from './support-policy.ts';
 type Turn={role:string;content:string};
 type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[]};
 
 const accessProblem=(text:string)=>/\b(?:access|sign[ -]?in|log[ -]?in|locked|subscription|membership)\b/i.test(text)&&/\b(?:can[’']?t|cannot|unable|no|not|locked|cancelled|canceled|inactive|failed|needs attention|paid|charged)\b/i.test(text);
-const cancellationRequest=(text:string)=>/\b(?:refund|money back|cancel|charged twice|duplicate charge)\b/i.test(text);
+const cancellationRequest=(text:string)=>supportRenewalCancellationRequested(text)||/\b(?:refund|money back|cancel|charged twice|duplicate charge)\b/i.test(text);
+const deniesVipPurchase=(text:string)=>/\b(?:not|never) (?:for |the |a )?vip\b|\b(?:didn[’']?t|did not|never) (?:buy|purchase|pay for) (?:the |a )?vip\b/i.test(text);
+
+/** Proof supplied for a wrong-email purchase stays in that review. A webinar
+ * screenshot is not a VIP purchase, and a product correction must end VIP routing.
+ * Operator findings, explicit success and substantive topic changes end inheritance. */
+export function supportCheckoutOwnershipReply(context:PurchaseContext){
+ let active=false;
+ for(const turn of context.messages){
+  if(turn.role==='operator'){active=false;continue;}
+  if(turn.role!=='user')continue;
+  const q=turn.content;
+  if(cancellationRequest(q)){active=false;continue;}
+  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved|i (?:am|got) (?:signed |logged )?in)\b/i.test(q)&&!/\b(?:not|still|but)\b/i.test(q)){active=false;continue;}
+  if(supportPurchaseEmailCorrection(q)){active=true;continue;}
+  const vipPurchase=/\b(?:paid (?:for )?|purchased |bought )(?:the |a )?(?:2\.0 )?vip\b/i.test(q)&&!deniesVipPurchase(q);
+  const otherTopic=/\b(?:seller|buyer|bot|leads?|calls?|texts?|course|training|upgrade)\b/i.test(q);
+  const proof=/\b(?:receipt|proof|screenshots?)\b/i.test(q)&&/\b(?:have|sent|emailed|submitted|show|showing|attached)\b/i.test(q);
+  const correction=deniesVipPurchase(q)&&/\b(?:software|regular|standard|access|paid|bought|purchased)\b/i.test(q);
+  active=active&&!vipPurchase&&!otherTopic&&(proof||correction);
+ }
+ if(!active)return null;
+ const q=context.messages.findLast(turn=>turn.role==='user')?.content??'';
+ const missingReceipt=/\b(?:no|missing) (?:purchase |payment )?rec(?:ei|ie)pt\b|\b(?:didn[’']?t|did not|never|haven[’']?t) (?:get|receive|received) (?:a |the |my )?rec(?:ei|ie)pt\b/i.test(q);
+ if(missingReceipt)return {reply:'The purchase still needs an ownership check before its checkout email can be corrected. Since you did not receive a receipt, the purchase date and amount can come from your bank or card statement. Keep any proof already supplied in this review; don’t send it again, pay again or share card numbers. This chat has not changed the email or restored access.',status:'open' as const,managementReview:true,ai:false};
+ // Reuse direct purchase guidance, including its no-repeat proof handling.
+ const direct=supportPurchaseHelp(context.messages);
+ if(direct)return {...direct,ai:false};
+ const sent=/\b(?:sent|emailed|submitted)\b/i.test(q)&&!/\b(?:not|never|haven[’']?t|didn[’']?t)\b/i.test(q);
+ const product=deniesVipPurchase(q)?'You’re describing regular software access. ':/\bvip\b/i.test(q)?'A VIP session screenshot does not establish a VIP software purchase. ':'';
+ return {reply:product+(sent?'You’ve said you sent the proof. I haven’t confirmed that it has been matched; you do not need to send the same proof again. ':'')+'The purchase and its ownership still need verification before the checkout email can be corrected. This chat has not changed the email or restored access; don’t pay again to troubleshoot.',status:'open' as const,managementReview:true,ai:false};
+}
 
 /** A fresh settled invoice and inactive access require matching the paid period,
  * not a second checkout. These are explanations only, never entitlement changes. */
@@ -35,7 +66,8 @@ export function supportPaidAccessReply(context:PurchaseContext){
  * customer claim nor an inactive flag proves which product their receipt bought. */
 export function supportVipPurchaseReply(context:PurchaseContext){
  let active=false,start=-1;
- const users=context.messages.filter(m=>m.role==='user');
+ const operator=context.messages.findLastIndex(m=>m.role==='operator');
+ const users=context.messages.slice(operator+1).filter(m=>m.role==='user');
  const receiptAcknowledged=(turn:(typeof users)[number])=>{
   if(!/^(?:yes[, ]+)?i (?:already )?did(?: that)?[.! ]*$/i.test(turn.content.trim()))return false;
   const previous=context.messages.slice(0,context.messages.indexOf(turn)).findLast(m=>m.role==='assistant'||m.role==='operator');
@@ -47,7 +79,7 @@ export function supportVipPurchaseReply(context:PurchaseContext){
   const complaint=/\b(?:paid|purchased|bought|charged|already|missing|locked|transfer|carry|not showing|not recognized|not active)\b/i.test(content);
   const unrelated=/\b(?:leads?|contacts?|phone numbers?|calls?|texts?|course|training|refund|cancel|charged twice|duplicate charge)\b/i.test(content);
   const followup=/^(?:ask ai(?: bot)?(?: vip)?|still (?:not|missing|locked)|it (?:says|shows)|same|yes|no|i (?:already |just )?(?:sent|emailed)|(?:can|could|would) you (?:please )?(?:check|look))\b/i.test(content.trim());
-  const next:boolean=!unrelated&&(vip&&complaint||active&&(followup||receiptAcknowledged(turn)));
+  const next:boolean=!unrelated&&!deniesVipPurchase(content)&&!supportPurchaseEmailCorrection(content)&&(vip&&complaint||active&&(followup||receiptAcknowledged(turn)));
   if(next&&!active)start=index;
   active=next;
   if(!active)start=-1;
@@ -77,7 +109,7 @@ export function supportPurchaseEmailCorrection(text:string){
 /** Purchase and checkout problems are not proof that a sign-in code arrived. */
 export function supportPurchaseHelp(messages:Turn[]){
  const users=messages.filter(m=>m.role==='user'),q=users.at(-1)?.content??'';
- if(/\b(?:refund|cancel|charged twice|duplicate charge|new card)\b/i.test(q))return null;
+ if(cancellationRequest(q)||/\bnew card\b/i.test(q))return null;
  const checkout=/\b(?:checkout|check out|two[ -]month|2[ -]month|free (?:trial|offer))\b/i;
  const failed=/\b(?:failed|not go through|didn[’']?t go through|did not go through|doesn[’']?t work|does not work|not work|doesn[’']?t let|error|declined|not completed|won[’']?t)\b/i;
  const previous=users.slice(0,-1).findLast(m=>checkout.test(m.content)&&failed.test(m.content));

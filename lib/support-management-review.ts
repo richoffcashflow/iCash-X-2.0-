@@ -3,7 +3,7 @@ import {supportCodeDelivery} from './support-code-delivery.ts';
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportRepeatedFailedSteps} from './support-learning-signals.ts';
 import {supportAccountDeletionGuidance} from './support-account-deletion.ts';
-import {supportAnswer} from './support-policy.ts';
+import {supportAnswer,supportRenewalCancellationRequested} from './support-policy.ts';
 import {supportMissingActivityConcern} from './support-account-review.ts';
 
 const generic = /^(?:I don[’']t have (?:enough information|a confirmed answer)|I haven[’']t confirmed the cause yet|There[’']s no confirmed change|I couldn[’']t verify your account details)/i;
@@ -13,14 +13,14 @@ const transferRequest = /(?:^|\b(?:can i|could i|may i|let me|i (?:want|need|wou
 const briefRequest = /^(?:human|agent|representative|manager|management|supervisor|escalate(?: this)?)[.!?\s]*$/i;
 const genericHuman = /^This is automated support|^I can help troubleshoot this here\./i;
 
-function reviewExplanation(context:SupportContext,question:string){
+function reviewExplanation(context:SupportContext,question:string,contactRequested=false){
  const earlier=context.messages.slice(0,context.messages.findLastIndex(turn=>turn.role==='user'));
  // An older complaint cannot override a later human finding or explicit success.
  const boundary=earlier.findLastIndex(turn=>turn.role==='operator'||turn.role==='user'&&/^(?:that worked|it worked|working now|fixed now|all fixed|problem solved)[.!\s]*$/i.test(turn.content.trim()));
  const history=earlier.slice(boundary+1).filter(turn=>turn.role==='user').map(turn=>turn.content).reverse();
  const issue=history.find(text=>supportMissingActivityConcern(text)||! /^(?:why|for what|review|anything yet|any update|how long.*|will i be contacted)[?!.\s]*$/i.test(text.trim())&&/\b(?:code|sign[ -]?in|receipt|access|not working|down|nothing today|no leads|no calls|no texts|delayed|restart time|no response|not getting|credit|charged|payment|contract|agreement)\b/i.test(text)&&/\b(?:no|not|never|missing|wrong|duplicate|unrecognized|error|failed|blocked|stuck|issue|problem|down|delayed|unconfirmed|nothing today|can[’']?t|cannot|didn[’']?t|doesn[’']?t|haven[’']?t)\b/i.test(text))??'';
  const reason=/\b(?:sign[ -]?in|receipt|access)\b|\b(?:no|missing) code\b/i.test(issue)?'Your case is still in management review for your unresolved purchase or sign-in access.':supportMissingActivityConcern(issue)||/\b(?:nothing today|no leads|no calls|no texts|delayed|restart time|not working|down)\b/i.test(issue)?'Your case is still in management review because you reported the bot’s work is delayed or missing.':/\b(?:charged|payment|credit)\b/i.test(issue)?'Your payment or credit issue is still in management review.':/\b(?:contract|agreement)\b/i.test(issue)?'Your agreement issue is still in management review.':'Your unresolved issue is still in management review.';
- const next=/\b(?:contacted|call me|email me|reply|respond)\b/i.test(question)?'Management can reply in this conversation; I can’t promise a phone call or response time.':'I don’t have a confirmed fix or completion time.';
+ const next=contactRequested?'Management can reply in this conversation; I can’t promise a phone call, email, text or response time.':/\b(?:contacted|call me|email me|reply|respond)\b/i.test(question)?'Management can reply in this conversation; I can’t promise a phone call or response time.':'I don’t have a confirmed fix or completion time.';
  return reason+' '+next;
 }
 
@@ -42,6 +42,11 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
  }
  const question=context.messages[index].content;
  const previous=context.messages.slice(0,index).findLast(turn=>turn.role==='assistant'||turn.role==='operator');
+ // Requests for a response to this support case are not seller outreach.
+ const caseContact=/\b(?:support|management|case|update|responds?)\b/i.test(question)&&/(?:\b(?:call me|text me|email me|my number)\b|email \[email removed\])/i.test(question)
+  || /^(?:is there|do you have) (?:a |an )?(?:phone |support )?number (?:i can|to) (?:call|contact)[?!.\s]*$/i.test(question.trim());
+ const separatePayment=supportRenewalCancellationRequested(question)||/\b(?:refund|money back|charged twice|duplicate charge|unrecognized charge)\b/i.test(question)||/duplicate-charge report|do both statement entries match|reporting a charge you don’t recognize|statement details you supplied are saved/i.test(answer.reply);
+ if(context.handedOff&&caseContact&&!separatePayment&&!/\b(?:seller|buyer|lead|bot|homeowner|don[’']?t|do not|no need)\b/i.test(question))return {reply:reviewExplanation(context,question,true),status:'open',managementReview:true,ai:false};
  // Operator replies can clear the queue flag without resolving purchase access.
  // Only an immediate, explicitly access-related timing follow-up uses this record.
  const operator=context.messages[index-1];
