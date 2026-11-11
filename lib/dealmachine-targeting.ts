@@ -1,6 +1,8 @@
 import {z} from 'zod';
-import {selectDiscoveryFilter,type DiscoveryFilterPlan} from './discovery-filters.ts';
+import {selectDiscoveryFilter,discoveryFilters,type DiscoveryFilterPlan} from './discovery-filters.ts';
 import {targetingLearningDecision} from './dealmachine-targeting-learning.ts';
+import {financialPrefilters,researchEligibilityFilters,researchQueryPolicyValid} from './research-query-policy.ts';
+import {combineFinancialFilters} from './financial-query-filters.ts';
 
 export const targetingVersion='seller-targeting-v1';
 const range=z.object({min:z.number().nonnegative(),max:z.number().nonnegative()}).strict().refine(v=>v.min<=v.max);
@@ -57,8 +59,9 @@ export type TargetingState={enabled:boolean;capabilities:unknown;dedupReady:bool
  * A supported winner gets at most three of five experimental slots. */
 export function selectTargetingPlan(legacy:unknown,sequence:number,shared:unknown,raw:unknown,accountId:string,zip:string,now=Date.now()):AnyDiscoveryPlan|null{
  // Validate legacy state even on an experimental slot; never bypass its holds.
- const scopedPolicy=(raw as {queryContext?:{policy?:{version?:string}}}|null)?.queryContext?.policy?.version;
- const legacyLearning=scopedPolicy!=='financial-prefilter-v1';
+ const queryPolicy=(raw as {queryContext?:{policy?:unknown}}|null)?.queryContext?.policy;
+ const financial=researchQueryPolicyValid(queryPolicy)&&queryPolicy.version==='financial-prefilter-v1'?queryPolicy:null;
+ const legacyLearning=(queryPolicy as {version?:string}|null)?.version!=='financial-prefilter-v1';
  const original=selectDiscoveryFilter(legacy,sequence,shared,legacyLearning),fallback=()=>original;
  const s=raw as TargetingState|null;
  if(s?.enabled!==true||s.dedupReady!==true||!Array.isArray(s.experiments))return fallback();
@@ -67,6 +70,7 @@ export function selectTargetingPlan(legacy:unknown,sequence:number,shared:unknow
   if(!e||typeof e!=='object')return false;
   const parsed=targetingDefinitionSchema.safeParse(e.definition);if(!parsed.success)return false;
   const d=parsed.data,b=d.buyerEvidence;
+  if(financial&&!combineFinancialFilters([...discoveryFilters(),...targetingFilters(d),...researchEligibilityFilters(financial.version),...financialPrefilters(financial,d.segment==='off_market_repairs'?25000:0)]))return false;
   return Number.isSafeInteger(e.nextPage)&&e.nextPage>0&&e.nextPage<=999999999&&Number.isSafeInteger(e.pages)&&e.pages>=0&&e.exhausted===false&&e.blocked===false
    &&d.asOf<=new Date(now).toISOString().slice(0,10)&&!targetingCapabilityProblem(d,s.capabilities,now)
    &&(d.segment!=='mobile'||s.mobileVerified===true)
