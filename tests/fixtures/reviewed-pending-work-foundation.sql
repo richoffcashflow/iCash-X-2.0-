@@ -1,7 +1,10 @@
 -- Fictional accounts and explicit unchanged external gates. Real credit
 -- admission, final prospecting guard, availability and settlement load separately.
 create schema icash_work_private;
-create table public.icash_prospecting_budgets(id bigint generated always as identity primary key,account_id uuid,baseline_cents bigint);
+create table public.icash_prospecting_budgets(id bigint generated always as identity primary key,account_id uuid,baseline_cents bigint,created_at timestamptz default now());
+create table public.icash_opportunity_outcomes(account_id uuid,attempted boolean,responded boolean,opted_out boolean,discovered_at timestamptz);
+create function public.icash_customer_discovery_charge(uuid,text,bigint) returns bigint language sql as $$select $3$$;
+create function public.icash_account_work_health(uuid) returns jsonb language sql as $$select '{"status":"ok"}'::jsonb$$;
 alter table public.icash_operation_spend add column prospecting_budget_id bigint;
 create view public.icash_duplicate_discovery_coverage as select operation_key,account_id,covered_cents from public.icash_usage_coverage where false;
 create function public.icash_discovery_no_new_inventory(uuid,text) returns boolean language sql as $$select false$$;

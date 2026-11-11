@@ -12,7 +12,8 @@ declare item record;
 begin
  for item in select * from (values
   ('public.icash_prospecting_total_available(uuid)','814cf7934f1d444996fc4a8211357ecc'),
-  ('public.icash_daily_work_target(uuid)','587af3fc94cc82b586add5723d4c85d9')
+  ('public.icash_daily_work_target(uuid)','587af3fc94cc82b586add5723d4c85d9'),
+  ('public.icash_prospecting_progress(uuid)','56a51192f325ee08c2ca465c2720f08a')
  ) expected(signature,checksum) loop
   if md5(pg_get_functiondef(item.signature::regprocedure))<>item.checksum then
    raise exception 'Reviewed pending-work prerequisite changed: %',item.signature;
@@ -107,6 +108,19 @@ begin
   '''pendingCents'',u.pending,''planningPendingCents'',u.planning_pending,''releasedPendingCents'',u.pending-u.planning_pending,');
  definition:=replace(definition,'t.cents-u.spent-u.pending','t.cents-u.spent-u.planning_pending');
  execute definition;
+end $$;
+
+-- Existing support answers describe pendingCents as funds set aside. Report
+-- the actual planning commitment there, without changing any visible copy.
+do $$
+declare definition text;needle text;
+begin
+ definition:=pg_get_functiondef('public.icash_prospecting_progress(uuid)'::regprocedure);
+ needle:='sum(charge_cap_cents) filter(where state in (''reserved'',''dispatched''))';
+ if (length(definition)-length(replace(definition,needle,'')))/length(needle)<>1 then
+  raise exception 'Progress pending commitment boundary changed';
+ end if;
+ execute replace(definition,needle,'sum(icash_reliability_private.pending_planning_cents(icash_operation_spend)) filter(where state in (''reserved'',''dispatched''))');
 end $$;
 
 -- Operator-only: ordinary services can read the reviewed manifest, never enable

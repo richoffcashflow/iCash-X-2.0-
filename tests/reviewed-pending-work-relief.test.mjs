@@ -29,6 +29,7 @@ try{
  assert.deepEqual(await accounting(),unchanged,'installation does not change money, operation state or supplier reserves');
  assert.equal(Number(await available()),0,'installed inactive');
  assert.equal((await target()).planningPendingCents,1100);
+ assert.equal((await val('select icash_prospecting_progress($1)',[id(1)])).pendingCents,1100);
  const manifest=await val('select manifest from icash_reliability_private.pending_work_relief_policy');
  const activate=(m=manifest,sha='a'.repeat(40))=>val('select icash_reliability_private.activate_pending_work_relief($1,$2)',[m,sha]);
  await assert.rejects(activate('b'.repeat(32)),/manifest changed/);
@@ -43,6 +44,9 @@ try{
  const daily=await target();
  assert.equal(daily.pendingCents,1100);assert.equal(daily.planningPendingCents,100);assert.equal(daily.releasedPendingCents,1000);
  assert.equal(daily.remainingCents,400);assert.equal(daily.percent,50);assert.equal(daily.minimumPercent,30);
+ const progress=await val('select icash_prospecting_progress($1)',[id(1)]);
+ assert.equal(progress.pendingCents,100,'customer support describes only funds still set aside');
+ assert.equal(progress.remainingCents,900);
  await q("update icash_operation_spend set estimate_checked_at=now() where operation_key='old-call'");
  assert.equal(Number(await available()),900,'routine receipt check does not recreate planning hold');
  for(const update of ["charge_cap_cents=899","reserved_micros=1","account_id='"+id(2)+"'","state='reserved'","permission_until='2028-01-01'","credit_reservation_id=gen_random_uuid()"]){

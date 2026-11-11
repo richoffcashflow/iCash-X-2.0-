@@ -8,6 +8,8 @@ The migration freezes full operation snapshots for currently observed `pending_w
 
 Only exact snapshot matches receive planning relief after activation. The routine `estimate_checked_at` timestamp is excluded because checking for a receipt is not new spending. Every other original binding must still match. A changed amount, identity, state or permission immediately restores the planning deduction. Settled operations continue through ordinary actual usage accounting. Unreviewed and newly admitted pending work counts in full, under the existing serialized final-admission guard and actual wallet balance. The daily goal remains 50%, its minimum remains 30%, and reported raw pending quotes remain visible alongside separate planning amounts.
 
+Existing support progress reports only the planning amount as `pendingCents`, so its unchanged answers do not describe the released quotes as money still set aside. Raw unresolved quotes remain available in the daily-target diagnostics and original operation records.
+
 The private manifest and activation record have RLS and service-role read access only. Ordinary application roles cannot mutate the manifest or activate relief. The operator-only activation function takes the exact manifest and verified full release SHA under the existing global operating-budget lock. An exact retry is idempotent; another release cannot overwrite its receipt. There is no automatic cohort expansion or periodic expiration of uncertain work.
 
 ## Release and verification
