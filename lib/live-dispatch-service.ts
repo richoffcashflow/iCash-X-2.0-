@@ -70,13 +70,20 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  // not the legacy main-branch conversation-only hash or its two-tool subset.
  if(c.agent_id!==recordedReview.agentId||c.agent_config_hash!==recordedReview.configHash||c.max_duration_seconds!==recordedReview.maxTotalSeconds||!Array.isArray(c.required_tool_ids)||c.required_tool_ids.length!==recordedReview.toolIds.length||!recordedReview.toolIds.every(id=>c.required_tool_ids.includes(id)))return hold('recorded_call_review_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');
- const suppressed=await db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`);if(suppressed.length)return hold('contact_opted_out');
+ // These independent reads share a preflight boundary; none admits work or
+ // replaces the database's final contact/clock checks at reservation and dial.
+ const [suppressed,sellerConsentCurrent,outreachContext]=await Promise.all([
+  db<{phone:string}[]>(`icash_text_suppressions?phone=eq.${encodeURIComponent(p.phone)}&select=phone&limit=1`),
+  p.seller_intake_id?db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id}):false,
+  db<unknown>('rpc/icash_voice_outreach_context','POST',{p_account:accountId,p_job:j.id}),
+ ]);
+ if(suppressed.length)return hold('contact_opted_out');
  // This flag is derived exclusively from a fresh server-side database check.
- p.sellerConsentVerified=p.seller_intake_id?await db<boolean>('rpc/icash_seller_voice_permission_current','POST',{p_account:accountId,p_permission:p.id})===true:false;
+ p.sellerConsentVerified=sellerConsentCurrent===true;
  // Ordinary outbound calls use the current window. Only an exact owner
  // self-demo with a fresh server-verified request may override that window.
  // Final database admission rechecks the clock before the provider dial.
- const outreach=readVoiceOutreachContext(await db<unknown>('rpc/icash_voice_outreach_context','POST',{p_account:accountId,p_job:j.id}));
+ const outreach=readVoiceOutreachContext(outreachContext);
  if(!outreach)return hold('contact_hours_required');
  const contact=contactEligibility(p,Date.now(),outreach);
  if(!contact.ready){
@@ -98,12 +105,14 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  const buyerContext=p.party==='buyer'?await db<BuyerCallContext|null>('rpc/icash_buyer_voice_context','POST',{p_permission:p.id}):null;
  if(p.party==='buyer'&&!buyerContext)return hold('buyer_marketing_release_required');
  const address=cancellation?.address||limitedScreen?.property.address||buyerContext?.address||(eligible?.ready?eligible.screening.property.address:'');
- const [identity]=await db<{principal:string;voice_id:string;company_name?:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,voice_id,company_name`);
- const [account]=await db<{assistant_name:string;bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=assistant_name,bot_paused`);
+ const [[identity],[account],threads]=await Promise.all([
+  db<{principal:string;voice_id:string;company_name?:string}[]>(`icash_customer_identities?account_id=eq.${accountId}&select=principal,voice_id,company_name`),
+  db<{assistant_name:string;bot_paused:boolean}[]>(`icash_accounts?id=eq.${accountId}&select=assistant_name,bot_paused`),
+  db<{sender:string;sender_pool_assigned?:boolean}[]>('rpc/icash_property_voice_threads','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}),
+ ]);
  if(!identity?.principal||!account||account.bot_paused)return hold('identity_or_start_required');
  // Verify the actual provider caller ID before reserving credits or placing a call.
  const primaryNumber=process.env.CONTIGUITY_FROM;
- const threads=await db<{sender:string;sender_pool_assigned?:boolean}[]>('rpc/icash_property_voice_threads','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone});
  let threadNumber:string;
  try{threadNumber=selectBusinessCaller(primaryNumber,threads);}catch{return hold('business_number_mismatch');}
  // Calls and texts share one recipient-specific allocation. The database keeps
@@ -138,25 +147,32 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
   }catch{/* Diagnostic failure must not prevent the original durable hold. */}
   return hold('production_agent_review_required');
  }
- const customVoice=await selectedCustomCallVoice(accountId);
+ const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;
+ const [customVoice,[practice],[rate]]=await Promise.all([
+  selectedCustomCallVoice(accountId),
+  db<{agent_id:string}[]>(`icash_voice_test_config?agent_id=eq.${c.agent_id}&select=agent_id`),
+  rateId?db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`):[],
+ ]);
  const callVoiceId=customVoice??identity.voice_id;
  const voiceOverride=object(object(object(agent).conversation_config).tts).voice_id!==callVoiceId;
  if(voiceOverride&&!customVoice&&!c.approved_voice_ids?.includes(callVoiceId))return hold('voice_selection_setup_required');
- const [practice]=await db<{agent_id:string}[]>(`icash_voice_test_config?agent_id=eq.${c.agent_id}&select=agent_id`);if(practice)return hold('practice_agent_blocked');
- const rateId=p.party==='buyer'?c.buyer_rate_id:c.seller_rate_id;if(!rateId)return hold('full_call_cost_quote_required');
- const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;voice_max_duration_seconds:number|null;charge_cents?:number;version?:string}[]>(`icash_operation_rates?id=eq.${rateId}&select=operation,enabled,expires_at,voice_max_duration_seconds,charge_cents,version`);
+ if(practice)return hold('practice_agent_blocked');
+ if(!rateId)return hold('full_call_cost_quote_required');
  if(!rate?.enabled||rate.operation!==(p.party==='buyer'?'buyer_call':'seller_call')||!(Date.parse(rate.expires_at)>Date.now())||!rate.voice_max_duration_seconds||rate.voice_max_duration_seconds<c.max_duration_seconds)return hold('full_call_cost_quote_required');
  if(!sameBusinessNumber(primaryNumber,recordedReview.fromPhone)||rate.charge_cents!==recordingPolicy.minimumHoldCents||!rate.version?.startsWith(recordingPolicy.version+':'))return hold('recorded_call_review_required');
  // The displayed formula result is the actual seller offer, under standing operator policy.
  const cashOfferPrice=eligible?.ready?eligible.screening.cashOfferPriceCents:null;
  const ceiling=cashOfferPrice;
- const smsContext=p.party==='seller'&&!cancellation?boundedVoiceSmsContext(await db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id})):null;
- const priorCalls=p.party==='seller'&&!cancellation?await db<unknown>('rpc/icash_seller_prior_call_context','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):[];
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
- const request=!cancellation&&p.party==='seller'&&object(snapshot.snapshot).sellerRequest?await db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null;
- const closing=!intake&&!cancellation&&!limited&&p.party==='seller'&&recordedReview.contractToolId?await loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null;
  const agreementToolsEnabled=!intake&&!cancellation&&!!recordedReview.contractToolId&&recordedReview.contractToolId!==sellerContractToolId;
- const [purchaseDraft]=agreementToolsEnabled&&p.party==='seller'?await db<{terms:Record<string,unknown>}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&stage=eq.draft&select=terms&limit=1`):[];
+ const [rawSmsContext,priorCalls,request,closing,[purchaseDraft]]=await Promise.all([
+  p.party==='seller'&&!cancellation?db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id}):null,
+  p.party==='seller'&&!cancellation?db<unknown>('rpc/icash_seller_prior_call_context','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):[],
+  !cancellation&&p.party==='seller'&&object(snapshot.snapshot).sellerRequest?db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null,
+  !intake&&!cancellation&&!limited&&p.party==='seller'&&recordedReview.contractToolId?loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null,
+  agreementToolsEnabled&&p.party==='seller'?db<{terms:Record<string,unknown>}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&stage=eq.draft&select=terms&limit=1`):[],
+ ]);
+ const smsContext=p.party==='seller'&&!cancellation?boundedVoiceSmsContext(rawSmsContext):null;
  const purchaseTerms=purchaseDraft?{inspectionDays:purchaseDraft.terms.inspectionDays??10,closingDate:purchaseDraft.terms.closingDate??'',escrowAgent:purchaseDraft.terms.escrowAgent??''}:null;
  const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined,callbackRequestedNow:!!j.sms_source_message_id};
  // Validate the complete opening/context before reserving credits or dialing.
