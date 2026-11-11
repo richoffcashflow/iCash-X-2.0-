@@ -18,7 +18,9 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    if(url.origin==='https://checkout.stripe.com')return route.fulfill({contentType:'text/html',body:'<!doctype html><label>Sample payment field<input aria-label="Sample payment field" autocomplete="off"></label>'});
    if(url.origin!==base)return route.abort();
    if(url.pathname==='/api/webinar/start')return json({sessionId,webinar,progress:100,name:'Fixture',messages:[],preview:false,serverNow:+start});
-   if(url.pathname==='/api/webinar/event')return json({saved:true,...(route.request().postDataJSON().kind==='completed'?{redirect:webinarCompletionDestination(webinar,webinar.offers,sessionId,+start+31000)}:{})});
+   // WebKit can omit a background beacon's body from Playwright's request.
+   // The completion fetch still must return its real destination for the URL assertion below.
+   if(url.pathname==='/api/webinar/event')return json({saved:true,...(route.request().postDataJSON()?.kind==='completed'?{redirect:webinarCompletionDestination(webinar,webinar.offers,sessionId,+start+31000)}:{})});
    if(url.pathname==='/api/webinar/chat/feed')return json({messages:[],statuses:[]});
    if(url.pathname==='/api/webinar/timers')return json({deadlines:{},offerDeadlines:{},serverNow:+start});
    if(url.pathname==='/api/billing/membership'){
