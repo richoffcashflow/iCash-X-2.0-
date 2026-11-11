@@ -29,6 +29,7 @@ def main():
     sql((root / 'config/november-sender-pacing.sql').read_text())
     sql((root / 'config/november-sender-200.sql').read_text())
     sql((root / 'config/november-additional-sender-pacing.sql').read_text())
+    sql((root / 'config/november-11-sender-pacing.sql').read_text())
     sql('grant usage on schema public to service_role;')
     # Freeze only clock reads in the real admission functions. Run at a fixed
     # daytime instant regardless of the CI runner's clock; retain original locks.
@@ -37,12 +38,12 @@ def main():
                  'icash_sender_private.take(text,uuid,text,boolean,uuid,uuid,text,boolean)']:
         definition = sql(f"select pg_get_functiondef('{name}'::regprocedure)")
         sql(definition.replace('statement_timestamp()', 'public.fixture_clock()').replace('clock_timestamp()', 'public.fixture_clock()'))
-    line = "'+15056019451'"
+    line = "'+16027722055'"
     def contenders(prefix):
         return [f"set role service_role;select icash_sender_private.take('cold-{i}',md5('{prefix}{i}')::uuid,{line},true)" for i in range(8)]
     assert race(contenders('empty')).count('t') == 1, 'Only one concurrent send may start in three minutes'
     assert sql(f"select icash_sender_private.take('reply',md5('reply')::uuid,{line},false)") == 't'
-    for phone in ['+15055072937', '+15127791343', '+18623812530']:
+    for phone in ['+14357242174', '+15056019451', '+15055072937', '+15127791343', '+18623812530']:
         assert sql(f"select icash_sender_private.take('independent',md5('{phone}')::uuid,'{phone}',true)") == 't'
     sql('truncate icash_sender_private.uses;')
     sql(f"insert into icash_sender_private.uses(source,source_id,sender,cold,admitted_at) select 'history',md5(i::text)::uuid,{line},true,public.fixture_clock()-interval '30 minutes' from generate_series(1,19)i;")

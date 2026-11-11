@@ -38,6 +38,13 @@ export async function testNovemberNumbers(f){
  assert.equal((await one("select count(*)::int n from icash_text_senders where phone in ('+15056019451','+15055072937','+15127791343')")).n,0,'New registration rolls back on drift');
  await db.exec(current);await db.exec(additional);
  assert.equal((await one("select count(*)::int n from icash_text_senders where phone in ('+15056019451','+15055072937','+15127791343') and not enabled")).n,3,'All new leases install disabled');
+ const november11=readFileSync('config/november-11-business-numbers.sql','utf8');
+ const latest=(await one("select pg_get_functiondef('icash_business_conversation_sender(uuid,uuid,text,boolean)'::regprocedure) definition")).definition;
+ await db.exec(latest.replace("'+15127791343')","'+15127791342')"));
+ await assert.rejects(db.exec(november11),/November 11 number boundary changed/);await q('rollback');
+ assert.equal((await one("select count(*)::int n from icash_text_senders where phone in ('+16027722055','+14357242174')")).n,0,'November 11 registration rolls back on drift');
+ await db.exec(latest);await db.exec(november11);
+ assert.equal((await one("select count(*)::int n from icash_text_senders where phone in ('+16027722055','+14357242174') and not enabled")).n,2,'Both November 11 leases install disabled');
  assert.deepEqual((await metadata()).rows,before,'Function metadata and prior ACLs are preserved');
  const save=(phone,forwarding,enabled,id=null)=>q('select icash_save_business_voice_number($1,$2,$3,$4,$5)',[ac,id,forwarding,enabled,phone]);
  for(const phone of novemberBusinessPhones){
@@ -65,6 +72,8 @@ export async function testNovemberNumbers(f){
  await assert.rejects(save('+12025550999',true,true,pn),/phone_check/);
  for(const role of ['anon','authenticated'])assert.equal((await one("select has_function_privilege($1,'icash_business_conversation_sender(uuid,uuid,text,boolean)','execute') allowed",[role])).allowed,false);
  console.log('PASS November numbers: exact leases, inactive installation, SMS/incoming distinction, verified-only outbound, callback receipts, Pause, suppression, continuity and atomic drift rejection.');
+ // Older hash-bound routing migrations must keep testing their original predecessor.
+ if(process.env.OWNER_DEMO_ROUTING_ONLY==='1'||process.env.SENDER_HEALTH_ROUTING==='1')await db.exec(latest);
  if(process.env.OWNER_DEMO_ROUTING_ONLY==='1')await (await import('./owner-demo-call-capable-routing-fixture.mjs')).testOwnerDemoRouting(f);
  if(process.env.SENDER_HEALTH_ROUTING==='1')await (await import('./sender-health-routing-fixture.mjs')).testSenderHealthRouting(f);
 }

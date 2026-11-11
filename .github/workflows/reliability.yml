@@ -247,8 +247,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
   verify:
-    # Playwright 1.56.1 provides browser dependencies for Ubuntu 24.04.
+    # Match the locked Playwright version. The official image includes its
+    # browsers and system dependencies, avoiding live Ubuntu mirror downloads.
     runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble@sha256:42f02d323c310069b4d54c94bd91a608966a486c3492c48ae0b1cea747ec5ca2
+      options: --shm-size=1g
     timeout-minutes: 20
     env:
       META_INSTANT_LEADS_ENABLED: 'true'
@@ -265,21 +269,4 @@ jobs:
       # verification stays independent without running that suite a second time.
       - run: pnpm build
       - run: pnpm run test:concurrency
-      - name: Use Ubuntu primary package mirror
-        run: |
-          sudo python3 - <<'PY'
-          from pathlib import Path
-
-          paths = [Path('/etc/apt/apt-mirrors.txt'), Path('/etc/apt/sources.list')]
-          directory = Path('/etc/apt/sources.list.d')
-          paths += list(directory.glob('*.list')) + list(directory.glob('*.sources'))
-          for path in paths:
-              if not path.is_file():
-                  continue
-              source = path.read_text()
-              updated = source.replace('http://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu').replace('https://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu')
-              if updated != source:
-                  path.write_text(updated)
-          PY
-      - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm run test:browser
