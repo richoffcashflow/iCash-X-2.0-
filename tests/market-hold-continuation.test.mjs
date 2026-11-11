@@ -111,7 +111,7 @@ await scenario(async()=>{
 });
 for(const role of ['anon','authenticated'])assert.equal(await value('select has_function_privilege($1,$2,\'EXECUTE\')',[role,'public.icash_continue_held_inventory(uuid,uuid,integer)']),false);
 for(const role of ['anon','authenticated','service_role'])for(const table of ['market_hold_continuation_settings','market_hold_continuations'])assert.equal(await value('select has_table_privilege($1,$2,\'SELECT,INSERT,UPDATE,DELETE\')',[role,'icash_research_private.'+table]),false);
-assert.equal(f.migration,readFileSync(new URL('../supabase/migrations/20261111195230_market_hold_continuation.sql',import.meta.url),'utf8'));
+assert.equal(f.migration,readFileSync(new URL('../supabase/migrations/20261111223030_market_hold_continuation.sql',import.meta.url),'utf8'));
 assert.equal((f.migration.match(/with unresolved as materialized/gi)||[]).length,1);
 assert.equal(f.migration.includes('limit 64'),true);
 assert.doesNotMatch(f.migration,/update\s+(?:public\.)?icash_operation_spend|delete from|update\s+(?:public\.)?icash_wallets/i);
