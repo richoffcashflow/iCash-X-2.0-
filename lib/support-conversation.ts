@@ -1,4 +1,5 @@
 import {supportLocationGuidance} from './support-location-guidance.ts';
+import {supportVoiceSetupReply} from './support-voice-setup.ts';
 import {classifySupportCoaching,supportCoachingReferral,supportCoachingInstructions} from './support-coaching.ts';
 import {supportCurrentStepReply} from './support-current-step.ts';
 import {supportAccountReviewReply,supportMissingActivityConcern} from './support-account-review.ts';
@@ -47,6 +48,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&supportAcknowledgment(question))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Got it.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
+ const voiceSetup=supportVoiceSetupReply(context);if(voiceSetup)return voiceSetup;
  const versionClarification=supportVersionClarification(context.messages);if(versionClarification)return result(versionClarification,'open');
  const location=supportLocationGuidance(context);if(location)return location;
  const accountReview=supportAccountReviewReply(context);if(accountReview)return accountReview;
@@ -157,6 +159,7 @@ async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fet
  const fallback=supportManagementReview(context,supportTechnicalFallback(context));
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
  if(supportVersionClarification(context.messages))return fallback;
+ if(supportVoiceSetupReply(context))return fallback;
  if(supportAccountReviewReply(context))return fallback;
  if(supportCurrentStepReply(context))return fallback;
  if(supportInboxGuidance(context))return fallback;
