@@ -38,9 +38,16 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
  }
  async function readReview(){if(env.ICASH_RECORDED_OUTBOUND_READY!=='true')return null;const r=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON,now());if(!r||r.providerAccountSid!==env.TWILIO_ACCOUNT_SID)return null;return r;}
  async function checkAgent(review:RecordingReview){
-  if(!recordingAgentMatches(review,await provider.agent(review)))return false;
-  if(review.contractToolId&&!sellerContractToolMatches(await provider.tool(review.contractToolId),review.contractToolId,review.offerPolicy))return false;
-  const tool=await provider.tool(review.stopToolId),config=object(tool.tool_config),api=object(config.api_schema),body=object(api.request_body_schema),props=object(body.properties),id=object(props.recordingId),auth=object(object(api.request_headers).Authorization);
+  // Fetch the exact reviewed resources together on every attempt. All reads
+  // must pass before admission; no cached approval or parallel send is used.
+  const [agent,contract,tool]=await Promise.all([
+   provider.agent(review),
+   review.contractToolId?provider.tool(review.contractToolId):null,
+   provider.tool(review.stopToolId),
+  ]);
+  if(!recordingAgentMatches(review,agent))return false;
+  if(review.contractToolId&&!sellerContractToolMatches(contract,review.contractToolId,review.offerPolicy))return false;
+  const config=object(tool.tool_config),api=object(config.api_schema),body=object(api.request_body_schema),props=object(body.properties),id=object(props.recordingId),auth=object(object(api.request_headers).Authorization);
   return tool.id===review.stopToolId&&config.type==='webhook'&&config.name==='icash_stop_recording'&&api.url===recordingBaseUrl+'/stop'&&api.method==='POST'&&Object.keys(auth).length===1&&auth.variable_name==='secret__icash_recording_stop_token'&&body.type==='object'&&Array.isArray(body.required)&&body.required.length===1&&body.required[0]==='recordingId'&&Object.keys(props).length===1&&id.type==='string'&&id.dynamic_variable==='icash_recording_id'&&(api.auth_connection===null||api.auth_connection===undefined)&&(!tool.response_mocks||Array.isArray(tool.response_mocks)&&tool.response_mocks.length===0);
  }
  async function bindCall(row:RecordingRow,call:Record<string,unknown>,writer:RecordingDb=db,fresh=true){
