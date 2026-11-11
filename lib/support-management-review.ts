@@ -56,6 +56,12 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
   return {reply:'The operator’s last update says your access review is still open, with no confirmed completion time. I can’t give you a reliable timeframe yet or confirm that the email has changed or access has been restored. Your earlier details remain in this conversation for management review.',status:'open',managementReview:true,ai:false};
  }
  const reviewFollowup=/management review|flagged this conversation/i.test(previous?.content??'')||/\b(?:management|review|any update|anything yet)\b/i.test(question);
+ // A verified handoff plus the immediate support topic distinguishes waiting
+ // for Support from seller follow-up. Assistant text alone cannot create a handoff.
+ const waitForSupport=/^(?:(?:ok(?:ay)?|so)[,\s]+)?(?:(?:do|should|can) i (?:just )?wait for (?:a |an |the |your )?(?:follow[ -]?up|reply|response|update)(?: from (?:support|management|you))?|will (?:support|management|you) follow up(?: with me)?)[.!?\s]*$/i.test(question.trim());
+ if(context.handedOff&&previous?.role==='assistant'&&/management review|flagged this conversation/i.test(previous.content)&&waitForSupport){
+  return {reply:reviewExplanation(context,'will someone reply')+' You can check this conversation for updates or add new details here; you don’t need to repeat the steps you already reported.',status:'open',managementReview:true,ai:false};
+ }
  if(context.handedOff&&reviewFollowup&&/^(?:for what|why|review|what (?:unresolved )?issue|what (?:is|does) (?:the |management )?review(?: mean)?|why (?:is|was) (?:it|this|my case) (?:in |under )?review|anything yet|any update|how long(?: will (?:it|this) take)?|will i be contacted|will (?:someone|management) (?:reply|respond|contact me)|what happens now)[.!?\s]*$/i.test(question.trim())){
   return {reply:reviewExplanation(context,question),status:'open',managementReview:true,ai:false};
  }

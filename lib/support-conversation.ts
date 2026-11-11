@@ -4,7 +4,7 @@ import {supportAccountDetailsReply} from './support-account-details.ts';
 import {supportPurchaseComplaintReply,supportPurchaseMismatch} from './support-purchase-complaint.ts';
 import {classifySupportCoaching,supportCoachingReferral,supportCoachingInstructions} from './support-coaching.ts';
 import {supportCurrentStepReply} from './support-current-step.ts';
-import {supportAccountReviewReply,supportMissingActivityConcern} from './support-account-review.ts';
+import {supportAccountReviewReply,supportMissingActivityConcern,supportCurrentResearchQuestion} from './support-account-review.ts';
 import {repeatedRefundReply} from './support-closure.ts';
 import {z} from 'zod';
 import {redactSupportQuestion,supportAnswer,supportTopic,supportDuplicateCharge,supportRenewalCancellationRequested,type SupportEvidence} from './support-policy.ts';
@@ -35,7 +35,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 function earlierSupportProblem(context:SupportContext){
  const users=context.messages.filter(m=>m.role==='user');
  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
- return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportPurchaseMismatch(m.content)||supportMissingActivityConcern(m.content)||supportMissingSellerContactQuestion(m.content)||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|waiting for (?:the )?next task|not (?:working|calling|texting|sent|sending|making|doing)|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportPurchaseMismatch(m.content)||supportMissingActivityConcern(m.content)||context.kind==='account'&&supportCurrentResearchQuestion(m.content)||supportMissingSellerContactQuestion(m.content)||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|waiting for (?:the )?next task|not (?:working|calling|texting|sent|sending|making|doing)|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
 }
 
 /** Local replies also work during provider outages and interruption recovery. */
