@@ -5,6 +5,7 @@ import {automaticOfferGuardrails,automaticOfferGuardrailMatches} from '../lib/au
 import {automaticOfferToolConfig,sellerAgreementToolMatches} from '../lib/seller-agreement-tool.ts';
 import {receptionLiveConversationMatches} from '../lib/recorded-reception.ts';
 import {sellerRoutineOwnershipAnswer} from '../lib/seller-ownership-answer.ts';
+import {sellerRoutineTimingAnswer} from '../lib/seller-timing-answer.ts';
 const now=Date.now(),address='45 Oak Road',conversationId='conv_fixture',token='a'.repeat(64);
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
 const context={party:'seller',accountId:'account',dealId:'deal',address,snapshot,offerState:null,offerVersion:0};
@@ -147,6 +148,32 @@ current=structuredClone(context);
 assert.equal((await automaticCallOffer(token,{action:'report_change',conversationId,sellerStatement:'No, um, no.'},{...ownershipDeps,verifyInput:async()=>false})).quoteAllowed,false,'unverified input cannot use the exception');
 assert.equal(current.offerState.factsPending,true);
 console.log('PASS connected report_change: routine negative co-owner answer preserves acceptance; original holds, changed agreement and evidence gates remain.');
+
+// November 11 failure: a normal timeline was wrongly persisted as changed
+// financial facts, destroying the calculated quote. Exercise the real service.
+let timingHistory={transcript:[{role:'agent',message:'When are you hoping to sell?'},{role:'user',message:"I'm looking to sell within the next 30 to 60 days."}]};
+const timingDeps={...d,resolveStatement:async i=>callSellerStatement(timingHistory,i),verifyInput:async i=>callOfferEvidence(timingHistory,i),verifyRoutineTimingAnswer:async i=>sellerRoutineTimingAnswer(timingHistory,i)};
+const reportTiming=()=>automaticCallOffer(token,{action:'report_change',conversationId,sellerStatement:'30 to 60 days.'},timingDeps);
+for(const base of [context,heldContext]){
+ current=structuredClone(base);
+ const before=await call({action:'get_offer'}),after=await reportTiming();
+ assert.equal(after.priceCents,before.priceCents);assert.equal(after.quoteAllowed,true);
+ assert.equal(after.contractAllowed,before.contractAllowed,'a routine timeline does not clear debt checks');
+ assert.equal(after.quoteRevision,before.quoteRevision,'routine answers do not invalidate the exact quote');
+ assert.equal(current.offerState.factsPending,undefined);
+ assert.equal(current.offerState.sellerStatement,timingHistory.transcript.at(-1).message);
+}
+for(const held of [{factsPending:true},{factsPending:true,payoffPending:true},{conditionPending:true},{agreementRevisionRequired:true}]){
+ current={...structuredClone(context),offerState:held};
+ const before=calculateAutomaticCallOffer(current,held,now),after=await reportTiming();
+ assert.equal(after.quoteAllowed,before.quoteAllowed);assert.equal(after.contractAllowed,before.contractAllowed);
+ for(const [key,value] of Object.entries(held))assert.equal(current.offerState[key],value);
+}
+current={...structuredClone(context),offerState:{acceptedPriceCents:9000000}};
+assert.equal((await reportTiming()).status,'verbally_accepted');assert.equal(current.offerState.acceptedPriceCents,9000000);
+timingHistory.transcript.at(-1).message='30 days, but my wife also owns the property.';
+current=structuredClone(context);assert.equal((await reportTiming()).quoteAllowed,false);assert.equal(current.offerState.factsPending,true);
+console.log('PASS actual timing report_change request preserves quote, acceptance and independent holds; mixed corrections stay blocked.');
 
 // The new ceiling must never silently rewrite an earlier accepted or issued amount.
 const legacyAcceptance={acceptedPriceCents:11536650},legacyBefore=JSON.stringify(legacyAcceptance);

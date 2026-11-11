@@ -2,7 +2,7 @@ import {object} from './required-call-recording.ts';
 
 function otherOwnerQuestion(message:string){
  const question=(message.match(/[^.!?;\n]+[.!?;]?/g)??[]).map(part=>part.trim()).filter(Boolean).at(-1)??'';
- return /^(?:does (?:anyone|anybody) else own (?:the|this|your) (?:property|house|home)(?: with you)?(?: who (?:would )?needs? to agree to sell)?|are there (?:any )?other owners(?: (?:of|on) (?:the|this|your) (?:property|house|home))?)\?$/i.test(question);
+ return /^(?:does (?:anyone|anybody) else own (?:the|this|your) (?:property|house|home)(?: with you)?(?: who (?:would )?needs? to agree to sell)?|are there (?:any )?other owners(?: (?:of|on) (?:the|this|your) (?:property|house|home))?(?: who (?:would )?needs? to agree (?:to sell|to the sale))?)\?$/i.test(question);
 }
 
 const negativeAnswer=/^(?:(?:um|uh|well)[,.\s]+)*(?:no|nope)(?:[,.\s]+(?:um|uh|well|no|nope))*[.\s]*$/i;
