@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 11, 2026 the owner required per-user property variety across authorized markets. After settled productive research batches, favor less represented cities and ZIPs while preserving explicit geographic limits, financial screening, exclusions, unknown operations and final spend admission. Keep productive supply when no safe alternative exists; do not claim guaranteed diversity for a single permitted market. Install after market-hold continuation, activate only after exact release verification, and preserve the current UI. See docs/per-user-market-diversity.md.
+
 - On November 11, 2026 the owner requested removing the remaining holds and restoring work. Release only the frozen, bounded pre-November-11 planning commitments from the reviewed blocked-account cohort, after exact-release verification. Preserve original uncertain operations, supplier reserves, actual once-only settlement, current funding, Pause and contact controls. No recurring age-out or replay of old work. See docs/reviewed-pending-work-relief.md.
 
 - On November 11, 2026 the owner clarified that call speed means the delay before their phone rings. Run independent read-only preflight checks concurrently, await every required result, and keep fresh exact provider review, final database admission, recording, contact, billing and unknown-outcome guards. Preserve the immediate intake path and existing UI. Offline concurrency tests do not establish live ring latency; provider recording start is not the ring timestamp. See docs/voice-dial-preflight.md.
