@@ -15,8 +15,8 @@ export function sellerPayoffPosition(report:SellerPayoffReport|undefined,priceCe
   canProceed:shortfallCents===0||!report.coverageDeclined&&validCents(report.coveredShortfallCents)&&report.coveredShortfallCents>=shortfallCents};
 }
 
-/** Extract only the latest exact caller statement, bound to the preceding
- * question. Tool arguments cannot manufacture a payoff or a promise to pay. */
+/** Extract the latest caller answer, bound to its real question, with a missed
+ * mortgage answer from the adjacent debt exchange. Arguments cannot invent facts. */
 export function sellerPayoffEvidence(value:unknown,input:Record<string,unknown>):SellerPayoffUpdate|null{
  if(input.action!=='report_change'||typeof input.sellerStatement!=='string')return null;
  const rows=object(value).transcript;if(!Array.isArray(rows))return null;
@@ -24,7 +24,21 @@ export function sellerPayoffEvidence(value:unknown,input:Record<string,unknown>)
  const index=turns.findLastIndex(t=>t.role==='user');
  const latest=String(turns[index]?.message??'').trim(),previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
  const actual=extractPayoff(latest,previous),requested=extractPayoff(input.sellerStatement,previous);
- return actual&&requested&&JSON.stringify(actual)===JSON.stringify(requested)?actual:null;
+ if(!actual||!requested||JSON.stringify(actual)!==JSON.stringify(requested))return null;
+ // A provider interruption can skip saving the mortgage answer. Recover it
+ // only from the immediately preceding seller turn when this turn answers the
+ // follow-up about other debts. Both answers stay bound to their real questions;
+ // never scan past a correction, unknown answer or another seller statement.
+ const otherDebtQuestion=/\b(other|additional|besides|apart from)\b/i.test(previous)&&/\b(debt|debts|lien|liens|taxes|hoa|mortgage|loan)\b/i.test(previous);
+ if(actual.otherDebtCents!==undefined&&otherDebtQuestion){
+  const priorIndex=turns.slice(0,index).findLastIndex(t=>t.role==='user');
+  if(priorIndex<0)return actual;
+  const priorAnswer=String(turns[priorIndex]?.message??'').trim();
+  const priorQuestion=String(turns.slice(0,priorIndex).findLast(t=>t.role==='agent')?.message??'');
+  const prior=extractPayoff(priorAnswer,priorQuestion);
+  if(prior?.mortgageCents!==undefined)return {mortgageCents:prior.mortgageCents,...actual};
+ }
+ return actual;
 }
 function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
  if(/\b(another owner|other owner|not the owner|ownership|deed|inherited|divorce|wrong (?:property|address)|new (?:roof|foundation)|fire damage)\b/i.test(latest))return null;

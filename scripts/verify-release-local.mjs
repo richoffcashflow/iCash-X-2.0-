@@ -49,6 +49,7 @@ const suites = [
  'seller-submission-status', 'seller-meta', 'seller-meta-database',
  'optin-call-now-route', 'optin-call-now-database',
  'seller-agreement-identity', 'seller-agreement-evidence', 'live-agreement-history', 'live-agreement-route',
+ 'seller-payoff', 'offer-loop-route', 'seller-phone-flow',
  'seller-agreement-delivery-status', 'seller-agreement-delivery-preflight',
  'contract-delivery-readiness-database', 'confirmed-contract-delivery',
  'seller-scenario-fine-tuning', 'buyer-intent-context',
