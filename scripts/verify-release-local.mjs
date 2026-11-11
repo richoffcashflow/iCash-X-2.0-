@@ -39,7 +39,7 @@ const suites = [
  'paid-access-recovery', 'paid-webinar-access', 'membership-routes', 'membership-embedded', 'purchase-access-email', 'purchase-access-followups', 'purchase-account-access', 'purchase-email-signin', 'email-only-signin-support', 'email-signin-errors', 'purchase-phone-access', 'cancellation-notifications', 'agreement-cancellation', 'live-dispatch', 'conversation-address',
  'workspace-acknowledgment', 'work-account-membership', 'account-activity-route', 'customer-provisioning-recovery', 'stripe-invoice-webhook', 'stripe-dispute-webhooks', 'manual-funding-route', 'early-access-funding', 'course-preview-contracts', 'course-preview-access', 'course-portal',
  'consented-browser-calling-database', 'contact-rpc-readback', 'manual-call-options', 'browser-phone-route', 'browser-phone-service', 'customer-phone-diagnostics', 'browser-call-session', 'authority-review-status', 'sms-review-status-route',
- 'dashboard-password', 'dashboard-boundaries', 'webinar-offer-save', 'webinar-flow-ui',
+ 'dashboard-password', 'dashboard-boundaries', 'webinar-offer-save', 'webinar-flow-ui', 'webinar-completion-route', 'webinar-shared-chat', 'webinar-shared-chat-client', 'webinar-chat-stream',
  'webinar-entry-route', 'webinar-session-summary', 'webinar-delivery', 'webinar-intelligence-route', 'webinar-vip', 'vip-billing-route', 'vip-billing', 'webinar-growth', 'webinar-recovery', 'webinar-return-database',
  'webinar-reminder-attribution-database', 'webinar-reminder-client', 'webinar-reminder-routes', 'webinar-reminder-results', 'checkout-measurement',
  'webinar-recovery-client', 'webinar-recovery-route', 'webinar-followups', 'webinar-purchase-flow', 'webinar-exit-reminder', 'webinar-chat-no-assistant', 'webinar-followup-routes', 'webinar-replay-spots',

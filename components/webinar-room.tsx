@@ -25,7 +25,7 @@ import {WebinarPlayer} from '@/components/webinar-player';
 import {WebinarPanelBoundary} from '@/components/webinar-panel-boundary';
 import {webinarPost as post,webinarBeacon,webinarRequest} from '@/lib/webinar-client';
 import {restoredPosition,savePosition,clearPosition,withinWebinarResumeWindow,webinarReturnNeedsReload} from '@/lib/webinar-playback';
-import {publicWebinar,webinarSchema,formatWatchTime,webinarOffers,webinarPitchAt,offerDestination,type Webinar,type WebinarEvent} from '@/lib/webinar-policy';
+import {publicWebinar,webinarSchema,formatWatchTime,webinarOffers,webinarPitchAt,webinarCompletionDestination,offerDestination,type Webinar,type WebinarEvent} from '@/lib/webinar-policy';
 const WebinarCheckout=dynamic(()=>import('@/components/webinar-checkout-adapter').then(m=>m.WebinarCheckout),{loading:()=> <p role="status">Getting checkout ready…</p>});
 type PublicWebinar=ReturnType<typeof publicWebinar>;
 type Message=WebinarMessage;
@@ -202,7 +202,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
  }
  function finishWebinar(){
   endedRef.current=true;setEnded(true);
-  if(session?.preview&&(w?.redirectAtEnd||isVip)&&(!isVip||purchasedRef.current!=='vip')){const next=selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId);if(isVip||next?.action==='checkout'){navigateWebinar(checkoutPreviewHref);return;}}
+  if(session?.preview&&w&&(!isVip||purchasedRef.current!=='vip')){const next=webinarCompletionDestination(w,offers,session.sessionId,Date.now()+timerState.offset);if(isVip||next?.startsWith(webinarSite.checkoutPath+'?')){navigateWebinar(checkoutPreviewHref);return;}}
   const done=track('completed');continuePurchase();
   if(checkoutEngagedRef.current)return;
   const offer=w?selectOffer(offers,w.durationSeconds,Date.now()+timerState.offset,w.endOfferId):null;if(offer)setSelectedOfferId(offer.id);setFunding(!!offer);

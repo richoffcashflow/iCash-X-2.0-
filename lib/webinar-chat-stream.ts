@@ -12,6 +12,8 @@ export function webinarChatStream(cues:ChatCue[],messages:WebinarMessage[],secon
  const entries:StreamEntry[]=cues.filter(c=>c.at<=seconds&&(c.kind==='replay'||c.kind==='purchase')).map(c=>({key:`cue:${c.id}`,at:c.at,kind:'cue',cue:c}));
  for(const message of messages){
   if(message.role!=='user')continue;
+  // Preserve a viewer's own submissions when seeking; shared comments follow the recording.
+  if(message.shared&&(typeof message.playback_seconds!=='number'||!Number.isInteger(message.playback_seconds)||message.playback_seconds<0||message.playback_seconds>seconds))continue;
   entries.push({key:`message:${message.id}`,at:message.playback_seconds??0,kind:'message',message,pending:false});
  }
  if(pending)entries.push({key:'sending',at:pending.playback_seconds,kind:'message',message:{...pending,id:'sending',role:'user'},pending:true});

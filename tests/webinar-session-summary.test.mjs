@@ -11,14 +11,15 @@ const {webinarSession,WebinarError}=await loadService('lib/webinar-server.ts',{
   const params=new URLSearchParams(path.split('?')[1]);
   assert.equal(params.get('id'),'eq.session');assert.equal(params.get('visitor_id'),'eq.visitor');assert.equal(params.get('limit'),'1');
   if(!exists)return [];
-  const row={id:'session',visitor_id:'visitor',webinar_id:'webinar',revision:7,is_preview:false,superseded_at:supersededAt};
+  const row={id:'session',visitor_id:'visitor',webinar_id:'webinar',revision:7,is_preview:false,superseded_at:supersededAt,progress_seconds:42};
   if(params.get('select')==='*')return [{...row,config}];
-  assert.equal(params.get('select'),'id,visitor_id,webinar_id,revision,is_preview,superseded_at,recording_version:config->>recordingVersion');
+  assert.equal(params.get('select'),'id,visitor_id,webinar_id,revision,is_preview,superseded_at,progress_seconds,recording_version:config->>recordingVersion');
   return [{...row,recording_version:version}];
  }
 });
 let result=await webinarSession('session',true);
 assert.equal(result.v,visitor);assert.deepEqual(result.s.config,{recordingVersion:'night'});assert.equal(result.s.revision,7);
+assert.equal(result.s.progress_seconds,42,'Older open tabs retain a bounded playback checkpoint for shared chat');
 supersededAt='2026-10-25T00:00:00Z';version=null;
 result=await webinarSession('session',true);assert.equal(result.s.superseded_at,supersededAt);assert.deepEqual(result.s.config,{recordingVersion:'day'});
 assert.equal(calls.filter(p=>p.startsWith('icash_webinar_visitors')).length,2,'Authorization is checked on every poll');

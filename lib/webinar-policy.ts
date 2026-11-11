@@ -86,6 +86,20 @@ export function webinarPitchAt(w:OfferConfig){return Math.min(...webinarOffers(w
 export function webinarReturnPosition(w:OfferConfig){return Math.max(0,Math.min(webinarPitchAt(w)-180,Math.max(0,(w.durationSeconds??14400)-1)));}
 export function offerDestination(o:WebinarOffer){return o.action==='link'&&validOfferUrl(o.url)?o.url:webinarSite.checkoutPath;}
 export function webinarEndOffer(w:OfferConfig,now=Date.now()){return selectOffer(webinarOffers(w),w.durationSeconds??14400,now,w.endOfferId);}
+/** Completion opens ordinary checkout; it never extends or reopens an expired offer. */
+export function webinarCompletionDestination(w:Pick<Webinar,'parentWebinarId'|'redirectAtEnd'|'durationSeconds'|'endOfferId'>,offers:WebinarOffer[],sessionId:string,now=Date.now()):string|null{
+ if(w.parentWebinarId)return '/webinar/upgrade';
+ if(!w.redirectAtEnd)return null;
+ const available=selectOffer(offers,w.durationSeconds,now,w.endOfferId);
+ if(available?.action==='link')return offerDestination(available);
+ if(!available){
+  const revealed=offers.filter(o=>o.at<=w.durationSeconds).sort((a,b)=>a.at-b.at);
+  const ending=revealed.find(o=>o.id===w.endOfferId)??revealed.at(-1);
+  // An expired custom destination is not permission to sell a different product.
+  if(ending?.action!=='checkout')return null;
+ }
+ return `${webinarSite.checkoutPath}?webinar_session=${encodeURIComponent(sessionId)}`;
+}
 export function publicWebinar(w:Webinar){const {transcript,faq,chatStyle,nightVersion,nightEnabled,adEntryWebinarId,...rest}=w;void transcript;void faq;void chatStyle;void nightVersion;void nightEnabled;void adEntryWebinarId;return {...rest,chat:w.chat.map(({variations,...cue})=>{void variations;return cue;})};}
 export function offerOpen(w:Pick<Webinar,'offerEndsAt'>,now=Date.now()){return !w.offerEndsAt||Date.parse(w.offerEndsAt)>now;}
 export const eventNames=['started','progress','name_saved','contact_saved','pitch_shown','add_to_cart','checkout_opened','completed','chat_question','returning_customer'] as const;

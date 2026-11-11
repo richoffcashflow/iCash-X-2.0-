@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 11, 2026 the owner requested shipping the webinar audit fixes. Completed main webinars with expired checkout offers must reach ordinary checkout without resetting deadlines or interrupting engaged payment. Shared approved comments follow their original playback time, with day/night, revision, preview and moderation boundaries intact. Preserve the current interface. Missing Meta CAPI credentials remain a separate configuration prerequisite; do not claim server purchase tracking is restored without verified delivery. See docs/webinar-completion-chat-2026-11-11.md.
+
 - On November 10, 2026 the owner required DealMachine financial prequalification before paid pulls, strict deduplication and outcome-based credit efficiency. Use the verified `financial-prefilter-v1` contract, exact free estimates and existing final spend locks; never widen mandatory financial filters or retry an uncertain paid request. Separate stale/missing/conflicting data from financial rejection, preserve original timestamps and budgets, and count real carrier costs and verified proceeds. No paid demonstrations or UI changes. See docs/financial-credit-optimization.md for staged activation and source limits.
 
 - On November 9, 2026 the owner refined the contact panel: open the seller thread with replies first, keep a slim reply bar at the bottom, place Call above the conversation, and show recordings inline with texts by default. Calling stays above the visible thread. Preserve exact selected-recipient routing, drafts, owner account/view/session boundaries and the simple main workspace.

@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
-import {eventNames,offerDestination} from '@/lib/webinar-policy';
-import {availableOffers,selectOffer} from '@/packages/webinar-engine/src/index';
+import {eventNames,webinarCompletionDestination} from '@/lib/webinar-policy';
+import {availableOffers} from '@/packages/webinar-engine/src/index';
 import {webinarBody,webinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarSession,WebinarError} from '@/lib/webinar-server';
 import {sessionWebinarOffers} from '@/lib/webinar-offer-server';
 export async function POST(req:Request){try{
@@ -12,7 +12,6 @@ export async function POST(req:Request){try{
  if(i.kind==='add_to_cart'&&!availableOffers(offers,i.seconds).length)throw new WebinarError(400,'An offer must be available before selecting it.');
  await db('rpc/icash_webinar_record','POST',{p_visitor:v.id,p_session:i.sessionId,p_seconds:i.seconds,p_kind:i.kind,p_key:i.key});
  const ended=i.kind==='completed'&&!s.is_preview&&i.seconds>=s.config.durationSeconds-5;
- const offer=ended&&s.config.redirectAtEnd?selectOffer(offers,s.config.durationSeconds,Date.now(),s.config.endOfferId):null;
- const redirect=ended&&s.config.parentWebinarId?'/webinar/upgrade':offer?offer.action==='checkout'?`${offerDestination(offer)}?webinar_session=${s.id}`:offerDestination(offer):null;
+ const redirect=ended?webinarCompletionDestination(s.config,offers,s.id):null;
  return Response.json({saved:true,...(redirect?{redirect}:{})},{headers:webinarHeaders});
  }catch(e){return webinarError(e);}}

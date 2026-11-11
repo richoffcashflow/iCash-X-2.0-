@@ -10,6 +10,11 @@ assert.deepEqual(keys(25,JSON.parse(JSON.stringify(messages))),keys(25),'Reloade
 assert.deepEqual(keys(0),['message:same-id'],'Seeking back does not hide your saved submission');
 assert.deepEqual(keys(35),keys(25),'Old assistant rows and host cues remain hidden');
 assert.equal(webinarChatStream([], [{id:'legacy',role:'user',text:'Older message',playback_seconds:null}],10)[0].at,0);
+const shared={id:'shared',role:'user',text:'Question about the offer',playback_seconds:1200,shared:true};
+assert.deepEqual(keys(20,[shared]),['cue:same-id','cue:next'],'Later shared comments cannot appear at the beginning');
+assert.equal(webinarChatStream([], [shared],1200)[0].at,1200,'Shared comments retain their original recording position');
+assert.equal(webinarChatStream([], [shared],1199).length,0,'Rewinding immediately hides future shared comments');
+for(const playback_seconds of [null,undefined,-1,NaN,1.5])assert.equal(webinarChatStream([], [{...shared,playback_seconds}],14400).length,0,'Unknown shared timing is not stamped at zero');
 const w={id:'saved-id',videoUrl:'',nightVersion:{videoUrl:'https://example.test/night.mp4'}};
 assert.equal(webinarPreviewLink(w),'/webinar?preview=saved-id&variant=night');
 assert.equal(webinarPreviewLink({...w,videoUrl:'https://example.test/day.mp4'}),'/webinar?preview=saved-id&variant=day');
