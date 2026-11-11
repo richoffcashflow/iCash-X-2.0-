@@ -1,3 +1,4 @@
+import {supportLocationGuidance} from './support-location-guidance.ts';
 import {classifySupportCoaching,supportCoachingReferral,supportCoachingInstructions} from './support-coaching.ts';
 import {supportCurrentStepReply} from './support-current-step.ts';
 import {supportAccountReviewReply,supportMissingActivityConcern} from './support-account-review.ts';
@@ -47,6 +48,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const versionClarification=supportVersionClarification(context.messages);if(versionClarification)return result(versionClarification,'open');
+ const location=supportLocationGuidance(context);if(location)return location;
  const accountReview=supportAccountReviewReply(context);if(accountReview)return accountReview;
  const currentStep=supportCurrentStepReply(context);if(currentStep)return {...currentStep,reply:removeRepeatedSupportQuestions(currentStep.reply,context.messages),status:currentStep.status==='resolved'&&(earlierSupportProblem(context)||context.handedOff)?'open':currentStep.status};
  const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status,inbox.routineGuidance);
