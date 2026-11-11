@@ -1,6 +1,7 @@
 import {supportLocationGuidance} from './support-location-guidance.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
 import {supportAccountDetailsReply} from './support-account-details.ts';
+import {supportPurchaseComplaintReply,supportPurchaseMismatch} from './support-purchase-complaint.ts';
 import {classifySupportCoaching,supportCoachingReferral,supportCoachingInstructions} from './support-coaching.ts';
 import {supportCurrentStepReply} from './support-current-step.ts';
 import {supportAccountReviewReply,supportMissingActivityConcern} from './support-account-review.ts';
@@ -34,7 +35,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 function earlierSupportProblem(context:SupportContext){
  const users=context.messages.filter(m=>m.role==='user');
  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
- return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportMissingActivityConcern(m.content)||supportMissingSellerContactQuestion(m.content)||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|waiting for (?:the )?next task|not (?:working|calling|texting|sent|sending|making|doing)|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportPurchaseMismatch(m.content)||supportMissingActivityConcern(m.content)||supportMissingSellerContactQuestion(m.content)||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|waiting for (?:the )?next task|not (?:working|calling|texting|sent|sending|making|doing)|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
 }
 
 /** Local replies also work during provider outages and interruption recovery. */
@@ -94,6 +95,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(migration)return result(migration.reply,migration.status);
  const course=supportCourseAnswer(context.messages,context.kind==='account'?supportReplyEvidence(context.messages,context.evidence??[]):[]);
  if(course?.answered&&supportListingQuestion(question))return result(course.reply,earlierSupportProblem(context)?'open':'resolved');
+ const complaint=supportPurchaseComplaintReply(context);if(complaint)return result(complaint.reply,complaint.status);
  const receipt=context.kind==='account'?context.evidence?.find(e=>e.key==='work_value'):undefined;
  if(receipt)return result(receipt.detail,'open');
  const outreach=context.kind==='account'?supportOutreachReply(context.messages,context.evidence??[]):null;
@@ -163,6 +165,7 @@ async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fet
  if(supportVersionClarification(context.messages))return fallback;
  if(supportVoiceSetupReply(context))return fallback;
  if(supportAccountDetailsReply(context))return fallback;
+ if(supportPurchaseComplaintReply(context))return fallback;
  if(supportAccountReviewReply(context))return fallback;
  if(supportCurrentStepReply(context))return fallback;
  if(supportInboxGuidance(context))return fallback;
