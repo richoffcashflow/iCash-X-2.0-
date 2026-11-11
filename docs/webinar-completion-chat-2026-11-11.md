@@ -8,4 +8,6 @@ Shared chat requests include the viewer's bounded playback position. The databas
 
 Regression coverage exercises the actual completion route with the audited timings, saved deadlines and retries; active main/VIP checkout; owner preview; server filtering before pagination; original client timestamps, polling and rewind; session summaries and moderation isolation. These tests use fictional sessions and offline fixtures, with no customer messages or paid transactions.
 
+The browser completion assertion waits for the destination's payment frame and checks the original request referrer. The ordinary checkout intentionally prepares payment automatically; asserting a global zero immediately after navigation raced against its mount. The corrected test requires exactly one destination preparation and none from the expired webinar, while retaining the active-payment continuity checks. No checkout behavior changes.
+
 The separate Meta audit found missing production `ICASH_META_ACCESS_TOKEN` and `ICASH_META_GRAPH_VERSION`, with queued server events that had never been attempted. This release does not invent credentials, change the configured pixel, replay events or claim delivery. Restoring CAPI requires an authorized token for that pixel, a supported Graph version and receipt-backed delivery verification. Browser Pixel and server tracking are separate.
