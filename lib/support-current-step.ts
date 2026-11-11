@@ -17,6 +17,15 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
  const answer=(reply:string,status:SupportReply['status']='open'):SupportReply=>({reply,status,ai:false});
  const guidance=(reply:string,status:SupportReply['status']='open'):SupportReply=>({...answer(reply,status),...(supportRoutineGuidanceQuestion(q)?{routineGuidance:true as const}:{})});
  if(/\b(?:refund|cancel|charged twice|duplicate charge|unrecognized charge)\b/i.test(q))return null;
+ const pauseQuestion=(text:string)=>/^(?:should|can|could|how (?:do|can)) i pause (?:my |the )?(?:bot|ai|automation)[?!.\s]*$/i.test(text.trim());
+ const questionIndex=context.messages.findLastIndex(turn=>turn.role==='user');
+ const priorTurn=context.messages[questionIndex-1],priorQuestion=context.messages[questionIndex-2];
+ const pauseFollowup=/^pause(?: (?:it|then))?[?!.\s]*$/i.test(q.trim())&&priorQuestion?.role==='user'&&pauseQuestion(priorQuestion.content)&&priorTurn?.role==='assistant';
+ if(pauseQuestion(q)||pauseFollowup)return {...answer('If you want to stop new automatic work, choose Pause bot in the workspace. Work already started may still finish and its costs may settle. Pausing is not a repair for missing or delayed activity and does not cancel your software subscription. This chat has not changed your bot setting.'),routineGuidance:true};
+ if(/^(?:should|do|must|would) i (?:need to |have to )?(?:upgrade to|buy|get) vip[?!.\s]*$/i.test(q.trim())){
+  const active=context.kind==='account'&&context.evidence?.some(e=>e.key==='vip'&&e.source==='icash_vip_features_active'&&e.status==='ok'&&e.code==='vip_active');
+  return {...answer((active?'Your current account already has VIP; you do not need to buy it again. ':'')+'Standard includes ordinary automated seller leads, calls, texts and support. VIP adds features such as Ask AI Bot, buyer-network access, custom voice, eligible lead priority and usage savings. Upgrading is not a verified repair for missing or delayed work and does not guarantee a lead, seller reply or closing.'),routineGuidance:true};
+ }
  const offerCode=supportOfferCodeReply(context.messages);if(offerCode)return offerCode;
 
  // Payment details supplied during sign-in troubleshooting are not a question
