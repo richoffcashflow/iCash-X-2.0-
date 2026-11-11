@@ -1,5 +1,17 @@
 # Four November business numbers
 
+## November 11 additions
+
+The owner added (602) 772-2055 and (435) 724-2174 to the same pool.
+`november_11_business_numbers` extends the exact-number routing boundaries and
+installs both SMS rows disabled. `november_11_sender_pacing` gives both the
+existing 200/day, 20/hour, three-minute spacing and daytime policy, preserving
+usage counters, health routing and all previously disabled numbers.
+After the matching production release, connect each from `/messagingadmin/calls`
+and confirm its active lease and forwarding before enabling its SMS row.
+Outgoing calling remains dependent on verified Twilio caller ID. Connection
+checks do not send texts or place calls, and do not prove end-to-end delivery.
+
 ## November 10 additions
 
 The owner added (505) 601-9451, (505) 507-2937 and (512) 779-1343 to the same
