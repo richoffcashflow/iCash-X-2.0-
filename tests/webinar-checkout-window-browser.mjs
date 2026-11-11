@@ -9,7 +9,7 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
   const start=new Date('2026-10-20T05:00:00Z');await page.clock.install({time:start});
   const vip=scenario==='vip',id='00000000-0000-4000-8000-000000000123',sessionId='00000000-0000-4000-8000-000000000456';
   const webinar=publicWebinar({...newWebinar(id),title:'Checkout timer fixture',status:'published',publicCode:'123456',videoUrl:base+'/fixture-video.mp4',showAudienceCount:false,parentWebinarId:vip?'00000000-0000-4000-8000-000000000999':null,offers:[{id:'primary',at:0,title:'Your original offer',description:'',ctaLabel:'Continue',action:'checkout',url:'',expiresAt:new Date(+start+30000).toISOString()}]});
-  let preparations=0,vipAttempts=0,paid=false;
+  let preparations=0,vipAttempts=0,paid=false;const preparationSources=[];
   const status=()=>({ready:true,mode:'test',embeddedReady:true,needsClaim:false,customerName:'Fixture',email:scenario==='card'||vip?'fixture@example.invalid':null,offer:{revision:1,priceCents:5000},membership:vip||paid?{accessible:true,vip:vip&&paid}:null,postPurchaseUrl:'/live/123457'});
   const stripe=`window.fixtureMounts=0;window.fixtureDestroys=0;window.Stripe=()=>({createEmbeddedCheckoutPage:async({onComplete})=>({mount(node){window.fixtureMounts++;const frame=document.createElement('iframe');frame.title='Fixture secure payment';frame.src='https://checkout.stripe.com/form';node.append(frame);window.fixtureComplete=onComplete;},destroy(){window.fixtureDestroys++;}})});`;
   await context.route('**/*',route=>{
@@ -24,7 +24,7 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    if(url.pathname==='/api/webinar/chat/feed')return json({messages:[],statuses:[]});
    if(url.pathname==='/api/webinar/timers')return json({deadlines:{},offerDeadlines:{},serverNow:+start});
    if(url.pathname==='/api/billing/membership'){
-    if(route.request().method()==='POST'){preparations++;return json({clientSecret:'fixture-secret',publishableKey:'pk_test_fixture',sessionId:'cs_test_fixture'});}
+    if(route.request().method()==='POST'){preparations++;preparationSources.push(route.request().headers().referer);return json({clientSecret:'fixture-secret',publishableKey:'pk_test_fixture',sessionId:'cs_test_fixture'});}
     return json(status());
    }
    if(url.pathname==='/api/billing/vip'){
@@ -48,7 +48,12 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
     assert.equal(await page.locator('#webinar-offer').count(),0);assert.equal(preparations,0);
     await page.locator('video').dispatchEvent('ended');
     await page.waitForURL(base+'/webinar/checkout?webinar_session='+sessionId);
-    assert.equal(preparations,0,'Completion opens the ordinary checkout without preparing payment');
+    // The destination intentionally auto-opens payment. Wait for that form and
+    // verify the request's source, instead of racing its mount after navigation.
+    await field.waitFor();
+    assert.equal(preparations,1,'The ordinary destination prepares exactly one checkout');
+    assert.deepEqual(preparationSources,[base+'/webinar/checkout?webinar_session='+sessionId],'Completion never prepares payment in the expired webinar');
+    assert.deepEqual(await page.evaluate(()=>[window.fixtureMounts,window.fixtureDestroys]),[1,0]);
    }else{
     await page.getByRole('heading',{name:'Your original offer'}).waitFor();
     if(scenario==='email'){
