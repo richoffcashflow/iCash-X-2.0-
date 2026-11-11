@@ -5,7 +5,7 @@ const suites = [
  'assistant-text-actions', 'assistant-text-action-route', 'property-followthrough',
  'financial-prequalification', 'financial-credit-outcomes',
  'cash-offer-math', 'offer-policy', 'screening-job', 'screening-recalculation', 'automatic-call-offer', 'seller-text-offer', 'free-sample',
- 'support-credit-balance', 'support-call-hold-guidance', 'support-review-wait', 'support-current-research', 'support-purchase-complaint', 'support-account-details', 'support-voice-setup', 'support-location-guidance', 'support-review-guidance', 'support-credit-exhaustion', 'support-manual-contact', 'support-account-deletion', 'support-center',
+ 'support-review-wait', 'support-current-research', 'support-purchase-complaint', 'support-account-details', 'support-voice-setup', 'support-location-guidance', 'support-review-guidance', 'support-credit-exhaustion', 'support-manual-contact', 'support-account-deletion', 'support-center',
  'http-response-lifecycle', 'deferred-text-recovery',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
  'scheduler-reliability', 'workflow-stall-isolation', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database',
@@ -68,6 +68,7 @@ const suites = [
  'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
  'credit-refill-context', 'credit-refill-recommendation',
+ 'support-credit-balance', 'support-call-hold-guidance',
 ];
 for (const suite of suites) {
  const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});
