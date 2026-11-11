@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
+import {newWebinar,publicWebinar,webinarCompletionDestination} from '../lib/webinar-policy.ts';
 
 // Local, intercepted payment UI only. No Stripe/provider request or real card data.
 export async function verifyWebinarCheckoutWindow(browser,base,options={},name='browser'){
@@ -18,7 +18,7 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    if(url.origin==='https://checkout.stripe.com')return route.fulfill({contentType:'text/html',body:'<!doctype html><label>Sample payment field<input aria-label="Sample payment field" autocomplete="off"></label>'});
    if(url.origin!==base)return route.abort();
    if(url.pathname==='/api/webinar/start')return json({sessionId,webinar,progress:100,name:'Fixture',messages:[],preview:false,serverNow:+start});
-   if(url.pathname==='/api/webinar/event')return json({saved:true,redirect:vip?'/webinar/upgrade':'/webinar/checkout'});
+   if(url.pathname==='/api/webinar/event')return json({saved:true,...(route.request().postDataJSON().kind==='completed'?{redirect:webinarCompletionDestination(webinar,webinar.offers,sessionId,+start+31000)}:{})});
    if(url.pathname==='/api/webinar/chat/feed')return json({messages:[],statuses:[]});
    if(url.pathname==='/api/webinar/timers')return json({deadlines:{},offerDeadlines:{},serverNow:+start});
    if(url.pathname==='/api/billing/membership'){
@@ -44,6 +44,9 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    if(scenario==='untouched'){
     await page.getByText('This session’s offers have ended.',{exact:true}).waitFor();
     assert.equal(await page.locator('#webinar-offer').count(),0);assert.equal(preparations,0);
+    await page.locator('video').dispatchEvent('ended');
+    await page.waitForURL(base+'/webinar/checkout?webinar_session='+sessionId);
+    assert.equal(preparations,0,'Completion opens the ordinary checkout without preparing payment');
    }else{
     await page.getByRole('heading',{name:'Your original offer'}).waitFor();
     if(scenario==='email'){
@@ -66,5 +69,5 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    assert.deepEqual(errors,[]);
   }catch(error){throw Error(`${name} ${scenario}: ${error.message}\n${page.url()}\n${await page.locator('body').innerText()}\n${errors.join('\n')}`);}finally{await context.close();}
  }
- console.log(`PASS ${name}: untouched offer expires; email, cross-origin payment fields and VIP retry stay mounted through expiry/video end; verified payment advances.`);
+ console.log(`PASS ${name}: untouched expired offer reaches ordinary checkout on completion; email, cross-origin payment fields and VIP retry stay mounted through expiry/video end; verified payment advances.`);
 }

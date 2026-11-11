@@ -1,4 +1,5 @@
 import {webinarOfferFocus} from '../lib/webinar-offer-focus.ts';
+import {webinarSite} from '../lib/webinar-site.ts';
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';
 import * as policy from '../lib/webinar-policy.ts';import * as prompts from '../lib/webinar-prompts.ts';import * as playback from '../lib/webinar-playback.ts';
 import {webinarChatStream} from '../lib/webinar-chat-stream.ts';
@@ -29,7 +30,7 @@ const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds,public_status:'pending'}]};}return {saved:true};}
 let timerInput;
-const roomDeps={installWebinarRecovery:()=>({sync(){},stop(){}}),...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite:{hostName:'Kesean',brandName:'iCash X',assistantName:'Assistant',checkoutPath:'/join',workspacePath:'/'}};
+const roomDeps={installWebinarRecovery:()=>({sync(){},stop(){}}),...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();assert.equal(listeners.has('beforeunload'),false,'Loading never installs a reminder');await flush();tree=render();
 assert.equal(listeners.has('beforeunload'),true,'Regular viewers receive the one-time exit reminder');
@@ -448,7 +449,7 @@ for(const vip of [false,true])for(const interaction of [null,'onFocusCapture','o
  if(!vip&&interaction==='onUpgradeActive')continue;
  const originalNow=Date.now;let clock=Date.parse('2026-10-20T05:00:00Z');Date.now=()=>clock;
  const expiring={...w,parentWebinarId:vip?'00000000-0000-4000-8000-000000000999':null,offers:[{id:'expiring',at:0,title:'Original checkout',description:'',ctaLabel:'Buy',action:'checkout',url:'',expiresAt:new Date(clock+1000).toISOString()}]};
- const instance=await harness('components/webinar-room.tsx',{...roomDeps,post:async url=>url.endsWith('/start')?{sessionId,webinar:policy.publicWebinar(expiring),progress:100,name:'Buyer',messages:[],preview:false,serverNow:clock}:{saved:true,redirect:vip?'/webinar/upgrade':'/webinar/checkout'}});
+ const instance=await harness('components/webinar-room.tsx',{...roomDeps,post:async url=>url.endsWith('/start')?{sessionId,webinar:policy.publicWebinar(expiring),progress:100,name:'Buyer',messages:[],preview:false,serverNow:clock}:{saved:true,redirect:policy.webinarCompletionDestination(expiring,expiring.offers,sessionId,clock)}});
  try{
   const draw=()=>instance.render('WebinarRoom',{});draw();await flush();let current=draw();current=draw();
   const before=redirects.length;
@@ -472,3 +473,18 @@ for(const vip of [false,true])for(const interaction of [null,'onFocusCapture','o
  }finally{instance.close();Date.now=originalNow;}
 }
 console.log('PASS main/VIP active checkout: email/input/iframe/upgrade engagement pins the offer across expiry, idle errors and video end; only verified purchase advances.');
+
+for(const recordingVersion of ['day','night']){
+ const expired={...w,recordingVersion,offers:[{id:'closed',at:100,title:'Checkout',description:'',ctaLabel:'Review',action:'checkout',url:'',expiresAt:new Date(Date.now()-1000).toISOString()}]};
+ let writes=0;
+ const instance=await harness('components/webinar-room.tsx',{...roomDeps,post:async url=>{if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(expired),progress:expired.durationSeconds,name:'Owner',messages:[],preview:true,serverNow:Date.now()};writes++;return {saved:true};}});
+ try{
+  const draw=()=>instance.render('WebinarRoom',{});draw();await flush();let current=draw();current=draw();
+  assert.equal(find(current,'WebinarCheckout'),undefined,'Expired offers stay closed in owner preview');
+  const before=redirects.length;find(current,'WebinarPlayer').props.onEnded();await flush();
+  assert.equal(redirects.length,before+1);
+  assert.equal(redirects.at(-1),`/webinar/checkout/preview?webinar=${w.id}&variant=${recordingVersion}`);
+  assert.equal(writes,0,'Preview completion never writes a live checkout event');
+ }finally{instance.close();}
+}
+console.log('PASS expired Day/Night preview completion opens the isolated checkout preview without reopening offers.');

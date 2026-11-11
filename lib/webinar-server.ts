@@ -24,14 +24,14 @@ export async function webinarVisitor(create=false,resume?:string,signal?:AbortSi
  if(v&&create)jar.set('icash_webinar',webinarToken(v.id,'visitor',86400*180),{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*180});
  if(!v)throw new WebinarError(401,'Reload the webinar to restore your session.');return v;
 }
-export type WebinarSessionSummary=Pick<WebinarSession,'id'|'visitor_id'|'webinar_id'|'revision'|'is_preview'|'superseded_at'>&{config:Pick<Webinar,'recordingVersion'>};
+export type WebinarSessionSummary=Pick<WebinarSession,'id'|'visitor_id'|'webinar_id'|'revision'|'is_preview'|'superseded_at'|'progress_seconds'>&{config:Pick<Webinar,'recordingVersion'>};
 export async function webinarSession(id:string,summary:true):Promise<{v:Visitor;s:WebinarSessionSummary}>;
 export async function webinarSession(id:string,summary?:false):Promise<{v:Visitor;s:WebinarSession}>;
 export async function webinarSession(id:string,summary=false):Promise<{v:Visitor;s:WebinarSession|WebinarSessionSummary}>{
  const v=await webinarVisitor();
  // Polling needs current ownership/supersession and chat scope, not the saved
  // video, transcript, offers and chat cues. Never cache authorization or state.
- const fields=summary?'id,visitor_id,webinar_id,revision,is_preview,superseded_at,recording_version:config->>recordingVersion':'*';
+ const fields=summary?'id,visitor_id,webinar_id,revision,is_preview,superseded_at,progress_seconds,recording_version:config->>recordingVersion':'*';
  const [row]=await db<(WebinarSession&{recording_version?:Webinar['recordingVersion']})[]>(`icash_webinar_sessions?id=eq.${id}&visitor_id=eq.${v.id}&select=${fields}&limit=1`);
  if(!row)throw new WebinarError(404,'Session not found.');
  if(summary){const {recording_version,...s}=row;return {v,s:{...s,config:{recordingVersion:recording_version==='night'?'night':'day'}}};}
