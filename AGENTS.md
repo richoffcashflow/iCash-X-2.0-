@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 11, 2026 the owner requested removing the remaining holds and restoring work. Release only the frozen, bounded pre-November-11 planning commitments from the reviewed blocked-account cohort, after exact-release verification. Preserve original uncertain operations, supplier reserves, actual once-only settlement, current funding, Pause and contact controls. No recurring age-out or replay of old work. See docs/reviewed-pending-work-relief.md.
+
 - On November 11, 2026 the owner required fast, aggressive daily work for every funded active user. Fix demonstrated supply/dispatch failures and prioritize actual calls, texts and useful results. Financial queries must contain one provider filter per field while preserving every mandatory constraint; incompatible experiments yield to eligible supply. Keep original unknown operations, funds, daily budgets, Run/Pause and recipient controls. No paid demonstrations, automatic credit purchases, number purchases or UI changes. See docs/daily-outreach-query-recovery.md.
 
 - On November 11, 2026 the owner reported repeated live-call confirmations and slow offer responses. Reuse source-bound seller answers, preserve accepted prices across routine initial ownership answers, and ask only missing closing details followed by one concise price/date/inspection/text-permission readback. Keep truthful AI identity, exact offer/identity/consent checks, changed-term holds and bounded retries. Verify both inbound and outbound runtime instructions with offline scenarios; instruction tests do not prove live speech quality. See docs/seller-confirmation-continuity.md.
