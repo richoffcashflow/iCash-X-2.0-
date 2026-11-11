@@ -35,5 +35,21 @@ for(const tail of [
 ])assert.doesNotMatch((await ask([...history,...tail],{allowAI:false})).reply,/latest activity check|still flags no completed work/i);
 for(const messages of [[u('Can u confirm?')],[u('Does the bot work in Oregon?'),a('Markets vary.'),u('Can u confirm?')]])assert.doesNotMatch((await ask(messages,{allowAI:false})).reply,/latest activity check|still flags no completed work/i);
 assert.doesNotMatch((await ask([...history,u('Can u confirm?')],{kind:'access'})).reply,/latest activity check|still flags no completed work/i);
+const operatorReview=[u('My bot has done no work.'),o('No completed research, calls or texts are recorded. This needs investigation; the case remains open with no confirmed restart time.')];
+for(const q of ['Will the issue be fixed so my bot can start working?','So the problem is going to be fixed so I can start getting leads and the bot can start working','When will this be repaired?']){
+ const r=await ask([...operatorReview,u(q)]);assert.match(r.reply,/no completed work/i,q);assert.equal(r.managementReview,true);assert.equal(r.status,'open');
+ assert.doesNotMatch(r.reply,/add listings|upload properties|will start|will be fixed|guarantee/i);
+ const repeated=await ask([...operatorReview,u(q),a(r.reply),u('When will this be repaired?')]);assert.match(repeated.reply,/no completed work/i);
+}
+for(const messages of [
+ [u('Will the issue be fixed so my bot can start working?')],
+ [o('Your payment receipt is under review.'),u('When will this be repaired?')],
+ [o('No completed research was recorded before the repair. The issue is now resolved.'),u('When will this be repaired?')],
+ [...operatorReview,u('It worked'),u('When will this be repaired?')],
+ [...operatorReview,u('Where is the course?'),u('When will this be repaired?')],
+ [...operatorReview,u('When will the seller contract be fixed?')],
+])assert.doesNotMatch((await ask(messages,{allowAI:false})).reply,/latest activity check|still flags no completed work/i);
+assert.doesNotMatch((await ask([...operatorReview,u('When will this be repaired?')],{kind:'access',allowAI:false})).reply,/latest activity check|still flags no completed work/i);
+assert.doesNotMatch((await ask([a(operatorReview[1].content),u('When will this be repaired?')],{allowAI:false})).reply,/latest activity check|still flags no completed work/i);
 assert.equal(calls,0);
 console.log('PASS fictional activity confirmation, repeat, current evidence, guest/operator/topic boundaries; no provider calls');

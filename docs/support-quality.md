@@ -2,6 +2,8 @@
 
 Short requests to confirm stalled bot activity use fresh account evidence instead of repeating a generic management-review message. Confirmation distinguishes no completed work, pending earlier work, Pause, historical totals and unavailable checks. It never promises a restart or treats a passing check as customer recovery. Fictional replays in `tests/support-activity-confirmation.test.mjs` cover repeat questions, repair follow-ups, guests, operator findings, explicit success and topic changes; paid provider tests remain disabled.
 
+Repair-expectation follow-ups can retain an explicitly unresolved operator finding about missing activity. Current account checks still supply the answer; the operator update is not a promised repair. Other operator findings, resolved issues and intervening topics stop this path, and the reply never guarantees when leads or outreach will begin.
+
 Deal-timing and property-selection questions receive direct, source-backed explanations before generic lead-import help. The current shared offer formula is used, without promising a deal, restart or daily result. `tests/support-work-expectations.test.mjs` covers both account and guest conversations, changed topics and unresolved activity complaints. These answers do not diagnose or resolve a customer account fault.
 
 The owner requested a broader support improvement pass on October 30, 2026, using the support inbox as the source. Read-only review found recurring confusion about contact availability, contract timing, off-market properties, usage costs, failed offer checkout, and wrong checkout emails. Earlier automated replies sometimes answered a nearby topic or repeated a fallback without advancing the case.
