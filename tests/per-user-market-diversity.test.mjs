@@ -4,6 +4,7 @@ import {PGlite} from '@electric-sql/pglite';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const sql=read('config/per-user-market-diversity.sql');
 assert.equal(sql,read('supabase/migrations/20261111195406_per_user_market_diversity.sql'));
+assert(!/^begin;|^commit;/m.test(sql),'Migration caller owns transaction and history receipt');
 const db=new PGlite(),q=(s,a=[])=>db.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const a=id(1),b=id(2),rev=id(3);

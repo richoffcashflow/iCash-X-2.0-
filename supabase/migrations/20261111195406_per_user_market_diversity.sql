@@ -1,5 +1,5 @@
 -- Spread successful research across authorized markets without buying a test page.
-begin;
+-- Caller owns the migration transaction so schema and history stay atomic.
 set local lock_timeout='5s';
 set local statement_timeout='60s';
 do $guard$
@@ -123,4 +123,3 @@ begin
  if (length(d)-length(replace(d,needle,'')))/length(needle)<>1 then raise exception 'Inventory preparation changed';end if;
  execute replace(d,needle,needle||E'\n if public.icash_rotate_successful_market(p_account,p_revision,p_page) then return ''inventory_market_changed'';end if;');
 end $patch$;
-commit;
