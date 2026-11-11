@@ -6,7 +6,7 @@ const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
 const predecessors=JSON.parse(read('tests/fixtures/financial-prequalification-before.json'));
 export const plan={version:'seller-filters-v1',strategy:'baseline',providerPage:1,mode:'explore'};
 export const policy={version:'financial-prefilter-v1',exclusionListId:'fixture-list',asOf:'2026-11-10',tier:0};
-export const migration=read('config/dealmachine-financial-prequalification.sql');
+export const migration=read('config/dealmachine-financial-prequalification.sql')+read('config/financial-query-single-filter.sql');
 export const setupSql=base.setupSql+base.migration+`
  alter table icash_accounts add primary key(id);
  alter table icash_screening_jobs add primary key(id);
@@ -15,7 +15,8 @@ export const setupSql=base.setupSql+base.migration+`
   add column updated_at timestamptz default now(),add column shared_hits integer not null default 0;
  `+predecessors.filter(x=>['icash_claim_discovery_estimate','icash_targeting_query_context','icash_reserve_research_discovery'].includes(x.proname)).map(x=>x.definition+';').join('\n')
  +JSON.parse(read('tests/fixtures/financial-exclusions-before.json')).definition+';'
- +read('config/research-request-reuse.sql').match(/create function public\.icash_finish_discovery_estimate\([\s\S]*?\$\$;/)[0];
+ +read('config/research-request-reuse.sql').match(/create function public\.icash_finish_discovery_estimate\([\s\S]*?\$\$;/)[0]
+ +read('tests/fixtures/financial-targeting-filters-before.sql');
 const nativeQuery=JSON.parse(read('tests/fixtures/financial-free-query.json'));
 const filters=[...new Map(nativeQuery.filters.map(f=>[f.filter_id,{filter_id:f.filter_id,type:typeof f.value==='boolean'?'BOOLEAN':['market_status','property_type'].includes(f.filter_id)?'MULTI_SELECT':f.filter_id==='last_sale_date'?'DATE':'NUMBER',allowed_operators:f.operator?[f.operator]:['is_boolean'],is_premium_filter:false,...(f.filter_id==='market_status'?{options:[{option_id:6,label:'Off Market'}]}:{})}])).values()];
 export const seedSql=base.seedSql+base.activateSql+`update icash_integration_checks set checked_at=now(),result=jsonb_build_object('status','verified','catalogVersion',4,'checkedAt',now(),'plan','{"name":"Fixture","is_paid":true}'::jsonb,'filters','${JSON.stringify(filters)}'::jsonb);`;
