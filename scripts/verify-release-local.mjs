@@ -14,7 +14,7 @@ const suites = [
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',
  'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources',
  'owner-export-preflight', 'owner-export-preflight-database', 'owner-export-preflight-review', 'owner-export-preflight-cohorts',
- 'research-request-reuse', 'discovery-hold-backoff', 'research-market-duplicate-cooling', 'research-duplicate-yield-cooling', 'research-provider-feedback', 'seller-interest-evidence',
+ 'research-request-reuse', 'market-hold-continuation', 'market-hold-continuation-service', 'discovery-hold-backoff', 'research-market-duplicate-cooling', 'research-duplicate-yield-cooling', 'research-provider-feedback', 'seller-interest-evidence',
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
  'pro-voice-capacity', 'pro-voice-capacity-database',
  'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-call-invitation', 'seller-initial-reply',
