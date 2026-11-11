@@ -12,6 +12,13 @@ for(const q of ['Can u confirm?','Can you confirm that?','Please check again.','
  const repeat=await ask([...history,u(q),a(r.reply),u('Can you confirm?')]);assert.match(repeat.reply,/no completed work/i);
 }
 const delayed=[u('My workspace has been running all day without progress.'),a('Your case is still in management review.'),u('I need to speak to a live support agent.'),a('This is automated support. Your case is still in management review.'),u('Why?'),a('Your case is still in management review.')];
+for(const q of ['Why has my bot not looked up new properties today?','My bot has not researched any properties today.','The bot did not find any leads today.']){
+ const r=await ask([u(q)],{handedOff:false});assert.match(r.reply,/no completed work/i);assert.match(r.reply,/overall/);assert.match(r.reply,/do not prove.*recent/i);assert.equal(r.managementReview,true);assert.equal(r.status,'open');
+ const follow=await ask([u(q),a(r.reply),u('Can you confirm?')]);assert.match(follow.reply,/latest activity check/i);
+}
+for(const q of ['Has my bot looked up properties today?','My bot has researched properties today.','The seller has not looked up properties today.','How long until my bot finds a deal?']){
+ const r=await ask([u(q)],{allowAI:false,handedOff:false});assert.doesNotMatch(r.reply,/lack of progress is frustrating/i);
+}
 assert.match((await ask([...delayed,u('Why hasn’t this been rectified?')])).reply,/no completed work/i);
 const paused=await ask([...history,u('Is it fixed yet?')],{evidence:[{...evidence[0],code:'paused',status:'attention'},evidence[1]]});assert.match(paused.reply,/currently paused/i);assert.match(paused.reply,/before/i);assert.doesNotMatch(paused.reply,/resume|unpaused/i);
 const pending=await ask([...history,u('Can you confirm?')],{evidence:[evidence[0],{...evidence[1],outreach:{...evidence[1].outreach,progress:{status:'settling',health:{status:'blocked',reason:'pending_work'}}}}]});assert.match(pending.reply,/earlier work.*confirmation/i);assert.doesNotMatch(pending.reply,/charged|no completed work/i);

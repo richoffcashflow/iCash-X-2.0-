@@ -19,6 +19,7 @@ try{
    const r=await replyToSupport(context(kind,[user(q)]),model);
    assert.match(r.reply,/uploading.*creates.*clone/i);assert.match(r.reply,/Choose recording/);
    assert.match(r.reply,/Create my voice/);assert.match(r.reply,/under 4 MB/);assert.equal(r.ai,false);assert.equal(r.status,'open');
+   assert.match(r.reply,/only when setup is empty or.*failed/i);assert.match(r.reply,/ready clone cannot be replaced/i);
   }
   const history=[first,assistant('You need a ready cloned voice before uploading.')];
   const correct=await replyToSupport(context(kind,[first,assistant(baseline.reply),user('It says there is an issue')]),model);
@@ -55,6 +56,22 @@ try{
   assert.equal(supportVoiceSetupReply(context(kind,[...history,user('It worked'),user('Same issue')])),null);
   const ready=await replyToSupport(context(kind,[...history,user('It shows ready')]),model);
   assert.match(ready.reply,/If Custom voice shows/);assert.match(ready.reply,/does not confirm/);assert.equal(ready.status,'open');
+  for(const messages of [
+   [user('Can I rerecord my custom voice?')],
+   [...history,user('I have that'),assistant('Try Refresh.'),user('No'),assistant('Upload another recording.'),user('It will not let me rerecord')],
+   [...history,user('Not seeing progress'),assistant('Do you have VIP?'),user('I have that'),assistant('Try Refresh.'),user('No'),assistant('Upload another recording.'),user('It will not let me rerecord'),assistant('Try replacing it.'),user('It does not allow me')],
+   [...history,user('It shows ready'),assistant(ready.reply),user('It does not allow me to replace the recording')],
+  ]){
+   const r=await replyToSupport(context(kind,messages),model);
+   assert.match(r.reply,/ready clone cannot be replaced/i);assert.match(r.reply,/empty or.*failed/i);
+   assert.doesNotMatch(r.reply,/upload (?:a |another |fresh |new )recording|select Refresh/i);
+   assert.equal(r.status,'open');
+  }
+  for(const q of ['Can I rerecord the seller call?','Can I replace my contract?','Can I change my phone number?'])assert.equal(supportVoiceSetupReply(context(kind,[...history,user(q)])),null,q);
+  assert.equal(supportVoiceSetupReply(context(kind,[...history,{role:'operator',content:'Keep the existing voice; the original upload needs review.'},user('No')])),null);
+  assert.equal(supportVoiceSetupReply(context(kind,[...history,user('Where is the course?'),user('No')])),null);
+  const changedError=await replyToSupport(context(kind,[user('Can I rerecord my custom voice?'),assistant('The ready clone cannot be replaced.'),user('It says the file is over 4 MB')]),model);
+  assert.match(changedError.reply,/under 4 MB/);assert.doesNotMatch(changedError.reply,/ready clone cannot be replaced/);
  }
  assert.equal(calls,0);
 }finally{process.env=old;}
