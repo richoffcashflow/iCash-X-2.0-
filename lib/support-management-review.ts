@@ -5,6 +5,7 @@ import {supportRepeatedFailedSteps} from './support-learning-signals.ts';
 import {supportAccountDeletionGuidance} from './support-account-deletion.ts';
 import {supportAnswer} from './support-policy.ts';
 import {supportMissingActivityConcern} from './support-account-review.ts';
+import {supportActivityConfirmation} from './support-activity-confirmation.ts';
 
 const generic = /^(?:I don[’']t have (?:enough information|a confirmed answer)|I haven[’']t confirmed the cause yet|There[’']s no confirmed change|I couldn[’']t verify your account details)/i;
 const stuck = /\b(?:still|again|already|same (?:issue|problem)|did(?:n[’']t| not) (?:help|work)|not (?:working|getting)|no (?:replies|response|code)|not getting anywhere|going in circles|frustrated|upset|you keep|all day)\b/i;
@@ -40,6 +41,8 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
  if(context.handedOff&&answer.status==='closed'){
   return {reply:'The refund policy still applies. Your case is still in management review, and your earlier details are saved here.',status:'open',managementReview:true,ai:false};
  }
+ const activityConfirmation=supportActivityConfirmation(context);
+ if(activityConfirmation)return {...activityConfirmation,reply:activityConfirmation.reply+' '+(context.handedOff?'Your case remains in management review.':'I’ve flagged this conversation for management review.')};
  const question=context.messages[index].content;
  const previous=context.messages.slice(0,index).findLast(turn=>turn.role==='assistant'||turn.role==='operator');
  // Operator replies can clear the queue flag without resolving purchase access.

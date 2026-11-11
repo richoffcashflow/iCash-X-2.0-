@@ -6,6 +6,7 @@ import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-repl
 import {supportCustomVoiceReply} from './support-custom-voice.ts';
 import {supportOfferCodeReply} from './support-checkout.ts';
 import {supportPurchaseEmailCorrection} from './support-purchase-help.ts';
+import {cashOfferPolicy} from './cash-offer-math.ts';
 
 /** Source-backed answers to the customer's current step. Prior assistant text
  * supplies a topic only, never proof of payment, authority, delivery or a fix. */
@@ -17,6 +18,12 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
  const answer=(reply:string,status:SupportReply['status']='open'):SupportReply=>({reply,status,ai:false});
  const guidance=(reply:string,status:SupportReply['status']='open'):SupportReply=>({...answer(reply,status),...(supportRoutineGuidanceQuestion(q)?{routineGuidance:true as const}:{})});
  if(/\b(?:refund|cancel|charged twice|duplicate charge|unrecognized charge)\b/i.test(q))return null;
+ // Deal timing and selection questions are product questions, not requests to
+ // import leads. Anchoring keeps a real fault or unrelated timing question out.
+ if(/^(?:how long does it take (?:for (?:it|the bot|my bot) )?to find a deal|how many (?:days|hours|weeks) until (?:the |my )?bot finds a deal|when will (?:the |my )?bot find a deal)[?!.\s]*$/i.test(q.trim()))
+  return answer('There is no guaranteed time to find a deal. The bot searches and screens properties, contacts eligible sellers and follows up when allowed. A researched property is not an interested seller or a signed contract. Seller responses, agreed terms and closing steps affect the outcome; a Run label alone does not show that new work is happening.');
+ if(/^how does (?:the |my )?(?:bot|ai|algorithm) (?:choose|select|screen) properties[?!.\s]*$/i.test(q.trim()))
+  return answer(`The bot selects markets and screens properties automatically using saved property data and financial checks. Its current cash-offer formula is ARV × ${cashOfferPolicy.ruleBasisPoints/100}% − repairs − wholesale fee. Eligible opportunities can move to contact checks and seller outreach. Those estimates are not a confirmed seller agreement or profit; actual account activity still needs its own check.`);
  const pauseQuestion=(text:string)=>/^(?:should|can|could|how (?:do|can)) i pause (?:my |the )?(?:bot|ai|automation)[?!.\s]*$/i.test(text.trim());
  const questionIndex=context.messages.findLastIndex(turn=>turn.role==='user');
  const priorTurn=context.messages[questionIndex-1],priorQuestion=context.messages[questionIndex-2];
