@@ -134,7 +134,8 @@ for(const oldState of [{factsPending:true},{factsPending:true,payoffPending:true
  for(const [key,value] of Object.entries(oldState))assert.equal(current.offerState[key],value,'existing '+key+' is never cleared');
 }
 current={...structuredClone(context),offerState:{acceptedPriceCents:9000000}};
-await reportOwnership();assert.equal(current.offerState.acceptedPriceCents,null,'existing acceptance invalidation is preserved');
+assert.equal((await reportOwnership()).status,'verbally_accepted');
+assert.equal(current.offerState.acceptedPriceCents,9000000,'routine initial ownership answer keeps the accepted price');
 current={...structuredClone(context),pendingAgreement:{priceCents:9000000}};
 assert.equal((await reportOwnership()).quoteAllowed,false);assert.equal(current.offerState.agreementRevisionRequired,true);
 for(const question of ['Are you the owner?','Are you the only owner?','Is the property currently listed with an agent?']){
@@ -145,7 +146,7 @@ ownershipTranscript={transcript:[{role:'agent',message:ownershipQuestion},{role:
 current=structuredClone(context);
 assert.equal((await automaticCallOffer(token,{action:'report_change',conversationId,sellerStatement:'No, um, no.'},{...ownershipDeps,verifyInput:async()=>false})).quoteAllowed,false,'unverified input cannot use the exception');
 assert.equal(current.offerState.factsPending,true);
-console.log('PASS connected report_change: routine negative co-owner answer avoids a false hold; original holds, acceptance invalidation, changed agreement and evidence gates remain.');
+console.log('PASS connected report_change: routine negative co-owner answer preserves acceptance; original holds, changed agreement and evidence gates remain.');
 
 // The new ceiling must never silently rewrite an earlier accepted or issued amount.
 const legacyAcceptance={acceptedPriceCents:11536650},legacyBefore=JSON.stringify(legacyAcceptance);

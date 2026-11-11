@@ -22,6 +22,22 @@ assert.deepEqual(evidence('Are there any other liens besides the mortgage?','But
 assert.deepEqual(evidence(payoffQuestion,'It is paid off.'),{mortgageCents:0});
 assert.deepEqual(evidence('Are there any other liens besides the mortgage?','10K'),{otherDebtCents:1000000});
 assert.equal(evidence(payoffQuestion,'It is not paid off.'),null);
+// The tool may be interrupted after the mortgage answer but before saving it.
+// The adjacent other-debt answer must retain both source-bound facts.
+const debtTurns=(balance,other='No')=>({transcript:[{role:'agent',message:payoffQuestion},{role:'user',message:balance},{role:'agent',message:'Any other loans, liens, unpaid taxes or HOA balances besides that mortgage?'},{role:'user',message:other}]});
+const debtInput={action:'report_change',sellerStatement:'No'};
+assert.deepEqual(sellerPayoffEvidence(debtTurns('The payoff is fifty thousand dollars.'),debtInput),{mortgageCents:5000000,otherDebtCents:0});
+assert.deepEqual(sellerPayoffEvidence(debtTurns('It is paid off.'),debtInput),{mortgageCents:0,otherDebtCents:0});
+assert.deepEqual(sellerPayoffEvidence(debtTurns('I owe $100,000.','Another $10,000.'),{...debtInput,sellerStatement:'Another $10,000.'}),{mortgageCents:10000000,otherDebtCents:1000000});
+for(const answer of ['I do not know.','Not $50,000, actually $70,000.','The other owner owes $50,000.'])assert.deepEqual(sellerPayoffEvidence(debtTurns(answer),debtInput),{otherDebtCents:0});
+assert.equal(sellerPayoffEvidence(debtTurns('I owe $50,000.','I do not know.'),debtInput),null,'arguments cannot replace an unknown answer');
+assert.equal(sellerPayoffEvidence(debtTurns('I owe $50,000.','There are taxes but I do not know how much.'),debtInput),null,'unknown additional debt cannot become zero');
+const unrelated=debtTurns('$50,000.');unrelated.transcript[0].message='How much will the repairs cost?';
+assert.deepEqual(sellerPayoffEvidence(unrelated,debtInput),{otherDebtCents:0},'do not turn a repair estimate into payoff');
+const interrupted=debtTurns('I owe $50,000.');interrupted.transcript.splice(2,0,{role:'agent',message:'What is the exact current payoff?'},{role:'user',message:'I am not sure now.'});
+assert.deepEqual(sellerPayoffEvidence(interrupted,debtInput),{otherDebtCents:0},'do not search past a later unknown answer');
+const corrected=debtTurns('I owe $50,000.');corrected.transcript.splice(2,0,{role:'agent',message:payoffQuestion},{role:'user',message:'It is $100,000.'});
+assert.deepEqual(sellerPayoffEvidence(corrected,debtInput),{mortgageCents:10000000,otherDebtCents:0},'the adjacent corrected amount wins');
 const dependencies={now:()=>now,bind:async()=>{},verifyQualification:async()=>({ready:true}),verifyInput:async i=>callOfferEvidence({transcript},i),verifyPayoffChange:async i=>callPayoffEvidence({transcript},i),verifyPayoffFacts:async i=>sellerPayoffEvidence({transcript},i),db:async(path,method,body)=>{
  if(path==='rpc/icash_call_offer_context')return structuredClone(current);
  assert.equal(path,'rpc/icash_save_call_offer');assert.equal(body.p_expected_version,current.offerVersion);
@@ -30,6 +46,14 @@ const dependencies={now:()=>now,bind:async()=>{},verifyQualification:async()=>({
 const call=i=>automaticCallOffer(token,{conversationId,...i},dependencies);
 const report=async(question,answer,argument=answer)=>{transcript=[{role:'agent',message:question},{role:'user',message:answer}];return call({action:'report_change',sellerStatement:argument});};
 assert.equal((await call({action:'get_offer'})).priceCents,8200000);
+transcript=debtTurns('My mortgage payoff is $50,000.').transcript;
+const recovered=await call(debtInput);
+assert.equal(recovered.contractAllowed,true,'one report saves the missed mortgage and current other-debt answer');
+assert.equal(current.offerState.payoffReport.mortgageCents,5000000);assert.equal(current.offerState.payoffReport.otherDebtCents,0);
+assert.equal(current.offerState.payoffReport.coveredShortfallCents,undefined);
+assert.equal(current.offerState.acceptedPriceCents,null,'recovered facts never manufacture acceptance');
+current=structuredClone(base);
+await call({action:'get_offer'});
 let quote=await report(payoffQuestion,'Uh, the current mortgage payoff is 50K.','My mortgage payoff is $50,000.');
 assert.equal(quote.priceCents,8200000);assert.equal(quote.contractAllowed,false);assert.match(quote.nextQuestion,/other loans/);
 quote=await report(quote.nextQuestion,'No');
@@ -38,7 +62,9 @@ assert.equal(quote.reportedPayoff.shortfallCents,0);assert.equal(current.offerSt
 assert.equal(current.snapshot.raw.data.total_estimated_loan_balance,0,'original provider research is never rewritten');
 transcript=[{role:'agent',message:'We can offer $82,000 cash, as is. Does that work?'},{role:'user',message:'Yes'}];
 assert.equal((await call({action:'accept_offer',priceCents:quote.priceCents,quoteRevision:quote.quoteRevision})).status,'verbally_accepted');
-assert.equal((await call({action:'get_offer'})).contractAllowed,true,'return call retains the grounded payoff');
+const acceptedRead=await call({action:'get_offer'});
+assert.equal(acceptedRead.contractAllowed,true,'return call retains the grounded payoff');
+assert.equal(acceptedRead.status,'verbally_accepted');assert.match(acceptedRead.instruction,/Keep the accepted price; do not ask it again/);
 const accepted=structuredClone(current);
 quote=await report(payoffQuestion,'I do not know.');
 assert.equal(quote.contractAllowed,false);

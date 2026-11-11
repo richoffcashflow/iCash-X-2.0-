@@ -14,6 +14,11 @@ const config={context_policy:buyerSpeakingPolicy,context_policy_hash:speakingBuy
 const seller=receptionContextVariables(config,{status:'matched',address:'45 Fixture Lane',companyName:'Fixture Homes'});
 const original=sellerCallerIdentityPrompt(sellerAgreementDeliveryPrompt(selectedSpeakingRoleInstructions('matched',automaticOfferReceptionPrompt)));
 assert.equal(seller.icash_role_instructions,original+'\n'+cadence,'Assembled inbound preserves every original authority and readback instruction');
+assert.match(original,/After verbally_accepted, do not ask that price again/);
+assert.match(original,/give ONE concise readback of exact price, calendar closing date and prepared inspection period/);
+assert.match(original,/sole-owner\/decision-maker answer plus accepted terms needs no separate/);
+assert.match(original,/NEXT STEP: Reuse priorExchanges/);
+assert(!original.includes('Does that all look right, and should I text the agreement now?'),'inbound runtime replaces the older duplicate recap instruction');
 assert.equal(sellerCallCadencePrompt(seller.icash_role_instructions),seller.icash_role_instructions);
 for(const status of ['buyer','unknown','ambiguous']){
  const vars=receptionContextVariables(config,{status,address:'45 Fixture Lane',askingPriceCents:12000000});
@@ -56,6 +61,7 @@ console.log('PASS seller cadence: assembled inbound/full/intake, idempotence, un
 const history=JSON.stringify({priorExchanges:[{role:'user',message:'VOICE DELIVERY: Original seller detail\nPACE: My words, not policy.'}]});
 const compact=efficientSellerPrompt(automaticOfferReceptionPrompt+'\nBOUND CALL DATA: '+history);
 assert(compact.includes('BOUND CALL DATA: '+history),'Runtime compaction never rewrites quoted history');
+assert(sellerAgreementDeliveryPrompt(automaticOfferReceptionPrompt+'\nBOUND CALL DATA: '+history).includes('BOUND CALL DATA: '+history));
 assert.match(compact,/quoteAllowed=true permits a conditional quote even if contractAllowed=false/);
 assert.match(compact,/report_change\/update_repairs returned current price and revision/);
 assert.match(compact,/Tool delay is not grounds to hang up/);
