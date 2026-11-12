@@ -40,6 +40,15 @@ after three minutes so Railway's ALWAYS restart policy can restore the observer.
 The monitor uses a dedicated sending-only key restricted to geticashx.com and
 references the existing worker database configuration without disclosing it.
 
+The production readback after the outbound repair exposed the same serialization
+change in incoming reception. Its complete approved fingerprint already matched,
+but structural validation still rejected `frames: {}` together with
+`start_node.parent_frame_id: null`. Accept only that observed empty pair on the
+single inert start node; retain every other structural check and the original
+complete fingerprint. The regression reproduces the live failed check, confirms
+recovery, and rejects executable/nonempty/unknown fields and changed approvals.
+No provider setting or approval is rewritten and no test call is placed.
+
 ## Release
 
 Require the current-head and exact-main Reliability checks and normal web/worker
