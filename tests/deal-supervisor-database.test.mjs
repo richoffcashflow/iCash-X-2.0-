@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {setup} from './helpers/deal-supervisor-setup.mjs';
 assert.equal(readFileSync(new URL('../config/deal-supervisor.sql',import.meta.url),'utf8'),readFileSync(new URL('../supabase/migrations/20261112195442_deal_supervisor.sql',import.meta.url),'utf8'),'Tested SQL must match the applied migration receipt');
+assert.equal(readFileSync(new URL('../config/deal-supervisor-activation-guard.sql',import.meta.url),'utf8'),readFileSync(new URL('../supabase/migrations/20261112200426_deal_supervisor_activation_guard.sql',import.meta.url),'utf8'),'Activation guard must match its migration receipt');
 const pg=await PGlite.create();await pg.exec(setup);
 const q=(sql,args=[])=>pg.query(sql,args),one=async(sql,args=[])=>(await q(sql,args)).rows[0];
 const run=async()=>(await one('select icash_run_deal_supervisor() r')).r;
@@ -25,6 +26,10 @@ async function signed(c,kind='purchase',{verified=true,test=false}={}){
  await q("insert into icash_signing_envelopes(id,account_id,deal_id,kind,state,provider_id,terms_hash,recipients,provider_evidence,test_mode) values($1,$2,$3,$4,'completed',$5,'fixture-hash',$6,$7,$8)",[id,c.a,c.d,kind,'provider-'+id,recipients,verified?evidence:{},test]);return id;
 }
 const disabled=await seed();await message(disabled);assert.equal((await run()).status,'disabled');assert.equal((await one('select count(*)::int n from icash_deal_supervisor_events')).n,0);
+for(const fields of ["activated_at=now(),release_sha=null","activated_at=null,release_sha=repeat('a',40)","activated_at=now(),release_sha='invalid'"]){
+ await assert.rejects(pg.exec('update icash_deal_supervisor_settings set enabled=true,'+fields),/icash_deal_supervisor_settings_check/);
+ assert.equal((await run()).status,'disabled','An incomplete release receipt cannot activate work');
+}
 await pg.exec("update icash_deal_supervisor_settings set enabled=true,activated_at=now(),release_sha=repeat('a',40);update icash_seller_progress_settings set enabled=true;");
 const cold=await seed();await message(cold,{direction:'outgoing'});await run();assert.equal(await snapshot(cold),undefined,'Cold drafts are not engaged deals');
 const practice=await seed({practice:true});await message(practice);await run();assert.equal(await snapshot(practice),undefined);

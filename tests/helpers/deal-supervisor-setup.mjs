@@ -14,5 +14,5 @@ export const setup=fixture.slice(0,split)+read('../fixtures/seller-progress-orig
  +read('../../config/seller-reply-progress.sql')+read('./deal-supervisor-fixture.sql')
  +sqlFunction('platform-shared-learning','icash_learning_signature_verified')
  +sqlFunction('platform-shared-learning','icash_learning_deal_outcomes')
- +read('../../config/deal-supervisor.sql');
+ +read('../../config/deal-supervisor.sql')+read('../../config/deal-supervisor-activation-guard.sql');
 if(process.env.DEAL_SUPERVISOR_FIXTURE_OUTPUT)writeFileSync(process.env.DEAL_SUPERVISOR_FIXTURE_OUTPUT,setup);
