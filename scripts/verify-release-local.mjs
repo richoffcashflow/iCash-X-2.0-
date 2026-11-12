@@ -71,7 +71,7 @@ const suites = [
  'credit-refill-context', 'credit-refill-recommendation',
  'support-activity-confirmation',
  'support-progress-evidence',
- 'support-case-reference', 'support-calling-pause-boundary',
+ 'support-case-reference', 'support-calling-pause-boundary', 'support-stopped-search',
  'support-work-expectations',
  'support-credit-balance', 'support-call-hold-guidance', 'support-agreement-autofill', 'support-funding-notice', 'support-funding-expectations',
 ];

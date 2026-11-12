@@ -8,6 +8,7 @@ const existingOutreachConcern=(text:string)=>/\b(?:ai|bot|automated|automation|r
  * and failure in one sentence, and let an explicit successful result reset it. */
 export function supportMissingActivityConcern(text:string){
  if(/\b(?:(?:it|(?:the |my )?(?:bot|ai)) (?:is )?working (?:now|fine|well)|problem solved|fixed now|all fixed)[.!\s]*$/i.test(text)&&!/\b(?:not working (?:now|fine|well)|not fixed|isn[’']?t working (?:now|fine|well))\b/i.test(text))return false;
+ if(/^(?:my|the) (?:ai )?(?:bot|ai) (?:has )?stopped (?:searching|researching(?: properties)?|finding (?:new |any )?leads)[.!?\s]*$/i.test(text.trim()))return true;
  // These whole-work complaints must not fall through to model guesses about
  // eligible inventory. A stopped seller contact or browser is a separate issue.
  if(/^(?:why (?:did|has) (?:my|the) (?:ai )?bot stop(?:ped)?(?:[^.!?\n]{0,70}\b(?:not|didn[’']?t) pause it)?|(?:my|the) (?:ai )?bot (?:has )?stopped (?:by itself|on its own))[?!.\s]*$/i.test(text.trim()))return true;
@@ -94,6 +95,14 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const totals=o?`${o.callsStarted} call attempts and ${o.textsSent} texts are recorded overall, with ${o.textReplies} text replies. These totals do not prove seller interest or recent automatic outreach.`:'I can’t verify the call and text records from the available checks.';
  const voice=context.evidence?.find(e=>e.key==='voice'&&e.status==='attention');
  const blocker=paused?'The pause explains why new work is stopped now, but not why outreach was missing before it.':voice?.detail??(o?.progress?.status==='settling'?'Earlier work is awaiting final cost confirmation.':o?.progress?.status==='budget_reached'?'Available work credits do not cover the next task.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='pending_work'?'An earlier task is awaiting confirmation.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='no_completed_work'?supportProgressDelay(o,false):context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New property research is waiting for capacity.':'I haven’t verified the specific cause of the missing or slow activity.');
+ // A request for restart instructions needs current controls and evidence;
+ // an old operator diagnosis is not authority to resume work or promise it.
+ const restartQuestion=/^(?:how (?:do|can|should) i|what (?:exactly )?do i (?:need to )?do to) (?:restart|resume) (?:my|the) (?:ai bot|bot|ai)(?: (?:so it can work again|to work(?: exactly)?|again))?[?!.\s]*$/i.test(q.trim());
+ if(restartQuestion){
+  if(paused)return answer('Your bot is currently paused. Select Run bot in the workspace if you want to allow eligible new work. That does not repair a service issue or confirm that a task will start. This chat has not changed the setting.');
+  if(work?.status!=='ok'||work.code!=='not_paused')return answer('I can’t confirm your current Run/Pause setting from these checks. Check that control in the workspace; I haven’t verified a restart or a repair.',true);
+  return answer('Your bot is already switched on. '+blocker+' Toggling Run or buying more credits won’t repair a service-side block. I haven’t verified that new work has resumed or a restart time.',true);
+ }
  const automatedQuestion=/\b(?:automated|automatic|automatically|ai|bot)\b/i.test(q)&&/\b(?:calls?|calling|sms|texts?|texting|outreach|speak)\b/i.test(q)&&/\b(?:available|availability|enabled|able|blocker|missing setup|bot to speak|bot to conduct|no recorded|0 calls|zero calls)\b/i.test(q);
  if(automatedQuestion){
   const capability='Eligible seller calls and texts can run automatically; the property’s Call button is for you to speak through your browser microphone.';
@@ -108,6 +117,13 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const operatorProblems=/\b(?:display problem|display bug|display correction|empty (?:contact )?thread|unfinished work|awaiting final|awaiting.*cost|tied to (?:earlier|unfinished) work)\b/i.test(operator)&&/\b(?:not live|not fixed|not.*confirmed|can’t.*confirm|still|blocking|needs? (?:review|resolution|repair))\b/i.test(operator);
  if(operatorProblems&&/\b(?:issue|problem|quality|responses?|replies|fixed|restored)\b/i.test(q)&&!/\b(?:contract|agreement|sign[ -]?in|course|vip|voice|refund|cancel)\b/i.test(q))
   return answer('The earlier operator review recorded unresolved problems with '+(/\b(?:display|thread)\b/i.test(operator)?'conversation visibility':'unfinished work')+(/\b(?:unfinished work|awaiting final|awaiting.*cost|tied to (?:earlier|unfinished) work)\b/i.test(operator)&&/\b(?:display|thread)\b/i.test(operator)?' and work awaiting final charges':'')+'. Those findings do not establish why sellers haven’t replied. I haven’t verified a repair or a restart time, so asking you to check the same tabs or buy more credits would not resolve the reported issue.',true);
+ const missingSentTexts=/\b(?:cannot|can[’']?t|unable to) (?:find|see|view) (?:the |my )?(?:exact |actual |sent )?(?:texts|messages)\b/i.test(q)&&/\b(?:bot|sent|sending)\b/i.test(q);
+ if(missingSentTexts){
+  const counts=o?`${o.textsDelivered} of ${o.textsSent} texts have delivery confirmation overall; ${o.textReplies} text replies are recorded. `:'I can’t verify saved texts from these checks. ';
+  const directed=/\b(?:Texts|selected contact)\b/i.test(previous)||/\b(?:already|tried|still)\b/i.test(q);
+  const next=directed?'The missing conversation still needs checking. Which property is affected?':'Open the property under Your leads, choose Texts and check the selected contact. If it is blank, which property is affected?';
+  return answer(counts+'These records do not prove that the messages display correctly for you or that a seller wants to sell. '+next+' '+(voice?voice.detail+' ':'')+'I haven’t verified that every part of outreach is working.',true);
+ }
  const runningFollowup=outreachConcern(users.at(-2)?.content??'')&&/\b(?:run|running|paused)\b/i.test(previous)&&previous.includes('?')&&/^(?:it(?:[’']s| is)|the bot is|my bot is) (?:running|on)(?:[;,. ]+(?:(?:it has )?the )?green light(?: is)? on)?[.!\s]*$/i.test(q.trim());
  if(outreachConcern(q)||runningFollowup||missingActivityFollowup(context))return answer('I understand why the lack of progress is frustrating. '+state+' '+totals+' '+blocker+(activityProofQuestion(q)?' Check recorded calls and texts on the property; a Run label or a researched lead does not prove recent automatic outreach.':''),true);
  if(/^(?:that sucks|this sucks|that[’']?s (?:frustrating|disappointing)|nothing(?: right now)?)[.!\s]*$/i.test(q.trim())&&users.slice(-7,-1).some(m=>outreachConcern(m.content)))
