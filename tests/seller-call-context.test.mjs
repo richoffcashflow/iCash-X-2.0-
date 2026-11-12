@@ -72,3 +72,9 @@ for(const question of ['AI for Fixture Homes. Do you own 45 Oak Road? Reply STOP
 }
 
 const packed=compactSellerProgress(progress);assert(JSON.stringify(packed).length<6000);assert(JSON.stringify(packed).includes('A roof and AC.'));assert(JSON.stringify(packed).includes('Keyshawn Russell'));assert(!JSON.stringify(packed).includes('completedAt'));
+const wholeAnswer='The roof needs work. '+('Original seller detail. ').repeat(16);
+const tightProgress={history:null,priorCalls:[{messages:[{direction:'outgoing',body:'What repairs are needed?'},{direction:'incoming',body:wholeAnswer}]}]};
+const tightBudget=JSON.stringify([{question:'What repairs are needed?',answer:wholeAnswer}]).length+8;
+const tight=compactSellerProgress(tightProgress,tightBudget);
+assert.equal(tight.priorExchanges[0]?.answer,wholeAnswer,'unused SMS allowance preserves the whole actual call answer');
+assert(JSON.stringify(tight.recentSms).length+JSON.stringify(tight.priorExchanges).length<=tightBudget);

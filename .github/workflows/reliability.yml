@@ -144,10 +144,14 @@ jobs:
         run: python3 scripts/test-account-recovery-postgres.py
       - name: Verify account repair and customer Pause under concurrent transactions
         run: python3 scripts/test-account-work-postgres.py
+      - name: Verify reviewed planning relief, fresh admission and late receipts under contention
+        run: python3 scripts/test-reviewed-pending-work-postgres.py
       - name: Verify legacy search quarantine and customer Pause under concurrent transactions
         run: python3 scripts/test-legacy-search-postgres.py
       - name: Verify exact fresh-contact revalidation under concurrent controls
         run: python3 scripts/test-seller-contact-revalidation-postgres.py
+      - name: Verify independent market continuation under concurrent controls
+        run: python3 scripts/test-market-hold-continuation-postgres.py
       - name: Verify financial prefilters and free-only widening under concurrent controls
         run: python3 scripts/test-financial-prequalification-postgres.py
       - name: Verify one-use phone checks and immutable receipts under concurrent claims

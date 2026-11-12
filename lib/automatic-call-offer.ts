@@ -131,7 +131,7 @@ const financial=sellerCallFinancialGate(base.property.financialScreening,{seller
   if(payoff){
    const nextQuestion=state.payoffPending?'Can you confirm the current mortgage payoff balance?':!payoff.complete?'Are there any other loans, liens, unpaid taxes or HOA balances besides that mortgage?':payoff.shortfallCents>0&&!payoff.canProceed?state.payoffReport?.coverageDeclined?'Would you like a person to review any other options?':`The difference is ${offerPricePresentation(payoff.shortfallCents).displayPrice}. Would you be willing and able to bring that amount to closing to sell the property?`:null;
    return {...common,payoffVerified:false,titleVerificationRequiredBeforeClosing:true,payoffSource:'seller_reported',reportedPayoff:payoff,conditional,contractAllowed:!conditional,status:conditional?'conditional_proposal':accepted?'verbally_accepted':'calculated_proposal',nextQuestion,
-    instruction:conditional?`Keep the exact cash offer unchanged. ${nextQuestion} Do not ask the seller to reconcile records or repeat a saved balance. Do not send the agreement until the reported debts and any shortfall are addressed. Never promise lender approval or ask for payment now.`:`The seller-reported debts ${payoff.complete&&payoff.shortfallCents>0?'exceed the cash price, and the seller explicitly agreed to cover the stated difference at closing':'fit within the cash offer'}. Continue price acceptance and the remaining closing confirmations, then prepare/text the agreement. A mortgage is not a reason to stop. Title will obtain actual payoffs and confirm final proceeds before closing; do not call these figures verified or guarantee net proceeds.`};
+    instruction:conditional?`Keep the exact cash offer unchanged. ${nextQuestion} Do not ask the seller to reconcile records or repeat a saved balance. Do not send the agreement until the reported debts and any shortfall are addressed. Never promise lender approval or ask for payment now.`:`The seller-reported debts ${payoff.complete&&payoff.shortfallCents>0?'exceed the cash price, and the seller explicitly agreed to cover the stated difference at closing':'fit within the cash offer'}. ${accepted?'Keep the accepted price; do not ask it again. Collect only missing closing details.':'Obtain acceptance of this exact price, then collect only missing closing details.'} Prepare/text only after the final terms readback and text permission. A mortgage is not a reason to stop. Title will obtain actual payoffs and confirm final proceeds before closing; do not call these figures verified or guarantee net proceeds.`};
   }
   if(conditional)return {...common,conditional:true,contractAllowed:false,payoffVerified:false,status:agreed?'conditional_accepted':'conditional_proposal',conditions:['Mortgage payoff and any liens must be confirmed before a contract is sent.'],...conditionalInstruction(price,!!state.payoffStatement,!!agreed)};
   return {...common,conditional:false,contractAllowed:true,status:accepted?'verbally_accepted':'calculated_proposal',instruction:accepted?'Keep this exact verbally accepted price and continue the remaining closing confirmations.':'Present this exact nonbinding as-is cash purchase price after qualification. Do not promise net proceeds or invent adjustments. Obtain acceptance again if a previous offer was conditional.'};
@@ -139,7 +139,7 @@ const financial=sellerCallFinancialGate(base.property.financialScreening,{seller
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifyRoutineTimingAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);
  // The context RPC independently checks the exact capability, bound conversation,
@@ -159,6 +159,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(i.action==='update_repairs'||i.action==='report_change'){
   const actual=await d.resolveStatement?.(i);if(actual)i.sellerStatement=actual;
   if(context.pendingAgreement)state.agreementRevisionRequired=true;
+  const acceptedBeforeUpdate=state.acceptedPriceCents;
   const verified=await d.verifyInput(i);state.sellerStatement=verified?i.sellerStatement:'Statement confirmation required';state.acceptedPriceCents=null;
   if(i.action==='report_change'){
    const sellerPrice=verified?await d.verifySellerPrice?.(i):null;
@@ -169,9 +170,11 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
    }else{
    const listing=await d.verifyListingStatus?.(i);
    if(typeof listing==='boolean'){state.listedWithAgent=listing;state.listingStatement=i.sellerStatement;}
-   else if(verified&&await d.verifyRoutineOwnershipAnswer?.(i)){
+   else if(verified&&(await d.verifyRoutineOwnershipAnswer?.(i)||await d.verifyRoutineTimingAnswer?.(i))){
     // Keep the answer without creating a new changed-facts hold. Every saved
-    // hold, pending agreement revision and renewed acceptance check remains.
+    // hold and pending agreement revision remains. An initial co-owner answer
+    // or ordinary timing answer changes no price, so retain saved acceptance.
+    state.acceptedPriceCents=acceptedBeforeUpdate;
    }
    else {
    const update=await d.verifyPayoffFacts?.(i);

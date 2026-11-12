@@ -15,6 +15,9 @@ export function supportMissingActivityConcern(text:string){
 const outreachConcern=supportMissingActivityConcern;
 const activityPage=(text:string)=>/^(?:(?:on )?the |on )?(?:all activity|your leads|home|dashboard)(?: (?:page|screen|view))?[.!\s]*$/i.test(text.trim());
 const currentActivityQuestion=(text:string)=>/^is (?:my |the )?(?:ai bot|bot|ai) (?:really |actually )?(?:working|running|active)(?: (?:right )?now)?[?!\s]*$/i.test(text.trim());
+// Present research-status questions need account evidence, not the general
+// lead-import guide. Anchoring keeps capability, geography and other objects out.
+export const supportCurrentResearchQuestion=(text:string)=>/^is (?:my |the )?(?:ai bot|bot|ai) (?:(?:actively|currently|actually|really) )?(?:finding|searching for|looking for|researching) (?:new )?(?:leads|properties)(?: (?:right )?now)?[?!\s]*$/i.test(text.trim());
 const activityProofQuestion=(text:string)=>/\b(?:how|when)(?: can| do| will)? i (?:tell|know|see)\b.{0,35}\b(?:ai|bot)\b.{0,30}\b(?:doing (?:anything|something)|working|work|active)\b/i.test(text);
 function missingActivityFollowup(context:SupportContext){
  const turns=context.messages.slice(-9),latest=turns.at(-1);
@@ -77,6 +80,11 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   return answer(/^nothing/i.test(q)?'Understood. The activity problem you reported remains open; you do not need to repeat it.':'I understand why you’re frustrated. Your report of slow or missing activity remains unresolved; I haven’t confirmed a fix or restart time.',true);
  if(/\b(?:searching|looking) for a deal\b/i.test(q)&&/\b(?:waiting|status|says|shows)\b/i.test(q))
   return answer('“Searching for a deal” is the workspace status label. It does not prove that a task is actively running or that outreach has started. '+state+' '+totals+' '+blocker);
+ if(supportCurrentResearchQuestion(q)){
+  const research=o?`${o.screened} properties checked are recorded overall. These checks do not confirm that a research task is running right now.`:'I can’t verify current research activity from these checks.';
+  const blocked=o?.progress?.health?.status==='blocked';
+  return answer(state+' '+research+' '+totals+(paused||blocked||voice||o?.progress?.status==='settling'||o?.progress?.status==='budget_reached'?' '+blocker:''),blocked);
+ }
  if(currentActivityQuestion(q)||activityProofQuestion(q)||/\b(?:what|how do i know)\b.{0,45}\b(?:currently|right now)\b.{0,25}\b(?:working|doing)\b|\bwhat is (?:my |the )?bot doing (?:currently|now)\b/i.test(q))
   return answer(state+' '+totals+' '+blocker+(o?.progress?.health?.status==='blocked'?'':' Open a property’s Calls or Texts to review its saved activity. A researched property is not a confirmed interested seller.'),o?.progress?.health?.status==='blocked');
  return null;

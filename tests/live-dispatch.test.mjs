@@ -66,7 +66,8 @@ let reservationError=null,budgetHoldAccepted=true,flexibleFunding={maxSeconds:12
 let metaClaimResult='claimed',spacingCurrent=true,spacingAfterReservation=true;
 let sellerConsentCurrent=true,activeConversation=false,outreachContextOverride=undefined,metaContext=null,cancellationCurrent=true;
 let customVoice=null;
-const selectedCustomCallVoice=async()=>customVoice;
+let preflightRead=null;
+const selectedCustomCallVoice=async()=>{await preflightRead?.('custom_voice');return customVoice;};
 let c=structuredClone(configTemplate),providerAgent=structuredClone(agent),providerPaths=[],agentReadFailed=false,agentReadError=null,identityVoice='voice';
 let preflightDiagnostics=[];
 let providerReads=0,flipAt=null,flip=()=>{},legacyRate=false,recordingStatus='recording_consent_pending';
@@ -77,6 +78,7 @@ let buyerApproved=true,callbackId=null,providerNumber='+14243948384',suppressed=
 let priorSellerCalls=[],cancellationId=null,cancellationContext=null,inventoryDenied=false;
 const db=async(path,method,body)=>{
  records.push({path,method,body});
+ await preflightRead?.(path);
  if(flipAt===path||flipAt==='final-patch'&&method==='PATCH'&&body.sms_context!==undefined)flip();
  if(path==='rpc/icash_cancellation_voice_context')return cancellationContext;
  if(path==='rpc/icash_reserve_cancellation_voice')return flexibleFunding;
@@ -389,6 +391,32 @@ recordingBoundary=undefined;predialAccepted=true;
 console.log('PASS actual dispatcher supplies original operation and consumed ticket to pre-create abort; missing marker/capability and rejected proof remain held.');
 
 sharedAssignment=null;
+// Stall each independent read group: all members must start before any can
+// finish, and no reservation/claim/provider send can pass the pending group.
+const readGroups=[
+ ['icash_text_suppressions','rpc/icash_seller_voice_permission_current','rpc/icash_voice_outreach_context'],
+ ['icash_customer_identities','icash_accounts','rpc/icash_property_voice_threads'],
+ ['custom_voice','icash_voice_test_config','icash_operation_rates'],
+ ['rpc/icash_voice_sms_context','rpc/icash_seller_prior_call_context','rpc/icash_seller_call_request','select=id,terms&limit=2','select=terms&limit=1'],
+];
+for(const group of readGroups)for(const fail of [false,true]){
+ reset();permission={...beforeCancellationPermission,seller_intake_id:'fixture-intake'};sellerConsentCurrent=true;
+ providerAgent.platform_settings.guardrails=automaticOfferGuardrails();providerAgent.conversation_config.agent.prompt.tool_ids.push('tool_automatic');
+ c.agent_config_hash=automaticReview.configHash;c.required_tool_ids=automaticReview.toolIds;process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(automaticReview);
+ snapshot.sellerRequest={id:'fixture-lead',phone:permission.phone,ownerName:null};
+ let release;const gate=new Promise(resolve=>{release=resolve;}),started=[];
+ preflightRead=async path=>{const key=group.find(prefix=>path.includes(prefix));if(!key)return;started.push(key);await gate;if(fail&&key===group.at(-1))throw Error('Synthetic preflight unavailable');};
+ const pending=dispatchLiveVoice('account','job');
+ try{
+  await new Promise(setImmediate);
+  assert.deepEqual(started.toSorted(),group.toSorted(),'Independent reads start together');
+  assert.equal(postCount,0);assert(!records.some(r=>/^rpc\/icash_(reserve|claim)_/.test(r.path??'')),'No admission before every read completes');
+ }finally{release();}
+ if(fail){await assert.rejects(pending,/Synthetic preflight unavailable/);assert.equal(postCount,0);assert(!records.some(r=>/^rpc\/icash_(reserve|claim)_/.test(r.path??'')));}
+ else assert.equal((await pending).status,'call_started');
+ preflightRead=null;delete snapshot.sellerRequest;
+}
+console.log('PASS independent contact, identity, voice/rate and seller-context reads overlap; pending/failed reads cannot reserve, claim or dial.');
 delete process.env.CONTIGUITY_FROM;delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');
 

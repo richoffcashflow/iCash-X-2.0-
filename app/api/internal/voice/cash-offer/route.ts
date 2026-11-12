@@ -1,12 +1,13 @@
 import {instantCallAddress} from '@/lib/meta-instant-call';
 import {dispatchTextMessage} from '@/lib/text-message-service';
 import {dispatchLiveVoice} from '@/lib/live-dispatch-service';
-import {NextResponse} from 'next/server';
+import {after,NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
 import {bindSellerAgreementCall} from '@/lib/seller-agreement-binding';
 import {automaticCallOffer,blockedOffer,buyerAgreementHandoff} from '@/lib/automatic-call-offer';
 import {sellerListingEvidence} from '@/lib/seller-listing';
 import {sellerRoutineOwnershipAnswer} from '@/lib/seller-ownership-answer';
+import {sellerRoutineTimingAnswer} from '@/lib/seller-timing-answer';
 import {sellerPayoffEvidence} from '@/lib/seller-payoff';
 import {callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence} from '@/lib/call-offer-evidence';
 import {createRecordedReceptionProviders} from '@/lib/recorded-reception-provider';
@@ -37,9 +38,14 @@ export async function POST(request:Request){
   if(intake)return NextResponse.json(intake,{headers});
   const d={db,bind:bindSellerAgreementCall,verifyQualification:async(i:Record<string,unknown>,context:Parameters<typeof boundSellerQualification>[1])=>{
    const current=await transcript(i),qualification=await boundSellerQualification(db,context,current);
-   if(qualification.ready)try{await db('rpc/icash_targeting_note_qualified','POST',{p_hash:sha(token),p_conversation:i.conversationId,p_evidence_hash:sha(JSON.stringify(current))});}catch{console.warn('targeting_qualification_observation_pending');}
+   if(qualification.ready){
+    const observation={p_hash:sha(token),p_conversation:i.conversationId,p_evidence_hash:sha(JSON.stringify(current))};
+    // Reporting is not offer authority. Keep it after the caller's response;
+    // the database still validates the same call and evidence before recording.
+    try{after(async()=>{try{await db('rpc/icash_targeting_note_qualified','POST',observation);}catch{console.warn('targeting_qualification_observation_pending');}});}catch{console.warn('targeting_qualification_observation_pending');}
+   }
    return qualification;
-  },resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyRoutineOwnershipAnswer:async(i:Record<string,unknown>)=>sellerRoutineOwnershipAnswer(await transcript(i),i),verifySellerPrice:async(i:Record<string,unknown>)=>callSellerPriceEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
+  },resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>)=>callOfferEvidence(await transcript(i),i),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyRoutineOwnershipAnswer:async(i:Record<string,unknown>)=>sellerRoutineOwnershipAnswer(await transcript(i),i),verifyRoutineTimingAnswer:async(i:Record<string,unknown>)=>sellerRoutineTimingAnswer(await transcript(i),i),verifySellerPrice:async(i:Record<string,unknown>)=>callSellerPriceEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
   if(input.action!=='confirm_and_send'&&input.action!=='status'){
    const result=await automaticCallOffer(token,input,d);
    if(process.env.META_INSTANT_LEADS_ENABLED==='true'&&result.quoteAllowed&&'priceCents' in result)try{await db('rpc/icash_meta_note_offer_authorized','POST',{p_hash:sha(token),p_conversation:input.conversationId,p_price:result.priceCents});}catch{console.warn('instant_offer_observation_pending');}

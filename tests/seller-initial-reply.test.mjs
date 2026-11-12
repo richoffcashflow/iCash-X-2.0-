@@ -12,9 +12,11 @@ await pg.exec(fixture.slice(0,split)+read('./fixtures/seller-progress-original-f
  fn('seller-response-policy','icash_seller_direct_response_match')+fn('seller-response-policy','icash_seller_response_disposition')+fn('seller-gap-recovery','icash_seller_contact_stop')+
  `create trigger icash_text_ai_incoming after insert on icash_text_messages for each row execute function icash_enqueue_text_ai();`+read('../config/seller-reply-progress.sql')+read('../config/seller-dialogue.sql')+read('./fixtures/seller-initial-reply-original-context.sql')+';');
 await pg.exec('update icash_seller_progress_settings set enabled=true,dialogue_enabled=true;update fixture_flags set conversation=false;');
+// Distinct fictional recipients keep seed cases isolated without random collisions.
+let fixturePhone=6000000;
 let tick=0;const at=()=>new Date(Date.now()-300000+(++tick)*1000).toISOString();
 async function seed({questionState='delivered',questionReceipt=true,opening=true}={}){
- const a=randomUUID(),t=randomUUID(),d=randomUUID(),s=randomUUID(),question=randomUUID(),phone='+1555'+Math.floor(Math.random()*9999999).toString().padStart(7,'0');
+ const a=randomUUID(),t=randomUUID(),d=randomUUID(),s=randomUUID(),question=randomUUID(),phone='+1555'+(++fixturePhone).toString().padStart(7,'0');
  await q('insert into icash_accounts(id) values($1)',[a]);
  await q("insert into icash_screening_jobs(id,account_id,snapshot,result) values($1,$2,$3,$4)",[s,a,{propertyId:s},{financialCheck:{status:'eligible'},preliminarySellerCeilingCents:12938400}]);
  await q("insert into icash_deal_files(id,account_id,screening_id,terms) values($1,$2,$3,$4)",[d,a,s,{address:'Offline fixture'}]);

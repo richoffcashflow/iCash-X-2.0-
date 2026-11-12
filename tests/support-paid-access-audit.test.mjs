@@ -56,3 +56,21 @@ try{
  assert.equal(calls,0);
 }finally{process.env=env;}
 console.log('PASS paid access and VIP purchase audit: paid-period uncertainty, no second checkout, trusted diagnostics, guest boundary, old invoices, migration vs email transfer, and receipt follow-ups; offline only.');
+
+// Fictional receipt-email confirmations retain only the immediate sign-in issue.
+const emailEpisode=[user('No verification code arrives when I sign in.'),assistant('Does the email on your receipt match the email you entered?')];
+for(const text of ['Yes, my email is the same.','The email matches.','Yes the email is the same']){
+ const r=await replyToSupport({kind:'access',messages:[...emailEpisode,user(text)],allowAI:false},noModel);
+ assert.doesNotMatch(r.reply,/enough information|what are you trying/i,text);
+ assert.notEqual(r.status,'resolved');assert.doesNotMatch(r.reply,/payment (?:is|has been) verified|access (?:is|has been) restored/i);
+}
+const {currentAccessConversation}=await import('../lib/support-access-topic.ts');
+for(const tail of [
+ [user('My seller email is the same.')],
+ [user('Yes my email is the same. Where is the course?')],
+ [{role:'operator',content:'A different payment review is pending.'},user('The email matches.')],
+ [user('Where is the course?'),assistant('Open Course.'),user('The email matches.')],
+ [user('I got in.'),assistant('Glad that worked.'),user('The email matches.')]
+])assert.equal(currentAccessConversation([...emailEpisode,...tail]).length,0);
+assert.equal(currentAccessConversation([user('The email matches.')]).length,0);
+console.log('PASS receipt-email confirmation continuity and operator/topic/success boundaries');
