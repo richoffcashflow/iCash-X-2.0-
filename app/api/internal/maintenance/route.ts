@@ -39,6 +39,7 @@ export async function GET(request:Request){
   const verified=await refreshVoiceCapacity(db,readVoiceCapacityProvider,readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON),async agent=>{
    recovery=await recoverVoiceConfiguration(db,agent).catch(()=>({status:'recovery_unavailable',requeued:0}));
    if(recovery.status==='recovery_unavailable'){capacityOk=false;console.error('Voice configuration recovery unavailable');}
+   if(recovery.status==='review_required'){capacityOk=false;console.error('Voice configuration does not match its approved setup');}
   });
   return {...verified,change,eightyPercentChange,recovery};
  })().catch(error=>{capacityOk=false;console.error('Voice capacity verification unavailable',error instanceof Error&&/^VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'read_unavailable');return {status:'verification_unavailable'};});

@@ -29,7 +29,44 @@ test('preview, disabled release, mismatched account, expired review and real pro
   f=>f.env.TWILIO_ACCOUNT_SID='AC'+'b'.repeat(32),f=>delete f.env.TWILIO_AUTH_TOKEN,
   f=>f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...f.review,reviewedUntil:'2026-10-01T00:00:00Z'}),
   f=>f.agent.version_id='agtvrsn_other',f=>f.agent.conversation_config.agent.prompt.prompt='Changed',f=>f.agent.platform_settings.privacy.record_voice=true];
- for(const mutate of variants){const f=fixture();mutate(f);let calls=0;const r=await recoverVoiceConfiguration(async()=>{calls++;},f.agent,f.env,now);assert.equal(r.requeued,0);assert.equal(calls,0);}
+ for(const mutate of variants){const f=fixture();mutate(f);let calls=0;const r=await recoverVoiceConfiguration(async path=>{if(path.startsWith('icash_integration_checks'))return [];calls++;},f.agent,f.env,now);assert.equal(r.requeued,0);assert.equal(calls,0);}
+});
+test('reviewed November 12 representation enters only the existing bounded recovery with original and observed hashes',async()=>{
+ const f=fixture(),calls=[];
+ f.agent.workflow={edges:{},nodes:{start_node:{type:'start',edge_order:[]}}};
+ const hash=()=>sha(JSON.stringify(canonical({conversation_config:f.agent.conversation_config,platform_settings:f.agent.platform_settings,workflow:f.agent.workflow,procedures:null})));
+ f.review.configHash=hash();f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(f.review);
+ f.agent.conversation_config.agent.prompt.enable_prompt_caching=true;
+ f.agent.workflow.frames={};f.agent.workflow.nodes.start_node.parent_frame_id=null;
+ const before=JSON.stringify(f);
+ assert.deepEqual(await recoverVoiceConfiguration(async(...args)=>{calls.push(args);return 3;},f.agent,f.env,now),{status:'checked',requeued:3});
+ assert.equal(calls.length,1);assert.equal(calls[0][0],'rpc/icash_recover_voice_configuration');
+ assert.equal(calls[0][2].p_config_hash,f.review.configHash);assert.equal(calls[0][2].p_observed_hash,hash());assert.notEqual(hash(),f.review.configHash);
+ assert.equal(JSON.stringify(f),before);
+});
+test('runtime drift preserves one private redacted snapshot without provider reads or recovery',async()=>{
+ const f=fixture(),calls=[],before=JSON.stringify(f.review);
+ f.env.ELEVENLABS_API_KEY='PRIVATE_PROVIDER_SECRET';f.env.TWILIO_AUTH_TOKEN='PRIVATE_CARRIER_SECRET';f.env.SUPABASE_SECRET_KEY='PRIVATE_DATABASE_SECRET';
+ f.agent.conversation_config.agent.prompt.new_default=null;
+ f.agent.conversation_config.agent.prompt.prompt='PRIVATE_PROMPT';
+ f.agent.conversation_config.agent.dynamic_variable_placeholders={private_name:'PRIVATE_CUSTOMER'};
+ f.agent.platform_settings.private_headers={request_headers:{Authorization:'PRIVATE_PROVIDER_SECRET'}};
+ f.agent.platform_settings.test_value='PRIVATE_CARRIER_SECRET PRIVATE_DATABASE_SECRET';
+ const stored=new Map();
+ const db=async(path,method,body)=>{calls.push({path,method,body});assert(path.startsWith('icash_integration_checks'));if(method==='POST'){assert(!stored.has(body.provider));stored.set(body.provider,structuredClone(body));return [];}return stored.size?[{provider:[...stored.keys()][0]}]:[];};
+ for(let i=0;i<2;i++)assert.deepEqual(await recoverVoiceConfiguration(db,f.agent,f.env,now),{status:'review_required',requeued:0});
+ assert.equal(calls.filter(c=>c.method==='POST').length,1,'An existing fingerprint is never rewritten');
+ const saved=[...stored.values()][0];assert.match(saved.provider,/^outbound_runtime_config_review_[a-f0-9]{64}$/);
+ assert.equal(saved.result.sourceConfigHash,f.review.configHash);assert.equal(saved.result.releaseSha,f.env.VERCEL_GIT_COMMIT_SHA);
+ for(const secret of ['PRIVATE_PROVIDER_SECRET','PRIVATE_CARRIER_SECRET','PRIVATE_DATABASE_SECRET','PRIVATE_PROMPT','PRIVATE_CUSTOMER'])assert(!JSON.stringify(saved).includes(secret));
+ assert.equal(saved.result.configuration.conversation_config.agent.prompt.new_default,null);
+ assert.equal(saved.result.calls,false);assert.equal(saved.result.providerWrites,false);assert.equal(saved.result.approvalChanged,false);
+ assert.equal(JSON.stringify(f.review),before);
+ for(const failedStage of ['GET','POST']){
+  let failed=0;
+  const db=async(_path,method)=>{if((method??'GET')===failedStage){failed++;throw Error('unavailable');}return [];};
+  assert.deepEqual(await recoverVoiceConfiguration(db,f.agent,f.env,now),{status:'review_required',requeued:0});assert.equal(failed,1,'No retry of an uncertain snapshot write');
+ }
 });
 test('unknown database outcome is not automatically retried',async()=>{
  const f=fixture();let calls=0;
