@@ -20,11 +20,14 @@ const fetch=async(url,init)=>{
 };
 allowed=false;assert.equal((await syncResearchExclusions(db,fetch)).status,'pending');assert.equal(calls.length,0);assert.equal(writes.at(-1).p_result.unstarted,true);
 allowed=true;timeout=true;await syncResearchExclusions(db,fetch);assert.equal(calls.length,1);assert.equal(writes.at(-1).p_result.unstarted,false);
+assert.equal(admissions.at(-1).p_operation,null,'create remains ordinary');
 timeout=false;claim={...claim,action:'recover'};assert.equal((await syncResearchExclusions(db,fetch)).status,'synced');assert.equal(calls.at(-1).init.method,'GET');
+assert.equal(admissions.at(-1).p_operation,null,'recover remains ordinary');
 providerId=42;providerStatus='pending';assert.equal((await syncResearchExclusions(db,fetch)).status,'synced');assert.equal(writes.at(-1).p_result.listId,'42','Documented numeric provider IDs normalize without losing exact identity');
 wrongName=true;assert.equal((await syncResearchExclusions(db,fetch)).status,'pending','A different list cannot be adopted');wrongName=false;
 providerId=-1;assert.equal((await syncResearchExclusions(db,fetch)).status,'pending','Invalid IDs cannot attach a list');providerId='fixture-list';
 claim={...claim,action:'sync',listId:'fixture-list',ids:['prop_1']};assert.equal((await syncResearchExclusions(db,fetch)).status,'synced');assert.deepEqual(writes.at(-1).p_result.ids,['prop_1']);
+assert.equal(admissions.at(-1).p_operation,'maintenance-exclusion:'+token);assert.equal(admissions.at(-1).p_account,null);
 claim={...claim,ids:['prop_9007199254740991']};assert.equal((await syncResearchExclusions(db,fetch)).status,'synced');assert.deepEqual(JSON.parse(calls.at(-1).init.body).ids,[9007199254740991]);assert.deepEqual(writes.at(-1).p_result.ids,claim.ids,'Persist original prefixed property identities');
 for(const id of ['prop_9007199254740992','prop_0','prop_01']){claim={...claim,ids:[id]};const before=calls.length;assert.equal((await syncResearchExclusions(db,fetch)).status,'pending');assert.equal(calls.length,before,'Unsafe or ambiguous IDs never reach the provider');assert.equal(writes.at(-1).p_result.ok,false);}
 const starter='00000000-0000-4000-8000-000000000010';
