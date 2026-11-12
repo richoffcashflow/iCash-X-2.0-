@@ -1,5 +1,9 @@
 # Support improvement workflow
 
+Questions quoting the existing Credits added status notices distinguish a bot-status refresh from pending payment and actual completed activity. Account checks preserve Pause, pending-work holds and unknown results; guest wording never verifies private payment or activity. Billing requests and topic changes keep their own routes. Fictional coverage: `tests/support-funding-notice.test.mjs`.
+
+Agreement autofill questions recognize singular and plural form follow-ups only within the current agreement conversation. The answer points to the existing Fill from saved conversations control, preserves customer edits and requires review of missing or conflicting terms. Other forms, later operator findings, success and topic changes stop inherited guidance; a reply never establishes preparation, delivery or signing. Fictional account/guest coverage is in `tests/support-agreement-autofill.test.mjs`.
+
 Short requests to confirm stalled bot activity use fresh account evidence instead of repeating a generic management-review message. Confirmation distinguishes no completed work, pending earlier work, Pause, historical totals and unavailable checks. It never promises a restart or treats a passing check as customer recovery. Fictional replays in `tests/support-activity-confirmation.test.mjs` cover repeat questions, repair follow-ups, guests, operator findings, explicit success and topic changes; paid provider tests remain disabled.
 
 Short reports that a seller still has not been messaged retain the current automatic-text investigation instead of falling back to account-wide totals. An omitted bot subject requires an existing seller-text or composer-availability issue. Customer-sent messages, buyers, contracts, operator turns, success and topic changes stop that inheritance. Fictional recurrence replays extend `tests/support-seller-text-review.test.mjs`; no seller outreach is sent or claimed repaired.
