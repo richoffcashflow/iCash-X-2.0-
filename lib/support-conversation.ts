@@ -1,5 +1,7 @@
 import {supportLocationGuidance} from './support-location-guidance.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
+import {supportCallHoldReply} from './support-call-hold-guidance.ts';
+import {supportCreditBalanceReply} from './support-credit-balance.ts';
 import {supportAccountDetailsReply} from './support-account-details.ts';
 import {supportPurchaseComplaintReply,supportPurchaseMismatch} from './support-purchase-complaint.ts';
 import {classifySupportCoaching,supportCoachingReferral,supportCoachingInstructions} from './support-coaching.ts';
@@ -55,6 +57,8 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const voiceSetup=supportVoiceSetupReply(context);if(voiceSetup)return voiceSetup;
  const versionClarification=supportVersionClarification(context.messages);if(versionClarification)return result(versionClarification,'open');
  const location=supportLocationGuidance(context);if(location)return location;
+ const callHold=supportCallHoldReply(context);if(callHold)return callHold;
+ const creditBalance=supportCreditBalanceReply(context);if(creditBalance)return creditBalance;
  const accountReview=supportAccountReviewReply(context);if(accountReview)return accountReview;
  const currentStep=supportCurrentStepReply(context);if(currentStep)return {...currentStep,reply:removeRepeatedSupportQuestions(currentStep.reply,context.messages),status:currentStep.status==='resolved'&&(earlierSupportProblem(context)||context.handedOff)?'open':currentStep.status};
  const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status,inbox.routineGuidance);
@@ -162,6 +166,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 /** Recovery runs separately with fixed account-bound operations. The model only explains verified results. */
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportManagementReview(context,supportTechnicalFallback(context));
+ if(supportCreditBalanceReply(context))return fallback;
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
  if(supportVersionClarification(context.messages))return fallback;
  if(supportVoiceSetupReply(context))return fallback;
