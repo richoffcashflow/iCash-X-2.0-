@@ -58,8 +58,8 @@ export async function readOutboundReadiness(t:OutboundTemplate,key:string|undefi
  async function get(path:string){
   const url=origin+path;
   const r=await fetcher(url,{method:'GET',headers:{'xi-api-key':key!,Accept:'application/json'},redirect:'error',cache:'no-store',credentials:'omit',signal});
-  if(!r.ok||r.redirected||(r.url&&r.url!==url)||!/^application\/(?:json|[a-z0-9!#$&^_.+-]+\+json)(?:;|$)/i.test(r.headers.get('content-type')??'')||!r.body)throw Error('PROVIDER_UNAVAILABLE');
-  const length=r.headers.get('content-length');if(length&&(!/^\d+$/.test(length)||Number(length)>maximumBytes))throw Error('INVALID_RECEIPT');
+  if(!r.ok||r.redirected||(r.url&&r.url!==url)||!/^application\/(?:json|[a-z0-9!#$&^_.+-]+\+json)(?:;|$)/i.test(r.headers.get('content-type')??'')||!r.body){await r.body?.cancel().catch(()=>undefined);throw Error('PROVIDER_UNAVAILABLE');}
+  const length=r.headers.get('content-length');if(length&&(!/^\d+$/.test(length)||Number(length)>maximumBytes)){await r.body?.cancel().catch(()=>undefined);throw Error('INVALID_RECEIPT');}
   const reader=r.body.getReader(),chunks:Uint8Array[]=[];let total=0;
   try{while(true){signal.throwIfAborted();const v=await reader.read();if(v.done)break;total+=v.value.byteLength;if(total>maximumBytes)throw Error('INVALID_RECEIPT');chunks.push(v.value);}}catch(e){await reader.cancel().catch(()=>undefined);throw e;}finally{reader.releaseLock();}
   const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}

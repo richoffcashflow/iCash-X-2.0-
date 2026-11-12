@@ -14,7 +14,7 @@ export async function POST(req:Request){
  if(event.type!=='email.received')return NextResponse.json({received:true});
  const parsed=supportId.safeParse(event.data?.email_id);if(!parsed.success)return new Response(null,{status:400});
  try{
-  const r=await fetch(`https://api.resend.com/emails/receiving/${parsed.data}`,{headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error();const email=await r.json();
+  const r=await fetch(`https://api.resend.com/emails/receiving/${parsed.data}`,{headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error();}const email=await r.json();
   await intakeVerifiedSupportEmail(parsed.data,email);
   scheduleSupportOwnerNotifications();
   return NextResponse.json({received:true});

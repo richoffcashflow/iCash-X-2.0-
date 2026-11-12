@@ -41,6 +41,7 @@ export async function optimizeWebinarDelivery(id:string,revision:number,ownerId:
    if(existing.status!==404&&existing.status!==400)throw new WebinarError(502,'Could not check video storage. Please retry.');
    const copied=await fetch(new URL('/storage/v1/object/copy',base),{method:'POST',headers:storageHeaders,body:JSON.stringify({bucketId:bucket,sourceKey:object,destinationKey:destination,copyMetadata:false,metadata:{cacheControl:`max-age=${cacheSeconds}`,mimetype:original.type}}),redirect:'error',signal});
    // A concurrent request may have created the same immutable destination.
+   await copied.body?.cancel().catch(()=>undefined);
    if(!copied.ok&&copied.status!==409)throw new WebinarError(502,'Could not optimize video storage. No session changes were published.');
   }
   const verified=existing.ok?existing:await inspect(new URL(publicUrl));

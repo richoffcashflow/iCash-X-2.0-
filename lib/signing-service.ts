@@ -13,7 +13,7 @@ type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:Sig
 async function request(path:string,body?:unknown,testMode=false,method='POST'){
  const key=testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY;if(!key)throw new Error('Signing setup is not finished.');
  const r=await fetch(`https://api.docuseal.com/${path}`,{method:body?method:'GET',headers:{'X-Auth-Token':key,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,cache:'no-store',redirect:'error',signal:AbortSignal.timeout(25000)});
- if(!r.ok)throw new Error('Signing provider request failed. Do not resend until its status is checked.');return r;
+ if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw new Error('Signing provider request failed. Do not resend until its status is checked.');}return r;
 }
 const numericId=(id:unknown)=>String(z.coerce.number().int().positive().safe().parse(id));
 const signingAllowed=(accountId:string,id:string)=>db<boolean>('rpc/icash_signing_action_allowed','POST',{p_account:accountId,p_envelope:id});
@@ -139,7 +139,7 @@ export async function completedSigningPdf(accountId:string,id:string,audit=false
  const docs=audit?null:await (await request(`submissions/${numericId(e.provider_id)}/documents?merge=true`,undefined,e.test_mode)).json() as {url:string}[];
  const url=new URL(audit?(raw.audit_log_url??''):(docs?.[0]?.url??''));if(url.protocol!=='https:'||url.hostname!=='docuseal.com'||!['/blobs/','/file/'].some(prefix=>url.pathname.startsWith(prefix)))throw new Error('Combined PDF not ready.');
  const r=await fetch(url,{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(25000)});
- if(!r.ok||!r.headers.get('content-type')?.includes('application/pdf'))throw new Error('Signed PDF is not ready.');
+ if(!r.ok||!r.headers.get('content-type')?.includes('application/pdf')){await r.body?.cancel().catch(()=>undefined);throw new Error('Signed PDF is not ready.');}
  const bytes=await r.arrayBuffer();if(bytes.byteLength>20*1024*1024)throw new Error('PDF too large.');return bytes;
 }
 export async function customerSigningLink(accountId:string,id:string,email:string){

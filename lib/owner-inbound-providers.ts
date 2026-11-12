@@ -140,11 +140,13 @@ export function createOwnerInboundProviders(
     }
     // No retry, no regional fallback, and no raw provider error text in exceptions.
     if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
       // Preserve only the HTTP status for owner-only diagnostics, never a body,
       // URL, Authorization value or raw provider error. Existing error code stays.
       throw Object.assign(Error('OWNER_INBOUND_PROVIDER_UNAVAILABLE'), { providerHttpStatus: response.status });
     }
     if (response.redirected || (response.url && response.url !== url)) {
+      await response.body?.cancel().catch(() => undefined);
       throw Error('OWNER_INBOUND_PROVIDER_UNAVAILABLE');
     }
     let receipt: Receipt | null;
@@ -178,6 +180,7 @@ export function createOwnerInboundProviders(
       if (!receipt) throw Error();
       freezeReceipt(receipt);
     } catch {
+      await response.body?.cancel().catch(() => undefined);
       throw Error('OWNER_INBOUND_PROVIDER_RECEIPT_INVALID');
     }
     receipts.set(receipt, kind);

@@ -3,7 +3,7 @@ import {object,sid,type RecordingRow,type RecordingReview} from './required-call
 export type RecordingEnv={[key:string]:string|undefined;ICASH_RECORDED_OUTBOUND_READY?:string;RECORDED_OUTBOUND_REVIEW_JSON?:string;TWILIO_ACCOUNT_SID?:string;TWILIO_AUTH_TOKEN?:string;ELEVENLABS_API_KEY?:string};
 export class RecordingProviderError extends Error{status:number;constructor(status:number){super('RECORDING_PROVIDER_UNAVAILABLE');this.status=status;}}
 export async function boundedBytes(response:Response|Request,max:number){
- const length=response.headers.get('content-length');if(length&&(!/^\d+$/.test(length)||Number(length)>max))throw Error('BODY_LIMIT');
+ const length=response.headers.get('content-length');if(length&&(!/^\d+$/.test(length)||Number(length)>max)){await response.body?.cancel().catch(()=>undefined);throw Error('BODY_LIMIT');}
  if(!response.body)throw Error('BODY_REQUIRED');const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
  try{while(true){const x=await reader.read();if(x.done)break;size+=x.value.byteLength;if(size>max)throw Error('BODY_LIMIT');chunks.push(x.value);}}finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
  return Buffer.concat(chunks);
@@ -14,19 +14,19 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
  const auth='Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64');
  async function twilio(path:string,method='GET',body?:URLSearchParams,safety=false){
   const url=base+path,r=await fetcher(url,{method,headers:{Authorization:auth,...(body?{'Content-Type':'application/x-www-form-urlencoded'}:{})},body:body?.toString(),redirect:'error',cache:'no-store',credentials:'omit',signal:signal&&!safety?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
-  if(!r.ok||r.redirected||(r.url&&r.url!==url))throw new RecordingProviderError(r.status);return r;
+  if(!r.ok||r.redirected||(r.url&&r.url!==url)){await r.body?.cancel().catch(()=>undefined);throw new RecordingProviderError(r.status);}return r;
  }
  async function json(path:string,method='GET',body?:URLSearchParams,safety=false){return object(JSON.parse((await boundedBytes(await twilio(path,method,body,safety),262144)).toString('utf8')));}
  async function monitor(path:string){
   const url='https://monitor.twilio.com/v1'+path;
   const r=await fetcher(url,{method:'GET',headers:{Authorization:auth,Accept:'application/json'},redirect:'error',cache:'no-store',credentials:'omit',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
-  if(!r.ok||r.redirected||r.url&&r.url!==url)throw new RecordingProviderError(r.status);
+  if(!r.ok||r.redirected||r.url&&r.url!==url){await r.body?.cancel().catch(()=>undefined);throw new RecordingProviderError(r.status);}
   return object(JSON.parse((await boundedBytes(r,262144)).toString('utf8')));
  }
  async function eleven(path:string,body?:unknown){
   if(!env.ELEVENLABS_API_KEY)throw Error('RECORDING_PROVIDER_CONFIGURATION_REQUIRED');const url='https://api.elevenlabs.io'+path;
   const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
-  if(!r.ok||r.redirected||(r.url&&r.url!==url))throw new RecordingProviderError(r.status);return (await boundedBytes(r,262144)).toString('utf8');
+  if(!r.ok||r.redirected||(r.url&&r.url!==url)){await r.body?.cancel().catch(()=>undefined);throw new RecordingProviderError(r.status);}return (await boundedBytes(r,262144)).toString('utf8');
  }
  const callPath=(id:string)=>{if(!sid(id,'CA'))throw Error('CALL_ID_REQUIRED');return `/Calls/${id}`;};
  const recordPath=(id:string)=>{if(!sid(id,'RE'))throw Error('RECORDING_ID_REQUIRED');return `/Recordings/${id}`;};
@@ -56,8 +56,8 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
   end:(call:string)=>json(callPath(call)+'.json','POST',new URLSearchParams({Status:'completed'}),true),
   getRecording:(id:string,deleted=false)=>json(recordPath(id)+'.json'+(deleted?'?IncludeSoftDeleted=true':'')),
   listRecordings:(call:string)=>json(callPath(call)+'/Recordings.json?PageSize=100'),
-  deleteRecording:async(id:string)=>{const r=await twilio(recordPath(id)+'.json','DELETE');if(r.status!==204)throw Error('DELETION_NOT_CONFIRMED');},
-  media:async(id:string)=>{const r=await twilio(recordPath(id)+'.mp3');if(!/^audio\/(mpeg|mp3)(?:;|$)/i.test(r.headers.get('content-type')??''))throw Error('AUDIO_TYPE_INVALID');return boundedBytes(r,6*1024*1024);},
+  deleteRecording:async(id:string)=>{const r=await twilio(recordPath(id)+'.json','DELETE');await r.body?.cancel().catch(()=>undefined);if(r.status!==204)throw Error('DELETION_NOT_CONFIRMED');},
+  media:async(id:string)=>{const r=await twilio(recordPath(id)+'.mp3');if(!/^audio\/(mpeg|mp3)(?:;|$)/i.test(r.headers.get('content-type')??'')){await r.body?.cancel().catch(()=>undefined);throw Error('AUDIO_TYPE_INVALID');}return boundedBytes(r,6*1024*1024);},
   agent:async(r:RecordingReview)=>object(JSON.parse(await eleven(`/v1/convai/agents/${r.agentId}?branch_id=${r.branchId}`))),
   tool:async(id:string)=>{if(!/^tool_[A-Za-z0-9]+$/.test(id))throw Error('TOOL_ID_REQUIRED');return object(JSON.parse(await eleven('/v1/convai/tools/'+id)));},
   conversations:async(row:RecordingRow)=>object(JSON.parse(await eleven('/v1/convai/conversations?'+new URLSearchParams({agent_id:row.agent_id,branch_id:row.branch_id,version_id:row.version_id,user_id:'icash-recorded:'+row.id,page_size:'2'})))),

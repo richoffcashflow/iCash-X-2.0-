@@ -15,7 +15,7 @@ export async function dispatchDealEmail(accountId:string,id:string){
  const identity=customerEmailIdentity(accountId,job.principal,job.id);
  const unsubscribe=job.unsubscribeUrl&&/^https:\/\/homeoffernetwork\.com\/buyers\/unsubscribe\/[a-f0-9]{32}$/.test(job.unsubscribeUrl)?job.unsubscribeUrl:null;
  const response=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`deal-email-${job.id}`},body:JSON.stringify({from:identity?.from??`${emailFromName(job.principal)} <${titleEmailAddress(process.env.ICASH_TITLE_FROM_EMAIL)}>`,to:[job.to],reply_to:identity?.replyTo??process.env.ICASH_TITLE_REPLY_EMAIL,subject:identity?job.subject:`[ICX-M:${job.id}] ${job.subject}`,text:job.text,...(unsubscribe?{headers:{'List-Unsubscribe':`<${unsubscribe}>`,'List-Unsubscribe-Post':'List-Unsubscribe=One-Click'}}:{})}),signal:AbortSignal.timeout(15000)});
- if(!response.ok)throw Error('Delivery response needs review');
+ if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('Delivery response needs review');}
  const result=await response.json();if(typeof result.id!=='string'||!/^[0-9a-f-]{36}$/i.test(result.id))throw Error('Receipt missing');
  await db(`icash_deal_emails?id=eq.${job.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{state:'accepted',provider_id:result.id,updated_at:new Date().toISOString()});
  return {status:'email_accepted'};

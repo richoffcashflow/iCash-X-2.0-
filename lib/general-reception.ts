@@ -47,10 +47,10 @@ export type ReceptionDeps={rpc:(name:string,body?:Record<string,unknown>,signal?
 
 export async function boundedBody(input:Request|Response,maximum:number){
  if(!input.body)throw Error('BODY_REQUIRED');
- const length=input.headers.get('content-length');if(length&&(!/^\d+$/.test(length)||Number(length)>maximum))throw Error('BODY_LIMIT');
+ const length=input.headers.get('content-length');if(length&&(!/^\d+$/.test(length)||Number(length)>maximum)){await input.body.cancel().catch(()=>undefined);throw Error('BODY_LIMIT');}
  const reader=input.body.getReader();const chunks:Uint8Array[]=[];let size=0;
- try{while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>maximum){await reader.cancel();throw Error('BODY_LIMIT');}chunks.push(part.value);}}
- finally{reader.releaseLock();}
+ try{while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>maximum)throw Error('BODY_LIMIT');chunks.push(part.value);}}
+ finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
  return new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));
 }
 /** Twilio's documented SHA1 algorithm; rejects ambiguous duplicated form keys.
@@ -140,7 +140,7 @@ export function inspectReceptionAgent(c:ReceptionConfig,input:unknown,branchInpu
 const elevenOrigin='https://api.us.elevenlabs.io';
 async function eleven(env:ReceptionEnv,fetcher:typeof fetch,path:string,body?:unknown,signal?:AbortSignal){
  const response=await fetcher(elevenOrigin+path,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':env.ELEVENLABS_API_KEY!,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(3500)]):AbortSignal.timeout(3500)});
- if(!response.ok||response.url&&response.url!==elevenOrigin+path)throw Error('PROVIDER_UNAVAILABLE');
+ if(!response.ok||response.url&&response.url!==elevenOrigin+path){await response.body?.cancel().catch(()=>undefined);throw Error('PROVIDER_UNAVAILABLE');}
  const raw=await boundedBody(response,256*1024);
  return path==='/v1/convai/twilio/register-call'?raw:JSON.parse(raw);
 }
@@ -180,7 +180,7 @@ export function createReceptionHandlers(env:ReceptionEnv,deps:ReceptionDeps){
     if(c.call_profile==='owner_quick_test'&&!equal(callerHash,String(c.owner_caller_hash)))return reject();
     const path=`/v1/convai/agents/${c.agent_id}`;
     const callUrl=`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls/${form.get('CallSid')}.json`;
-    const [agent,listed,call,workspace]=await Promise.all([eleven(env,fetcher,path+`?branch_id=${c.branch_id}`,undefined,deadline),eleven(env,fetcher,path+'/branches?include_archived=true&limit=100',undefined,deadline),fetcher(callUrl,{headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64')},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(3500)])}).then(async r=>{if(!r.ok||r.url&&r.url!==callUrl)throw Error('CALL_UNAVAILABLE');return obj(JSON.parse(await boundedBody(r,32768)));}),eleven(env,fetcher,'/v1/convai/settings',undefined,deadline)]);
+    const [agent,listed,call,workspace]=await Promise.all([eleven(env,fetcher,path+`?branch_id=${c.branch_id}`,undefined,deadline),eleven(env,fetcher,path+'/branches?include_archived=true&limit=100',undefined,deadline),fetcher(callUrl,{headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64')},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(3500)])}).then(async r=>{if(!r.ok||r.url&&r.url!==callUrl){await r.body?.cancel().catch(()=>undefined);throw Error('CALL_UNAVAILABLE');}return obj(JSON.parse(await boundedBody(r,32768)));}),eleven(env,fetcher,'/v1/convai/settings',undefined,deadline)]);
     // Twilio signatures have no timestamp. Independently reject stale signed webhook replays.
     const age=(deps.now?.()??Date.now())-Date.parse(String(call.date_created));
     if(call.sid!==form.get('CallSid')||call.account_sid!==env.TWILIO_ACCOUNT_SID||call.to!==c.called_number||call.from!==from||call.direction!=='inbound'||call.status!=='ringing'||!Number.isFinite(age)||age<0||age>120000)return reject();

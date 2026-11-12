@@ -69,7 +69,7 @@ export async function analyzeText(input:{model:string;context:unknown;party?:Tex
  // The reviewed rate allows 46,000 input tokens and 800 output tokens.
  if(Buffer.byteLength(request.body,'utf8')>44000)throw Error('TEXT_AI_CONTEXT_TOO_LARGE');
  const response=await fetcher('https://api.openai.com/v1/chat/completions',request);
- if(!response.ok)throw Error(`TEXT_AI_PROVIDER_HTTP_${response.status}`);
+ if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error(`TEXT_AI_PROVIDER_HTTP_${response.status}`);}
  const result=await response.json();if(result.choices?.[0]?.finish_reason!=='stop')throw Error('TEXT_AI_INCOMPLETE');
  const analysis=validateTextAnalysis(JSON.parse(result.choices[0].message.content),sourceMessages.filter(m=>m.direction==='incoming').map(m=>m.body),party,conversationEnabled);
  // A model cannot interpret an owner-confirmation answer as permission to qualify a seller.

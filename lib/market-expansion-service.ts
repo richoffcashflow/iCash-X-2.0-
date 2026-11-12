@@ -9,7 +9,7 @@ export async function expandMarket(account:string,id:string){
  const request=async(path:string,body?:object)=>{
   if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))throw Error('Market rate limit');
   const r=await fetch('https://api.v2.dealmachine.com/v1'+path,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});
-  if(!r.ok)throw Error('Market provider failed');return r.json();
+  if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error('Market provider failed');}return r.json();
  };
  try{
   if(j.kind==='locations'){

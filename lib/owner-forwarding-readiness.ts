@@ -25,8 +25,9 @@ export async function readOwnerForwarding(env:Environment,fetcher:typeof fetch=f
  let response:Response;
  try{response=await fetcher(url,{method:'GET',headers:{Authorization:`Bearer ${key}`,Accept:'application/json'},cache:'no-store',redirect:'error',credentials:'omit',signal});}
  catch{throw new OwnerForwardingError('provider_unavailable');}
- if(response.redirected||(response.url&&response.url!==url))throw new OwnerForwardingError('provider_unavailable');
+ if(response.redirected||(response.url&&response.url!==url)){await response.body?.cancel().catch(()=>undefined);throw new OwnerForwardingError('provider_unavailable');}
  if(!response.ok){
+  await response.body?.cancel().catch(()=>undefined);
   const code=response.status===401?'provider_auth_failed':response.status===403?'provider_access_denied':response.status===400?'provider_request_rejected':'provider_unavailable';
   throw new OwnerForwardingError(code);
  }
@@ -43,7 +44,7 @@ export async function readOwnerForwarding(env:Environment,fetcher:typeof fetch=f
   parsed=receipt.parse(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)));
   const f=parsed.data.call_forwarding;
   if(parsed.data.number!==source||(f.enabled?f.to===null:f.to!==null)||(f.status==='active'?f.estimated_completion!==null:f.estimated_completion===null))throw Error();
- }catch(error){throw error instanceof OwnerForwardingError?error:new OwnerForwardingError('provider_receipt_invalid');}
+ }catch(error){await response.body?.cancel().catch(()=>undefined);throw error instanceof OwnerForwardingError?error:new OwnerForwardingError('provider_receipt_invalid');}
  const f=parsed.data.call_forwarding;
  return {sourcePhone:source,expectedDestination:ownerInboundTarget.ingressNumber,
   enabled:f.enabled,destination:f.to,providerStatus:f.status,estimatedCompletion:f.estimated_completion,

@@ -8,7 +8,7 @@ export type AuthSession={access_token:string;refresh_token:string;expires_in:num
 export async function authRequest<T>(path:string,body?:unknown,access?:string,method?:'PUT',signal?:AbortSignal):Promise<T> {
  if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SECRET_KEY)throw new Error("Account access unavailable");
  const bearer=access??(path.startsWith('admin/')?process.env.SUPABASE_SECRET_KEY:undefined);
- const r=await fetch(`${process.env.SUPABASE_URL}/auth/v1/${path}`,{method:method??(body===undefined?"GET":"POST"),headers:{apikey:process.env.SUPABASE_SECRET_KEY,...(bearer?{Authorization:`Bearer ${bearer}`}:{}) ,"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
+ const r=await fetch(`${process.env.SUPABASE_URL}/auth/v1/${path}`,{method:method??(body===undefined?"GET":"POST"),headers:{apikey:process.env.SUPABASE_SECRET_KEY,...(bearer?{Authorization:`Bearer ${bearer}`}:{}) ,"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",redirect:"error",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
  if(!r.ok){
   // Rejected access/refresh requests still own a response body. Cleanup must
   // retain the HTTP status used to distinguish access loss from an outage.
