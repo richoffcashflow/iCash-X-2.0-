@@ -2,10 +2,11 @@ import http from 'node:http';
 import {createRpc,tick,automationTick,workerFailureDetails} from './runner.mjs';
 import {createScheduler} from './scheduler.mjs';
 import {createHeartbeat} from './heartbeat.mjs';
+import {createWatchdog} from './watchdog.mjs';
 import {automationPools} from './pools.mjs';
 const configured=Boolean(process.env.SUPABASE_URL&&process.env.SUPABASE_SECRET_KEY);
 const active=configured&&process.env.SCREENING_WORKER_ENABLED==='true';
-let stopping=false,timer,heartbeatTimer;
+let stopping=false,timer,heartbeatTimer,watchdogTimer;
 const rpc=configured?createRpc(process.env.SUPABASE_URL,process.env.SUPABASE_SECRET_KEY):null;
 const scheduler=createScheduler({screening:()=>tick(rpc),automation:lane=>automationTick(rpc,fetch,lane),automationPools:automationPools(),
  onFailure:(lane,error)=>console.error('Worker operation failed',{lane,...workerFailureDetails(error)})});
@@ -21,9 +22,14 @@ const server=http.createServer((req,res)=>{
  res.end(JSON.stringify(health.body));
 });
 const heartbeat=rpc?createHeartbeat({rpc,health:()=>scheduler.health(active),onFailure:()=>console.error('Worker heartbeat unavailable')}):null;
+const watchdog=createWatchdog({isStalled:()=>scheduler.isStalled(),stop:()=>{
+ stopping=true;clearTimeout(timer);
+ return scheduler.stop();
+},exit:code=>process.exit(code),onStall:()=>console.error('Worker stalled; draining before automatic restart')});
 server.listen(Number(process.env.PORT||3001),'0.0.0.0',()=>{
  console.info('Worker started',{active,automationConcurrency:scheduler.health(active).body.automationConcurrency,commit:process.env.RAILWAY_GIT_COMMIT_SHA??null});
  if(active)void loop();
+ if(active)watchdogTimer=setInterval(()=>watchdog(active&&!stopping),15000);
  if(heartbeat){void heartbeat();heartbeatTimer=setInterval(()=>void heartbeat(),60000);}
 });
-for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;clearTimeout(timer);clearInterval(heartbeatTimer);server.close();void scheduler.stop();});
+for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{stopping=true;clearTimeout(timer);clearInterval(heartbeatTimer);clearInterval(watchdogTimer);server.close();void scheduler.stop();});

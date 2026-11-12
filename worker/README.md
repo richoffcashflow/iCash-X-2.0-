@@ -35,3 +35,20 @@ heartbeat, and actual completed work. A skipped/removed deployment is not an
 active worker. Graceful shutdown stops fresh claims and drains known attempts.
 Pure screening may retry its existing lease; paid calls, texts and purchases
 retain their separate original-receipt and unknown-outcome rules.
+
+
+A separate 15-second watchdog checks the same stuck-loop/handler deadlines as
+health. Only a local stall triggers restart; provider failures and held jobs keep
+their independent backoff. The watchdog immediately stops new claims, gives
+other in-flight handlers up to 270 seconds to finish, and exits once with code 1.
+Railway's existing ALWAYS restart policy starts a fresh process. Original durable
+tickets, unknown operations, receipts and money remain unchanged; no request is
+replayed by the watchdog. The normal release gate remains in place.
+
+This covers unresolved asynchronous work and a scheduler loop that stopped
+scheduling while the event loop still runs. A completely blocked Node event loop
+cannot execute this timer; independent stale-heartbeat monitoring remains
+necessary. It does not reconcile provider uncertainty or clear account holds.
+`worker-watchdog.test.mjs` injects hangs into the real scheduler and checks lane
+deadlines, once-only bounded exit, no fresh claims during drain, ordinary failure
+isolation and standby behavior without live provider requests.

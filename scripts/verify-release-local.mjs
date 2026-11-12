@@ -59,7 +59,7 @@ const suites = [
  'deal-documents', 'signing-service-validation', 'assignment-contract-policy',
  'buyer-scenarios', 'buyer-privacy-release-source', 'worker-recovery',
  'cost-efficiency', 'property-photo-route', 'property-photo', 'persistent-property-photo',
- 'reliability-database', 'meta-initial-voice-monitoring-database', 'meta-initial-voice-serialization-database', 'text-receipt-recovery', 'worker-heartbeat', 'reliability-monitor', 'service-health',
+ 'reliability-database', 'meta-initial-voice-monitoring-database', 'meta-initial-voice-serialization-database', 'text-receipt-recovery', 'worker-heartbeat', 'worker-watchdog', 'reliability-monitor', 'service-health',
  'text-sender-routing', 'sender-health-routing', 'sms-channel-admission', 'contiguity-service-webhook', 'carrier-blocked-sms', 'seller-text-replies', 'contract-text', 'contract-text-resend',
  'seller-callback-route', 'seller-callback-database', 'owner-outreach-route', 'owner-outreach-ui', 'owner-outreach-database', 'owner-overview-route', 'owner-overview-ui', 'lead-supply', 'lead-supply-database', 'admin-experience-route', 'admin-experience-ui',
  'workspace-attention-readback', 'seller-default-conversation', 'workspace-panel-content', 'workspace-archived-attention', 'seller-recovery-route', 'workspace-attention-ui', 'production-release-gate', 'production-health',
