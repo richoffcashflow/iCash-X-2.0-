@@ -1,0 +1,11 @@
+# Support question recognition
+
+The November 12 support audit reproduced three answer-routing failures with fictional conversations:
+
+- A missing seller-call recording received unrelated account-wide outreach counts. Call audio now has a shared account/guest reply path, distinguishes capability from available audio, retains an unresolved playback issue through short follow-ups, and asks for the affected property, call time and recording status. Repeated failed playback enters the existing management-review workflow. Live microphone problems, custom voice, voicemail classification and recorded-attempt statistics keep their existing routes.
+- Complaints that a bot stopped without being paused, appears on without running, or shows only older leads could fall through to unsupported explanations about eligible inventory. These now use the existing account checks, distinguish overall historical activity from current work, and retain short answers to matching questions. Unknown checks remain unknown; Pause and operator/topic boundaries are preserved.
+- Combined deletion and stop-renewal requests could answer only deletion. Natural requests to stop billing now retain the existing subscription-cancellation instructions alongside deletion review. Failed sign-in does not trigger another sign-in instruction. The reply does not cancel, delete, refund or change any account.
+
+Source checks: `components/call-recording.tsx` enumerates available, pending, absent, expired and failed audio states; `components/property-call-history.tsx` keeps recordings independent of transcripts. Subscription cancellation retains the existing confirmation flow. The customer interface and production controls are unchanged.
+
+Regression suites: `support-recording-question`, `support-stopped-work-phrasing`, and `support-deletion-renewal`. Each failed on the original main behavior and is registered with the release verifier. All fixtures are fictional and forbid paid model requests. Exact-head canonical checks and verified production deployment remain required before claiming live behavior. An answer correction does not recover a recording, resume stalled work or establish customer-confirmed resolution.

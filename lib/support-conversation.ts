@@ -1,4 +1,5 @@
 import {supportLocationGuidance} from './support-location-guidance.ts';
+import {supportCallRecordingReply} from './support-call-recordings.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
 import {supportCallHoldReply} from './support-call-hold-guidance.ts';
 import {supportCreditBalanceReply} from './support-credit-balance.ts';
@@ -54,6 +55,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const accountDetails=supportAccountDetailsReply(context);if(accountDetails)return accountDetails;
+ const callRecording=supportCallRecordingReply(context);if(callRecording)return callRecording;
  const voiceSetup=supportVoiceSetupReply(context);if(voiceSetup)return voiceSetup;
  const versionClarification=supportVersionClarification(context.messages);if(versionClarification)return result(versionClarification,'open');
  const location=supportLocationGuidance(context);if(location)return location;
@@ -167,6 +169,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportManagementReview(context,supportTechnicalFallback(context));
  if(supportCreditBalanceReply(context))return fallback;
+ if(supportCallRecordingReply(context))return fallback;
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
  if(supportVersionClarification(context.messages))return fallback;
  if(supportVoiceSetupReply(context))return fallback;

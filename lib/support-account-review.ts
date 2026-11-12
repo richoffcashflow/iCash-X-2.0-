@@ -7,6 +7,12 @@ const existingOutreachConcern=(text:string)=>/\b(?:ai|bot|automated|automation|r
  * and failure in one sentence, and let an explicit successful result reset it. */
 export function supportMissingActivityConcern(text:string){
  if(/\b(?:(?:it|(?:the |my )?(?:bot|ai)) (?:is )?working (?:now|fine|well)|problem solved|fixed now|all fixed)[.!\s]*$/i.test(text)&&!/\b(?:not working (?:now|fine|well)|not fixed|isn[’']?t working (?:now|fine|well))\b/i.test(text))return false;
+ // These whole-work complaints must not fall through to model guesses about
+ // eligible inventory. A stopped seller contact or browser is a separate issue.
+ if(/^(?:why (?:did|has) (?:my|the) (?:ai )?bot stop(?:ped)?(?:[^.!?\n]{0,70}\b(?:not|didn[’']?t) pause it)?|(?:my|the) (?:ai )?bot (?:has )?stopped (?:by itself|on its own))[?!.\s]*$/i.test(text.trim()))return true;
+ if(/\b(?:my|the) (?:ai )?bot (?:is |says it is )?(?:on|running|active)\b[^.!?\n]{0,35}\b(?:not|isn[’']?t) (?:running|working)\b/i.test(text))return true;
+ if(/\b(?:my|the) (?:ai )?bot (?:is )?taking (?:so |too )?long to find (?:a |any )?deals?\b/i.test(text))return true;
+ if(/\b(?:my|the) (?:ai )?bot\b[^.!?\n]{0,25}\b(?:only|still)\b[^.!?\n]{0,25}\b(?:leads|properties) from (?:last week|yesterday|last month)\b/i.test(text))return true;
  // A running workspace with no progress is an activity complaint. Require
  // that complete statement, not unrelated browser/video or software updates.
  if(/\b(?:app|apps|workspace|bot|ai) (?:is|has been|have been|was|had been) running\b[^.!?\n]{0,65}\b(?:without (?:any )?|no )(?:movement|progress|activity)(?: or updates?)?[.!?\s]*$/i.test(text))return true;
@@ -24,6 +30,18 @@ export const supportCurrentResearchQuestion=(text:string)=>/^is (?:my |the )?(?:
 const activityProofQuestion=(text:string)=>/\b(?:how|when)(?: can| do| will)? i (?:tell|know|see)\b.{0,35}\b(?:ai|bot)\b.{0,30}\b(?:doing (?:anything|something)|working|work|active)\b/i.test(text);
 function missingActivityFollowup(context:SupportContext){
  const turns=context.messages.slice(-9),latest=turns.at(-1);
+ const previous=turns.at(-2);
+ const olderLeads=/^(?:yes[, ]+(?:but )?)?(?:it[’']?s|it is|they are|they[’']re|these are|those are)(?: all)? from (?:last week|yesterday|last month)[.!?\s]*$/i.test(latest?.content.trim()??'');
+ const notRunning=/^(?:it says (?:it[’']?s|it is|its) |it is |it[’']?s )(?:on|running|active)[, ]+but (?:it is |it[’']?s |it )?not (?:running|working)[.!?\s]*$/i.test(latest?.content.trim()??'');
+ if(latest?.role==='user'&&previous?.role==='assistant'&&
+  (notRunning||olderLeads&&/\b(?:leads|properties)\b/i.test(previous.content)&&previous.content.includes('?'))){
+  for(const turn of turns.slice(0,-1).reverse()){
+   if(turn.role==='operator')break;
+   if(turn.role!=='user')continue;
+   if(outreachConcern(turn.content))return true;
+   if(!/^(?:yes|no|running|it is running|it[’']s running)[.!\s]*$/i.test(turn.content.trim()))break;
+  }
+ }
  if(latest?.role!=='user'||!activityPage(latest.content)&&!activityProofQuestion(latest.content))return false;
  // A page name is a detail only after a matching question. Never carry an
  // earlier complaint across an operator finding or another customer topic.
