@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {setup} from './helpers/deal-supervisor-setup.mjs';
+assert.equal(readFileSync(new URL('../config/deal-supervisor.sql',import.meta.url),'utf8'),readFileSync(new URL('../supabase/migrations/20261112195442_deal_supervisor.sql',import.meta.url),'utf8'),'Tested SQL must match the applied migration receipt');
 const pg=await PGlite.create();await pg.exec(setup);
 const q=(sql,args=[])=>pg.query(sql,args),one=async(sql,args=[])=>(await q(sql,args)).rows[0];
 const run=async()=>(await one('select icash_run_deal_supervisor() r')).r;

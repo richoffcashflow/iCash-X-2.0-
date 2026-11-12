@@ -27,6 +27,8 @@ Disable `icash_deal_supervisor_settings.enabled` to stop new supervision. Preser
 
 ## Validation and proof boundary
 
+The reviewed database migration was installed disabled as `20261112195442_deal_supervisor`. Readback confirmed zero events/records, a disabled runner, and no anonymous/authenticated read or execution privileges. Local native PostgreSQL contention checks and the production build passed before release; these installation checks do not establish activation or live outcomes.
+
 `deal-supervisor-database.test.mjs` executes the actual supervisor SQL, existing seller-progress SQL and canonical signature/outcome functions in isolated PostgreSQL. Synthetic scenarios cover missing routing, duplicate checks, stale sources, Pause/manual/opt-out/contact gates, unknown AI operations, forged completion labels, the seller-to-purchase-to-buyer-to-title-to-proceeds sequence, amount mismatches, tenant boundaries, failures and batching. Downstream journey/provider boundaries are explicitly simulated; these tests do not prove live negotiations or closed deals.
 
 `test-deal-supervisor-postgres.py` uses separate native PostgreSQL sessions to verify nonblocking runner contention, one missing reply job, original unique preparation and events committed during processing. Service/route tests verify authorization, release gates, failure isolation and no uncertain-RPC replay. Existing seller, signing, buyer and title suites continue to test those handlers.
