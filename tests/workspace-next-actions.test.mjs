@@ -74,6 +74,14 @@ for(const patch of [{titleSelected:false},{titleSelected:true,titleState:'needs_
  assert.equal(journeyNextAction({state:'reserved',last_progress_at:new Date().toISOString(),...patch}).target,'closing','reserved-deal actions open closing directly');
 }
 assert.equal(journeyNextAction({state:'signing',envelopeState:'customer_signature_needed'}).target,'signature');
+for(const showingState of ['proposed','confirmed']){
+ const next=journeyNextAction({state:'collecting',last_progress_at:'2020-01-01T00:00:00Z',wants_viewing:true,showingState});
+ assert.equal(next.waitingOn,'Buyer & seller','an active visit is not a generic inactivity review');
+ assert.equal(next.label,'View visit');
+}
+const unselected=journeyNextAction({state:'collecting',last_progress_at:new Date().toISOString(),wants_viewing:false,wants_assignment:false,hasSlots:false});
+assert.equal(unselected.label,'View buyer progress');
+assert.doesNotMatch(unselected.detail,/options are available/,'do not invent viewing availability');
 
 // Navigation reveals existing controls, preserves sibling disclosures and moves focus.
 function node(tagName,parentElement=null){return {tagName,parentElement,open:false,scrollIntoView(){this.scrolled=true;},focus(){this.focused=true;}};}

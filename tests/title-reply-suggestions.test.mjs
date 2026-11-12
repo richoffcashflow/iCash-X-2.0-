@@ -10,4 +10,7 @@ assert.equal(suggest('Closing is set for February 30, 2027.')[0].effectiveDate,n
 assert.equal(suggest('Closing is scheduled for tomorrow.')[0].effectiveDate,null);
 assert.equal(suggest('Deposit received: $2,000 and $500.')[0].amountCents,null);
 for(const body of ['We have not received the deposit.','The deposit will be received tomorrow.','If the funds are sent, we can close.','We expect the transaction to be closed on October 22, 2026.','Has the deposit been received?','Closing is not scheduled.','Please review.\nOn Monday, Title wrote:\nThe transaction has closed.','Thanks\n> We received the $2000 deposit.'])assert.equal(suggest(body).length,0,body);
-console.log('Title suggestions: 16 local ordinary-message, negation, quoted-history, date and amount fixtures passed.');
+for(const body of ["The deposit wasn't received.","The funds weren't disbursed.","We didn't receive the deposit.","The title file isn't open.","The transaction hasn’t closed.","The deposit wasn’t received.","We won’t say the transaction closed.","The payment can't be marked sent."]){
+ assert.deepEqual(suggest(body),[],body);
+}
+console.log('Title suggestions: ordinary replies, contraction negation, quoted history, date and amount fixtures passed.');
