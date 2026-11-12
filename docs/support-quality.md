@@ -1,5 +1,7 @@
 # Support improvement workflow
 
+Missing seller-call recordings and immediate audio-capability questions use recording-specific guidance, not aggregate outreach totals. A call attempt does not establish saved playable audio. Keep the case open, ask for the affected property and call time, and preserve guest privacy and operator/topic boundaries. Fictional offline coverage: `tests/support-call-recording.test.mjs`.
+
 Questions quoting the existing Credits added status notices distinguish a bot-status refresh from pending payment and actual completed activity. Account checks preserve Pause, pending-work holds and unknown results; guest wording never verifies private payment or activity. Billing requests and topic changes keep their own routes. Fictional coverage: `tests/support-funding-notice.test.mjs`.
 
 Agreement autofill questions recognize singular and plural form follow-ups only within the current agreement conversation. The answer points to the existing Fill from saved conversations control, preserves customer edits and requires review of missing or conflicting terms. Other forms, later operator findings, success and topic changes stop inherited guidance; a reply never establishes preparation, delivery or signing. Fictional account/guest coverage is in `tests/support-agreement-autofill.test.mjs`.
