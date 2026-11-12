@@ -96,6 +96,7 @@ try{
   }
   const db=async(path,method,p)=>{
    if(path==='rpc/icash_owner_active_export_capacity')return 'ready';
+   if(path==='rpc/icash_pending_owner_preflight')return null;
    if(path==='rpc/icash_owner_targeting_pools')return Object.fromEntries(p.p_screenings.map(id=>[id,'active']));
    if(path==='rpc/icash_owner_batch_candidates'){
     const remaining=[];for(const item of flow.items)if(!await v('select icash_owner_preflight_empty($1,$2,$3)',[flow.account,item.screeningId,item.snapshot]))remaining.push(item);
