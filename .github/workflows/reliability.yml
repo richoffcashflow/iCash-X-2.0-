@@ -34,6 +34,8 @@ jobs:
           persist-credentials: false
       - name: Verify learning refresh under real concurrent transactions
         run: python3 scripts/test-learning-refresh-postgres.py
+      - name: Verify durable deal supervision and concurrent source wakeups
+        run: python3 scripts/test-deal-supervisor-postgres.py
       - name: Verify corrected evidence rejects concurrent stale training results
         run: python3 scripts/test-learning-evidence-cutover-postgres.py
       - name: Verify prospective text learning under concurrent queues and customer Pause
