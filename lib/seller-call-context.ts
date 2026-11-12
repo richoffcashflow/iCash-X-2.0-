@@ -87,7 +87,9 @@ export function compactSellerProgress(progress:{history:VoiceSmsContext|null;pri
  };
  const smsBudget=Math.min(1500,Math.floor(budget/4));
  const recentSms=bounded(exchanges(progress.history?.messages??[]),smsBudget);
- const priorExchanges=bounded(progress.priorCalls.slice().reverse().flatMap(call=>exchanges(call.messages)),budget-smsBudget);
+ // Unused SMS space belongs to the saved call answers. Reserving an empty
+ // quarter could discard the only complete answer near the prompt limit.
+ const priorExchanges=bounded(progress.priorCalls.slice().reverse().flatMap(call=>exchanges(call.messages)),budget-JSON.stringify(recentSms).length);
  return {recentSms,priorExchanges};
 }
 export type SellerRequestContext={name?:string|null;submittedAt:string};

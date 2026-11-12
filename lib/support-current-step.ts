@@ -53,13 +53,17 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
 
  // The manual composer availability read is not a worker dispatch receipt.
  // Keep a missing seller reply distinct from account-wide call/text totals.
- const sellerTextFailure=(text:string)=>/\b(?:bot|ai|software)\b.{0,55}\b(?:has not|hasn[’']t|did not|didn[’']t|never|not|isn[’']t)\b.{0,35}\b(?:texted|texting|sent|sending|replied|reply|responded|responding)\b/i.test(text)&&/\b(?:seller|text|texted|texting|message|reply)\b/i.test(text)&&!/\b(?:buyer|contract|agreement|sign[ -]?in)\b/i.test(text);
+ const sellerTextFailure=(text:string)=>/\b(?:bot|ai|software)\b.{0,55}\b(?:has not|hasn[’']t|did not|didn[’']t|never|not|isn[’']t)\b.{0,35}\b(?:texted|texting|messaged|messaging|sent|sending|replied|reply|responded|responding)\b/i.test(text)&&/\b(?:seller|text|texted|texting|message|reply)\b/i.test(text)&&!/\b(?:buyer|contract|agreement|sign[ -]?in)\b/i.test(text);
+ // An omitted bot subject needs a continuing seller-text issue. A customer,
+ // buyer, operator finding or changed topic cannot supply that binding.
+ const sellerTextFollowup=(text:string)=>/^(?:it )?(?:still )?(?:has not|hasn[’']t|did not|didn[’']t) (?:messaged|texted|replied to|responded to|reply to|respond to) (?:the |that )?seller(?: back)?[.!?\s]*$/i.test(text.trim());
  const textAvailability=(text:string)=>/checking text availability/i.test(text);
  let missingText=false,checkingAvailability=false,propertyProvided=false;
  for(const turn of context.messages){
   if(turn.role==='operator'){missingText=false;checkingAvailability=false;propertyProvided=false;continue;}
   if(turn.role!=='user')continue;
   if(sellerTextFailure(turn.content)){missingText=true;continue;}
+  if((missingText||checkingAvailability)&&sellerTextFollowup(turn.content)){missingText=true;continue;}
   if(textAvailability(turn.content)){checkingAvailability=true;continue;}
   if((missingText||checkingAvailability)&&/^\d{1,6}\s+[\w .'-]+\b(?:street|st|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|way|blvd|boulevard)\b(?:[,\n ]+[A-Za-z .'-]+,? [A-Z]{2}(?: \d{5}(?:-\d{4})?)?)?[.! ]*$/i.test(turn.content.trim())){propertyProvided=true;continue;}
   if(!/^(?:please|yes|ok(?:ay)?|what|why|so what (?:am i supposed to|should i) do|help check what(?:'s| is) happening next|is that why there(?:'s| is) no automatic response)[?!.\s]*$/i.test(turn.content.trim())){missingText=false;checkingAvailability=false;propertyProvided=false;}

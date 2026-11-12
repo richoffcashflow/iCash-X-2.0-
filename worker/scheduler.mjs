@@ -22,6 +22,7 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
   return recent;
  };
  let stopped=false,lastLoopAt=now(),nextAutomationAt=0,cursor=0;
+ const isStalled=()=>now()-lastLoopAt>180000||lanes.some(lane=>lane.pending&&now()-lane.startedAt>(['research','general'].includes(lane.pool)?260000:lane.name==='automation'?140000:75000));
  const start=lane=>{
   lane.startedAt=now();
   lane.pending=Promise.resolve().then(lane.work).then(worked=>{
@@ -39,9 +40,10 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
   }).finally(()=>{lane.pending=null;});
  };
  return {
+  isStalled,
   health(active=true){
    const recurringSchedulerFailurePools=[...schedulerFailures.keys()].filter(pool=>recentSchedulerFailures(pool,now()).length>=schedulerFailureThreshold);
-   const stalled=now()-lastLoopAt>180000||lanes.some(lane=>lane.pending&&now()-lane.startedAt>(['research','general'].includes(lane.pool)?260000:lane.name==='automation'?140000:75000));
+   const stalled=isStalled();
    const degraded=stalled||lanes.some(lane=>lane.failures>0)||recurringSchedulerFailurePools.length>0;
    const automationHeld=automationLanes.every(lane=>lane.failures>0);
    const pools=[...new Set(automationLanes.map(lane=>lane.pool))].map(name=>{

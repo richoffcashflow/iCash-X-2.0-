@@ -8,6 +8,7 @@ import {automaticCallOffer,blockedOffer,buyerAgreementHandoff} from '../lib/auto
 import {callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence} from '../lib/call-offer-evidence.ts';
 import {sellerListingEvidence} from '../lib/seller-listing.ts';
 import {sellerRoutineOwnershipAnswer} from '../lib/seller-ownership-answer.ts';
+import {sellerRoutineTimingAnswer} from '../lib/seller-timing-answer.ts';
 import {sellerPayoffEvidence} from '../lib/seller-payoff.ts';
 import {sellerAgreementInput} from '../lib/seller-agreement-flow.ts';
 import {sellerAgreementAction,sellerAgreementFailure} from '../lib/seller-agreement-service.ts';
@@ -36,7 +37,7 @@ const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  instantCallAddress,dispatchTextMessage:()=>assert.fail('Unexpected intake text'),dispatchLiveVoice:()=>assert.fail('Unexpected intake call'),
  liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>assert.fail('The live tool history must work even when a provider GET is stale')}),
- callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,sellerRoutineOwnershipAnswer,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
+ callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,sellerRoutineOwnershipAnswer,sellerRoutineTimingAnswer,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
  sendForSignatures:async i=>{sends++;assert.equal(i.signers[0].phone,scope.phone);assert.equal(terms.priceCents,expectedPrice);assert.equal(terms.earnestCents,null);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms,recipients:[i.signers[0],{name:'Fixture buyer'}]}];return {id:'envelope',testMode:false};},
  textPendingContract:async(account,id,phone)=>{texts++;assert.deepEqual([account,id,phone],['account','envelope',scope.phone]);return {sent:true,status:'accepted'};},refreshSigning:async()=>({status:'awaiting_counterparty'}),
 });

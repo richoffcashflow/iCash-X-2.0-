@@ -1,5 +1,9 @@
 # Continuous reliability
 
+## November 11 call setup
+
+The owner clarified that call latency means the wait before the phone rings. The immediate intake path already schedules the call, but independent database and provider reads were serialized during dispatch setup. [Voice preflight](voice-dial-preflight.md) groups those reads while preserving fresh exact review, every result boundary, final admission and the one-use dial. Actual-service deferred-read regressions cover overlap, incomplete/failed checks, release changes and configuration drift. No paid call is part of verification; recording start cannot establish first-ring time. Both web and worker require the exact-main release.
+
 ## November 10 incoming custom voice
 
 Incoming call admission accepted the provider's already-supported empty and

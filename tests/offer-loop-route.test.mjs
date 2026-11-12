@@ -9,6 +9,7 @@ import {callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPrice
 import {sellerPayoffEvidence} from '../lib/seller-payoff.ts';
 import {sellerListingEvidence} from '../lib/seller-listing.ts';
 import {sellerRoutineOwnershipAnswer} from '../lib/seller-ownership-answer.ts';
+import {sellerRoutineTimingAnswer} from '../lib/seller-timing-answer.ts';
 import {sellerAgreementInput} from '../lib/seller-agreement-flow.ts';
 import {sellerAgreementFailure} from '../lib/seller-agreement-service.ts';
 import {object,sha} from '../lib/required-call-recording.ts';
@@ -24,7 +25,7 @@ const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},after:callback=>observations.push(callback),process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},
  db:async(path,method,b)=>{if(path==='rpc/icash_targeting_note_qualified'){observed.push(b);return observationPending;}if(path==='rpc/icash_call_offer_context')return structuredClone(context);assert.equal(path,'rpc/icash_save_call_offer');assert.equal(b.p_expected_version,context.offerVersion);context.offerState=b.p_state;context.offerVersion++;return true;},
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>{reads++;return {transcript:[...qualifiedSellerTurns,...transcript.transcript]};}}),
- callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,sellerRoutineOwnershipAnswer,automaticCallOffer,blockedOffer,sellerAgreementInput,object,sha,sellerAgreementFailure,
+ callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,sellerRoutineOwnershipAnswer,sellerRoutineTimingAnswer,automaticCallOffer,blockedOffer,sellerAgreementInput,object,sha,sellerAgreementFailure,
  sellerAgreementAction:forbidden,sendForSignatures:forbidden,textPendingContract:forbidden,refreshSigning:forbidden,
 });
 const post=async body=>{const response=await route.POST(new Request('https://fixture.test/api/internal/voice/cash-offer',{method:'POST',headers:{authorization:'Bearer '+'a'.repeat(64)},body:JSON.stringify({conversationId:'conv_fixture',...body})}));assert.equal(response.status,200);return response.json();};
@@ -68,5 +69,10 @@ context.offerState=structuredClone(savedAcceptance);
 transcript.transcript.push({role:'agent',message:'Has ownership changed?'},{role:'user',message:'There is another owner.'});
 assert.equal((await post({action:'report_change',sellerStatement:'There is another owner.'})).quoteAllowed,false);
 assert.equal(context.offerState.acceptedPriceCents,null,'actual ownership changes still clear acceptance');
+context.offerState=structuredClone(savedAcceptance);
+transcript={transcript:[{role:'agent',message:'When are you hoping to sell?'},{role:'user',message:"I'm looking to sell within the next 30 to 60 days."}]};
+const timeline=await post({action:'report_change',sellerStatement:'30 to 60 days.'});
+assert.equal(timeline.status,'verbally_accepted');assert.equal(timeline.priceCents,3400000);
+assert.equal(timeline.quoteRevision,accepted.quoteRevision);assert.notEqual(context.offerState.factsPending,true);
 await Promise.all(observations.map(callback=>callback()));
 console.log('PASS real POST handler: deferred bound observation, full transcript recovery, rounded offer, accepted-price continuity, changed-fact and issued-agreement holds; zero external actions.');

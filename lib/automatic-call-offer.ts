@@ -139,7 +139,7 @@ const financial=sellerCallFinancialGate(base.property.financialScreening,{seller
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifyRoutineTimingAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);
  // The context RPC independently checks the exact capability, bound conversation,
@@ -170,10 +170,10 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
    }else{
    const listing=await d.verifyListingStatus?.(i);
    if(typeof listing==='boolean'){state.listedWithAgent=listing;state.listingStatement=i.sellerStatement;}
-   else if(verified&&await d.verifyRoutineOwnershipAnswer?.(i)){
+   else if(verified&&(await d.verifyRoutineOwnershipAnswer?.(i)||await d.verifyRoutineTimingAnswer?.(i))){
     // Keep the answer without creating a new changed-facts hold. Every saved
-    // hold and pending agreement revision remains. This initial ownership
-    // answer changes no price or material fact, so retain its saved acceptance.
+    // hold and pending agreement revision remains. An initial co-owner answer
+    // or ordinary timing answer changes no price, so retain saved acceptance.
     state.acceptedPriceCents=acceptedBeforeUpdate;
    }
    else {
