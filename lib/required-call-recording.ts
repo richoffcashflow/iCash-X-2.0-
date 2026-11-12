@@ -84,7 +84,24 @@ function recordingDisabledVoiceSnapshot(snapshot:Record<string,unknown>):Record<
  delete previous.human_voice;
  return {...snapshot,platform_settings:{...platform,guardrails:previous}};
 }
+function recordingEmptyWorkflowDefaultsSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
+ const config=object(snapshot.conversation_config),agent=object(config.agent),prompt=object(agent.prompt);
+ const workflow=object(snapshot.workflow),nodes=object(workflow.nodes),start=object(nodes.start_node);
+ if(prompt.enable_prompt_caching!==true||start.type!=='start'
+  ||Object.keys(nodes).length!==1||!Object.hasOwn(start,'parent_frame_id')||start.parent_frame_id!==null
+  ||workflow.frames===null||typeof workflow.frames!=='object'||Array.isArray(workflow.frames)||Object.keys(workflow.frames).length!==0)return null;
+ const previousPrompt={...prompt},previousStart={...start},previousWorkflow={...workflow};
+ delete previousPrompt.enable_prompt_caching;delete previousStart.parent_frame_id;delete previousWorkflow.frames;
+ return {...snapshot,conversation_config:{...config,agent:{...agent,prompt:previousPrompt}},
+  workflow:{...previousWorkflow,nodes:{...nodes,start_node:previousStart}}};
+}
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
+ // November 12 added default prompt caching and empty layout-frame metadata
+ // together to the same reviewed version's single-start workflow. Reconstruct
+ // only this exact trio, then require the entire original fingerprint. Never
+ // normalize configured frames, other nodes, different caching or unknown fields.
+ const previousWorkflow=recordingEmptyWorkflowDefaultsSnapshot(snapshot);
+ if(previousWorkflow&&recordingConfigHashMatches(configHash,previousWorkflow))return true;
  // November 10 changed only the serialization of two disabled detectors:
  // human_voice=false appeared; the inactive synthetic end_call action vanished.
  // Reconstruct that exact pair and require the complete original fingerprint.

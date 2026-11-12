@@ -1,4 +1,5 @@
 import {canonical,object,readRecordingReview,recordingAgentMatches,sha} from './required-call-recording.ts';
+import {recordVoiceConfigurationDrift} from './voice-configuration-evidence.ts';
 
 type Db=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
 /** Reuse the ordinary capacity read. Recovery only queues never-admitted jobs;
@@ -9,8 +10,13 @@ export async function recoverVoiceConfiguration(db:Db,agent:unknown,env:Record<s
   ||!/^[a-f0-9]{40}$/.test(env.VERCEL_GIT_COMMIT_SHA??'')
   ||env.ICASH_LIVE_WORK_READY!=='true'||env.ICASH_RECORDED_OUTBOUND_READY!=='true'||env.ICASH_RECORDING_RECEIPTS_READY!=='true')return {status:'not_requested',requeued:0};
  const review=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON,now);
- if(!review||review.providerAccountSid!==env.TWILIO_ACCOUNT_SID||!env.TWILIO_AUTH_TOKEN
-  ||!recordingAgentMatches(review,agent))return {status:'review_required',requeued:0};
+ if(!review||review.providerAccountSid!==env.TWILIO_ACCOUNT_SID||!env.TWILIO_AUTH_TOKEN)return {status:'review_required',requeued:0};
+ if(!recordingAgentMatches(review,agent)){
+  // A deployment-time snapshot misses provider changes between releases.
+  // Retain the original hold even if this optional private evidence write fails.
+  await recordVoiceConfigurationDrift(db,review,agent,env,now).catch(()=>false);
+  return {status:'review_required',requeued:0};
+ }
  const a=object(agent),observedHash=sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null})));
  const requeued=await db<number>('rpc/icash_recover_voice_configuration','POST',{
   p_agent:review.agentId,p_config_hash:review.configHash,p_observed_hash:observedHash,

@@ -37,6 +37,43 @@ const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82
 const representations=[[false,false],[true,false],[false,true],[true,true]];
 const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
 
+test('November 12 joint cache and empty workflow defaults retain the complete original approval',()=>{
+ for(const olderDefaults of [false,true])for(const capacity of [false,true]){
+  const pair=olderDefaults?renamedVoiceFixture():{old:fixture(),current:fixture()};
+  for(const a of [pair.old,pair.current]){
+   a.workflow={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_subgraph_id:null}},subgraphs:{},prevent_subagent_loops:false};
+   a.platform_settings.guardrails={synthetic_voice:{is_enabled:false,trigger_action:{type:'end_call'}}};
+   if(capacity){Object.assign(a,{agent_id:eighty.agentId,branch_id:eighty.branchId,version_id:eighty.versionId});Object.assign(a.platform_settings.call_limits,{agent_concurrency_limit:eighty.previousLimit,daily_limit:eighty.previousDailyLimit});}
+  }
+  const review=reviewFor(pair.old),a=pair.current;
+  a.conversation_config.agent.prompt.enable_prompt_caching=true;
+  a.workflow.frames={};a.workflow.nodes.start_node.parent_frame_id=null;
+  if(olderDefaults){delete a.platform_settings.guardrails.synthetic_voice.trigger_action;a.platform_settings.guardrails.human_voice={is_enabled:false};}
+  if(capacity)a.platform_settings.call_limits.agent_concurrency_limit=eighty.limit;
+  const before=structuredClone({review,a});
+  assert.equal(recordingAgentMatches(review,a),true);
+  const incoming=x=>({...x,procedures:null}),incomingHash=sha(JSON.stringify(canonical(incoming(pair.old))));
+  assert.equal(recordingConfigHashMatches(incomingHash,incoming(a)),!capacity);
+  assert.deepEqual({review,a},before);
+  assert.equal(recordingAgentMatches({...review,configHash:'0'.repeat(64)},a),false);
+  assert.equal(recordingAgentMatches(reviewFor(a),pair.old),false,'Never synthesize a newer approval in reverse');
+  assert.equal(recordingAgentMatches(reviewFor(a),a),true,'Exact current approvals stay valid');
+  for(const mutate of [
+   a=>delete a.conversation_config.agent.prompt.enable_prompt_caching,
+   ...[false,null,'true',1].map(v=>a=>a.conversation_config.agent.prompt.enable_prompt_caching=v),
+   a=>delete a.workflow.frames,
+   ...[null,[],false,{new_frame:{}}].map(v=>a=>a.workflow.frames=v),
+   a=>delete a.workflow.nodes.start_node.parent_frame_id,
+   ...['frame',false,0,{}].map(v=>a=>a.workflow.nodes.start_node.parent_frame_id=v),
+   a=>a.workflow.nodes.extra={type:'end'},a=>a.workflow.nodes.start_node.type='end',
+   a=>a.workflow.edges.extra={target:'start_node'},a=>a.workflow.unknown=null,
+   a=>a.conversation_config.agent.prompt.prompt+=' changed',a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+   a=>a.platform_settings.privacy.record_voice=true,a=>a.platform_settings.auth.enable_auth=false,
+   a=>a.version_id='agtvrsn_other',a=>a.branch_id='agtbrch_other',
+  ]){const changed=structuredClone(a);mutate(changed);assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());}
+ }
+});
+
 test('November 10 disabled voice-detection representation retains full approval and active controls',()=>{
  for(const olderDefaults of [false,true])for(const capacity of [false,true]){
   const pair=olderDefaults?renamedVoiceFixture():{old:fixture(),current:fixture()};
