@@ -124,3 +124,15 @@ export function supportPurchaseHelp(messages:Turn[]){
  }
  return null;
 }
+
+/** A stated sales-disclosure complaint is not missing-receipt troubleshooting.
+ * It needs review without deciding the complaint or changing refund policy. */
+export function supportRefundDisclosureReply(context:PurchaseContext){
+ const q=context.messages.findLast(turn=>turn.role==='user')?.content??'';
+ const prior=context.messages.slice(0,context.messages.findLastIndex(turn=>turn.role==='user')).findLast(turn=>turn.role==='operator'||turn.role==='user');
+ const creditCost=/\bcredits?\b/i.test(q)||prior?.role==='operator'&&/\b(?:separate|extra|additional)\b.{0,80}\b(?:cost|credits?)\b|\bwork credits?\b.{0,30}\bseparate\b/i.test(prior.content)&&/\b(?:costs?|extra|more than|number|price)\b/i.test(q);
+ if(!/\b(?:refund|money back)\b/i.test(q)||!creditCost||supportRenewalCancellationRequested(q)||/\b(?:don[’']?t|do not|no longer) (?:want|need|request) (?:a |my )?(?:refund|money back)\b/i.test(q))return null;
+ const disclosure=/\b(?:not|never|nobody|no one|didn[’']?t|wasn[’']?t)\b.{0,65}\b(?:explain|explained|mention|mentioned|disclose|disclosed|tell|told|clear)\b|\b(?:hidden|undisclosed) (?:cost|fee|charge)|\b(?:need to|make)\b.{0,35}\b(?:clear|explain|convey)\b/i.test(q);
+ if(!disclosure)return null;
+ return {reply:'You’re asking for a refund because you say the separate work-credit cost wasn’t explained before purchase. The refund policy is unchanged; this chat has not approved or issued a refund. That sales-disclosure concern needs management review. You don’t need to repeat receipt or sign-in troubleshooting.',status:'open' as const,managementReview:true,ai:false};
+}

@@ -23,7 +23,7 @@ import {supportLegacyMigrationReply,supportVersionClarification} from './support
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCheckoutReply,supportIdentityReply} from './support-checkout.ts';
 import {supportProductClarification} from './support-product-clarifications.ts';
-import {supportPurchaseHelp,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply} from './support-purchase-help.ts';
+import {supportPurchaseHelp,supportRefundDisclosureReply,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply} from './support-purchase-help.ts';
 import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
 import {supportManagementReview} from './support-management-review.ts';
@@ -88,6 +88,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   const details=context.kind==='account'&&checks.length?checks.map(e=>e.detail).join('\n\n')+'\n\nDo not pay again. Do both statement entries match these recorded software payments, or is one a different amount or date?':'Do not pay again. A duplicate-charge report needs its own payment check. What dates and amounts appear for the two charges? Please leave out card numbers.';
   return result(details+cancel,'waiting_on_customer');
  }
+ const disclosure=supportRefundDisclosureReply(context);if(disclosure)return disclosure;
  const closure=context.historyComplete===false?null:repeatedRefundReply(context.messages,context.kind==='account'?context.evidence:[]);
  if(closure)return closure;
  if(context.kind==='access'&&supportCodeDelivery(context.messages)==='missing'&&['refund','cancel'].includes(supportTopic(question))){

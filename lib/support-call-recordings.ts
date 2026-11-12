@@ -1,6 +1,6 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 
-const subject=(text:string)=>/\bcalls?\b/i.test(text)&&(/\b(?:record(?:s|ing|ings)?|audio|playback)\b/i.test(text)||/\bcalls?\b.{0,25}\b(?:not|never|wasn[’']?t|weren[’']?t) recorded\b/i.test(text));
+const subject=(text:string)=>/\bcalls?\b/i.test(text)&&(/\b(?:record(?:s|ing|ings)?|playback)\b/i.test(text)||/\bcalls?\b.{0,25}\b(?:not|never|wasn[’']?t|weren[’']?t) recorded\b/i.test(text));
 const otherTopic=(text:string)=>/\b(?:custom voice|cloned? voice|voice sample|course|webinar|refund|cancel|subscription|billing|charged|sign[ -]?in|voicemail|answering[ -]machine|automated recording)\b/i.test(text);
 const failure=(text:string)=>/\b(?:no|missing|unavailable|silent|failed|cannot|can[’']?t|won[’']?t|not|doesn[’']?t|didn[’']?t)\b/i.test(text);
 const continuation=(text:string)=>/^(?:it (?:still )?(?:will not|won[’']?t|does not|doesn[’']?t) play|still (?:no audio|missing|not playing|the same)|same (?:issue|problem)|thanks|thank you|ok(?:ay)?|what now)[.!?\s]*$/i.test(text.trim());
@@ -15,7 +15,7 @@ export function supportCallRecordingReply(context:SupportContext):SupportReply|n
  let active=false,unresolved=false,asked=false;
  for(const turn of context.messages.slice(-12)){
   if(turn.role==='operator'){
-   active=subject(turn.content);unresolved=active&&failure(turn.content);asked=false;continue;
+   active=subject(turn.content)&&!otherTopic(turn.content);unresolved=active&&failure(turn.content);asked=false;continue;
   }
   if(turn.role==='assistant'){
    if(active&&/which property and call time/i.test(turn.content))asked=true;
@@ -24,7 +24,7 @@ export function supportCallRecordingReply(context:SupportContext):SupportReply|n
   if(turn.role!=='user')continue;
   if(/^(?:it is working now|it worked|that worked|fixed now|problem solved)[.!\s]*$/i.test(turn.content.trim())){active=false;unresolved=false;asked=false;continue;}
   if(!otherTopic(turn.content)&&subject(turn.content)){active=true;unresolved=unresolved||failure(turn.content);continue;}
-  if(active&&continuation(turn.content))continue;
+  if(active&&!otherTopic(turn.content)&&(continuation(turn.content)||capability(turn.content)&&/\brecord(?:s|ing)? audio\b/i.test(turn.content)))continue;
   active=false;unresolved=false;asked=false;
  }
  if(!active)return null;

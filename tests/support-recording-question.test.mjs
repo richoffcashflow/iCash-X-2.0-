@@ -27,3 +27,15 @@ for(const kind of ['account','access']){
 for(const q of ['Why do I have no recorded call attempts?','I press Call but the seller cannot hear me.','The seller cannot hear me during the call.','The call reached voicemail; why does that count as a response?','My custom voice recording will not play.'])assert.equal(supportCallRecordingReply({kind:'account',messages:[user(q)]}),null,q);
 assert.equal(modelCalls,0);
 console.log('PASS recording questions, failed playback, follow-ups, privacy and topic boundaries; offline only');
+
+for(const kind of ['account','access']){
+ const messages=[user('The seller call recording is missing.'),assistant('Which property and call time are affected?')];
+ const r=await ask(kind,[...messages,user('Is the system able to record audio?')]);
+ assert.match(r.reply,/supports call recording/i);assert.match(r.reply,/still unresolved/i);assert.equal(r.status,'open');
+ for(const boundary of [operator('Your subscription review remains open.'),user('Where is the course?'),user('It worked.')]){
+  assert.equal(supportCallRecordingReply({kind,messages:[...messages,boundary,user('Is the system able to record audio?')]}),null);
+ }
+ assert.equal(supportCallRecordingReply({kind,messages:[user('Is the system able to record audio?')]}),null);
+}
+
+for(const q of ['The calls have no audio.','I press Call but the bot has no audio.'])assert.equal(supportCallRecordingReply({kind:'account',messages:[user(q)]}),null,q);

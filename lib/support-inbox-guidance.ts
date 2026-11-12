@@ -1,5 +1,5 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
-import {supportDuplicateCharge} from './support-policy.ts';
+import {supportDuplicateCharge,supportTopic} from './support-policy.ts';
 import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-reply-style.ts';
 
 const voicemailSubject=(text:string)=>/\b(?:voice[ -]?mails?|answering[ -]machines?|automated (?:greetings?|recordings?))\b/i.test(text);
@@ -104,7 +104,7 @@ export function supportInboxGuidance(context:SupportContext):SupportReply|null{
  if(/\bopportunity search\b/i.test(issue)&&/\b(?:not|isn[’']?t|empty|blank|reset|fix|refresh|populat\w*)\b/i.test(issue))return answer('Opportunity search counts follow the selected Today, 7 days or 30 days period. Today changes at your local day boundary; adding credits should not erase completed activity. A blank counter alone does not prove saved leads were removed. Check All activity under Your leads. Is activity also missing with 7 days selected?');
  if(context.kind==='access'){
   if(/\b(?:name|where|link|address|url)\b/i.test(q)&&/\b(?:sign[ -]?in|log[ -]?in|login)\b/i.test(q))return answer('Open https://www.geticashx.com/ and choose Sign in. Use the email on your purchase receipt.');
-  if(/\b(?:paid|purchased)\b/i.test(q)&&/\b(?:not|haven[’']?t|didn[’']?t|never|wrong)\b/i.test(q)&&/\b(?:received|receive|sent|send|anything|person)\b/i.test(q))return answer('Don’t pay again. Are you missing the purchase receipt, the sign-in code, or access to the workspace after signing in?');
+  if(!['refund','cancel'].includes(supportTopic(q))&&/\b(?:paid|purchased)\b/i.test(q)&&/\b(?:not|haven[’']?t|didn[’']?t|never|wrong)\b/i.test(q)&&/\b(?:received|receive|sent|send|anything|person)\b/i.test(q))return answer('Don’t pay again. Are you missing the purchase receipt, the sign-in code, or access to the workspace after signing in?');
   const prior=context.messages.slice(0,-1).some(m=>m.role==='user'&&/\b(?:code|sign[ -]?in|access|paid|receipt)\b/i.test(m.content));
   if(prior&&/^(?:(?:ok(?:ay)?|so|but)[, ]+)*(?:remains? open until when|until when|how long|when will (?:it|this) be fixed|did i get scammed|is this a scam)[?!.\s]*$/i.test(q.trim()))return answer('Your access issue is still unresolved, and I don’t have a confirmed completion time. Don’t pay again. The purchase and sign-in records need to be matched before access can be restored; your earlier details remain in this conversation.');
  }
