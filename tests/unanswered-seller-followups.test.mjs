@@ -13,7 +13,7 @@ const final=async()=>val('select icash_seller_phone_call_current($1,$2)',[a,awai
 try{
  assert.equal(read('tests/fixtures/unanswered-seller-native.sql'),unansweredNativeFixtureSql(),'native fixture matches real migrations');
  await pg.exec(unansweredFixtureSql());
- await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+'commit;');
+ await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+read('config/seller-call-automated-greetings.sql')+'commit;');
  const migration=read('config/unanswered-seller-followups.sql');
  assert.equal(migration,read('supabase/migrations/20261112221500_unanswered_seller_followups.sql'));
  await pg.exec('begin;'+migration+'commit;');
@@ -62,6 +62,10 @@ try{
  });
  await scenario('late second attempt or human call blocks another dial',async()=>{
   assert.equal(await queue(),1);await q("insert into icash_customer_phone_calls(recipient_phone,child_sid,created_at) values($1,'CAhuman',now())",[phone]);assert.equal(await final(),false);
+ });
+ await scenario('Spanish automated greeting beginning with no remains unanswered',async()=>{
+  await q('update icash_live_conversations set result=$1',[{contactEvidence:'automated_answer',transcript:[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:'No se ha grabado nada. Grabe su mensaje después de la señal.'}]}]);
+  assert.equal(await eligible(),true);
  });
  await scenario('human transcript overrides a mistaken unanswered flag',async()=>{
   await q('update icash_live_conversations set result=$1',[{contactEvidence:'no_response',transcript:[{role:'user',message:'Hello, what is your offer?'}]}]);

@@ -62,7 +62,7 @@ try{
  create function icash_sms_reply_time(p_id uuid) returns numeric language sql stable as $$select extract(epoch from created_at) from public.icash_text_messages where id=p_id$$;`);
  await pg.exec(fn('config/seller-reply-progress.sql','icash_refresh_seller_reply_progress'));
  await pg.exec(read('config/seller-source-dispositions.sql'));
- await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+'commit;');
+ await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+read('config/seller-call-automated-greetings.sql')+'commit;');
 
  await pg.exec(fn('config/manual-deal-email.sql','icash_record_deal_email_reply'));
  await pg.exec('create trigger fixture_meta_observe_text after insert or update of state,provider_id on icash_text_messages for each row execute function icash_meta_observe_text()');

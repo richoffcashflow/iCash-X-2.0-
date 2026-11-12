@@ -49,6 +49,9 @@ try{
  const answerSql=readFileSync(new URL('../config/seller-call-answer-context.sql',import.meta.url),'utf8');
  assert.equal(answerSql,readFileSync(new URL('../supabase/migrations/20261112214321_seller_call_answer_context.sql',import.meta.url),'utf8'));
  await pg.exec('begin;'+answerSql+'commit;');
+ const greetingSql=readFileSync(new URL('../config/seller-call-automated-greetings.sql',import.meta.url),'utf8');
+ assert.equal(greetingSql,readFileSync(new URL('../supabase/migrations/20261112222054_seller_call_automated_greetings.sql',import.meta.url),'utf8'));
+ await pg.exec('begin;'+greetingSql+'commit;');
  for(const pattern of Object.values(sellerCallAnswerPatterns))assert(answerSql.includes(pattern.replaceAll('\\b','\\y')),'context SQL/TS pattern parity');
  const runtimeSql=(await pg.query("select string_agg(pg_get_functiondef(p.oid),E'\\n') definitions from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('icash_seller_direct_response_match','icash_seller_response_disposition','icash_seller_call_disposition')")).rows[0].definitions;
  for(const pattern of Object.values(sellerResponsePatterns))assert(runtimeSql.includes(pattern.replaceAll('\\b','\\y')),'installed SQL contains the exact mirrored regex');
@@ -61,7 +64,12 @@ try{
   assert.equal(analysis.responseDisposition,expected,'text: '+body);
   if(expected){assert.equal(analysis.action,'review');assert.equal(analysis.callRequested,false);assert.equal(analysis.optedOut,expected==='opt_out');}
  }
+ const spanishMachine='No se ha grabado nada. Grabe su mensaje después de la señal. Cuelgue cuando haya finalizado.';
  const callCases=[
+  [[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:spanishMachine}],null],
+  [[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:spanishMachine},{role:'user',message:'No.'}],null],
+  [[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:spanishMachine},{role:'agent',message:'Are you the owner?'},{role:'user',message:'No.'}],'declined'],
+  [[{role:'user',message:spanishMachine},{role:'user',message:'Stop calling me.'}],'opt_out'],
   ...['No.','Nope','Nah','Naw','No, sir.','No thanks','Not me',"No, I'm not"].map(answer=>[[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:answer}],'declined']),
   [[{role:'agent',message:'Are you the owner of 12 Fixture Lane?'},{role:'user',message:'No, I live elsewhere.'}],'review'],
   [[{role:'agent',message:'Do you own 12 Fixture Lane?'},{role:'user',message:'No.'},{role:'agent',message:'What property are you calling about?'},{role:'user',message:'I did not call you.'}],'declined'],
