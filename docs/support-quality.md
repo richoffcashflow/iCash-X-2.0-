@@ -1,5 +1,7 @@
 # Support improvement workflow
 
+Questions quoting Waiting for eligible work receive the status-label explanation and current account checks instead of a generic management-review fallback. Fresh blocked, paused, cost-confirmation and unknown states take precedence over a possibly older screen label. Historical research stays recorded; the label establishes neither missing inventory nor resumed work. Guest chats receive no private account claims. Fictional positive, negative and topic-change coverage is in `tests/support-waiting-work-status.test.mjs`.
+
 Questions quoting the existing Credits added status notices distinguish a bot-status refresh from pending payment and actual completed activity. Account checks preserve Pause, pending-work holds and unknown results; guest wording never verifies private payment or activity. Billing requests and topic changes keep their own routes. Fictional coverage: `tests/support-funding-notice.test.mjs`.
 
 Agreement autofill questions recognize singular and plural form follow-ups only within the current agreement conversation. The answer points to the existing Fill from saved conversations control, preserves customer edits and requires review of missing or conflicting terms. Other forms, later operator findings, success and topic changes stop inherited guidance; a reply never establishes preparation, delivery or signing. Fictional account/guest coverage is in `tests/support-agreement-autofill.test.mjs`.

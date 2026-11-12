@@ -88,6 +88,23 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   if(progress?.health?.status==='blocked')return answer(explanation+' The latest activity check flags work as blocked. Earlier recorded activity does not establish that it is progressing now. This needs investigation; no repair or restart time is confirmed.',true);
   return answer(explanation+(progress?' Check the property’s saved calls and texts for actual results; the notice alone cannot confirm current progress.':' I can’t verify current activity from the available checks.'));
  }
+ // Explain an explicitly quoted workspace label without treating it as live
+ // evidence. The current account check can have changed since the screen did.
+ const statusQuestion=q.trim().replace(/["“”]/g,'');
+ const waitingWork=/^(?:(?:so[, ]+)?(?:it|(?:my|the) (?:bot|workspace|dashboard|screen)) (?:still )?(?:says|shows) |what does |why does (?:it|(?:my|the) (?:bot|workspace|dashboard|screen)) (?:say|show) )?waiting for eligible work(?: mean)?[.!?\s]*$/i.test(statusQuestion);
+ if(waitingWork){
+  const explanation='That status label means the workspace is waiting for an eligible task. It is not an activity receipt or a restart estimate, and does not establish property availability.';
+  if(context.kind!=='account')return answer(explanation+' I can’t verify your current account status from this guest chat.');
+  const workCheck=context.evidence?.find(e=>e.key==='work'&&e.status!=='unknown');
+  const outreach=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
+  const progress=outreach?.progress;
+  if(workCheck?.code==='paused'||progress?.status==='paused')return answer(explanation+' Your bot is currently paused; this chat has not changed that setting.');
+  if(!progress||progress.health?.status==='unavailable')return answer(explanation+' I can’t verify the current work status from the available checks. Your reported issue remains open.',true);
+  if(progress.health?.status==='blocked')return answer(explanation+' '+(progress.health.reason==='no_completed_work'?supportProgressDelay(outreach!,false):progress.health.reason==='pending_work'?'The latest check shows earlier work awaiting confirmation.':'The latest check flags work as blocked; the specific cause still needs investigation.')+' This remains under review.',true);
+  if(progress.status==='settling')return answer(explanation+' The latest check instead shows earlier work awaiting cost confirmation. That is not proof of new activity.',true);
+  if(progress.status==='budget_reached')return answer(explanation+' The latest check instead says available credits do not cover the next task. A quoted label alone is not a reason to pay again.',true);
+  return answer(explanation+' '+(progress.status==='paced'?'The latest recorded status also shows that waiting state.':'The latest recorded status is different from the quoted label. Refresh the workspace once to see its current status.')+' Saved calls, texts and research results are the evidence of completed work; the label does not resolve the earlier problem.');
+ }
  if(context.kind!=='account')return null;
  const o=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
  const work=context.evidence?.find(e=>e.key==='work');
