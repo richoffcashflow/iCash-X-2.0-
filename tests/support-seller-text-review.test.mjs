@@ -36,3 +36,23 @@ assert.match(propertyFollowup.reply,/property details you shared/);assert.doesNo
 
 const addressTopicChange=check([user('The bot has not texted the seller back.'),assistant('Which property is affected?'),user('123 Example Lane is unrelated. Where is the course?')]);
 assert(!addressTopicChange||!/property details you shared|missing automatic reply/i.test(addressTopicChange.reply));
+
+// Fictional recurrence: short failure reports must retain the seller-text issue.
+const missingHistory=[user('The bot has not texted the seller back.'),assistant('Which property is affected?')];
+const availabilityHistory=[user('Why does it say checking text availability?'),assistant('That is the composer check.')];
+for(const history of [missingHistory,availabilityHistory])for(const q of ['It still has not messaged the seller.','Still hasn’t messaged that seller.','It did not respond to the seller.']){
+ for(const handedOff of [false,true]){
+  const r=await replyToSupport({kind:'account',messages:[...history,user(q)],handedOff,evidence:[],allowAI:false},async()=>{throw Error('No external model');});
+  assert.match(r.reply,/missing automatic reply is still unresolved/i,q);assert.equal(r.status,'open');
+  assert.doesNotMatch(r.reply,/recorded call attempts|texts.*delivered|will send|fixed/i);
+ }
+}
+assert.match(check([user('The bot has not messaged the seller back.')]).reply,/missing automatic reply/i);
+for(const q of ['I still have not messaged the seller.','It still has not messaged the buyer.','It still has not sent the contract.']){
+ const r=check([...missingHistory,user(q)]);assert(!r||!/missing automatic reply/i.test(r.reply),q);
+}
+for(const boundary of [user('Where is the course?'),user('It worked'),{role:'operator',content:'The saved seller receipt needs separate review.'}]){
+ const r=check([...missingHistory,boundary,user('It still has not messaged the seller.')]);assert(!r||!/missing automatic reply/i.test(r.reply));
+}
+assert.equal(check([user('It still has not messaged the seller.')]),null);
+assert.equal(supportCurrentStepReply({kind:'access',messages:[...missingHistory,user('It still has not messaged the seller.')]}),null);

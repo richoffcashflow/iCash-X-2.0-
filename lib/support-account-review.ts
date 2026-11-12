@@ -10,6 +10,9 @@ export function supportMissingActivityConcern(text:string){
  // A running workspace with no progress is an activity complaint. Require
  // that complete statement, not unrelated browser/video or software updates.
  if(/\b(?:app|apps|workspace|bot|ai) (?:is|has been|have been|was|had been) running\b[^.!?\n]{0,65}\b(?:without (?:any )?|no )(?:movement|progress|activity)(?: or updates?)?[.!?\s]*$/i.test(text))return true;
+ // Missing property research must use account evidence. Aggregate history
+ // cannot answer whether new work happened today, even when Run is enabled.
+ if(/\b(?:my|the) (?:bot|ai) (?:(?:has |did |is )?not|hasn[’']?t|didn[’']?t|isn[’']?t) (?:look(?:ed|ing)? up|research(?:ed|ing)?|find(?:ing)?|found) (?:any )?(?:new )?(?:properties|leads)\b/i.test(text))return true;
  return /\b(?:early|earlier|previous|unfinished) work (?:is )?(?:awaiting|waiting for) (?:final (?:cost )?confirmation|confirmation|costs?)\b|\b(?:early|earlier) work is awaiting\b/i.test(text)||existingOutreachConcern(text)||/\b(?:ai|bot|automation)\b[^.!?]{0,85}\b(?:not do(?:ing)? anything|didn[’']?t do anything|did not do anything|has(?:n[’']?t| not) done anything|nothing (?:(?:has|had) )?(?:happened|happens|occurred|occured))\b/i.test(text);
 }
 const outreachConcern=supportMissingActivityConcern;

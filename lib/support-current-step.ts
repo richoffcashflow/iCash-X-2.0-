@@ -6,6 +6,7 @@ import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-repl
 import {supportCustomVoiceReply} from './support-custom-voice.ts';
 import {supportOfferCodeReply} from './support-checkout.ts';
 import {supportPurchaseEmailCorrection} from './support-purchase-help.ts';
+import {cashOfferPolicy} from './cash-offer-math.ts';
 
 /** Source-backed answers to the customer's current step. Prior assistant text
  * supplies a topic only, never proof of payment, authority, delivery or a fix. */
@@ -17,6 +18,12 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
  const answer=(reply:string,status:SupportReply['status']='open'):SupportReply=>({reply,status,ai:false});
  const guidance=(reply:string,status:SupportReply['status']='open'):SupportReply=>({...answer(reply,status),...(supportRoutineGuidanceQuestion(q)?{routineGuidance:true as const}:{})});
  if(/\b(?:refund|cancel|charged twice|duplicate charge|unrecognized charge)\b/i.test(q))return null;
+ // Deal timing and selection questions are product questions, not requests to
+ // import leads. Anchoring keeps a real fault or unrelated timing question out.
+ if(/^(?:how long does it take (?:for (?:it|the bot|my bot) )?to find a deal|how many (?:days|hours|weeks) until (?:the |my )?bot finds a deal|when will (?:the |my )?bot find a deal|how long (?:until|will it be (?:until|before|to)) (?:i see (?:my |a )?(?:first )?deal|see (?:my |a )?(?:first )?deal(?: come through)?|(?:my |a )?(?:first )?deal comes through))[?!.\s]*$/i.test(q.trim()))
+  return answer('There is no guaranteed time to find a deal. The bot searches and screens properties, contacts eligible sellers and follows up when allowed. A researched property is not an interested seller or a signed contract. Seller responses, agreed terms and closing steps affect the outcome; a Run label alone does not show that new work is happening.');
+ if(/^how does (?:the |my )?(?:bot|ai|algorithm) (?:choose|select|screen) properties[?!.\s]*$/i.test(q.trim()))
+  return answer(`The bot selects markets and screens properties automatically using saved property data and financial checks. Its current cash-offer formula is ARV × ${cashOfferPolicy.ruleBasisPoints/100}% − repairs − wholesale fee. Eligible opportunities can move to contact checks and seller outreach. Those estimates are not a confirmed seller agreement or profit; actual account activity still needs its own check.`);
  const pauseQuestion=(text:string)=>/^(?:should|can|could|how (?:do|can)) i pause (?:my |the )?(?:bot|ai|automation)[?!.\s]*$/i.test(text.trim());
  const questionIndex=context.messages.findLastIndex(turn=>turn.role==='user');
  const priorTurn=context.messages[questionIndex-1],priorQuestion=context.messages[questionIndex-2];
@@ -46,13 +53,17 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
 
  // The manual composer availability read is not a worker dispatch receipt.
  // Keep a missing seller reply distinct from account-wide call/text totals.
- const sellerTextFailure=(text:string)=>/\b(?:bot|ai|software)\b.{0,55}\b(?:has not|hasn[’']t|did not|didn[’']t|never|not|isn[’']t)\b.{0,35}\b(?:texted|texting|sent|sending|replied|reply|responded|responding)\b/i.test(text)&&/\b(?:seller|text|texted|texting|message|reply)\b/i.test(text)&&!/\b(?:buyer|contract|agreement|sign[ -]?in)\b/i.test(text);
+ const sellerTextFailure=(text:string)=>/\b(?:bot|ai|software)\b.{0,55}\b(?:has not|hasn[’']t|did not|didn[’']t|never|not|isn[’']t)\b.{0,35}\b(?:texted|texting|messaged|messaging|sent|sending|replied|reply|responded|responding)\b/i.test(text)&&/\b(?:seller|text|texted|texting|message|reply)\b/i.test(text)&&!/\b(?:buyer|contract|agreement|sign[ -]?in)\b/i.test(text);
+ // An omitted bot subject needs a continuing seller-text issue. A customer,
+ // buyer, operator finding or changed topic cannot supply that binding.
+ const sellerTextFollowup=(text:string)=>/^(?:it )?(?:still )?(?:has not|hasn[’']t|did not|didn[’']t) (?:messaged|texted|replied to|responded to|reply to|respond to) (?:the |that )?seller(?: back)?[.!?\s]*$/i.test(text.trim());
  const textAvailability=(text:string)=>/checking text availability/i.test(text);
  let missingText=false,checkingAvailability=false,propertyProvided=false;
  for(const turn of context.messages){
   if(turn.role==='operator'){missingText=false;checkingAvailability=false;propertyProvided=false;continue;}
   if(turn.role!=='user')continue;
   if(sellerTextFailure(turn.content)){missingText=true;continue;}
+  if((missingText||checkingAvailability)&&sellerTextFollowup(turn.content)){missingText=true;continue;}
   if(textAvailability(turn.content)){checkingAvailability=true;continue;}
   if((missingText||checkingAvailability)&&/^\d{1,6}\s+[\w .'-]+\b(?:street|st|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|way|blvd|boulevard)\b(?:[,\n ]+[A-Za-z .'-]+,? [A-Z]{2}(?: \d{5}(?:-\d{4})?)?)?[.! ]*$/i.test(turn.content.trim())){propertyProvided=true;continue;}
   if(!/^(?:please|yes|ok(?:ay)?|what|why|so what (?:am i supposed to|should i) do|help check what(?:'s| is) happening next|is that why there(?:'s| is) no automatic response)[?!.\s]*$/i.test(turn.content.trim())){missingText=false;checkingAvailability=false;propertyProvided=false;}

@@ -69,6 +69,8 @@ const suites = [
  'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
  'credit-refill-context', 'credit-refill-recommendation',
+ 'support-activity-confirmation',
+ 'support-work-expectations',
  'support-credit-balance', 'support-call-hold-guidance',
 ];
 for (const suite of suites) {
