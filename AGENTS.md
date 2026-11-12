@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 12, 2026 the owner required real end-to-end deal progression and said to ship. Use durable, source-bound deal supervision across existing seller, signing, buyer and title workflows. Preserve current UI, customer controls, final admission, original unknown operations and accepted terms. Activate only after exact release verification with a fresh cutover; never replay historical conversations. Distinguish queued activity, verified signatures, verified closings and received proceeds. Offline scenarios are not real sales. See docs/deal-supervisor.md.
+
 - On November 11, 2026 the owner required per-user property variety across authorized markets. After settled productive research batches, favor less represented cities and ZIPs while preserving explicit geographic limits, financial screening, exclusions, unknown operations and final spend admission. Keep productive supply when no safe alternative exists; do not claim guaranteed diversity for a single permitted market. Install after market-hold continuation, activate only after exact release verification, and preserve the current UI. See docs/per-user-market-diversity.md.
 
 - On November 11, 2026 the owner requested removing the remaining holds and restoring work. Release only the frozen, bounded pre-November-11 planning commitments from the reviewed blocked-account cohort, after exact-release verification. Preserve original uncertain operations, supplier reserves, actual once-only settlement, current funding, Pause and contact controls. No recurring age-out or replay of old work. See docs/reviewed-pending-work-relief.md.
