@@ -70,7 +70,7 @@ const suites = [
  'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
  'credit-refill-context', 'credit-refill-recommendation',
- 'support-activity-confirmation',
+ 'support-activity-confirmation', 'support-mixed-location', 'support-refund-topic-change',
  'support-work-expectations',
  'support-credit-balance', 'support-call-hold-guidance', 'support-agreement-autofill', 'support-funding-notice', 'support-funding-expectations',
 ];

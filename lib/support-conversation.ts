@@ -1,4 +1,4 @@
-import {supportLocationGuidance} from './support-location-guidance.ts';
+import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
 import {supportCallHoldReply} from './support-call-hold-guidance.ts';
 import {supportCreditBalanceReply} from './support-credit-balance.ts';
@@ -141,7 +141,12 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
 /** The same boundary applies to signed-in chat, guest help and adapters using this engine. */
 function coachingRoute(context:SupportContext){
  const index=context.messages.findLastIndex(m=>m.role==='user');
- const question=context.messages[index]?.content??'';
+ const original=context.messages[index]?.content??'';
+ // Acknowledging the policy is not a renewed refund request. Strip only this
+ // leading declarative clause for routing; retain later refund/cancel requests
+ // and all earlier operator/customer evidence in the conversation.
+ const request=original.replace(/^\s*I (?:understand|accept) (?:your|the) refund policy[.,;]\s*(?:but\s+)?/i,'').trim();
+ const question=request||original;
  const route=classifySupportCoaching(question);
  const referral=supportCoachingReferral(context.evidence??[],question,context.kind==='account');
  const technical={...context,messages:context.messages.map((m,i)=>i===index?{...m,content:route.technicalQuestion}:m)};
@@ -149,15 +154,27 @@ function coachingRoute(context:SupportContext){
 }
 export function supportConversationFallback(context:SupportContext):SupportReply{
  const {route,referral,technical}=coachingRoute(context);
- if(route.kind==='support')return supportManagementReview(context,supportTechnicalFallback(context));
+ if(route.kind==='support')return reviewedTechnicalFallback(technical);
  if(route.kind==='coaching')return {reply:referral,status:'open',ai:false};
- const answer=supportManagementReview(technical,supportTechnicalFallback(technical));
+ const answer=reviewedTechnicalFallback(technical);
  return {...answer,reply:answer.reply+'\n\n'+referral,status:'open'};
+}
+
+function reviewedTechnicalFallback(context:SupportContext):SupportReply{
+ const location=supportLocationParts(context);
+ if(!location)return supportManagementReview(context,supportTechnicalFallback(context));
+ if(!location.remaining)return supportManagementReview(context,location.answer);
+ const index=context.messages.findLastIndex(t=>t.role==='user');
+ const primary={...context,messages:context.messages.map((t,i)=>i===index?{...t,content:location.remaining}:t)};
+ const answer=supportManagementReview(primary,supportTechnicalFallback(primary));
+ // Preserve the primary account finding and review decision. Geography alone
+ // must never replace a blocked/unknown activity check or resolve the case.
+ return {...answer,reply:answer.reply+'\n\n'+location.answer.reply,status:'open',ai:false};
 }
 
 export async function replyToSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const {route,referral,technical}=coachingRoute(context);
- if(route.kind==='support')return replyToTechnicalSupport(context,fetcher);
+ if(route.kind==='support')return replyToTechnicalSupport(technical,fetcher);
  if(route.kind==='coaching')return {reply:referral,status:'open',ai:false};
  const answer=await replyToTechnicalSupport(technical,fetcher);
  return {...answer,reply:answer.reply+'\n\n'+referral,status:'open'};
@@ -165,7 +182,8 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 
 /** Recovery runs separately with fixed account-bound operations. The model only explains verified results. */
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
- const fallback=supportManagementReview(context,supportTechnicalFallback(context));
+ const fallback=reviewedTechnicalFallback(context);
+ if(supportLocationParts(context))return fallback;
  if(supportCreditBalanceReply(context))return fallback;
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
  if(supportVersionClarification(context.messages))return fallback;
