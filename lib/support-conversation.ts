@@ -1,5 +1,7 @@
 import {supportLocationGuidance} from './support-location-guidance.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
+import {supportCallHoldReply} from './support-call-hold-guidance.ts';
+import {supportCreditBalanceReply} from './support-credit-balance.ts';
 import {supportAccountDetailsReply} from './support-account-details.ts';
 import {supportPurchaseComplaintReply,supportPurchaseMismatch} from './support-purchase-complaint.ts';
 import {classifySupportCoaching,supportCoachingReferral,supportCoachingInstructions} from './support-coaching.ts';
@@ -20,7 +22,7 @@ import {supportLegacyMigrationReply,supportVersionClarification} from './support
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCheckoutReply,supportIdentityReply} from './support-checkout.ts';
 import {supportProductClarification} from './support-product-clarifications.ts';
-import {supportPurchaseHelp,supportPaidAccessReply,supportVipPurchaseReply} from './support-purchase-help.ts';
+import {supportPurchaseHelp,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply} from './support-purchase-help.ts';
 import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
 import {supportManagementReview} from './support-management-review.ts';
@@ -50,10 +52,13 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&supportAcknowledgment(question))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Got it.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
+ const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const accountDetails=supportAccountDetailsReply(context);if(accountDetails)return accountDetails;
  const voiceSetup=supportVoiceSetupReply(context);if(voiceSetup)return voiceSetup;
  const versionClarification=supportVersionClarification(context.messages);if(versionClarification)return result(versionClarification,'open');
  const location=supportLocationGuidance(context);if(location)return location;
+ const callHold=supportCallHoldReply(context);if(callHold)return callHold;
+ const creditBalance=supportCreditBalanceReply(context);if(creditBalance)return creditBalance;
  const accountReview=supportAccountReviewReply(context);if(accountReview)return accountReview;
  const currentStep=supportCurrentStepReply(context);if(currentStep)return {...currentStep,reply:removeRepeatedSupportQuestions(currentStep.reply,context.messages),status:currentStep.status==='resolved'&&(earlierSupportProblem(context)||context.handedOff)?'open':currentStep.status};
  const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status,inbox.routineGuidance);
@@ -161,6 +166,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 /** Recovery runs separately with fixed account-bound operations. The model only explains verified results. */
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=supportManagementReview(context,supportTechnicalFallback(context));
+ if(supportCreditBalanceReply(context))return fallback;
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
  if(supportVersionClarification(context.messages))return fallback;
  if(supportVoiceSetupReply(context))return fallback;
