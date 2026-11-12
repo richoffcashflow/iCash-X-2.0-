@@ -54,6 +54,31 @@ test('reception accepts only exact empty provider defaults against the unchanged
 });
 const streamXml = '<Response><Connect><Stream url="wss://api.us.elevenlabs.io/fixture"/></Connect></Response>';
 
+test('incoming admission accepts observed empty frame metadata only with the original complete approval',()=>{
+ const cfg=configuration();
+ cfg.agent.workflow={nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_subgraph_id:null}},edges:{},subgraphs:{},prevent_subagent_loops:true};
+ const inspect=(a,c=cfg.c,b=cfg.branch)=>inspectRecordedReceptionAgent(c,a,b,true,cfg.tool);
+ cfg.c.config_hash=inspect(cfg.agent).hash;
+ const current=clone(cfg.agent);
+ current.conversation_config.agent.prompt.enable_prompt_caching=true;
+ current.workflow.frames={};current.workflow.nodes.start_node.parent_frame_id=null;
+ const before=clone(current),result=inspect(current);
+ assert.equal(result.checks.approvedHashMatches,true,'the original full fingerprint already reconstructs correctly');
+ assert.equal(result.checks.inertWorkflow,true);assert.equal(result.checks.noData,true);assert.equal(result.safe,true);
+ assert.deepEqual(current,before,'never rewrite the provider observation');
+ assert.equal(inspect(current,{...cfg.c,config_hash:'0'.repeat(64)}).safe,false);
+ assert.equal(inspect(current,cfg.c,{...cfg.branch,draft_exists:true}).safe,false);
+ for(const change of [
+  a=>{a.workflow.frames={frame:{}};},a=>{a.workflow.frames=[];},a=>{a.workflow.frames=null;},
+  a=>{a.workflow.nodes.start_node.parent_frame_id='frame';},a=>{a.workflow.nodes.start_node.parent_frame_id=false;},
+  a=>{a.workflow.edges={edge:{target:'action'}};},a=>{a.workflow.nodes.action={type:'webhook'};},
+  a=>{a.workflow.nodes.start_node.edge_order=['action'];},a=>{a.workflow.unreviewed=false;},
+  a=>{a.workflow.nodes.start_node.unreviewed=false;},a=>{a.conversation_config.agent.prompt.prompt+=' changed';},
+  a=>{a.conversation_config.agent.prompt.enable_prompt_caching=false;},a=>{a.version_id='agtvrsn_changed';},
+  a=>{a.branch_id='agtbrch_changed';},
+ ]){const changed=clone(current);change(changed);assert.equal(inspect(changed).safe,false);}
+});
+
 test('incoming calls accept only the added null identity tool against the saved approval',()=>{
  const cfg=configuration();cfg.agent.conversation_config.agent.prompt.built_in_tools={skip_turn:null};
  cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;

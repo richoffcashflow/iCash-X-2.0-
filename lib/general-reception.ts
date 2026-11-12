@@ -71,8 +71,17 @@ export function verifyReceptionPostcall(raw:string,header:string|null,secret:str
 }
 /** The current provider schema omits parent_subgraph_id for an unparented start.
  * Accept its absence or explicit null without relaxing any executable fields. */
-export function receptionWorkflowIsInert(value:unknown){
+export function receptionWorkflowIsInert(value:unknown):boolean{
  const workflow=obj(value),nodes=obj(workflow.nodes),node=obj(nodes.start_node);
+ // The same approved start-only workflow now includes joint empty frame
+ // metadata. Strip only this observed pair for structural validation; the
+ // caller must still match the original complete provider fingerprint.
+ if(Object.keys(nodes).length===1&&Object.hasOwn(nodes,'start_node')&&node.type==='start'
+  &&Object.hasOwn(node,'parent_frame_id')&&node.parent_frame_id===null
+  &&workflow.frames!==null&&typeof workflow.frames==='object'&&!Array.isArray(workflow.frames)&&Object.keys(workflow.frames).length===0){
+  const prior={...workflow},start={...node};delete prior.frames;delete start.parent_frame_id;
+  prior.nodes={start_node:start};return receptionWorkflowIsInert(prior);
+ }
  if(Object.keys(nodes).length===1&&Object.hasOwn(nodes,'start_node')&&node.parent_subgraph_id===undefined)return ownerWorkflowIsInert({...workflow,nodes:{start_node:{...node,parent_subgraph_id:null}}});
  return ownerWorkflowIsInert(value);
 }

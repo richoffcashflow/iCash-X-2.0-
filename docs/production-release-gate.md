@@ -18,6 +18,11 @@ If checks fail, fix the failure and release the corrected main commit. If the AP
 
 ## Independent production health
 
+The [separate Railway reliability monitor](independent-reliability-monitor.md)
+provides the continuous one-minute observation loop after its verified rollout.
+It reuses durable owner alerts and is checked for freshness by maintenance. The
+GitHub workflow below remains an additional delayed-schedule fallback.
+
 `.github/workflows/production-health.yml` runs a read-only public health probe every five minutes and supports manual dispatch on main. It checks HTTP 200, the exact healthy schema, database/authentication/workflow results, and a fresh server timestamp. It allows three 10-second requests separated by 10 seconds and has a two-minute job timeout. It does not invoke recoveries, customer messaging, paid providers, or issue creation.
 
 Failed runs surface in GitHub Actions and can notify recipients according to their GitHub notification preferences. Owner notification delivery is not verified by this workflow. GitHub scheduling can be delayed, and public-repository schedules may be disabled by GitHub after extended inactivity; this is complementary monitoring, not a guaranteed paging service. The health endpoint reports the existing application/database/authentication/workflow checks, not every external provider or user task.

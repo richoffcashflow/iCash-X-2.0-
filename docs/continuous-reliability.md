@@ -1,5 +1,16 @@
 # Continuous reliability
 
+## November 12 independent monitoring
+
+The [independent monitor](independent-reliability-monitor.md) closes the observed
+multi-hour gaps in the five-minute GitHub schedule. A separate Railway process
+checks once a minute and reuses the existing durable incident/owner-alert path
+without dispatching customer work. Maintenance detects a stale observer after
+installation. Bounded direct owner warnings cover repeated app/incident-read
+failures using previously verified owner evidence; a cold start during a total
+auth outage remains a stated limitation. Offline failure injection, exact-release
+checks and successive live observations are required before calling it active.
+
 ## November 11 call setup
 
 The owner clarified that call latency means the wait before the phone rings. The immediate intake path already schedules the call, but independent database and provider reads were serialized during dispatch setup. [Voice preflight](voice-dial-preflight.md) groups those reads while preserving fresh exact review, every result boundary, final admission and the one-use dial. Actual-service deferred-read regressions cover overlap, incomplete/failed checks, release changes and configuration drift. No paid call is part of verification; recording start cannot establish first-ring time. Both web and worker require the exact-main release.

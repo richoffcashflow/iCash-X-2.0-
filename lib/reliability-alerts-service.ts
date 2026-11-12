@@ -2,6 +2,7 @@ import {reliabilityAlertClaimSchema} from './reliability-alerts.ts';
 import {reliabilitySeverityLabels,reliabilitySeverityGuidance} from './reliability-priority.ts';
 import {ownerInboundTarget} from './owner-inbound-acceptance.ts';
 import {reliabilitySchema} from './reliability.ts';
+import {externalReliabilityRuntime} from './reliability-monitor-runtime.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Dependencies={db:Database;env?:Record<string,string|undefined>;transport?:typeof fetch;delay?:(ms:number)=>Promise<void>};
 const email=/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
@@ -34,7 +35,7 @@ function configuration(env:Record<string,string|undefined>){
 export async function dispatchReliabilityAlerts(dependencies:Dependencies){
  const env=dependencies.env??process.env,db=dependencies.db,transport=dependencies.transport??fetch;
  // A preview can share the database; it must never alter production alert configuration or send.
- if(env.VERCEL_ENV!=='production')return 'skipped';
+ if(env.VERCEL_ENV!=='production'&&!externalReliabilityRuntime(env))return 'skipped';
  const config=configuration(env);
  const pending=await db<boolean>('rpc/icash_refresh_reliability_incident','POST',{p_configuration:config.state});
  if(config.state!=='ready'||!pending)return config.state==='ready'?'idle':config.state;
