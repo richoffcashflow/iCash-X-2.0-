@@ -4,6 +4,8 @@ import {supportBotWorkProblem} from './support-reply-style.ts';
 /** A past call hold is not a diagnosis of today's outage. Explain the next
  * review step without blaming a personal-number edit or reciting lifetime totals. */
 export function supportCallHoldReply(context:SupportContext):SupportReply|null{
+ const latest=context.messages.findLast(m=>m.role==='user')?.content.trim()??'';
+ if(/^(?:(?:it says|the error is)[: ,]*)?(?:your |my |the )?business calling number is unavailable(?:[.!?\s]+please try again)?[.!?\s]*$/i.test(latest))return {reply:'That error concerns the service’s calling number, not a missing seller phone number. It can occur when the calling service cannot select or verify its outbound number. The exact cause still needs a service review; the error alone does not prove a current account configuration fault. Your personal contact number is separate. This chat has not restarted a call or confirmed a repair.',status:'open',managementReview:true,ai:false};
  if(context.kind!=='account')return null;
  const voice=context.evidence?.find(e=>e.key==='voice');
  if(voice?.status!=='attention'||voice.code!=='voice_business_number_mismatch')return null;
