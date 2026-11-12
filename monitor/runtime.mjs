@@ -39,6 +39,7 @@ export function createExternalMonitor({env=process.env,transport=fetch,now=Date.
   if(now()<nextOwnerAt)return;nextOwnerAt=now()+300000;
   try{
    const response=await transport(new URL('/auth/v1/admin/users/'+ownerInboundTarget.ownerUserId,env.SUPABASE_URL),{headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${env.SUPABASE_SECRET_KEY}`},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(5000)});
+   if(response.status===404){owner=null;ownerCheckedAt=0;await response.body?.cancel();return;}
    if(!response.ok){await response.body?.cancel();return;}
    const value=await response.json(),confirmed=Date.parse(value?.email_confirmed_at);
    if(value?.id!==ownerInboundTarget.ownerUserId||typeof value.email!=='string'||value.email.length>254||!email.test(value.email)||!Number.isFinite(confirmed)||confirmed>now()||value.deleted_at||value.banned_until&&Date.parse(value.banned_until)>now()){

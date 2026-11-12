@@ -13,7 +13,7 @@ for(const [key,value] of Object.entries({ICASH_EXTERNAL_MONITOR_ENABLED:'false',
  assert.equal(await dispatchReliabilityAlerts({env:{...env,[key]:value},db:()=>assert.fail('Unapproved runtime must not touch incidents')}),'skipped');
 }
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-let clock=Date.parse('2026-11-12T12:05:00Z'),calls=[],saved=[],logs=[],failure='none',sent=[],ownerBanned=false;
+let clock=Date.parse('2026-11-12T12:05:00Z'),calls=[],saved=[],logs=[],failure='none',sent=[],ownerBanned=false,ownerMissing=false;
 const at=()=>new Date(clock).toISOString();
 const transport=async(url,options)=>{
  calls.push({url:String(url),method:options.method??'GET'});
@@ -27,6 +27,7 @@ const transport=async(url,options)=>{
  if(u.pathname.startsWith('/auth/v1/admin/users/')){
   assert.equal(u.pathname,'/auth/v1/admin/users/'+ownerInboundTarget.ownerUserId);
   if(failure==='both')throw Error('PRIVATE_AUTH_ERROR');
+  if(ownerMissing)return new Response(null,{status:404});
   return Response.json({id:ownerInboundTarget.ownerUserId,email:'private-owner@example.invalid',email_confirmed_at:new Date(clock-1000).toISOString(),banned_until:ownerBanned?new Date(clock+3600000).toISOString():null});
  }
  if(u.pathname==='/rest/v1/icash_integration_checks'){
@@ -61,6 +62,10 @@ failure='none';clock+=60000;await monitor.tick();
 ownerBanned=true;clock+=300000;await monitor.tick();failure='web';
 for(let i=0;i<3;i++){clock+=60000;await monitor.tick();}
 assert.equal(sent.length,1,'Explicit revoked identity clears cached recipient');
+ownerBanned=false;failure='none';clock+=300000;await monitor.tick();
+ownerMissing=true;clock+=300000;await monitor.tick();failure='web';
+for(let i=0;i<3;i++){clock+=60000;await monitor.tick();}
+assert.equal(sent.length,1,'An explicitly missing owner cannot remain authorized through the temporary-outage cache');
 
 let release;const wait=new Promise(resolve=>release=resolve);let probes=0;
 const concurrent=createExternalMonitor({env,now:()=>clock,transport:async(...args)=>{probes++;return transport(...args);},dispatch:async()=>{await wait;return 'idle';}});
