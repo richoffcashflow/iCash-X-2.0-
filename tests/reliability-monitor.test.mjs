@@ -6,7 +6,7 @@ import {pruneUsageLoopObservations} from '../lib/usage-loop-tracking.ts';
 const original=console.error;const logs=[];console.error=v=>logs.push(v);
 try{
  let calls=[];
- const db=async(path,method,body)=>{calls.push({path,body});return path.endsWith('snapshot')?{issueCount:2}:null;};
+ const db=async(path,method,body)=>{calls.push({path,body});return path.startsWith('icash_integration_checks?')?[]:path.endsWith('snapshot')?{issueCount:2}:null;};
  assert.equal(await refreshReliability(db,false),true);assert.equal(calls[0].body.p_status,'degraded');assert.equal(logs.length,1);
  assert.equal(calls[1].path,'rpc/icash_repair_expired_research_configs');
  assert.equal(calls[2].path,'rpc/icash_refresh_account_work_snapshot','account stalls cannot hide behind healthy worker checks or reviewed historical receipts');
@@ -21,7 +21,8 @@ try{
    const savedSnapshot={checkedAt:'2026-01-01T00:00:00Z',issueCount:0};
    const evidence=JSON.stringify(savedSnapshot);
    const monitorDb=async(path,method,body)=>{
-    stages.push(path);assert.equal(method,'POST');
+    stages.push(path);if(path.startsWith('icash_integration_checks?')){assert.equal(method,'GET');return [];}
+    assert.equal(method,'POST');
     if(path==='rpc/icash_record_service_heartbeat'){
      heartbeatWrites++;
      if(failure==='heartbeat'||failure==='snapshot_and_degraded_heartbeat'&&heartbeatWrites===2)throw Error('private heartbeat failure');

@@ -1,4 +1,5 @@
 import {dispatchReliabilityAlerts} from './reliability-alerts-service.ts';
+import {externalMonitorFresh} from './external-monitor-health.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export async function refreshReliability(db:Database,maintenanceOk:boolean){
  let monitored=true,refreshFailed=false;
@@ -14,6 +15,9 @@ export async function refreshReliability(db:Database,maintenanceOk:boolean){
  }catch{
   monitored=false;refreshFailed=true;
  }
+ try{
+  if(!await externalMonitorFresh(db))throw Error('External monitor stale');
+ }catch{monitored=false;refreshFailed=true;console.error(JSON.stringify({event:'icash_external_monitor_unavailable'}));}
  if(refreshFailed){
   // Failed recovery or a failed snapshot cannot extend healthy recovery from
   // fresh old evidence. Both independent stages still run before observation.
