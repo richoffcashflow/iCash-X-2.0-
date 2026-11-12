@@ -60,6 +60,8 @@ jobs:
         run: python3 scripts/test-new-user-request-reserve-postgres.py
       - name: Verify paced research and maintenance reserve under concurrent transactions
         run: python3 scripts/test-research-request-pacing-postgres.py
+      - name: Verify financial-query startup sync uses one exact reserved request
+        run: python3 scripts/test-research-feed-request-postgres.py
       - name: Verify one-use owner demo research allowance under concurrent transactions
         run: python3 scripts/test-owner-demo-request-postgres.py
       - name: Verify delayed contact checks survive concurrent cleanup

@@ -180,6 +180,18 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  if(!pools||candidates.some(x=>!['active','mobile'].includes(pools[x.screeningId])))return {status:'held'};
  const mobileOnly=pools[primary.screeningId]==='mobile';
  candidates=candidates.filter(x=>pools[x.screeningId]===pools[primary.screeningId]);
+ // Resume the exact saved free check before fetching its owner preview again.
+ // Positive checks still take a fresh property preview and the original final
+ // purchase admission below; this only removes reads while the list is pending.
+ const pending=await db<{items:unknown[];request:unknown}|null>('rpc/icash_pending_owner_preflight','POST',{
+  p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
+ if(pending){
+  const resumed=await preflightOwnerExport(db,accountId,pending.items,pending.request,transport);
+  if(resumed.status==='empty')return {status:'empty',contacts:0};
+  if(resumed.status==='pending')throw new OwnerExportPreflightPendingError(accountId,primary.screeningId);
+  if(resumed.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  if(!['disabled','ready'].includes(resumed.status))return {status:'held'};
+ }
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
  let preview:unknown,previewRequestId='';
  try{
