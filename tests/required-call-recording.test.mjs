@@ -85,6 +85,9 @@ for(const policy of ['direct_recorded_v1','spoken_v1']){
  const data=voicemailBodies.at(-1).conversation_initiation_client_data,prompt=data.conversation_config_override.agent.prompt.prompt;
  assert(prompt.indexOf('VOICEMAIL CUTOFF:')>prompt.indexOf('Earlier saved context'));
  assert.match(prompt,/OUTBOUND DIRECTION: You placed this call/);assert.match(prompt,/Never require qualification before honoring a request to end/);assert.match(prompt,/business phone menu, call-screening assistant/);assert.match(prompt,/Never repeat silence checks/);
+ assert.match(prompt,/A no, nope, nah or "not me" to the ownership question ends this property inquiry/);
+ assert.match(prompt,/Do not ask for another address, the real owner's number, why they called, or another sales question/);
+ assert.match(prompt,/A no to repairs, liens, tenants or your offered price answers that specific question/);
  assert.match(prompt,/immediately call icash_stop_recording/);assert.match(prompt,/callEnded is not true, immediately use end_call/);
  assert.match(prompt,/live person's mention of voicemail.*not confirmed voicemail/);
  assert.match(prompt,/transcript containing only "\.\.\."/);
