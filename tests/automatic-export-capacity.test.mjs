@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
 import {recoverAutomaticOwnerExportCapacity} from '../lib/automatic-export-capacity.ts';
 const env={VERCEL_ENV:'production',DEALMACHINE_API_KEY:'dm_sk_live_fixture',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)};
-function fixture({idle=false,quotaProbe,timeoutProbe,badProbe,largeProbe,lostSave=false,lostFinal=false,saveFails=false,providerHeaders={}}={}){
- let claimed=false,finals=0;const calls=[],saved=new Map(),writes=[],metrics=[];
+function fixture({idle=false,quotaProbe,timeoutProbe,badProbe,largeProbe,lostSave=false,lostFinal=false,saveFails=false,providerHeaders={},parallel=false}={}){
+ let claimed=false,finals=0,claimInFlight=false;const calls=[],saved=new Map(),writes=[],metrics=[];
+ let pendingStarted,processingStarted;
+ const pending=new Promise(resolve=>pendingStarted=resolve),processing=new Promise(resolve=>processingStarted=resolve);
  const db=async(path,method,body)=>{
   assert.equal(method,'POST');
   if(path==='rpc/icash_claim_automatic_export_capacity'){assert.equal(body.p_release,env.VERCEL_GIT_COMMIT_SHA);if(idle||claimed)return null;claimed=true;return {reviewId:'review',requestId:'inventory'};}
-  if(path==='rpc/icash_claim_export_capacity_probe')return quotaProbe===body.p_probe?null:body.p_probe;
+  if(path==='rpc/icash_claim_export_capacity_probe'){
+   assert.equal(claimInFlight,false,'Nonblocking shared quota claims must remain sequential');claimInFlight=true;
+   await new Promise(resolve=>setImmediate(resolve));claimInFlight=false;
+   return quotaProbe===body.p_probe?null:body.p_probe;
+  }
   if(path==='rpc/icash_record_export_capacity_probe'){
    writes.push(body);if(saveFails)throw Error('database unavailable');
    if(saved.has(body.p_probe))assert.deepEqual(saved.get(body.p_probe),body.p_receipt);else{saved.set(body.p_probe,body.p_receipt);if(lostSave)throw Error('committed; response lost');}return true;
@@ -20,6 +26,10 @@ function fixture({idle=false,quotaProbe,timeoutProbe,badProbe,largeProbe,lostSav
   assert.equal(u.origin,'https://api.v2.dealmachine.com');assert.equal(u.pathname,'/v1/exports');assert.equal(u.searchParams.get('limit'),'100');assert.equal(u.searchParams.get('offset'),'0');
   assert.equal(options.method,'GET');assert.equal(options.redirect,'error');assert.equal(options.cache,'no-store');assert(options.signal instanceof AbortSignal);
   assert.equal(options.headers['Cache-Control'],'no-cache, max-age=0');
+  if(parallel&&probe!=='inventory'){
+   assert(saved.has('inventory'),'Inventory evidence must be durable first');
+   if(probe==='pending'){pendingStarted();await processing;}else{processingStarted();await pending;}
+  }
   if(timeoutProbe===probe)throw Error('network unavailable');
   if(largeProbe===probe)return new Response('x'.repeat(1048577));
   if(badProbe===probe)return new Response('invalid',{status:500});
@@ -30,6 +40,7 @@ function fixture({idle=false,quotaProbe,timeoutProbe,badProbe,largeProbe,lostSav
 for(const overrides of [{VERCEL_ENV:'preview'},{DEALMACHINE_API_KEY:''},{VERCEL_GIT_COMMIT_SHA:''},{VERCEL_GIT_COMMIT_SHA:undefined,RAILWAY_GIT_COMMIT_SHA:undefined}]){const f=fixture();assert.equal(await f.run(overrides),null);assert.equal(f.calls.length,0);}
 const idle=fixture({idle:true});assert.equal(await idle.run(),null);assert.equal(idle.calls.length,0);
 const good=fixture({lostSave:true,lostFinal:true});assert.deepEqual(await good.run(),{status:'capacity_verified'});assert.deepEqual(good.calls,['inventory','pending','processing']);assert.equal(good.writes.length,6);assert.equal(good.metrics.length,3);assert.equal(await good.run(),null);assert.equal(good.calls.length,3,'Acknowledgment loss never repeats a provider request');
+const simultaneous=fixture({parallel:true});assert.deepEqual(await simultaneous.run(),{status:'capacity_verified'});assert.equal(simultaneous.saved.size,3,'Independent status reads overlap and both finish before final verification');
 for(const providerHeaders of [{},{Date:'Wed, 04 Nov 2026 22:30:00 GMT',Age:'0'},{Date:'Tue, 03 Nov 2026 22:30:00 GMT',Age:'3600'},{Date:'not a provider date',Age:'unknown'},{Date:'Wed, 04 Nov 2026 22:30:00 GMT',Age:'00'}]){
  const f=fixture({providerHeaders,lostSave:true});await f.run();
  assert.equal(f.calls.length,3);

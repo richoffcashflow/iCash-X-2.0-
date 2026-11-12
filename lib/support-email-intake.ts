@@ -46,7 +46,7 @@ export async function intakeVerifiedSupportEmail(providerId:string,value:unknown
    subject:'Action required: confirm your iCash X cancellation request',
    text:supportCancelReceiptText(mode,config.origin),
   })});
-  if(!response.ok)throw Error('RECEIPT_PROVIDER_UNAVAILABLE');const receipt=await response.json();const accepted=supportId.parse(receipt?.id);
+  if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('RECEIPT_PROVIDER_UNAVAILABLE');}const receipt=await response.json();const accepted=supportId.parse(receipt?.id);
   await db('rpc/icash_support_finish_cancel_receipt','POST',{p_request:job.id,p_provider:accepted});
  }catch{
   // A timeout may follow provider acceptance. Never automatically resend, even

@@ -48,7 +48,7 @@ export async function reconcileReception(env:ReceptionEnv,deps:ReceptionDeps){
   if(!/^AC[0-9a-fA-F]{32}$/.test(env.TWILIO_ACCOUNT_SID??'')||!env.TWILIO_AUTH_TOKEN||!env.ELEVENLABS_API_KEY)return hold('provider_configuration_missing');
   const read=async(url:string,headers:Record<string,string>)=>{
    const response=await fetcher(url,{headers,redirect:'error',cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(6000)])});
-   if(!response.ok||response.url&&response.url!==url)throw Error('PROVIDER_UNAVAILABLE');
+   if(!response.ok||response.url&&response.url!==url){await response.body?.cancel().catch(()=>undefined);throw Error('PROVIDER_UNAVAILABLE');}
    return obj(JSON.parse(await boundedBody(response,512*1024)));
   };
   const origin='https://api.us.elevenlabs.io',headers={'xi-api-key':env.ELEVENLABS_API_KEY};

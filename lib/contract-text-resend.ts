@@ -15,11 +15,11 @@ export async function inspectContractTextResend(hash:string,{db,key,fetcher=fetc
  if(!j)return {status:'not_authorized' as const};
  if(!Number.isSafeInteger(j.expected_submitter_id)||j.expected_submitter_id<=0)throw Error('SIGNER_BINDING_MISMATCH');
  const r=await fetcher(`https://api.docuseal.com/submitters/${j.expected_submitter_id}`,{method:'GET',headers:{'X-Auth-Token':key},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000)});
- if(!r.ok)return {status:'inspection_unavailable' as const,code:`PROVIDER_HTTP_${r.status}`};
+ if(!r.ok){await r.body?.cancel().catch(()=>undefined);return {status:'inspection_unavailable' as const,code:`PROVIDER_HTTP_${r.status}`};}
  const p=await r.json();
  if(p.id!==j.expected_submitter_id||String(p.submission_id??p.submission?.id)!==j.expected_provider_id||p.external_id!==`${j.envelope_id}:${j.signer_id}`||p.phone!==j.recipient||p.metadata?.terms_hash!==j.terms_hash)throw Error('SIGNER_BINDING_MISMATCH');
  const submissionResponse=await fetcher(`https://api.docuseal.com/submissions/${j.expected_provider_id}`,{method:'GET',headers:{'X-Auth-Token':key},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000)});
- if(!submissionResponse.ok)return {status:'inspection_unavailable' as const,code:`PROVIDER_HTTP_${submissionResponse.status}`};
+ if(!submissionResponse.ok){await submissionResponse.body?.cancel().catch(()=>undefined);return {status:'inspection_unavailable' as const,code:`PROVIDER_HTTP_${submissionResponse.status}`};}
  const submission=await submissionResponse.json();
  if(String(submission.id)!==j.expected_provider_id||!submission.submitters?.some((s:{id?:number;external_id?:string})=>s.id===j.expected_submitter_id&&s.external_id===p.external_id))throw Error('SIGNER_BINDING_MISMATCH');
  const creatorEmail=submission.created_by_user?.email;
@@ -49,7 +49,7 @@ export async function resendContractText(hash:string,{db,key,fetcher=fetch}:Depe
   const r=await fetcher('https://api.docuseal.com/'+path,{method,
    headers:{'X-Auth-Token':key,'Content-Type':'application/json'},
    ...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000)});
-  if(!r.ok)throw Error('PROVIDER_REQUEST_FAILED');
+  if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error('PROVIDER_REQUEST_FAILED');}
   return r.json();
  };
  try{

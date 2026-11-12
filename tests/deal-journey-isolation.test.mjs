@@ -58,6 +58,7 @@ try{
   let ownerCalls=0;
   const {GET}=await loadService('app/api/internal/journeys/route.ts',{
    db:f.d.db,authorizeOutboundBilling,processDealJourneys,
+   processDealSupervisor:async()=>({status:'disabled',processed:0,repaired:0,errors:0}),
    sendForSignatures:f.d.send,textPendingContract:f.d.text,dispatchTextMessage:f.d.dispatch,coordinateTitleOpening:f.d.title,
    processOwnerBuyerDelivery:async()=>{ownerCalls++;if(ownerFails)throw Error('PRIVATE owner delivery detail');return {status:'owner_delivery_idle'};},
   });

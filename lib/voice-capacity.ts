@@ -7,8 +7,8 @@ export async function readVoiceCapacityProvider(path:string,region:'global'|'us'
  if(!env.ELEVENLABS_API_KEY||!(/^\/v1\/user\/subscription$/.test(path)||/^\/v1\/convai\/agents\/agent_[A-Za-z0-9]+(?:\?branch_id=agtbrch_[A-Za-z0-9]+)?$/.test(path)))throw Error('VOICE_CAPACITY_READ_REQUIRED');
  const url=(region==='us'?'https://api.us.elevenlabs.io':'https://api.elevenlabs.io')+path;
  const response=await fetcher(url,{method:'GET',headers:{'xi-api-key':env.ELEVENLABS_API_KEY,Accept:'application/json'},cache:'no-store',redirect:'error',credentials:'omit',signal:AbortSignal.timeout(8000)});
- if(!response.ok)throw Error('VOICE_CAPACITY_READ_HTTP_'+response.status);
- if(response.redirected||response.url&&response.url!==url)throw Error('VOICE_CAPACITY_READ_UNAVAILABLE');
+ if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('VOICE_CAPACITY_READ_HTTP_'+response.status);}
+ if(response.redirected||response.url&&response.url!==url){await response.body?.cancel().catch(()=>undefined);throw Error('VOICE_CAPACITY_READ_UNAVAILABLE');}
  return JSON.parse((await boundedBytes(response,262144)).toString('utf8')) as unknown;
 }
 // Verified against https://elevenlabs.io/pricing/agents on 2026-10-23.

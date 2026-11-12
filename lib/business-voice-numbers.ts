@@ -35,7 +35,7 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,target
    }catch{/* Status remains available when the provider has no safe error label. */}
    throw new BusinessPhoneError(`${label} returned HTTP ${r.status}${reason?': '+reason:'.'} ${body===undefined?'':'Refresh before retrying the change.'}`.trim());
   }
-  if(r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??''))throw new BusinessPhoneError(`${label} returned an unexpected response.`);
+  if(r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??'')){await r.body?.cancel().catch(()=>undefined);throw new BusinessPhoneError(`${label} returned an unexpected response.`);}
   try{return JSON.parse((await boundedBytes(r,262144)).toString('utf8')) as unknown;}
   catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out while reading the response':'returned an unreadable response'}. Refresh before retrying.`);}
  }

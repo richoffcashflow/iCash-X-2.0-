@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import {setup,migration,delay} from './helpers/sender-delay-opener-fixture.mjs';
+const sql=readFileSync(new URL('../config/completion-reliability.sql',import.meta.url),'utf8');
+const pg=await PGlite.create(),v=async(s,a=[])=>Object.values((await pg.query(s,a)).rows[0]??{})[0];
+const health=()=>v("select icash_text_receipt_private.sender_opener_available('+17205550100')");
+try{
+ await pg.exec(setup+migration+delay);
+ await pg.exec("update icash_operation_spend set dispatched_at=now()-interval '3 days';update icash_text_events set payload=jsonb_set(payload,'{timestamp}',to_jsonb(extract(epoch from now()-interval '2 days')));update icash_seller_opener_assignments set created_at=now();");
+ assert.equal(await health(),true,'Reproduce silent age-out before the fix');
+ const ledger=await v('select jsonb_agg(to_jsonb(o)) from icash_operation_spend o');
+ await pg.exec(sql.split('-- BEGIN sender health')[1].split('-- END sender health')[0]);
+ assert.equal(await health(),false,'A two-day-old unresolved signed delay still limits new introductions');
+ await pg.exec("update icash_seller_opener_assignments set created_at=now()-interval '6 minutes'");
+ assert.equal(await health(),true,'An ordinary source-bound recovery introduction remains possible');
+ await pg.exec("update icash_seller_opener_assignments set created_at=now();update icash_text_messages set state='delivered',last_delivery_at=now();");
+ assert.equal(await health(),false,'Late delivery of a pre-delay send cannot clear a newer delay');
+ await pg.exec("update icash_operation_spend set dispatched_at=now()-interval '1 minute';");
+ assert.equal(await health(),true,'A delay not bound to the original dispatch cannot throttle a sender');
+ await pg.query('update icash_operation_spend set dispatched_at=$1',[ledger[0].dispatched_at]);
+ await pg.exec("update icash_text_events set payload=jsonb_set(payload,'{timestamp}',to_jsonb(extract(epoch from now()-interval '5 minutes')))");
+ assert.equal(await health(),false);
+ await pg.exec("select fixture_seed_admission(2,2);update icash_seller_opener_assignments set created_at=now()-interval '6 minutes';select icash_queue_seller_opener(account_id,id) from icash_text_threads where id='20000000-0000-4000-8000-000000000002';");
+ const message=await v("select message_id from icash_seller_opener_assignments where thread_id='20000000-0000-4000-8000-000000000002'");
+ assert(message);assert.equal(await health(),false);
+ await pg.query("update icash_text_messages set state='delivered',provider_id='post_delay_receipt',last_delivery_at=now() where id=$1",[message]);
+ await pg.query("insert into icash_operation_spend select 'text:'||id,account_id,'settled',now() from icash_text_messages where id=$1",[message]);
+ assert.equal(await health(),true,'Only post-delay delivery restores full speed');
+ assert.deepEqual(await v("select jsonb_agg(to_jsonb(o)) from icash_operation_spend o where operation_key<>'text:'||$1::text",[message]),ledger);
+ for(const role of ['anon','authenticated'])assert.equal(await v("select has_function_privilege($1,'icash_text_receipt_private.sender_opener_available(text)','execute')",[role]),false);
+ console.log('PASS persistent sender health: old signed delays, original dispatch binding, one ordinary probe, post-delay delivery, unchanged ledger and ACLs.');
+}finally{await pg.close();}

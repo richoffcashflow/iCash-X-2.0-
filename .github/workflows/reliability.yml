@@ -34,6 +34,8 @@ jobs:
           persist-credentials: false
       - name: Verify learning refresh under real concurrent transactions
         run: python3 scripts/test-learning-refresh-postgres.py
+      - name: Verify durable deal supervision and concurrent source wakeups
+        run: python3 scripts/test-deal-supervisor-postgres.py
       - name: Verify corrected evidence rejects concurrent stale training results
         run: python3 scripts/test-learning-evidence-cutover-postgres.py
       - name: Verify prospective text learning under concurrent queues and customer Pause
@@ -60,6 +62,10 @@ jobs:
         run: python3 scripts/test-new-user-request-reserve-postgres.py
       - name: Verify paced research and maintenance reserve under concurrent transactions
         run: python3 scripts/test-research-request-pacing-postgres.py
+      - name: Verify financial-query startup sync uses one exact reserved request
+        run: python3 scripts/test-research-feed-request-postgres.py
+      - name: Verify startup contact dependencies use three bound reserved reads
+        run: python3 scripts/test-starter-export-dependency-postgres.py
       - name: Verify one-use owner demo research allowance under concurrent transactions
         run: python3 scripts/test-owner-demo-request-postgres.py
       - name: Verify delayed contact checks survive concurrent cleanup

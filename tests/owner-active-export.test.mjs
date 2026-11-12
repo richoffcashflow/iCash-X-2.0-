@@ -59,6 +59,7 @@ let previews=0,capacity='ready',preflightStatus='disabled',paid=0,downloads=0,ge
 const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:'2099-01-01',research_version:2};
 const db=async(path,method,p)=>{
  if(path==='rpc/icash_owner_active_export_capacity'){assert.deepEqual(p,{p_account:account});return capacity;}
+ if(path==='rpc/icash_pending_owner_preflight'){assert.deepEqual(p,{p_account:account,p_primary:candidates[0].screeningId,p_candidates:candidates,p_mobile:false});return null;}
  if(path==='rpc/icash_record_empty_owner_preview'){assert.deepEqual(p.p_items,candidates);assert.deepEqual(p.p_preview,preview);assert.match(p.p_request,/^[0-9a-f-]{36}$/);return true;}
  if(path==='rpc/icash_claim_owner_preflight')return {status:preflightStatus};
  if(path==='rpc/icash_owner_batch_candidates')return candidates;
@@ -97,6 +98,27 @@ try{
   assert.equal(error.accountId,account);assert.equal(error.screeningId,candidates[0].screeningId);assert.equal(error.operationKey,`owners:${account}:${candidates[0].screeningId}`);return true;
  });assert.equal(previews+paid+downloads+gets,0,'Known slot/quota hold makes no provider request');assert.equal(claimed,false);assert.equal(saved,null);}
  reset();capacity='disabled';assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(previews,0);
+ // A deferred list keeps its original people and snapshot. Pending/empty/held
+ // checks do not burn another properties/ids request or reserve any money.
+ const pendingItems=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:a.ids}));
+ const pendingRequest=activeOwnerExportRequest(ids,false,true);
+ let pendingReads=0;
+ const resumeDb=async(path,method,p)=>{
+  if(path==='rpc/icash_pending_owner_preflight'){pendingReads++;return {items:pendingItems,request:pendingRequest};}
+  if(path==='rpc/icash_claim_owner_preflight'){assert.deepEqual(p.p_items,pendingItems);assert.deepEqual(p.p_request,pendingRequest);}
+  return db(path,method,p);
+ };
+ for(const status of ['pending','quota_wait','empty','held']){
+  reset();preflightStatus=status;
+  if(['pending','quota_wait'].includes(status))await assert.rejects(enrichActiveOwners(resumeDb,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);
+  else assert.equal((await enrichActiveOwners(resumeDb,account,candidates[0],config,250000,transport)).status,status);
+  assert.equal(previews+paid+downloads+gets,0,'Saved free-check wait does not refetch owners');assert.equal(claimed,false);
+ }
+ reset();preflightStatus='ready';
+ assert.equal((await enrichActiveOwners(resumeDb,account,candidates[0],config,250000,transport)).status,'contacts_saved');
+ assert.equal(previews,1,'A positive resumed check still refreshes owner identity before final admission');assert.equal(paid,1);assert.equal(pendingReads,5);
+ reset();await assert.rejects(enrichActiveOwners(async(path,...args)=>{if(path==='rpc/icash_pending_owner_preflight')throw Error('database unavailable');return db(path,...args);},account,candidates[0],config,250000,transport),/database unavailable/);
+ assert.equal(previews+paid+downloads+gets,0,'A failed saved-check read is not permission to spend another request');
  for(const status of ['empty','held']){reset();preflightStatus=status;assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,status);assert.equal(paid,0);assert.equal(claimed,false,'No wallet admission before preflight');}
  for(const status of ['pending','quota_wait']){reset();preflightStatus=status;await assert.rejects(enrichActiveOwners(db,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);assert.equal(paid,0);assert.equal(claimed,false);}
  // Quota and organization contention cannot create a purchase or wallet claim.

@@ -18,7 +18,7 @@ export async function observeLegacyReceptionCosts(env:Record<string,string|undef
   if(!/^AC[a-f0-9]{32}$/i.test(env.TWILIO_ACCOUNT_SID??'')||!env.TWILIO_AUTH_TOKEN||!env.ELEVENLABS_API_KEY)return unavailable;
   async function read(url:string,headers:Record<string,string>){
    const r=await fetcher(url,{method:'GET',headers,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(8000)});
-   if(!r.ok||r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??''))throw Error('UNAVAILABLE');
+   if(!r.ok||r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??'')){await r.body?.cancel().catch(()=>undefined);throw Error('UNAVAILABLE');}
    return obj(JSON.parse(await boundedBody(r,512*1024)));
   }
   try{

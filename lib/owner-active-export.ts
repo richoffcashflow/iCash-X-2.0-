@@ -104,14 +104,14 @@ export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt
 async function boundedBody(response:Response,maximum:number){
  if(!response.body)throw Error('OWNER_EXPORT_RESPONSE_UNAVAILABLE');
  const reader=response.body.getReader(),parts:Buffer[]=[];let size=0;
- try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>maximum)throw Error('OWNER_EXPORT_RESPONSE_TOO_LARGE');parts.push(Buffer.from(value));}}finally{await reader.cancel().catch(()=>null);}
+ try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>maximum)throw Error('OWNER_EXPORT_RESPONSE_TOO_LARGE');parts.push(Buffer.from(value));}}finally{await reader.cancel().catch(()=>null);reader.releaseLock();}
  return Buffer.concat(parts);
 }
 async function downloadOriginal(url:unknown,transport:typeof fetch){
  if(typeof url!=='string')return invalid();const u=new URL(url);
  if(u.protocol!=='https:'||u.hostname!=='storage.googleapis.com'||u.username||u.password||u.hash||(u.port&&u.port!=='443'))return invalid();
  const response=await transport(u,{method:'GET',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
- if(!response.ok)throw Error('OWNER_EXPORT_DOWNLOAD_UNAVAILABLE');
+ if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('OWNER_EXPORT_DOWNLOAD_UNAVAILABLE');}
  const bytes=await boundedBody(response,1048576),plain=bytes[0]===0x1f&&bytes[1]===0x8b?gunzipSync(bytes,{maxOutputLength:1048576}):bytes;
  return new TextDecoder('utf-8',{fatal:true}).decode(plain);
 }
@@ -180,6 +180,18 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  if(!pools||candidates.some(x=>!['active','mobile'].includes(pools[x.screeningId])))return {status:'held'};
  const mobileOnly=pools[primary.screeningId]==='mobile';
  candidates=candidates.filter(x=>pools[x.screeningId]===pools[primary.screeningId]);
+ // Resume the exact saved free check before fetching its owner preview again.
+ // Positive checks still take a fresh property preview and the original final
+ // purchase admission below; this only removes reads while the list is pending.
+ const pending=await db<{items:unknown[];request:unknown}|null>('rpc/icash_pending_owner_preflight','POST',{
+  p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
+ if(pending){
+  const resumed=await preflightOwnerExport(db,accountId,pending.items,pending.request,transport);
+  if(resumed.status==='empty')return {status:'empty',contacts:0};
+  if(resumed.status==='pending')throw new OwnerExportPreflightPendingError(accountId,primary.screeningId);
+  if(resumed.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  if(!['disabled','ready'].includes(resumed.status))return {status:'held'};
+ }
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
  let preview:unknown,previewRequestId='';
  try{

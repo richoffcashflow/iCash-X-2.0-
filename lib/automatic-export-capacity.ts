@@ -12,7 +12,7 @@ async function saveProbe(db:ResearchDb,reviewId:string,probe:Probe,receipt:Recei
 async function readReceipt(response:Response):Promise<Receipt>{
  if(!response.body)throw Error('CAPACITY_BODY_UNAVAILABLE');
  const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
- try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576)throw Error('CAPACITY_BODY_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>null);}
+ try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576)throw Error('CAPACITY_BODY_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>null);reader.releaseLock();}
  const rawText=Buffer.concat(chunks).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
  const number=(name:string)=>{const value=response.headers.get(name);return value!==null&&/^\d{1,10}$/.test(value)?Number(value):null;};
  // Retain original provider freshness evidence for database validation. Never
@@ -30,16 +30,15 @@ export async function recoverAutomaticOwnerExportCapacity(db:ResearchDb,transpor
  if(env.VERCEL_ENV!=='production'||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(env.DEALMACHINE_API_KEY??'')||!release||!/^[a-f0-9]{40}$/.test(release))return null;
  const claim=await db<{reviewId:string;requestId:string}|null>('rpc/icash_claim_automatic_export_capacity','POST',{p_release:release});
  if(!claim)return null;
- const deadline=AbortSignal.timeout(40000);
+ const deadline=AbortSignal.timeout(55000);
  try{
-  for(const probe of ['inventory','pending','processing'] as const){
-   const requestId=probe==='inventory'?claim.requestId:await db<string|null>('rpc/icash_claim_export_capacity_probe','POST',{p_review:claim.reviewId,p_probe:probe});
-   if(!requestId)break;
+  const readProbe=async(probe:Probe,requestId:string)=>{
+   deadline.throwIfAborted();
    let received:Receipt|null=null,saved=false;
    try{
     await finishAdmittedDealMachineRequest(db,requestId,async()=>{
      const response=await transport('https://api.v2.dealmachine.com/v1/exports?limit=100&offset=0'+(probe==='inventory'?'':`&status=${probe}`),{
-      method:'GET',headers:{Authorization:`Bearer ${env.DEALMACHINE_API_KEY}`,'Cache-Control':'no-cache, max-age=0'},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(15000)]),
+      method:'GET',headers:{Authorization:`Bearer ${env.DEALMACHINE_API_KEY}`,'Cache-Control':'no-cache, max-age=0'},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(25000)]),
      });
      received=await readReceipt(response);
      saved=await saveProbe(db,claim.reviewId,probe,received);
@@ -47,10 +46,23 @@ export async function recoverAutomaticOwnerExportCapacity(db:ResearchDb,transpor
     });
    }catch{
     if(!received)await saveProbe(db,claim.reviewId,probe,{httpStatus:null,raw:null,rawText:'',outcome:'read_unavailable'});
-    break;
+    return false;
    }
    const receipt=received as Receipt|null;
-   if(!saved||receipt?.httpStatus!==200||receipt.raw===null||!receipt.headers?.minuteRemaining||!receipt.headers?.dayRemaining)break;
+   return saved&&receipt?.httpStatus===200&&receipt.raw!==null&&!!receipt.headers?.minuteRemaining&&!!receipt.headers?.dayRemaining;
+  };
+  // Admission uses a nonblocking shared lock, so claim sequentially. Only the
+  // independent provider reads overlap; await every admitted read to finish.
+  if(await readProbe('inventory',claim.requestId)){
+   const requests:{probe:Probe;requestId:string}[]=[];
+   try{
+    for(const probe of ['pending','processing'] as const){
+     deadline.throwIfAborted();
+     const requestId=await db<string|null>('rpc/icash_claim_export_capacity_probe','POST',{p_review:claim.reviewId,p_probe:probe});
+     if(!requestId)break;
+     requests.push({probe,requestId});
+    }
+   }finally{await Promise.allSettled(requests.map(({probe,requestId})=>readProbe(probe,requestId)));}
   }
  }catch{/* The next automatic attempt is a separate free check after backoff. */}
  // Finalization reads the durable probe receipts, including writes whose

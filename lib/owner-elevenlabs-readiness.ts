@@ -76,8 +76,8 @@ export async function readOwnerElevenLabsReadiness(env:Environment,fetcher:typeo
   let response:Response;
   try{response=await fetcher(url,{method:'GET',headers:{'xi-api-key':key!,Accept:'application/json'},cache:'no-store',redirect:'error',credentials:'omit',signal});}
   catch{return {status:'provider_unavailable',receipt:null};}
-  if(response.redirected||(response.url&&response.url!==url))return {status:'provider_unavailable',receipt:null};
-  if(!response.ok)return {status:response.status===401?'provider_auth_failed':response.status===403?'provider_access_denied':'provider_unavailable',receipt:null};
+  if(response.redirected||(response.url&&response.url!==url)){await response.body?.cancel().catch(()=>undefined);return {status:'provider_unavailable',receipt:null};}
+  if(!response.ok){await response.body?.cancel().catch(()=>undefined);return {status:response.status===401?'provider_auth_failed':response.status===403?'provider_access_denied':'provider_unavailable',receipt:null};}
   try{
    const length=response.headers.get('content-length');
    if(length&&(!/^\d+$/.test(length)||Number(length)>maximumBytes))throw Error();
@@ -91,7 +91,7 @@ export async function readOwnerElevenLabsReadiness(env:Environment,fetcher:typeo
    if(!receipt)throw Error();
    if(!identity(receipt))return {status:'target_mismatch',receipt:null};
    return {status:'checked',receipt};
-  }catch{return {status:'provider_receipt_invalid',receipt:null};}
+  }catch{await response.body?.cancel().catch(()=>undefined);return {status:'provider_receipt_invalid',receipt:null};}
  }
  const target=ownerInboundTarget,agentPath=`/v1/convai/agents/${encodeURIComponent(target.agentId)}`;
  const [agent,branch,phone,incomingDefault]=await Promise.all([

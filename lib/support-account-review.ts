@@ -15,6 +15,7 @@ export function supportMissingActivityConcern(text:string){
  if(/\b(?:my|the) (?:ai )?bot (?:is |says it is )?(?:on|running|active)\b[^.!?\n]{0,35}\b(?:not|isn[’']?t) (?:running|working)\b/i.test(text))return true;
  if(/\b(?:my|the) (?:ai )?bot (?:is )?taking (?:so |too )?long to find (?:a |any )?deals?\b/i.test(text))return true;
  if(/\b(?:my|the) (?:ai )?bot\b[^.!?\n]{0,25}\b(?:only|still)\b[^.!?\n]{0,25}\b(?:leads|properties) from (?:last week|yesterday|last month)\b/i.test(text))return true;
+ if(/\b(?:my|the) (?:bot|ai) (?:has not|hasn[’']t) (?:completed|done) (?:any )?work\b/i.test(text))return true;
  // A running workspace with no progress is an activity complaint. Require
  // that complete statement, not unrelated browser/video or software updates.
  if(/\b(?:app|apps|workspace|bot|ai) (?:is|has been|have been|was|had been) running\b[^.!?\n]{0,65}\b(?:without (?:any )?|no )(?:movement|progress|activity)(?: or updates?)?[.!?\s]*$/i.test(text))return true;

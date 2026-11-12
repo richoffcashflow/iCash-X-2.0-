@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'deal-supervisor', 'deal-supervisor-database',
  'assistant-text-actions', 'assistant-text-action-route', 'property-followthrough',
  'financial-prequalification', 'financial-credit-outcomes', 'financial-query-filters', 'financial-query-contract',
  'cash-offer-math', 'offer-policy', 'screening-job', 'screening-recalculation', 'automatic-call-offer', 'seller-text-offer', 'free-sample',
@@ -12,7 +13,7 @@ const suites = [
  'dealmachine-list-quality', 'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',
- 'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources',
+ 'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources', 'research-feed-request-efficiency', 'starter-export-dependency',
  'owner-export-preflight', 'owner-export-preflight-database', 'owner-export-preflight-review', 'owner-export-preflight-cohorts',
  'per-user-market-diversity', 'per-user-market-diversity-integration', 'research-request-reuse', 'research-request-pacing', 'market-hold-continuation', 'market-hold-continuation-service', 'discovery-hold-backoff', 'research-market-duplicate-cooling', 'research-duplicate-yield-cooling', 'research-provider-feedback', 'seller-interest-evidence',
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
@@ -72,6 +73,7 @@ const suites = [
  'support-activity-confirmation',
  'support-progress-evidence',
  'support-case-reference', 'support-calling-pause-boundary', 'support-stopped-search',
+ 'support-mixed-location', 'support-refund-topic-change', 'support-city-request',
  'support-work-expectations',
  'support-credit-balance', 'support-call-hold-guidance', 'support-agreement-autofill', 'support-funding-notice', 'support-funding-expectations',
 ];

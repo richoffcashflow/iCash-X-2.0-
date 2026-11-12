@@ -1,4 +1,5 @@
 import {conversationTrustInstructions} from './conversation-trust.ts';
+import {boundedBytes} from './required-call-recording-provider.ts';
 
 /** Server-only provider adapter. Never return provider errors, credentials or raw responses to public clients. */
 export async function elevenRequest<T>(path:string, body?:unknown, fetcher:typeof fetch=fetch,signal?:AbortSignal):Promise<T> {
@@ -11,12 +12,14 @@ export async function elevenRequest<T>(path:string, body?:unknown, fetcher:typeo
   if(!r.ok){
    // Only known permission identifiers are safe to surface; never log provider bodies.
    let permission='',validation='';
-   try{const d=await r.json();const m=typeof d?.detail?.message==='string'?d.detail.message:'';permission=['convai_write','convai_read','voices_read','text_to_speech'].find(p=>m.includes(p))??'';
+   try{const d=JSON.parse((await boundedBytes(r,8192)).toString('utf8'));const m=typeof d?.detail?.message==='string'?d.detail.message:'';permission=['convai_write','convai_read','voices_read','text_to_speech'].find(p=>m.includes(p))??'';
     if(r.status===422&&Array.isArray(d.detail))validation=d.detail.slice(0,3).map((e:{loc?:unknown[];type?:unknown})=>(e.loc??[]).filter(x=>typeof x==='string'&&/^[a-zA-Z0-9_]+$/.test(x)).join('_')).join('_').slice(0,200).toUpperCase();
    }catch{}
    throw new Error(`VOICE_HTTP_${r.status}${permission?'_'+permission.toUpperCase():''}${validation?'_'+validation:''}`);
   }
-  return r.json();
+  // Headers alone do not confirm a write. A lost or malformed success body
+  // retains the same unknown-outcome classification as a connection failure.
+  try{return await r.json();}catch{throw new Error(body===undefined?'VOICE_INVALID_RESPONSE':'VOICE_WRITE_UNKNOWN_NO_RETRY');}
 }
 
 export function voiceTestAgent(voiceId:string) {

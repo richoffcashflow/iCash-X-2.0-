@@ -28,7 +28,7 @@ export function customerPhoneProvider(env:NodeJS.ProcessEnv=process.env,fetcher:
  const authorization='Basic '+Buffer.from(account+':'+secret).toString('base64');
  async function read(url:string,body?:URLSearchParams){
   const r=await fetcher(url,{method:body?'POST':'GET',headers:{Authorization:authorization,...body?{'Content-Type':'application/x-www-form-urlencoded'}:{}},body:body?.toString(),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});
-  if(!r.ok)throw Error(body?'PHONE_PROVIDER_OUTCOME_UNKNOWN':'PHONE_PROVIDER_UNAVAILABLE');
+  if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error(body?'PHONE_PROVIDER_OUTCOME_UNKNOWN':'PHONE_PROVIDER_UNAVAILABLE');}
   return object(JSON.parse((await boundedBytes(r,262144)).toString('utf8')));
  }
  const base=`https://api.twilio.com/2010-04-01/Accounts/${account}`;

@@ -12,7 +12,7 @@ export function createRecordedReceptionProviders(env:RecordingEnv,fetcher:typeof
  async function eleven(path:string,body?:unknown,readSignal?:AbortSignal){
   if(!env.ELEVENLABS_API_KEY)throw Error('PROVIDER_CONFIGURATION_REQUIRED');const url=origin+path;
   const r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{'xi-api-key':env.ELEVENLABS_API_KEY,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',cache:'no-store',credentials:'omit',signal:AbortSignal.any([...(signal?[signal]:[]),...(readSignal?[readSignal]:[]),AbortSignal.timeout(8000)])});
-  if(!r.ok||r.redirected||r.url&&r.url!==url)throw Error('PROVIDER_UNAVAILABLE');return (await boundedBytes(r,262144)).toString('utf8');
+  if(!r.ok||r.redirected||r.url&&r.url!==url){await r.body?.cancel().catch(()=>undefined);throw Error('PROVIDER_UNAVAILABLE');}return (await boundedBytes(r,262144)).toString('utf8');
  }
  const agentPath=(id:string)=>{if(!/^agent_[A-Za-z0-9]+$/.test(id))throw Error('AGENT_REQUIRED');return '/v1/convai/agents/'+id;};
  return {
@@ -21,7 +21,7 @@ export function createRecordedReceptionProviders(env:RecordingEnv,fetcher:typeof
    if(!sid(r.call_sid,'CA')||r.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!Number.isInteger(r.max_total_seconds)||r.max_total_seconds<60||r.max_total_seconds>600||r.max_total_seconds%60!==0)throw Error('CALL_BINDING_REQUIRED');
    const url=`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls/${r.call_sid}.json`;
    const response=await fetcher(url,{method:'POST',headers:{Authorization:'Basic '+Buffer.from(env.TWILIO_ACCOUNT_SID+':'+env.TWILIO_AUTH_TOKEN).toString('base64'),'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({TimeLimit:String(r.max_total_seconds),StatusCallback:recordedReceptionUrl+'/terminal?id='+r.id,StatusCallbackMethod:'POST'}),redirect:'error',cache:'no-store',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
-   if(response.redirected||response.url&&response.url!==url)throw Error('CALL_BOUND_UNCONFIRMED');
+   if(response.redirected||response.url&&response.url!==url){await response.body?.cancel().catch(()=>undefined);throw Error('CALL_BOUND_UNCONFIRMED');}
    if(!response.ok){
     // Only numeric carrier diagnostics. Never log credentials, phones, or raw bodies.
     let code=0;try{const body=object(JSON.parse((await boundedBytes(response,32768)).toString('utf8')));if(Number.isSafeInteger(body.code))code=Number(body.code);}catch{}

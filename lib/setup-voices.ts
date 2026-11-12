@@ -6,7 +6,7 @@ import type {SetupVoice} from './bot-setup';
 const catalogVoices=unstable_cache(async():Promise<SetupVoice[]>=>{
  const key=process.env.ELEVENLABS_API_KEY;if(!key)return [];
  const r=await fetch('https://api.elevenlabs.io/v2/voices?page_size=100',{headers:{'xi-api-key':key},signal:AbortSignal.timeout(10000),redirect:'error',cache:'no-store'});
- if(!r.ok)throw Error('Voice catalog unavailable');
+ if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error('Voice catalog unavailable');}
  const catalog=await r.json() as {voices:{voice_id:string;name:string;category:string;preview_url?:string}[]};
  return ([['eric','Calm & direct'],['sarah','Warm & conversational'],['chris','Relaxed & direct'],['jessica','Clear & friendly']] as const).flatMap(([key,description])=>{
   const v=catalog.voices.find(v=>v.category==='premade'&&new RegExp(`^${key}(\\s|$)`,'i').test(v.name));

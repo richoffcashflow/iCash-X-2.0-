@@ -34,5 +34,35 @@ try{
  await assert.rejects(one('select icash_owner_cost_evidence($1,30,false)',[uid(11)]),/Owner required/);
  await assert.rejects(one('select icash_owner_cost_evidence($1,999,false)',[owner]),/Invalid report filters/);
  for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'icash_owner_cost_evidence(uuid,integer,boolean)','execute')",[role]),false);
+ // A zero-dollar settlement alone is not proof of no provider activity.
+ await pg.exec(`create schema icash_recording_private;create schema icash_private;
+ alter table icash_operation_spend add dispatched_at timestamptz,add charged_cents bigint,add settlement_evidence text;
+ alter table icash_cost_observations add source_ref text;
+ create table icash_recording_private.predial_aborts(operation_key text,account_id uuid,job_id uuid,ticket_id uuid,dispatched_at timestamptz,boundary text,created_at timestamptz,reason text);
+ create table icash_voice_jobs(id uuid,account_id uuid,operation_key text,state text,outcome text,provider_call_sid text,conversation_id text);
+ create table icash_call_recordings(operation_key text,voice_job_id uuid);
+ create table icash_live_conversations(operation_key text);
+ create table icash_private.provider_costs(operation_key text);`);
+ await pg.exec(read('config/completion-reliability.sql').split('-- BEGIN no-dispatch cost evidence')[1].split('-- END no-dispatch cost evidence')[0]);
+ const operation='voice:'+uid(100),ticket=uid(101),reason='business_number_verification_required';
+ await q("insert into icash_operation_spend(operation_key,account_id,state,actual_micros,dispatched_at,charged_cents,settlement_evidence) values($1,$2,'settled',0,now()-interval '1 minute',0,$3)",[operation,uid(1),'voice-predial-abort-v1:'+ticket+':'+reason]);
+ assert.equal((await report()).missingManifestCount,2,'A bare zero-dollar row remains missing evidence');
+ await q("insert into icash_voice_jobs values($1,$2,$3,'held',$4,null,null)",[uid(100),uid(1),operation,reason]);
+ await q("insert into icash_recording_private.predial_aborts select operation_key,account_id,$2,$3,dispatched_at,'before_recording_create_v1',now(),$4 from icash_operation_spend where operation_key=$1",[operation,uid(100),ticket,reason]);
+ const ledger=await one('select jsonb_agg(to_jsonb(o) order by operation_key) from icash_operation_spend o');
+ r=await report();assert.equal(r.verifiedNoDispatchCount,1);assert.equal(r.missingManifestCount,1);assert(validOwnerCostEvidence(r,{days:30,includeOwner:false}));
+ for(const mutation of [
+  "update icash_recording_private.predial_aborts set account_id='"+uid(2)+"'",
+  "update icash_recording_private.predial_aborts set dispatched_at=now()",
+  "update icash_recording_private.predial_aborts set boundary='unknown'",
+  "update icash_operation_spend set charged_cents=1 where operation_key='"+operation+"'",
+  "update icash_voice_jobs set provider_call_sid='late-provider-call'",
+  "insert into icash_call_recordings values('"+operation+"','"+uid(100)+"')",
+  "insert into icash_live_conversations values('"+operation+"')",
+  "insert into icash_private.provider_costs values('"+operation+"')",
+  "insert into icash_cost_observations(provider,event_key,amount,units) values('twilio','"+operation+":late',1,'usd')",
+ ]){await pg.exec('begin;'+mutation);assert.equal((await report()).verifiedNoDispatchCount,0,mutation);assert.equal((await report()).missingManifestCount,2);await pg.exec('rollback');}
+ assert.deepEqual(await one('select jsonb_agg(to_jsonb(o) order by operation_key) from icash_operation_spend o'),ledger,'Reporting never rewrites zero settlements or manufactures manifests');
+ for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'icash_verified_predial_no_cost(text)','execute')",[role]),false);
  console.log('Owner cost evidence: canonical credits, receipt/estimate separation, scope, missing/mismatched costs and private access verified.');
 }finally{await pg.close();}
