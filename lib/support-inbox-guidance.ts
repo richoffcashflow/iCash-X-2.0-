@@ -6,6 +6,27 @@ const voicemailSubject=(text:string)=>/\b(?:voice[ -]?mails?|answering[ -]machin
 const voicemailTiming=(text:string)=>voicemailSubject(text)&&/\b(?:beep|tone|speaks? over|speaking over|talks? over|talking over|wait(?:ing)? for|timing)\b/i.test(text);
 export const supportVoicemailComplaint=(text:string)=>voicemailSubject(text)&&(/\b(?:count\w*|classif\w*|responses?|dashboard|reports?)\b/i.test(text)||voicemailTiming(text));
 
+/** A bare form follow-up needs the immediately continuing agreement subject.
+ * Earlier assistant copy is not product evidence; operator findings stop inheritance. */
+function agreementAutofillQuestion(context:SupportContext){
+ const index=context.messages.findLastIndex(turn=>turn.role==='user');
+ const question=context.messages[index]?.content??'';
+ const autofill=/\b(?:auto[ -]?fill|automatically fill|fill.*automatically)\b/i;
+ const otherForm=/\b(?:checkout|payment|billing|tax|sign[ -]?in|log[ -]?in|registration|browser|contact)\b/i;
+ if(!autofill.test(question)||otherForm.test(question))return false;
+ const agreement=/\b(?:agreements?|contracts?)\b/i;
+ if(agreement.test(question))return true;
+ if(!/\bforms?\b/i.test(question))return false;
+ for(const turn of context.messages.slice(Math.max(0,index-10),index).reverse()){
+  if(turn.role==='operator')return false;
+  if(turn.role!=='user')continue;
+  if(otherForm.test(turn.content)||/\b(?:that worked|it worked|fixed now|problem solved)\b/i.test(turn.content))return false;
+  if(agreement.test(turn.content))return true;
+  if(!/\bforms?\b/i.test(turn.content)||!autofill.test(turn.content))return false;
+ }
+ return false;
+}
+
 /** Narrow, source-backed answers for observed inbox failures. This only explains
  * controls and supplied evidence; it never changes control, sends or settles work. */
 export function supportInboxGuidance(context:SupportContext):SupportReply|null{
@@ -62,7 +83,7 @@ export function supportInboxGuidance(context:SupportContext):SupportReply|null{
   }
  }
  if(/\b(?:agreements?|contracts?)\b/i.test(issue)&&/\b(?:not working|isn[’']?t working|doesn[’']?t work|broken|fails?|failed|error|blank|spinning|can[’']?t (?:send|save|sign|download)|cannot (?:send|save|sign|download))\b/i.test(issue))return answer('The agreement problem is still unresolved. Which step fails: opening the draft, saving edits, sending for signatures, or opening the signing link?');
- if(/\b(?:agreements?|contracts?|form)\b/i.test(issue)&&/\b(?:auto[ -]?fill|automatically fill|fill.*automatically)\b/i.test(issue))return answer('The agreement can fill empty fields from supported saved conversation details, while keeping your edits. Review the names, price and date, and complete any missing information before sending for signatures. Returning control to the bot does not confirm that an agreement was prepared or sent.');
+ if(agreementAutofillQuestion(context))return answer('The agreement can fill empty fields from supported saved conversation details, while keeping your edits. In Edit agreement, choose Fill from saved conversations. Review the names, price and date, and complete any missing information before sending for signatures. Returning control to the bot does not confirm that an agreement was prepared or sent.');
  if(/\b(?:resolution (?:box|note)|seller conversation|unanswered question)\b/i.test(issue)&&/\b(?:review|read|see|open)\b/i.test(issue))return answer('Use Open conversation on the seller follow-up to review Texts; switch to Calls for recordings. Only save a resolution note after you have completed the follow-up. If that conversation will not open, what happens when you select it?');
  if(/\b(?:calls?|recordings?|conversation)\b/i.test(issue)&&/\b(?:cut(?:ting)? (?:(?:it|the call|the conversation) )?short|cut off|ended early|hung up|hangs? up|only.{0,25}(?:yes|address)|nothing else|didn[’']?t hear anything else)\b/i.test(issue))return answer('A recording stopping early does not tell us whether the call ended or playback failed. Open that property’s Calls and compare the recording with its transcript and duration. Which property and call time does this affect?');
  const noReply=/\b(?:no one|nobody|none)\b.{0,40}\b(?:answer\w*|respond\w*|repl\w*)\b|\bno (?:seller |text )?(?:responses?|replies)\b|\b(?:not|never|haven[’']?t|hasn[’']?t|didn[’']?t|isn[’']?t|aren[’']?t|without)\b.{0,35}\b(?:replies|responses|responding|replying|a reply|a response)\b/i.test(issue);

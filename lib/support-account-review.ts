@@ -55,6 +55,18 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  if(supportVoicemailComplaint(q))return null;
  if(/\b(?:(?:more|extra) (?:money|credits?)|(?:add|adding|fund)\b.{0,25}\b(?:bot|account)|buy (?:more )?credits?)\b/i.test(q)&&/\b(?:contracts?|deals?|results?|work differently|work faster|better)\b/i.test(q)&&!/\b(?:purchase price|seller price|assignment fee|offer amount)\b/i.test(q))
   return answer('Adding money buys more prepaid work credits for eligible research, contact lookup, calls and texts. It does not guarantee a contract, seller response or closed deal, and it does not change the bot’s strategy. More credits do not fix a technical problem or override Pause. You don’t need to pay more to troubleshoot missing activity.');
+ // These existing funding-banner labels describe a status refresh, not a
+ // pending checkout or proof that a task started. Never infer paid state from a quote.
+ if(/\bcredits added\b/i.test(q)&&/\b(?:checking your bot[’']?s status|let[’']?s get to work)\b/i.test(q)&&!/\b(?:checkout|sign[ -]?in|code|card|charged|charges|subscription|membership|access|voice|agreements?|contracts?|unrecogni[sz]ed|unauthorized)\b/i.test(q)){
+  const explanation='Those notices describe added credits and a bot-status refresh, not a pending payment. They do not prove that work has started, and you do not need to pay again to troubleshoot them.';
+  if(context.kind!=='account')return answer(explanation+' I can’t verify your account’s current activity from this guest chat.');
+  const work=context.evidence?.find(e=>e.key==='work'&&e.status!=='unknown');
+  const progress=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach?.progress;
+  if(work?.code==='paused'||progress?.status==='paused')return answer(explanation+' Your bot is currently paused. This chat has not changed that control.');
+  if(progress?.status==='settling'||progress?.health?.status==='blocked'&&progress.health.reason==='pending_work')return answer(explanation+' The latest activity check shows earlier work awaiting confirmation. That still needs review; no restart time is confirmed.',true);
+  if(progress?.health?.status==='blocked')return answer(explanation+' The latest activity check flags work as blocked. Earlier recorded activity does not establish that it is progressing now. This needs investigation; no repair or restart time is confirmed.',true);
+  return answer(explanation+(progress?' Check the property’s saved calls and texts for actual results; the notice alone cannot confirm current progress.':' I can’t verify current activity from the available checks.'));
+ }
  if(context.kind!=='account')return null;
  const o=context.evidence?.find(e=>e.key==='outreach')?.outreach;
  const work=context.evidence?.find(e=>e.key==='work');
