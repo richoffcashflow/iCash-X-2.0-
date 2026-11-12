@@ -13,7 +13,7 @@ const suites = [
  'dealmachine-list-quality', 'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',
- 'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources', 'research-feed-request-efficiency',
+ 'owner-active-export', 'owner-active-export-database', 'owner-active-export-contact-sources', 'research-feed-request-efficiency', 'starter-export-dependency',
  'owner-export-preflight', 'owner-export-preflight-database', 'owner-export-preflight-review', 'owner-export-preflight-cohorts',
  'per-user-market-diversity', 'per-user-market-diversity-integration', 'research-request-reuse', 'research-request-pacing', 'market-hold-continuation', 'market-hold-continuation-service', 'discovery-hold-backoff', 'research-market-duplicate-cooling', 'research-duplicate-yield-cooling', 'research-provider-feedback', 'seller-interest-evidence',
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
