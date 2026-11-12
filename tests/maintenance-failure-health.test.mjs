@@ -8,11 +8,12 @@ const original=console.error,logs=[];console.error=(...args)=>logs.push(args);
 const priorEnv={VERCEL_ENV:process.env.VERCEL_ENV,ICASH_RELIABILITY_EMAIL_ENABLED:process.env.ICASH_RELIABILITY_EMAIL_ENABLED};
 process.env.VERCEL_ENV='production';process.env.ICASH_RELIABILITY_EMAIL_ENABLED='false';
 try{
- for(const failure of ['none','voice_read','pro_change','capacity_change','voice_recovery','voice_review','text_configuration','research_repair','research_repair_and_snapshot']){
+ for(const failure of ['none','voice_read','pro_change','capacity_change','voice_recovery','voice_review','text_configuration','research_repair','research_repair_and_snapshot','external_monitor']){
   const stages=[],heartbeats=[];let authorized=false,releaseVoice;
   const voiceWait=new Promise(resolve=>{releaseVoice=resolve;});
   const db=async(path,_method,body)=>{
    stages.push(path);
+   if(path.startsWith('icash_integration_checks?'))return failure==='external_monitor'?[{checked_at:'2020-01-01T00:00:00Z',result:{observedAt:'2020-01-01T00:00:00Z',releaseSha:'a'.repeat(40),intervalMs:60000}}]:[];
    if(path==='rpc/icash_close_inactive_support')return 0;
    if(path==='rpc/icash_record_service_heartbeat'){heartbeats.push(body.p_status);return null;}
    if(path==='rpc/icash_repair_expired_research_configs'&&failure.startsWith('research_repair'))throw Error('private database details');
@@ -59,7 +60,7 @@ try{
   assert.equal(stages.filter(s=>s==='rpc/icash_refresh_account_work_snapshot').length,1,'Snapshot remains independent');
   assert.equal(body.lanes.capacity.ok,!['voice_read','pro_change','capacity_change','voice_recovery','voice_review'].includes(failure));
   assert.equal(body.lanes.textReceipts.ok,failure!=='text_configuration');
-  assert.equal(body.monitored,!failure.startsWith('research_repair'));
+  assert.equal(body.monitored,!failure.startsWith('research_repair')&&failure!=='external_monitor');
   for(const lane of ['outbound','recording','ownerRecording','reception','senderVolume'])assert.equal(body.lanes[lane].ok,true);
  }
  assert(!JSON.stringify(logs).includes('private'),'Only fixed diagnostics leave failure boundaries');
