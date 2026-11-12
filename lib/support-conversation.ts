@@ -31,7 +31,7 @@ import {supportInboxGuidance} from './support-inbox-guidance.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean;managementReview?:boolean;routineGuidance?:true};
-export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean;historyComplete?:boolean;contactKnown?:boolean};
+export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean;historyComplete?:boolean;contactKnown?:boolean;conversationReference?:string};
 const noRefunds='All sales are final; we do not offer refunds. I can help fix an access or software issue here.';
 const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'[code removed]');
 

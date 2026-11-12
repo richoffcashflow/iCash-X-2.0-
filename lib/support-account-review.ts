@@ -1,6 +1,7 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportRenewalCancellationRequested} from './support-policy.ts';
 import {supportVoicemailComplaint} from './support-inbox-guidance.ts';
+import {supportProgressDelay} from './support-progress-evidence.ts';
 
 const existingOutreachConcern=(text:string)=>/\b(?:ai|bot|automated|automation|research|outreach|calls?|texts?|sellers?|properties|leads?)\b/i.test(text)&&/\b(?:slow|slower|not doing much|not (?:been )?doing anything|isn[’']?t doing anything|hasn[’']?t been doing anything|no interested|no interest|haven[’']?t (?:gotten|got|had|received).{0,30}interested)\b/i.test(text);
 /** A complaint about absent work is not proof of its cause. Keep the subject
@@ -86,13 +87,13 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   return answer(explanation+(progress?' Check the property’s saved calls and texts for actual results; the notice alone cannot confirm current progress.':' I can’t verify current activity from the available checks.'));
  }
  if(context.kind!=='account')return null;
- const o=context.evidence?.find(e=>e.key==='outreach')?.outreach;
+ const o=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
  const work=context.evidence?.find(e=>e.key==='work');
  const paused=work?.code==='paused'||o?.progress?.status==='paused';
  const state=paused?'Your bot is paused. This chat has not resumed it or authorized new work.':work?.code==='not_paused'&&work.status==='ok'?'Your bot is switched on; that setting alone does not prove outreach is running.':'I can’t confirm the current Run/Pause setting from these checks.';
  const totals=o?`${o.callsStarted} call attempts and ${o.textsSent} texts are recorded overall, with ${o.textReplies} text replies. These totals do not prove seller interest or recent automatic outreach.`:'I can’t verify the call and text records from the available checks.';
  const voice=context.evidence?.find(e=>e.key==='voice'&&e.status==='attention');
- const blocker=paused?'The pause explains why new work is stopped now, but not why outreach was missing before it.':voice?.detail??(o?.progress?.status==='settling'?'Earlier work is awaiting final cost confirmation.':o?.progress?.status==='budget_reached'?'Available work credits do not cover the next task.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='pending_work'?'An earlier task is awaiting confirmation.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='no_completed_work'?'The saved checks report no completed work and flag the activity as blocked; I haven’t verified the specific cause or a restart time.':context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New property research is waiting for capacity.':'I haven’t verified the specific cause of the missing or slow activity.');
+ const blocker=paused?'The pause explains why new work is stopped now, but not why outreach was missing before it.':voice?.detail??(o?.progress?.status==='settling'?'Earlier work is awaiting final cost confirmation.':o?.progress?.status==='budget_reached'?'Available work credits do not cover the next task.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='pending_work'?'An earlier task is awaiting confirmation.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='no_completed_work'?supportProgressDelay(o,false):context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New property research is waiting for capacity.':'I haven’t verified the specific cause of the missing or slow activity.');
  const automatedQuestion=/\b(?:automated|automatic|automatically|ai|bot)\b/i.test(q)&&/\b(?:calls?|calling|sms|texts?|texting|outreach|speak)\b/i.test(q)&&/\b(?:available|availability|enabled|able|blocker|missing setup|bot to speak|bot to conduct|no recorded|0 calls|zero calls)\b/i.test(q);
  if(automatedQuestion){
   const capability='Eligible seller calls and texts can run automatically; the property’s Call button is for you to speak through your browser microphone.';

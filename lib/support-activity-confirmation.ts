@@ -1,5 +1,6 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportMissingActivityConcern,supportCurrentResearchQuestion} from './support-account-review.ts';
+import {supportProgressDelay} from './support-progress-evidence.ts';
 
 const confirmation=(text:string)=>/^(?:(?:can|could) (?:you|u) (?:please )?confirm(?: (?:it|that|this))?|(?:please )?check again|is (?:it|this|that) fixed(?: yet)?|why (?:(?:hasn[’']t) (?:it|this|that)|has (?:it|this|that) not) been (?:fixed|rectified))[?!.\s]*$/i.test(text.trim());
 const repairExpectation=(text:string)=>/^(?:so )?(?:(?:when )?will (?:it|this|the (?:issue|problem|bot)) be|is (?:it|this|the (?:issue|problem|bot)) going to be|(?:it|this|the (?:issue|problem)) (?:is going to|will) be) (?:fixed|repaired)(?: so (?:i can (?:start )?(?:getting|receiving) leads(?: and (?:the |my )?bot can (?:start )?working)?|(?:the |my )?bot can (?:start )?work(?:ing)?))?[?!.\s]*$/i.test(text.trim());
@@ -35,7 +36,7 @@ export function supportActivityConfirmation(context:SupportContext):SupportReply
  }else if(progress?.status==='settling'||progress?.health?.status==='blocked'&&progress.health.reason==='pending_work'){
   detail='The latest activity check shows earlier work still awaiting confirmation. I can confirm that remaining hold, but not a repair or restart time. The original work result needs review before this can be called fixed.';
  }else if(progress?.health?.status==='blocked'&&progress.health.reason==='no_completed_work'){
-  detail='The latest activity check still flags no completed work. That confirms the missing progress, but not its cause or a restart time. This needs service-side investigation; you do not need to repeat setup steps or buy more credits to troubleshoot it.';
+  detail=supportProgressDelay(outreach!)+' This needs service-side investigation; you do not need to repeat setup steps or buy more credits to troubleshoot it.';
  }else if(outreach&&Number.isSafeInteger(outreach.callsStarted)&&Number.isSafeInteger(outreach.textsSent)){
   detail=`The saved records show ${outreach.callsStarted} call attempts and ${outreach.textsSent} texts overall. Those totals do not confirm that new work is running or that the earlier problem is fixed. Current task results still need to be checked.`;
  }else{

@@ -6,6 +6,7 @@ import {supportAccountDeletionGuidance} from './support-account-deletion.ts';
 import {supportAnswer,supportRenewalCancellationRequested} from './support-policy.ts';
 import {supportMissingActivityConcern} from './support-account-review.ts';
 import {supportActivityConfirmation} from './support-activity-confirmation.ts';
+import {supportCaseReference} from './support-case-reference.ts';
 
 const generic = /^(?:I don[’']t have (?:enough information|a confirmed answer)|I haven[’']t confirmed the cause yet|There[’']s no confirmed change|I couldn[’']t verify your account details)/i;
 const stuck = /\b(?:still|again|already|same (?:issue|problem)|did(?:n[’']t| not) (?:help|work)|not (?:working|getting)|no (?:replies|response|code)|not getting anywhere|going in circles|frustrated|upset|you keep|all day)\b/i;
@@ -30,6 +31,8 @@ function reviewExplanation(context:SupportContext,question:string,contactRequest
 export function supportManagementReview(context:SupportContext, answer:SupportReply):SupportReply {
  const index=context.messages.findLastIndex(turn=>turn.role==='user');
  if(index<0)return answer;
+ const reference=supportCaseReference(context);
+ if(reference)return reference;
  const deletion=supportAccountDeletionGuidance(context);
  if(deletion){
   // Keep independently actionable payment findings alongside the deletion review.
