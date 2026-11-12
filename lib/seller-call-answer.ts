@@ -4,6 +4,7 @@ export const sellerCallAnswerPatterns={
  ownership:"\\b(?:is this|are you|am i (?:speaking|talking) (?:to|with)) (?:the )?(?:property )?owner\\b|\\bdo you (?:still )?own\\b|\\bis .{1,100} (?:your (?:house|home|property)|yours)\\b",
  interest:"\\b(?:interested.{0,35}(?:sell|cash offer)|consider (?:selling|a cash offer)|want to sell|open to.{0,15}cash offer)\\b",
  specificPrice:"\\$\\s*[0-9]|\\b[0-9][0-9,.]*\\s*(?:dollars?|grand|thousand|million|k|m)\\b|\\b(?:hundred|thousand|million) (?:dollars?|cash|offer)\\b",
+ unmarkedPrice:"\\b(?:sell(?:ing)?(?: (?:it|your (?:home|house|property)|the (?:home|house|property)))? (?:for|at)|(?:cash )?offer (?:of|at)|price (?:of|at|is)) (?:about |around |roughly )?(?:[0-9][0-9,.]*(?=\\s*(?:[?!.]|$|if\\b|with\\b))|(?:(?:a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|and) ){1,7}(?:hundred|thousand|million|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\\b)",
  negative:"^(?:no|nope|nah|naw)(?:[,! .]+(?:thanks|thank you|gracias|sir|ma'am|maam|i (?:am not|don't|do not)|i'm not|we (?:are not|don't|do not)|that's not me))?[.! ,]*$|^(?:not me|i am not|i'm not|i don't|i do not|we are not|we don't|we do not)[.! ,]*$",
  negativeStart:"^(?:no|nope|nah|naw)\\b",
  politeNegative:"^no[,! .]+(?:thanks|thank you|gracias)[.! ,]*$",
@@ -20,7 +21,7 @@ export function sellerCallAnswerDisposition(question:string,answer:string):'decl
   if(new RegExp(sellerCallAnswerPatterns.negativeStart).test(a))return 'review';
  }
  // Rejecting an actual amount does not reject selling in general.
- if(new RegExp(sellerCallAnswerPatterns.specificPrice).test(last))return null;
+ if(new RegExp(sellerCallAnswerPatterns.specificPrice).test(last)||new RegExp(sellerCallAnswerPatterns.unmarkedPrice).test(last))return null;
  if(new RegExp(sellerCallAnswerPatterns.interest).test(last)&&new RegExp(sellerCallAnswerPatterns.negative).test(a))return 'declined';
  return null;
 }

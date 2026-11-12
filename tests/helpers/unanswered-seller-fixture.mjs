@@ -66,4 +66,4 @@ grant select on all tables in schema public to service_role;
 grant insert on icash_voice_jobs to service_role;
 grant update on icash_operating_budget to service_role;
 `;
-export function unansweredNativeFixtureSql(){return unansweredFixtureSql()+"begin;"+read('config/seller-call-answer-context.sql')+read('config/unanswered-seller-followups.sql')+read('config/seller-call-automated-greetings.sql')+read('config/seller-specific-price-answers.sql')+"commit;"+unansweredNativeSeedSql;}
+export function unansweredNativeFixtureSql(){return unansweredFixtureSql()+"begin;"+read('config/seller-call-answer-context.sql')+read('config/unanswered-seller-followups.sql')+read('config/seller-call-automated-greetings.sql')+read('config/seller-specific-price-answers.sql')+read('config/seller-unmarked-price-answers.sql')+"commit;"+unansweredNativeSeedSql;}
