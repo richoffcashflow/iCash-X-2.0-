@@ -41,7 +41,9 @@ try{
  const budget=await v('select to_jsonb(b) from icash_dealmachine_request_budget b');
  const source=await v("select to_jsonb(e)-'capacity_review_id' from icash_research_private.owner_exports e");
  const paid=await v('select to_jsonb(b) from icash_research_private.owner_batches b');
- await pg.exec(migration);assert.deepEqual(await v('select to_jsonb(b) from icash_dealmachine_request_budget b'),budget);
+ await pg.exec(migration);
+ await pg.exec(read('config/completion-reliability.sql').split('-- BEGIN export recovery')[1].split('-- END export recovery')[0]);
+ assert.deepEqual(await v('select to_jsonb(b) from icash_dealmachine_request_budget b'),budget);
  for(const mutation of [
   'update icash_discovery_configs set fixture_candidate=false','update icash_discovery_configs set contacts_enabled=false',
   'update icash_discovery_configs set auto_enabled=false','update icash_discovery_configs set enabled=false',
@@ -70,7 +72,9 @@ try{
   'update icash_research_private.request_reserve_policy set account_requests=1',
   "update icash_research_private.quota_feedback set blocked_until=now()+interval '1 hour'",
  ])await isolated(async()=>{await pg.exec(mutation);assert.equal(await probe(c.reviewId,'pending'),null,'Never switch to another beneficiary after '+mutation);});
- for(const p of ['pending','processing']){assert(await probe(c.reviewId,p));assert.equal(await probe(c.reviewId,p),null);await save(c.reviewId,p);}
+ for(const p of ['pending','processing']){assert(await probe(c.reviewId,p));assert.equal(await probe(c.reviewId,p),null);}
+ assert.equal(await v('select count(*)::int from icash_research_private.export_capacity_probes where receipt is not null'),1,'Both status reads can be admitted after inventory, without waiting for each other');
+ for(const p of ['processing','pending'])await save(c.reviewId,p);
  assert.equal(await v('select day_used from icash_dealmachine_request_budget'),8823);
  assert.equal(await v('select count(*)::int from icash_research_private.request_reserve_admissions'),3);
  assert.equal(await v('select count(distinct account_id)::int from icash_research_private.request_reserve_admissions'),1);

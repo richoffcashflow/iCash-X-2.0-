@@ -33,15 +33,20 @@ before = sql("select to_jsonb(b) from icash_dealmachine_request_budget b;")
 money = sql("select to_jsonb(s) from icash_operation_spend s;")
 source = sql("select to_jsonb(e)-'capacity_review_id' from icash_research_private.owner_exports e;")
 sql((ROOT / "config/starter-export-dependency.sql").read_text())
+sql((ROOT / "config/completion-reliability.sql").read_text().split('-- BEGIN export recovery')[1].split('-- END export recovery')[0])
 assert sql("select to_jsonb(b) from icash_dealmachine_request_budget b;") == before
 claims = contend(["set role service_role;select icash_claim_automatic_export_capacity(repeat('a',40));"] * 24)
 claims = [json.loads(c) for c in claims if c]
 assert len(claims) == 1, claims
 c = claims[0]
 for probe in ["inventory", "pending", "processing"]:
-    if probe != "inventory":
-        admitted = contend([f"set role service_role;select icash_claim_export_capacity_probe('{c['reviewId']}','{probe}');"] * 24)
-        assert len([x for x in admitted if x]) == 1, admitted
+    if probe == "pending":
+        # Admission is sequential because it uses a nonblocking shared lock.
+        # Both status views are admitted before saving either response.
+        for p in ["pending", "processing"]:
+            admitted = contend([f"set role service_role;select icash_claim_export_capacity_probe('{c['reviewId']}','{p}');"] * 24)
+            assert len([x for x in admitted if x]) == 1, admitted
+        assert sql("select count(*) from icash_research_private.export_capacity_probes where receipt is not null;") == "1"
     data = [{"export_id": "old-terminal", "status": "completed", "created_at": "2000-01-01T00:00:00Z"}] if probe == "inventory" else []
     raw = {"data": data, "pagination": {"limit": 100, "offset": 0, "total": len(data), "has_more": False}}
     receipt = {"httpStatus": 200, "raw": raw, "rawText": json.dumps(raw), "headers": {"minuteRemaining": 49, "dayRemaining": 700}}
