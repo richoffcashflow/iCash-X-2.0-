@@ -13,7 +13,7 @@ export async function serviceHealth():Promise<ServiceHealth>{
   const probe=async(path:string,database=false):Promise<Check>=>{
    if(!url||!key)return 'unavailable';
    try{
-    const response=await fetch(`${url}${path}`,{headers:{apikey:key,...(database?{Authorization:`Bearer ${key}`}:{})},cache:'no-store',signal:AbortSignal.timeout(5000)});
+    const response=await fetch(`${url}${path}`,{headers:{apikey:key,...(database?{Authorization:`Bearer ${key}`}:{})},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});
     if(!response.ok){await response.body?.cancel();return 'unavailable';}
     if(database){const rows:unknown=await response.json();return Array.isArray(rows)&&rows.some(row=>row?.id===1)?'ok':'unavailable';}
     await response.body?.cancel();return 'ok';
@@ -22,7 +22,7 @@ export async function serviceHealth():Promise<ServiceHealth>{
   const workflowProbe=async():Promise<Check>=>{
    if(!url||!key)return 'unavailable';
    try{
-    const response=await fetch(`${url}/rest/v1/rpc/icash_reliability_status`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(5000)});
+    const response=await fetch(`${url}/rest/v1/rpc/icash_reliability_status`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:'{}',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});
     if(!response.ok){await response.body?.cancel();return 'unavailable';}
     const report=reliabilitySchema.parse(await response.json());
     return report.fresh&&report.status==='ok'?'ok':'degraded';

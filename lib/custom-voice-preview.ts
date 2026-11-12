@@ -26,9 +26,9 @@ async function save(row:CustomVoicePreview,changes:Record<string,unknown>) {
 }
 const providerId=(value:string|null)=>value&&/^[A-Za-z0-9_-]{1,200}$/.test(value)?value:null;
 async function audioBytes(response:Response) {
- if(!response.ok||!/^audio\/mpeg(?:;|$)/i.test(response.headers.get('content-type')??'')||!response.body)throw Error('PREVIEW_AUDIO_UNCONFIRMED');
+ if(!response.ok||!/^audio\/mpeg(?:;|$)/i.test(response.headers.get('content-type')??'')||!response.body){await response.body?.cancel().catch(()=>undefined);throw Error('PREVIEW_AUDIO_UNCONFIRMED');}
  const reader=response.body.getReader(),parts:Uint8Array[]=[];let size=0;
- while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxCustomVoicePreviewBytes){await reader.cancel();throw Error('PREVIEW_AUDIO_TOO_LARGE');}parts.push(value);}
+ try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxCustomVoicePreviewBytes)throw Error('PREVIEW_AUDIO_TOO_LARGE');parts.push(value);}}finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
  const bytes=new Uint8Array(size);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}
  if(!previewAudioValid(bytes))throw Error('PREVIEW_AUDIO_UNCONFIRMED');return bytes;
 }

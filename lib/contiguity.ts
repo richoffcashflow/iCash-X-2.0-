@@ -20,7 +20,7 @@ async function request(key:string,path:string,fetcher:Transport,body?:unknown) {
     method:body===undefined?'GET':'POST',headers:{Authorization:`Token ${key}`,'Content-Type':'application/json'},
     body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)
   }); } catch { throw new Error(body===undefined?'CONTIGUITY_UNREACHABLE':'CONTIGUITY_SEND_UNKNOWN_DO_NOT_RETRY'); }
-  if(!response.ok) throw new Error(`CONTIGUITY_HTTP_${response.status}`);
+  if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw new Error(`CONTIGUITY_HTTP_${response.status}`);}
   try {return await response.json();}catch{throw new Error(body===undefined?'CONTIGUITY_INVALID_RESPONSE':'CONTIGUITY_SEND_UNKNOWN_DO_NOT_RETRY');}
 }
 export async function contiguityPreflight(key:string,fetcher:Transport=fetch) {

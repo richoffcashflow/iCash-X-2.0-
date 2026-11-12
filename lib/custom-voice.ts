@@ -34,6 +34,7 @@ export async function createCustomVoice(accountId:string,userId:string,bytes:Uin
  try{response=await fetcher('https://api.elevenlabs.io/v1/voices/add',{method:'POST',headers:{'xi-api-key':key},body:form,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(45000)});}
  catch{await save(row,{state:'unknown'});return customVoiceStatus(accountId);}
  if(!response.ok){
+  await response.body?.cancel().catch(()=>undefined);
   // Explicit request rejection can be retried; a server failure may have created a voice.
   await save(row,{state:[400,401,403,413,422,429].includes(response.status)?'failed':'unknown'});
   throw Error(response.status===401||response.status===403?'Custom voice setup needs a provider connection update. Your standard voice is still active.':'The voice could not be confirmed. Refresh its status before retrying.');

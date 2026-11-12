@@ -11,7 +11,7 @@ async function providerRequest(id:string,testMode:boolean,expire=false):Promise<
   ...(expire?{body:JSON.stringify({expire_at:new Date(Date.now()-60000).toISOString()})}:{}),
   cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)
  });
- if(!response.ok)throw Error('Could not verify signing status.');
+ if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('Could not verify signing status.');}
  return response.json();
 }
 

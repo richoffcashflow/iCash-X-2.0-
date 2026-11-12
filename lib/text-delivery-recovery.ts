@@ -8,11 +8,11 @@ async function readReceipt(path:string,key:string,fetcher:typeof fetch,now:()=>n
  const url=origin+path;
  const response=await fetcher(url,{method:'GET',headers:{Authorization:`Token ${key}`,Accept:'application/json'},
   cache:'no-store',redirect:'error',credentials:'omit',signal:AbortSignal.timeout(12000)});
- if(response.redirected||(response.url&&response.url!==url))throw Error('TEXT_RECEIPT_ORIGIN_MISMATCH');
+ if(response.redirected||(response.url&&response.url!==url)){await response.body?.cancel().catch(()=>undefined);throw Error('TEXT_RECEIPT_ORIGIN_MISMATCH');}
  // Bound the raw response while retaining exactly what the provider returned.
  const reader=response.body?.getReader();const chunks:Uint8Array[]=[];let bytes=0;
  if(reader)try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;
-  if(bytes>131072)throw Error('TEXT_RECEIPT_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
+  if(bytes>131072)throw Error('TEXT_RECEIPT_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
  const rawText=new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));let raw:unknown=null;
  try{raw=JSON.parse(rawText);}catch{/* Save the invalid original response; SQL will retain the hold. */}
  return {url,status:response.status,rawText,raw,checkedAt:new Date(now()).toISOString()};

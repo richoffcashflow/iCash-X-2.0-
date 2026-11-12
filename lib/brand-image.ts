@@ -3,7 +3,7 @@ export type BrandImage={title:string;imageKey:string};
 const bucket='icash-brand-images';
 function storageUrl(key:string){if(!/^[a-f0-9-]{36}\/[a-f0-9]{16}\/[0-2]\.jpg$/.test(key))throw Error('Invalid logo key');return `${process.env.SUPABASE_URL}/storage/v1/object/${bucket}/${key}`;}
 function storageHeaders(){const key=process.env.SUPABASE_SECRET_KEY;if(!key)throw Error('Storage unavailable');return {apikey:key,Authorization:`Bearer ${key}`};}
-export async function readBrandImage(key:string){const r=await fetch(storageUrl(key),{headers:storageHeaders(),cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('Logo unavailable');return new Uint8Array(await r.arrayBuffer());}
+export async function readBrandImage(key:string){const r=await fetch(storageUrl(key),{headers:storageHeaders(),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error('Logo unavailable');}return new Uint8Array(await r.arrayBuffer());}
 export async function generateBrandImages(id:string,name:string){
  const key=process.env.OPENAI_API_KEY;if(!key)throw Error('Logo design unavailable');
  const model='gpt-image-2.5-flare';
@@ -13,6 +13,6 @@ export async function generateBrandImages(id:string,name:string){
  const version=createHash('sha256').update(name).digest('hex').slice(0,16);
  const designs:BrandImage[]=[];
  for(let i=0;i<3;i++){const raw=data.data[i].b64_json;if(typeof raw!=='string'||raw.length>7000000)throw Error('Invalid image');const bytes=Buffer.from(raw,'base64');if(bytes.length>5000000||bytes[0]!==255||bytes[1]!==216)throw Error('Invalid JPEG');
- const imageKey=`${id}/${version}/${i}.jpg`;const upload=await fetch(storageUrl(imageKey),{method:'POST',headers:{...storageHeaders(),'Content-Type':'image/jpeg','x-upsert':'true'},body:bytes,signal:AbortSignal.timeout(15000)});if(!upload.ok)throw Error('Logo save failed');designs.push({title:`Option ${i+1}`,imageKey});}
+ const imageKey=`${id}/${version}/${i}.jpg`;const upload=await fetch(storageUrl(imageKey),{method:'POST',headers:{...storageHeaders(),'Content-Type':'image/jpeg','x-upsert':'true'},body:bytes,redirect:'error',signal:AbortSignal.timeout(15000)});await upload.body?.cancel().catch(()=>undefined);if(!upload.ok)throw Error('Logo save failed');designs.push({title:`Option ${i+1}`,imageKey});}
  return {designs,usage:{model,quality:'medium',images:3,provider:data.usage??null}};
 }

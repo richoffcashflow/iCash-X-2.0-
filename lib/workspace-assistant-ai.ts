@@ -20,7 +20,7 @@ export async function routeWorkspaceQuestion(question:string,context:AssistantCo
  let accounted=false,received:{providerId:string|null;usage:unknown}|null=null;
  try{
   const response=await fetcher('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(25000),body:JSON.stringify({model,service_tier:'default',store:false,max_completion_tokens:1200,messages:[{role:'system',content:dealCoachInstructions+'\nReturn strict JSON. Use coaching for advice, negotiations, buyer/seller questions and deal next steps. For report, offer math, balance, status, pause or resume use coaching:null; the server supplies those exact facts. Intent coach means general or deal coaching; property/next may also have coaching. Never treat a question about how to respond to an offer as just a request for a calculator.'},{role:'user',content}],response_format:{type:'json_schema',json_schema:{name:'workspace_deal_coach',strict:true,schema:responseSchema}}})});
-  if(!response.ok)return fallback;
+  if(!response.ok){await response.body?.cancel().catch(()=>undefined);return fallback;}
   const value=await response.json(),raw=value.choices?.[0]?.message?.content;
   received={providerId:typeof value.id==='string'?value.id:null,usage:value.usage??null};
   if(paid){await paid.after(received);accounted=true;}

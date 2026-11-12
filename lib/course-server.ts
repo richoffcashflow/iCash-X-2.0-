@@ -15,8 +15,8 @@ export function courseStorage(){const base=process.env.SUPABASE_URL,key=process.
 export async function courseAssetUrl(asset:CourseAsset){
  if(!asset.path)throw new CourseError(404,'This course file has not been uploaded yet.');
  const {base,headers}=courseStorage();
- const res=await fetch(`${base}/storage/v1/object/sign/${courseBucket}/${asset.path}`,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:7200}),cache:'no-store',signal:AbortSignal.timeout(15000)});
- if(!res.ok)throw Error('Course file unavailable');const data=await res.json();
+ const res=await fetch(`${base}/storage/v1/object/sign/${courseBucket}/${asset.path}`,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:7200}),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});
+ if(!res.ok){await res.body?.cancel().catch(()=>undefined);throw Error('Course file unavailable');}const data=await res.json();
  if(typeof data.signedURL!=='string'||!data.signedURL.startsWith(`/object/sign/${courseBucket}/`))throw Error('Invalid file destination');
  // Storage returns a path relative to /storage/v1, beginning with /object/sign.
  const url=new URL(`${base}/storage/v1${data.signedURL}`);if(url.origin!==new URL(base).origin||url.pathname!==`/storage/v1/object/sign/${courseBucket}/${asset.path}`||!url.searchParams.has('token'))throw Error('Invalid file destination');

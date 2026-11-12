@@ -13,7 +13,7 @@ export function stripeTest() {
 export function guestHash(token:string) { return createHash("sha256").update(token).digest("hex"); }
 export async function db<T>(path:string,method="GET",body?:unknown,signal?:AbortSignal):Promise<T> {
  if(!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) throw new Error("Database not configured");
- const response=await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`,{method,headers:{apikey:process.env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,"Content-Type":"application/json",Prefer:"return=representation"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
+ const response=await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`,{method,headers:{apikey:process.env.SUPABASE_SECRET_KEY,Authorization:`Bearer ${process.env.SUPABASE_SECRET_KEY}`,"Content-Type":"application/json",Prefer:"return=representation"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",redirect:"error",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
  if(!response.ok){
   try{throw await voiceReservationFailure(path,response.status,response);}
   finally{

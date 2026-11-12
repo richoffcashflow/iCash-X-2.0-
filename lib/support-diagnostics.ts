@@ -79,7 +79,7 @@ export async function supportDeploymentHealth(fetcher:typeof fetch=fetch){
  if(!token||!project)return {status:'unavailable',detail:'Vercel read-only diagnostics are not configured.'};
  const query=new URLSearchParams({projectId:project,target:'production',limit:'1'});if(process.env.VERCEL_TEAM_ID)query.set('teamId',process.env.VERCEL_TEAM_ID);
  try{
-  const r=await fetcher(`https://api.vercel.com/v6/deployments?${query}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();
+  const r=await fetcher(`https://api.vercel.com/v6/deployments?${query}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error();}
   const data=await r.json();const d=data.deployments?.[0];if(!d)throw Error();
   const state=['READY','ERROR','BUILDING','QUEUED','CANCELED','INITIALIZING'].includes(d.state)?d.state:'UNKNOWN';
   return {status:state,detail:`Latest production deployment: ${state}. This is deployment health, not proof that every request succeeded.`,deploymentId:typeof d.uid==='string'?d.uid:null,errorCode:typeof d.errorCode==='string'&&/^[A-Z0-9_]{1,100}$/.test(d.errorCode)?d.errorCode:null};

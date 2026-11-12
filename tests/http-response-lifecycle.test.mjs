@@ -100,3 +100,37 @@ await test('native HTTP streams close promptly after DB/auth errors and a comple
   server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
  }
 });
+
+await test('credential-bearing database and auth requests reject redirects without a second request',async()=>{
+ let requests=0,forwarded=0;
+ const destination=http.createServer((_request,response)=>{forwarded++;response.setHeader('Content-Type','application/json');response.end('{}');});
+ destination.listen(0,'127.0.0.1');await once(destination,'listening');
+ const server=http.createServer((_request,response)=>{requests++;response.writeHead(307,{Location:`http://127.0.0.1:${destination.address().port}/unexpected`});response.end();});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const oldUrl=process.env.SUPABASE_URL;
+ try{
+  process.env.SUPABASE_URL=`http://127.0.0.1:${server.address().port}`;
+  await assert.rejects(db('rpc/fixture','POST',{fixture:true}));
+  await assert.rejects(auth.authRequest('token?grant_type=refresh_token',{refresh_token:'fixture-only'}));
+  assert.equal(requests,2);assert.equal(forwarded,0,'Neither credentials nor a write may follow a redirect');
+ }finally{
+  process.env.SUPABASE_URL=oldUrl;
+  for(const item of [server,destination]){item.closeAllConnections();await new Promise(resolve=>item.close(resolve));}
+ }
+});
+
+await test('a successful header does not outlive the caller deadline while its body stalls',async()=>{
+ let requests=0;
+ const server=http.createServer((_request,response)=>{requests++;response.writeHead(200,{'Content-Type':'application/json'});response.write('{"pending":');});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const oldUrl=process.env.SUPABASE_URL;
+ try{
+  process.env.SUPABASE_URL=`http://127.0.0.1:${server.address().port}`;
+  await assert.rejects(db('rpc/fixture','POST',{},AbortSignal.timeout(50)),error=>['TimeoutError','AbortError'].includes(error.name));
+  await assert.rejects(auth.authRequest('user',undefined,undefined,undefined,AbortSignal.timeout(50)),error=>['TimeoutError','AbortError'].includes(error.name));
+  assert.equal(requests,2,'Body timeouts never replay database writes or refresh requests');
+ }finally{
+  process.env.SUPABASE_URL=oldUrl;
+  server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
+ }
+});

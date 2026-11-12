@@ -11,7 +11,7 @@ export async function readActiveReceptionReadiness(env:Record<string,string|unde
  if(!env.SUPABASE_URL||!env.SUPABASE_SECRET_KEY)return {status:'unavailable',providerChecksPass:false};
  const signal=AbortSignal.timeout(12000);
  const response=await fetcher(env.SUPABASE_URL+'/rest/v1/rpc/icash_get_recorded_reception_config',{method:'POST',headers:{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({p_called_number:receptionTarget.calledNumber}),redirect:'error',cache:'no-store',signal});
- if(!response.ok)throw Error('RECEPTION_READBACK_UNAVAILABLE');
+ if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('RECEPTION_READBACK_UNAVAILABLE');}
  const c=JSON.parse((await boundedBytes(response,65536)).toString('utf8')) as RecordedReceptionConfig|null;
  if(!validRecordedReceptionConfig(c)||c.provider_account_sid!==env.TWILIO_ACCOUNT_SID)return {status:'configuration_unavailable',providerChecksPass:false};
  const p=createRecordedReceptionProviders(env,fetcher,signal);
