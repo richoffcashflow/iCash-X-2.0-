@@ -19,7 +19,7 @@ export async function syncResearchExclusions(db:ResearchDb,request:typeof fetch=
  try{
   const endpoint=c.action==='sync'?`/lists/${c.listId}/items`:c.action==='recover'?'/lists?page=1&per_page=100':'/lists';
   const body=c.action==='create'?{name:c.name,source_type:'properties',add_as_prospects:false}:c.action==='sync'?{ids:c.ids.map(internalPropertyId),id_type:'internal_property_id',add_as_prospects:false}:null;
-  const r=await dealMachineRequest(db,c.action==='create'?'exclusion_create':'exclusion_sync',()=>request('https://api.v2.dealmachine.com/v1'+endpoint,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)}),c.accountId?{accountId:c.accountId,operationKey:'starter-exclusion:'+c.token}:{});
+  const r=await dealMachineRequest(db,c.action==='create'?'exclusion_create':'exclusion_sync',()=>request('https://api.v2.dealmachine.com/v1'+endpoint,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)}),c.accountId?{accountId:c.accountId,operationKey:'starter-exclusion:'+c.token}:c.action==='sync'?{operationKey:'maintenance-exclusion:'+c.token}:{});
   if(!r.ok)throw Error('RESEARCH_EXCLUSION_RESPONSE');
   stage='identity';const raw=object(r.raw);let data=object(raw.data);
   if(c.action==='recover'){
@@ -47,7 +47,7 @@ export async function syncResearchExclusions(db:ResearchDb,request:typeof fetch=
 }
 
 /** Drain only a small free maintenance batch. Every iteration uses the original
- * lease, ordinary quota and provider acknowledgment; no starter capacity, paid
+ * lease, bounded ordinary/maintenance quota and provider acknowledgment; no starter capacity, paid
  * lookup, fabricated sync timestamp or retry of an uncertain write. */
 export async function drainResearchExclusions(db:ResearchDb,request:typeof fetch=fetch,
  wait:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms)),now:()=>number=Date.now){
