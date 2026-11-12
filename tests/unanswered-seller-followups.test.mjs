@@ -13,7 +13,7 @@ const final=async()=>val('select icash_seller_phone_call_current($1,$2)',[a,awai
 try{
  assert.equal(read('tests/fixtures/unanswered-seller-native.sql'),unansweredNativeFixtureSql(),'native fixture matches real migrations');
  await pg.exec(unansweredFixtureSql());
- await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+read('config/seller-call-automated-greetings.sql')+'commit;');
+ await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+read('config/seller-call-automated-greetings.sql')+read('config/seller-specific-price-answers.sql')+'commit;');
  const migration=read('config/unanswered-seller-followups.sql');
  assert.equal(migration,read('supabase/migrations/20261112221500_unanswered_seller_followups.sql'));
  await pg.exec('begin;'+migration+'commit;');

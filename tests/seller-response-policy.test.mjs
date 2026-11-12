@@ -52,7 +52,10 @@ try{
  const greetingSql=readFileSync(new URL('../config/seller-call-automated-greetings.sql',import.meta.url),'utf8');
  assert.equal(greetingSql,readFileSync(new URL('../supabase/migrations/20261112222054_seller_call_automated_greetings.sql',import.meta.url),'utf8'));
  await pg.exec('begin;'+greetingSql+'commit;');
- for(const pattern of Object.values(sellerCallAnswerPatterns))assert(answerSql.includes(pattern.replaceAll('\\b','\\y')),'context SQL/TS pattern parity');
+ const priceSql=readFileSync(new URL('../config/seller-specific-price-answers.sql',import.meta.url),'utf8');
+ assert.equal(priceSql,readFileSync(new URL('../supabase/migrations/20261112224350_seller_specific_price_answers.sql',import.meta.url),'utf8'));
+ await pg.exec('begin;'+priceSql+'commit;');
+ for(const pattern of Object.values(sellerCallAnswerPatterns))assert((answerSql+priceSql).includes(pattern.replaceAll('\\b','\\y')),'context SQL/TS pattern parity');
  const runtimeSql=(await pg.query("select string_agg(pg_get_functiondef(p.oid),E'\\n') definitions from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('icash_seller_direct_response_match','icash_seller_response_disposition','icash_seller_call_disposition')")).rows[0].definitions;
  for(const pattern of Object.values(sellerResponsePatterns))assert(runtimeSql.includes(pattern.replaceAll('\\b','\\y')),'installed SQL contains the exact mirrored regex');
  for(const [body,expected] of fixtures){
@@ -66,6 +69,10 @@ try{
  }
  const spanishMachine='No se ha grabado nada. Grabe su mensaje después de la señal. Cuelgue cuando haya finalizado.';
  const callCases=[
+  ...['Would you consider selling for $120,000?','Would you be open to a $120,000 cash offer?','Are you interested in selling for 120k?','Would you consider selling for 120,000 dollars?','Would you consider selling for one hundred twenty thousand dollars?'].map(question=>[[{role:'agent',message:question},{role:'user',message:'No.'}],null]),
+  [[{role:'agent',message:'Would you consider selling for $120,000?'},{role:'user',message:'No, thanks.'}],null],
+  [[{role:'agent',message:'Would you consider selling for $120,000?'},{role:'user',message:'I am not interested in selling.'}],'declined'],
+  [[{role:'agent',message:'Are you the owner of the $120,000 house?'},{role:'user',message:'No.'}],'declined'],
   [[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:spanishMachine}],null],
   [[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:spanishMachine},{role:'user',message:'No.'}],null],
   [[{role:'agent',message:'Is this the owner of 12 Fixture Lane?'},{role:'user',message:spanishMachine},{role:'agent',message:'Are you the owner?'},{role:'user',message:'No.'}],'declined'],
