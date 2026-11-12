@@ -71,7 +71,7 @@ const suites = [
  'credit-refill-context', 'credit-refill-recommendation',
  'support-activity-confirmation',
  'support-work-expectations',
- 'support-credit-balance', 'support-call-hold-guidance', 'support-agreement-autofill', 'support-funding-notice',
+ 'support-credit-balance', 'support-call-hold-guidance', 'support-agreement-autofill', 'support-funding-notice', 'support-funding-expectations',
 ];
 for (const suite of suites) {
  const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});
