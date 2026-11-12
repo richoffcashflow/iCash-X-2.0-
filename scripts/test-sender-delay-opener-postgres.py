@@ -20,6 +20,9 @@ def main():
         'drop schema if exists icash_learning_policy_private cascade;'
         'drop schema if exists icash_work_private cascade;drop schema public cascade;create schema public;')
     sql(data['setup'] + data['migration'] + data['delay'] + data['age'])
+    sql((root / 'config/completion-reliability.sql').read_text().split('-- BEGIN sender health')[1].split('-- END sender health')[0])
+    sql("update icash_text_events set payload=jsonb_set(payload,'{timestamp}',to_jsonb(extract(epoch from now()-interval '2 hours')));"
+        "update icash_operation_spend set dispatched_at=now()-interval '3 hours';")
     sql('alter role service_role bypassrls;select fixture_seed_admission(n,n) from generate_series(2,13) n;')
     barrier = Barrier(12)
 
