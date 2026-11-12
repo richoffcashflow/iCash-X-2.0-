@@ -1,10 +1,11 @@
+import {sellerCallAnswerDisposition,sellerCallAnswerPatterns} from './seller-call-answer.ts';
 /** Source-word policy, not sentiment scoring. A soft refusal pauses automation;
  * only an actual stop-contact request establishes permanent suppression.
  * Keep the SQL implementation and parity fixtures in sync. */
 export type SellerResponseDisposition='opt_out'|'declined'|'review'|null;
 export const sellerResponsePatterns={
  optOut:"\\b(?:do not|don't|dont) send (?:me|us) (?:any |more |any more )?(?:texts?|messages?|emails?)(?: again)?\\b|(?:^|[.!?;] +)(?:please )?stop(?: please)?[.! ,]*$|\\b(?:stop|quit) (?:asking|bothering|harassing) (?:me|us)\\b|\\bplease unsubscribe(?: me)?\\b|(?:^|[,;.!] +)(?:please )?(?:unsubscribe|dnc)(?: me)?[.! ,]*$|^(?:please )?(?:stop|stopall|unsubscribe|cancel|end|quit|revoke|opt out|dnc)(?: please)?(?:[.! ,]*$|\\s*[,;.!]\\s*(?:please\\b|call\\b|text\\b|but\\b))|\\b(?:(?:do not|don't|dont) want (?:you|your (?:company|business)) to (?:ever )?(?:call|text|email|contact)\\b|(?:do not|don't|dont|never) (?:ever )?(?:call|text|email|message|contact)(?:ing)?(?: (?:me|us))?\\b(?! (?:it|that|the house|the property)\\b)|(?:stop|quit) (?:(?:calling|texting|emailing|messaging|contacting)\\b|(?:call|text|email|message|contact)\\b(?! (?:it|that|the house|the property)\\b))|(?:unsubscribe|remove|delete) (?:me|us|(?:my|our|this) (?:phone )?number)\\b|take (?:me|us|(?:my|our|this) (?:phone )?number) off\\b|leave (?:me|us) alone\\b|(?:put|add|place) (?:me|us|(?:my|our|this) (?:phone )?number) (?:on|in) (?:your |the )?(?:dnc|do not call)(?: list)?\\b|(?:i am|i'm) (?:already )?on (?:the |your )?(?:dnc|do not call) list\\b)",
- declined:"\\b(?:i|we)(?:'ve)? (?:(?:have|already) ){0,2}told (?:you|yall|y'all|you all) no\\b|\\b(?:i|we) (?:will not|won't|wont) (?:ever )?sell\\b|\\b(?:no thanks|no thank you|wrong (?:phone )?number|not for sale|not (?:(?:super|very|really|that|at all) )?interested|(?:do not|don't|dont) want to sell|not selling(?: (?:my|our|the) (?:house|home|property))?|no quiero vender|no me interesa vender)\\b",
+ declined:"\\b(?:i|we)(?:'ve)? (?:(?:have|already) ){0,2}told (?:you|yall|y'all|you all) no\\b|\\b(?:i|we) (?:will not|won't|wont) (?:ever )?sell\\b|\\b(?:no thanks|no thank you|wrong (?:phone )?number|not (?:up )?for sale|(?:i am|i'm|we are|we're) not (?:the )?owner|(?:i|we) (?:do not|don't|dont) own (?:the |this |that |my |our )?(?:house|home|property)|not (?:(?:super|very|really|that|at all) )?interested|(?:do not|don't|dont) want to sell|not selling(?: (?:my|our|the) (?:house|home|property))?|no quiero vender|no me interesa vender)\\b",
  review:"\\b(?:tired|sick) of (?:these|your|the) (?:texts|messages|calls)\\b|\\b(?:scam|scammer|scammers|fraud|fraudulent|suspicious|(?:i am|i'm|we are|we're) not (?:comfortable|ready)|need to think|never agreed|hold off|not for me|no interest|not looking to sell|(?:do not|don't|dont) trust|not now|not sure (?:about|i want)|stop bothering|waste of (?:my )?time)\\b|^(?:not comfortable|not ready)[.! ,]*$",
  nonRequest:"(?:\\b(?:not|never|did not|didn't|don't|do not|was not|wasn't) (?:say|saying|said|mean|meaning|ask|asking|asked|request|requesting|want|wanted)\\b[^.!?;]{0,100}|\\b(?:you|they|he|she|the tenant|my tenant|the owner|the agent|my wife|my husband) (?:said|say|wrote|asked)\\b[^.!?;]{0,100}|\\b(?:word|phrase|example)\\b[^.!?;]{0,60}|\\b(?:do not|don't|dont|never|not) )$",
  negatedIntroduction:"\\b(?:not|never|did not|didn't|don't|do not) (?:say|saying|mean|meaning|ask|asking|request|requesting)[ ,\"']*$",
@@ -47,8 +48,10 @@ export function sellerCallDisposition(transcript:{role:string;message?:string|nu
   if(turn.role!=='user'||typeof turn.message!=='string')continue;
   if(new RegExp(sellerResponsePatterns.machine,'i').test(turn.message.trim())){lastAgent='';continue;}
   let current=sellerResponseDisposition(turn.message);
-  if(!current&&/^no(?:[,! .]+(?:thanks|thank you|gracias))?[.! ]*$/i.test(turn.message.trim())
-   &&/interested.{0,35}(sell|cash offer)|consider selling|want to sell|open to.{0,15}cash offer/i.test(lastAgent))current='declined';
+  const answerDisposition=sellerCallAnswerDisposition(lastAgent,turn.message);
+  // A polite no to repairs or a call invitation is not a refusal to sell.
+  if(current==='declined'&&lastAgent.trim()&&new RegExp(sellerCallAnswerPatterns.politeNegative).test(normalize(turn.message)))current=answerDisposition;
+  if(!current)current=answerDisposition;
   if(current==='opt_out')return current;
   if(current==='declined'||!disposition)disposition=current;
   lastAgent='';
