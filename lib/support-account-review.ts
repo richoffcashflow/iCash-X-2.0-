@@ -76,6 +76,19 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  if(supportVoicemailComplaint(q))return null;
  if(/\b(?:(?:more|extra) (?:money|credits?)|(?:add|adding|fund)\b.{0,25}\b(?:bot|account)|buy (?:more )?credits?)\b/i.test(q)&&/\b(?:contracts?|deals?|results?|work differently|work faster|better)\b/i.test(q)&&!/\b(?:purchase price|seller price|assignment fee|offer amount)\b/i.test(q))
   return answer('Adding money buys more prepaid work credits for eligible research, contact lookup, calls and texts. It does not guarantee a contract, seller response or closed deal, and it does not change the bot’s strategy. More credits do not fix a technical problem or override Pause. You don’t need to pay more to troubleshoot missing activity.');
+ // A direct expectation of spending is a current-work question, not a request
+ // to buy credits. Do not inherit it across a new topic or infer actual spending.
+ if(/^i (?:expected|would (?:think|expect)) my credits (?:to |would (?:still )?)be (?:getting )?used(?: up)? by now[.!?\s]*$/i.test(q.trim())){
+  const explanation='Spending is evidence of charged work, not a promise that the bot is making progress. ';
+  if(context.kind!=='account')return answer(explanation+'I can’t verify your current work or credit usage from this guest chat.');
+  const workCheck=context.evidence?.find(e=>e.key==='work'&&e.status!=='unknown');
+  const outreach=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
+  if(workCheck?.code==='paused'||outreach?.progress?.status==='paused')return answer(explanation+'Your bot is currently paused; this chat has not changed that setting.');
+  if(!outreach?.progress||outreach.progress.health?.status==='unavailable')return answer(explanation+'I can’t verify current activity or explain the unchanged balance from these checks. The issue remains open.',true);
+  const progress=outreach.progress;
+  const detail=progress.health?.status==='blocked'&&progress.health.reason==='no_completed_work'?supportProgressDelay(outreach,false):progress.status==='settling'||progress.health?.status==='blocked'&&progress.health.reason==='pending_work'?'Earlier work is awaiting confirmation.':context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New research is waiting for service capacity.':'These checks do not establish why credits are unchanged or whether current work has progressed.';
+  return answer(explanation+detail+' This needs a current work review; adding credits is not a troubleshooting step, and I haven’t verified a restart.',true);
+ }
  // These existing funding-banner labels describe a status refresh, not a
  // pending checkout or proof that a task started. Never infer paid state from a quote.
  if(/\bcredits added\b/i.test(q)&&/\b(?:checking your bot[’']?s status|let[’']?s get to work)\b/i.test(q)&&!/\b(?:checkout|sign[ -]?in|code|card|charged|charges|subscription|membership|access|voice|agreements?|contracts?|unrecogni[sz]ed|unauthorized)\b/i.test(q)){
