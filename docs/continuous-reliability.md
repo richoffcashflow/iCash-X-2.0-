@@ -19,7 +19,8 @@ must verify a fresh successful comparison before declaring voice recovery.
 Continued observation also reproduced [paced contact starvation](acquisition-quota-headroom.md):
 two-request discovery repeatedly consumed capacity before three-request contact
 work became eligible. A separate disabled policy preserves one scheduling token
-at that boundary, retaining existing account aging, starter capacity, final
+only in acquisition and resumed-ticket selection. Shared availability and final
+admission are unchanged, retaining existing account aging, starter capacity,
 atomic request limits and every original uncertain operation. Mixed-demand
 offline progress and native activation/admission races are required before
 exact-release activation and live ordinary-contact verification.

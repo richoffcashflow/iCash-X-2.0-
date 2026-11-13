@@ -12,10 +12,18 @@ sql, contend = pacing.sql, pacing.contend
 
 if __name__ == "__main__":
     pacing.setup()
+    # Compile the captured selectors to verify the exact migration replacement;
+    # the mixed-demand model separately exercises their capacity prefilter.
+    sql("create table public.icash_automation_tickets(id uuid,account_id uuid,kind text,screening_id uuid,voice_job_id uuid,opener_message_id uuid,token text);")
+    for function in json.loads((ROOT / "tests/fixtures/acquisition-headroom-schedulers.json").read_text()):
+        sql(function["definition"])
     old = pacing.fixture.seed(910, "3 days")
     fresh = pacing.fixture.seed(911)
     before = sql("select to_jsonb(b) from public.icash_dealmachine_request_budget b;")
+    original_capacity = sql("select pg_get_functiondef('public.icash_dealmachine_capacity_available(integer,uuid)'::regprocedure);")
     sql((ROOT / "config/acquisition-quota-headroom.sql").read_text())
+    sql((ROOT / "config/acquisition-headroom-scheduler-scope.sql").read_text())
+    assert sql("select pg_get_functiondef('public.icash_dealmachine_capacity_available(integer,uuid)'::regprocedure);") == original_capacity
     assert sql("select to_jsonb(b) from public.icash_dealmachine_request_budget b;") == before
     sql("""update public.icash_dealmachine_request_budget set
       day_start=now()-interval '11 hours 59 minutes 57 seconds',day_used=4669,minute_start=now(),minute_used=0;""")
@@ -39,12 +47,14 @@ if __name__ == "__main__":
     sql("""update public.icash_dealmachine_request_budget set
       day_start=now()-interval '11 hours 59 minutes 57 seconds',day_used=4669,minute_start=now(),minute_used=0;""")
     original = sql("select to_jsonb(b) from public.icash_dealmachine_request_budget b;")
-    reads = contend([f"set role service_role;select public.icash_dealmachine_capacity_available(2,'{old}');" for _ in range(24)])
+    reads = contend([f"set role service_role;select public.icash_acquisition_capacity_available('{old}');" for _ in range(24)])
     assert reads == ["f"] * 24, reads
     assert sql("select to_jsonb(b) from public.icash_dealmachine_request_budget b;") == original
-    assert sql(f"select public.icash_dealmachine_capacity_available(2,'{fresh}');") == "t"
+    assert sql(f"select public.icash_acquisition_capacity_available('{fresh}');") == "t"
+    assert sql(f"select public.icash_dealmachine_capacity_available(2,'{old}');") == "t"
     assert sql(f"select public.icash_dealmachine_capacity_available(1,'{old}');") == "t"
     sql("update public.icash_dealmachine_request_budget set day_used=4668;")
+    assert sql(f"select public.icash_acquisition_capacity_available('{old}');") == "t"
     assert sql(f"select public.icash_dealmachine_capacity_available(2,'{old}');") == "t"
     assert sql(f"select public.icash_dealmachine_capacity_available(3,'{old}');") == "t"
     print("PASS native headroom: 16 concurrent activations, 24 final requests, exact counters, immutable replay evidence, read-only scheduling and independent starter allowance. No providers.")
