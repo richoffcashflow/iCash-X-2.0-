@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {nextBuyerSearch,nextBuyerSearchFromReceipts,discoverBuyerPage} from '../lib/buyer-discovery.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
+import {dealMachineRequest} from '../lib/dealmachine-request.ts';
 import {SharedLearningSafetyHold} from '../lib/shared-learning.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const fn=(file,name)=>read(file).match(new RegExp('create (?:or replace )?function public\\.'+name+'\\([\\s\\S]*?end \\$\\$;'))[0];
@@ -81,6 +82,7 @@ try{
   if(path==='rpc/icash_shared_buyer_cursor')return sqlEnabled&&await permitted({page:body.p_page,strategy:body.p_strategy,providerPage:body.p_provider_page});
   if(path==='rpc/icash_save_empty_buyer_search')return q('select icash_save_empty_buyer_search($1,$2,$3,$4,$5,$6,$7)',[body.p_account,body.p_deal,body.p_revision,body.p_page,body.p_strategy,body.p_provider_page,body.p_zip]);
   if(path==='rpc/icash_take_dealmachine_request')return true;
+  if(path==='rpc/icash_finish_dealmachine_request')return null;
   if(path==='rpc/icash_reserve_operation')return q("insert into icash_operation_spend values($1,'reserved',$2) on conflict do nothing",[body.p_operation,body.p_account]);
   if(path==='rpc/icash_claim_buyer_search'){if(!claimAllowed)return false;return (await q("update icash_operation_spend set state='dispatched' where operation_key=$1 and state='reserved' returning operation_key",[body.p_operation])).rows.length===1;}
   if(path==='rpc/icash_save_buyer_search')return q('select icash_save_buyer_search($1,$2,$3,$4,$5,$6)',[body.p_account,body.p_deal,body.p_revision,body.p_page,body.p_operation,JSON.stringify(body.p_receipt)]);
@@ -97,8 +99,8 @@ try{
   throw Error('Unexpected fixture call '+path);
  };
  let estimate=0,paidFailure=false;
- const fetch=async(url,options)=>{assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/search');const body=JSON.parse(options.body);requests.push(body);if(!body.estimate_cost){if(paidFailure)throw Error('uncertain fixture receipt');return {ok:true,json:async()=>({data:[],credits:{used:1,people:1,properties:0},pagination:{has_next_page:true}})};}return {ok:true,json:async()=>({estimated_credits:{this_page:estimate,breakdown:{properties:0,people:estimate}}})};};
- const service=await loadService('lib/buyer-discovery-service.ts',{db,fetch,nextBuyerSearchFromReceipts,discoverBuyerPage,SharedLearningSafetyHold,assignSharedLearning:async()=>{if(assignHeld)throw new SharedLearningSafetyHold();return {variant:'corporate_owners',version:'shared-v1',mode:'explore'};}});
+ const fetch=async(url,options)=>{assert.equal(url,'https://api.v2.dealmachine.com/v1/properties/search');const body=JSON.parse(options.body);requests.push(body);if(!body.estimate_cost){if(paidFailure)throw Error('uncertain fixture receipt');return Response.json({data:[],credits:{used:1,people:1,properties:0},pagination:{has_next_page:true}});}return Response.json({estimated_credits:{this_page:estimate,breakdown:{properties:0,people:estimate}}});};
+ const service=await loadService('lib/buyer-discovery-service.ts',{db,fetch,dealMachineRequest,nextBuyerSearchFromReceipts,discoverBuyerPage,SharedLearningSafetyHold,assignSharedLearning:async()=>{if(assignHeld)throw new SharedLearningSafetyHold();return {variant:'corporate_owners',version:'shared-v1',mode:'explore'};}});
  await seed(history);sqlEnabled=false;assert.equal((await service.discoverBuyersForDeal(A,D)).status,'buyer_cursor_review_required');assert.equal(requests.length,0,'Mixed deployment holds before requests');
  sqlEnabled=true;assignHeld=true;assert.equal((await service.discoverBuyersForDeal(A,D)).status,'learning_safety_hold');assert.equal(requests.length,0);assignHeld=false;
  existingState='dispatched';assert.equal((await service.discoverBuyersForDeal(A,D)).status,'buyer_receipt_reconciliation_required');assert.equal(requests.length,0);existingState=null;
