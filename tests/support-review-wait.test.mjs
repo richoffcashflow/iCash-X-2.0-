@@ -16,6 +16,14 @@ for(const kind of ['account','access'])for(const q of ['Should I wait for a resp
  const thanks=await ask([...history,user(q),assistant(r.reply),user('Thanks')],{kind});assert.equal(thanks.status,'open');
 }
 const fallback={reply:'Unchanged fixture answer.',status:'open',ai:false};
+for(const kind of ['account','access']){
+ const operatorContext=[user('My recording is missing.'),{role:'operator',content:'The recording issue is unresolved and escalated for review.'}];
+ for(const q of ['I have a question. Can anyone reach out to me?','Could someone reach out me at [number removed]?']){
+  const r=await ask([...operatorContext,user(q)],{kind});assert.match(r.reply,/Management can reply in this conversation/);assert.match(r.reply,/can.t promise a phone call/);assert.equal(r.status,'open');
+  assert.deepEqual(supportManagementReview({kind,handedOff:false,messages:[...operatorContext,user(q)]},fallback),fallback);
+ }
+ for(const q of ['Can someone reach out to the seller?','Can the bot reach out to me?','Do not have anyone reach out to me.','Can anyone reach out to me and cancel my subscription?'])assert.deepEqual(supportManagementReview({kind,handedOff:true,messages:[...operatorContext,user(q)]},fallback),fallback);
+}
 const reserved=[user('My bot stopped doing new work.'),assistant('Your case remains in management review.'),user('When should I add more credits?'),assistant('Some funds are committed to earlier work while its costs are confirmed. This does not confirm that stalled work restarted.')];
 const next=await ask([...reserved,user('So what is the best thing for me to do next?')]);
 assert.match(next.reply,/Management can reply in this conversation/);assert.equal(next.status,'open');

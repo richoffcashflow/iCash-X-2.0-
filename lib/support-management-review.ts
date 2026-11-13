@@ -52,6 +52,7 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
  const previous=context.messages.slice(0,index).findLast(turn=>turn.role==='assistant'||turn.role==='operator');
  // Requests for a response to this support case are not seller outreach.
  const caseContact=/\b(?:support|management|case|update|responds?)\b/i.test(question)&&/(?:\b(?:call me|text me|email me|my number)\b|email \[email removed\])/i.test(question)
+  || /\b(?:anyone|someone|somebody|support|management)\b.{0,20}\breach out (?:to )?me\b/i.test(question)
   || /^(?:is there|do you have) (?:a |an )?(?:phone |support )?number (?:i can|to) (?:call|contact)[?!.\s]*$/i.test(question.trim());
  const separatePayment=supportRenewalCancellationRequested(question)||/\b(?:refund|money back|charged twice|duplicate charge|unrecognized charge)\b/i.test(question)||/duplicate-charge report|do both statement entries match|reporting a charge you don’t recognize|statement details you supplied are saved/i.test(answer.reply);
  if(context.handedOff&&caseContact&&!separatePayment&&!/\b(?:seller|buyer|lead|bot|homeowner|don[’']?t|do not|no need)\b/i.test(question))return {reply:reviewExplanation(context,question,true),status:'open',managementReview:true,ai:false};
