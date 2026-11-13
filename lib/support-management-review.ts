@@ -68,6 +68,21 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
   &&!/access (?:is|was|has been) (?:restored|granted)|i[’']?m in|that worked/i.test(question)){
   return {reply:'The operator’s last update says your access review is still open, with no confirmed completion time. I can’t give you a reliable timeframe yet or confirm that the email has changed or access has been restored. Your earlier details remain in this conversation for management review.',status:'open',managementReview:true,ai:false};
  }
+ // A returning guest may have no queue flag after an operator response. Preserve
+ // only the latest trusted, still-unverified purchase finding; topic changes end it.
+ const latestOperator=context.messages.slice(0,index).findLastIndex(turn=>turn.role==='operator');
+ const purchaseNote=latestOperator>=0?context.messages[latestOperator].content:'';
+ const sinceOperator=context.messages.slice(latestOperator+1,index).filter(turn=>turn.role==='user');
+ const updateQuestion=/^(?:any update|anything yet|is there an update)[.!?\s]*$/i;
+ if(context.kind==='access'&&latestOperator>=0&&updateQuestion.test(question.trim())
+  &&sinceOperator.every(turn=>updateQuestion.test(turn.content.trim()))
+  &&/purchase ownership still needs verification/i.test(purchaseNote)
+  &&/transaction (?:reference|id)/i.test(purchaseNote)
+  &&/please (?:share|send|provide)/i.test(purchaseNote)
+  &&!/(?:do not|don[’']t) (?:share|send|provide).{0,40}(?:transaction|reference)/i.test(purchaseNote)
+  &&!/access (?:is|was|has been) restored|review (?:is |was )?(?:complete|closed|resolved)/i.test(purchaseNote)){
+  return {reply:'The last operator update says purchase ownership still needs verification. The transaction reference requested there can help match the payment; you do not need to resend the same screenshots or pay again. I have no confirmed access change or completion time. I’ve flagged this conversation for management review.',status:'open',managementReview:true,ai:false};
+ }
  const reviewFollowup=/management review|flagged this conversation/i.test(previous?.content??'')||/\b(?:management|review|any update|anything yet)\b/i.test(question);
  // A verified handoff plus the immediate support topic distinguishes waiting
  // for Support from seller follow-up. Assistant text alone cannot create a handoff.
