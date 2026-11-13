@@ -61,8 +61,8 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const voiceSetup=supportVoiceSetupReply(context);if(voiceSetup)return voiceSetup;
  const versionClarification=supportVersionClarification(context.messages);if(versionClarification)return result(versionClarification,'open');
  const location=supportLocationGuidance(context);if(location)return location;
- const callHold=supportCallHoldReply(context);if(callHold)return callHold;
  const creditBalance=supportCreditBalanceReply(context);if(creditBalance)return creditBalance;
+ const callHold=supportCallHoldReply(context);if(callHold)return callHold;
  const accountReview=supportAccountReviewReply(context);if(accountReview)return accountReview;
  const currentStep=supportCurrentStepReply(context);if(currentStep)return {...currentStep,reply:removeRepeatedSupportQuestions(currentStep.reply,context.messages),status:currentStep.status==='resolved'&&(earlierSupportProblem(context)||context.handedOff)?'open':currentStep.status};
  const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status,inbox.routineGuidance);
