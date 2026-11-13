@@ -1,6 +1,17 @@
 import type {AccessInvestigation} from './support-access-investigation.ts';
 type Turn={role:string;content:string};
 const normalize=(text:string)=>text.replace(/[’‘]/g,"'");
+/** A customer report selects the next question; it never verifies payment. */
+export function supportReportedPurchase(messages:Turn[]){
+ let paid=false;
+ for(const turn of messages){
+  if(turn.role!=='user')continue;
+  const text=normalize(turn.content);
+  if(/\b(?:haven't|have not|didn't|did not|never|not) (?:paid|purchased|bought)|\b(?:first time signing up|trying to sign up for the first time)\b/i.test(text))paid=false;
+  else if(/\bi (?:already )?(?:paid|purchased|bought)\b|\bmy payment went through\b|\bi was charged\b/i.test(text))paid=true;
+ }
+ return paid;
+}
 export function hasRecordedAccessPaymentCheck(messages:Turn[]){
  const operator=messages.filter(m=>m.role==='operator').at(-1)?.content??'';
  return /checkout email.{0,50}(?:differ|does not match|doesn't match)|(?:matched|matches).{0,40}(?:payment|receipt)|(?:payment|receipt).{0,40}(?:matched|matches)/i.test(operator);
@@ -28,6 +39,10 @@ export function missingAccessCodeReply(messages:Turn[],check?:AccessInvestigatio
  if(hasRecordedAccessPaymentCheck(messages)){
   return open('The payment check already recorded in this conversation is the next step to follow. You don’t need to repeat the code requests or send the same payment proof again. Access is still unresolved; this chat has not changed your sign-in email or restored access.');
  }
+ const receiptReport=messages.findLast(turn=>(turn.role==='user'||turn.role==='operator')&&/\breceipt\b/i.test(turn.content))?.content??'';
+ const noReceipt=/\bno receipt (?:arrived|received)|\b(?:don[’']?t|do not|can[’']?t|cannot) (?:see|find|have) (?:a |an |my |the )?(?:purchase |payment |email )?receipt\b|\b(?:never|not|didn[’']?t|haven[’']?t) (?:got|received|receive|get) (?:a |an |my |the )?(?:purchase |payment |email )?receipt\b/i.test(receiptReport);
+ if(noReceipt&&!supportReportedPurchase(messages))return open('Have you already completed an iCash X purchase, or are you trying to sign up for the first time? Please don’t pay again or share a sign-in code. Access remains unconfirmed.');
+ if(noReceipt)return open('Your receipt and sign-in code are still missing. '+(/\$\s*\d|\b\d+(?:\.\d{2})? dollars\b/.test(history)?'The payment details you shared still need to be matched to a purchase before access can be confirmed.':'What payment date and amount appear on your bank or card statement? Leave out card and account numbers.')+' Please don’t pay again. Access remains unresolved.');
  if(/(?:are|will|can) you.{0,25}send|send (?:it|the code|my code)|(?:issue|send) me (?:a|the|my) (?:sign[ -]?in )?code|you(?:'re| are) not sending/i.test(question))return open('I haven’t sent a code from this chat. '+prefix+(emailTried||phoneTried?'Repeated requests haven’t fixed this, and I won’t ask you to keep resending. ':'Code delivery is still unconfirmed. ')+'Your access issue is still open.');
  if(!receiptKnown&&!bothTried)return ask(prefix+'Check the email on your iCash X payment receipt. Does it match the email you entered on the sign-in page? Don’t share any sign-in code.');
  if(check?.email!=='unavailable'&&!emailTried&&!already)return ask(prefix+'Use the email on your payment receipt to request one fresh code, then check that inbox and its spam or junk folder. Does a code arrive?');
