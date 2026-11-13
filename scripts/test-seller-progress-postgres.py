@@ -373,7 +373,7 @@ drop function icash_seller_recovery_nonprice_current(uuid,uuid);
 sql(function('seller-gap-recovery', 'icash_choose_seller_recovery'))
 for row in json.loads((ROOT / 'tests/fixtures/seller-conversion-baseline.json').read_text()):
     sql(row['definition'] + ';')
-sql((ROOT / 'config/seller-conversion-followthrough.sql').read_text() + (ROOT / 'config/seller-conversion-inactive-compatibility.sql').read_text())
+sql((ROOT / 'config/seller-conversion-followthrough.sql').read_text() + (ROOT / 'config/seller-conversion-inactive-compatibility.sql').read_text() + (ROOT / 'config/seller-recovery-answer-continuity.sql').read_text())
 sql("update icash_seller_progress_settings set enabled=true,dialogue_enabled=true,offer_enabled=true,conversion_enabled_at=now()-interval '1 minute';update fixture_flags set conversation=true;")
 CA, CT, CD, CS, CU = [f'50000000-0000-4000-8000-{n:012d}' for n in range(1, 6)]
 sql(f"""

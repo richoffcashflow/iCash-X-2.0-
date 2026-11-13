@@ -182,5 +182,48 @@ for(const [action,variant] of Object.entries(actions)){
  }
  assert.equal(await rpc('icash_seller_recovery_context_variant',[randomUUID(),gap.id]),null,'account isolation');
 }
-for(const name of ['icash_seller_conversion_intent(text)','icash_seller_conversion_source(uuid,uuid)','icash_seller_recovery_context_variant(uuid,uuid)'])for(const role of ['anon','authenticated'])assert.equal((await one('select has_function_privilege($1,$2,\'execute\') ok',[role,name])).ok,false);
-await pg.close();console.log('PASS conversion intent SQL/TS parity, direct answers -> save -> one claim -> delivered, identity/terms/listing bounds, late Pause/STOP/manual/expiry/disable, 11 stage-specific followups and final source rechecks; zero providers.');
+// A real reminder delivery must carry its legal-name/date/inspection action
+// into the seller's next answer. A generic price/terms reminder never authorizes
+// acceptance or an agreement. Exercise each through the actual saved offer state.
+let answerPatchInstalled=false;
+for(const target of ['legal_name','closing_date','inspection','cash_offer','confirm_terms']){
+ const c=await seed();let r=await run(c,'I need $210k');
+ const close=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+ if(target!=='cash_offer')r=await run(c,'Yes');
+ if(['closing_date','inspection','confirm_terms'].includes(target)){await run(c,'My full legal name is Jane Seller');r=await run(c,'Yes, I am the only owner and decision maker');}
+ if(['inspection','confirm_terms'].includes(target))r=await run(c,close);
+ if(target==='confirm_terms')r=await run(c,'Yes');
+ assert.equal(r.plan.action,target);
+ const outgoing=await one('select m.* from icash_text_ai_jobs j join icash_text_messages m on m.id=j.outgoing_id where j.id=$1',[r.j.id]);
+ const gap=await one("insert into icash_seller_gaps(account_id,deal_id,screening_id,thread_id,source,source_id,reason,stage,channel,quote,state,due_at,expires_at,source_at) values($1,$2,$3,$4,'text',$5,'no_response','draft','text','SIMULATION','open',now()-interval '1 minute',now()+interval '1 hour',$6) returning id",[c.a,c.d,c.s,c.t,outgoing.id,outgoing.created_at]);
+ const mid=await rpc('icash_prepare_seller_recovery',[c.a,gap.id]);assert(mid);
+ assert.equal(await rpc('icash_seller_recovery_nonprice_current',[c.a,mid]),true);
+ await q("update icash_text_messages set state='delivered',provider_id='SIMULATION-reminder-receipt',created_at=$2 where id=$1",[mid,at()]);
+ const answer=target==='legal_name'?'My full legal name is Jane Seller':target==='closing_date'?close:'Yes';
+ if(!answerPatchInstalled){
+  const m=await incoming(c,answer),j=await one('select * from icash_text_ai_jobs where message_id=$1',[m.id]);
+  let context=(await rpc('icash_resume_seller_text_ai',[c.a,j.id])).context;
+  assert.equal(planSellerTextOffer(context).action,target,'reproduce the lost reminder action before patch');
+  const patch=read('../config/seller-recovery-answer-continuity.sql');assert.equal(patch,read('../supabase/migrations/20261113170111_seller_recovery_answer_continuity.sql'));await pg.exec(patch);answerPatchInstalled=true;
+  context=(await rpc('icash_resume_seller_text_ai',[c.a,j.id])).context;
+  assert.equal(planSellerTextOffer(context).action,'owners');
+  assert.equal((await processSellerTextOffer(context,dependencies)).status,'message_delivered');
+ }else{
+  const beforeSends=sends;r=await run(c,answer);
+  assert.equal(r.plan.action,{closing_date:'inspection',inspection:'confirm_terms',cash_offer:'cash_offer',confirm_terms:'confirm_terms'}[target]);
+  assert.equal(sends,beforeSends,'a generic reminder yes is never signature authority');
+  if(target==='cash_offer')assert(!r.plan.state.acceptedPriceCents,'no acceptance of an unquoted reminder');
+  if(target==='confirm_terms'){r=await run(c,'Yes, send the agreement');assert.equal(r.result.status,'seller_agreement_sent','fresh full readback still completes the actual signing path');}
+ }
+ const expected=['legal_name','closing_date','inspection'].includes(target)?target:null;
+ assert.equal(await rpc('icash_seller_recovery_reply_action',[c.a,mid]),expected);
+ assert.equal(await rpc('icash_seller_recovery_reply_action',[randomUUID(),mid]),null);
+ if(expected)for(const mutation of [
+  ()=>q("update icash_text_messages set state='accepted' where id=$1",[mid]),
+  ()=>q("update icash_text_messages set body='tampered' where id=$1",[mid]),
+  ()=>q("update icash_text_messages set provider_id=null where id=$1",[mid]),
+  ()=>q('update icash_seller_progress_settings set conversion_enabled_at=null'),
+ ]){await q('begin');await mutation();assert.equal(await rpc('icash_seller_recovery_reply_action',[c.a,mid]),null,'requires the exact current delivered reminder');await q('rollback');}
+}
+for(const name of ['icash_seller_conversion_intent(text)','icash_seller_conversion_source(uuid,uuid)','icash_seller_recovery_context_variant(uuid,uuid)','icash_seller_recovery_reply_action(uuid,uuid)'])for(const role of ['anon','authenticated'])assert.equal((await one('select has_function_privilege($1,$2,\'execute\') ok',[role,name])).ok,false);
+await pg.close();console.log('PASS conversion intent SQL/TS parity, direct answers -> save -> one claim -> delivered, identity/terms/listing bounds, late Pause/STOP/manual/expiry/disable, 11 stage-specific followups, reminder answers through agreement, and final source rechecks; zero providers.');
