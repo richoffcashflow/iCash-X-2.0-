@@ -4,7 +4,7 @@ import {RecordingProviderError,type RecordingEnv,type RecordingProviders} from '
 /** Read-only evidence for missing AI identities. Never authorizes binding, retry or settlement. */
 export async function recordingHandoffDiagnostic(row:RecordingRow,provider:Pick<RecordingProviders,'getCall'|'getCallEventsPage'|'getCallNotifications'>,env:RecordingEnv,now=Date.now()){
  const result=(status:string,extra:Record<string,unknown>={})=>({status,...extra});
- if(!uuid(row.id)||!sid(row.call_sid,'CA')||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.provider_account_sid,'AC')||!row.start_claimed_at||row.conversation_id||!/^[a-f0-9]{64}$/.test(row.nonce_hash??''))return result('binding_unavailable');
+ if(!uuid(row.id)||!sid(row.call_sid,'CA')||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!sid(row.provider_account_sid,'AC')||!row.start_claimed_at&&!row.recording_authorized_at||row.conversation_id||!/^[a-f0-9]{64}$/.test(row.nonce_hash??''))return result('binding_unavailable');
  try{
   const call=await provider.getCall(row.call_sid);
   if(call.sid!==row.call_sid||call.account_sid!==row.provider_account_sid||call.from!==row.from_phone||call.to!==row.to_phone||call.direction!=='outbound-api')return result('carrier_binding_mismatch');
@@ -24,7 +24,7 @@ export async function recordingHandoffDiagnostic(row:RecordingRow,provider:Pick<
    const body=response.response_body;
    const bounded=typeof body==='string'&&body.length<=64000;
    // Presence markers only: they do not assert a valid XML document or an AI connection.
-   events.push({httpStatus:Number.isInteger(response.response_code)&&Number(response.response_code)>=100&&Number(response.response_code)<=599?response.response_code:null,bodyBounded:bounded,connectMarker:bounded?/<Connect\b/.test(body):null,streamMarker:bounded?/<Stream\b/.test(body):null,hangupMarker:bounded?/<Hangup\b/.test(body):null});
+   events.push({httpStatus:Number.isInteger(response.response_code)&&Number(response.response_code)>=100&&Number(response.response_code)<=599?response.response_code:null,...(Number.isSafeInteger(response.request_duration)&&Number(response.request_duration)>=0&&Number(response.request_duration)<=60000?{requestDurationMs:response.request_duration}:{}),bodyBounded:bounded,connectMarker:bounded?/<Connect\b/.test(body):null,streamMarker:bounded?/<Stream\b/.test(body):null,hangupMarker:bounded?/<Hangup\b/.test(body):null});
   }
   // Only inspect the fixed call's first notification page after full carrier and
   // callback binding. Codes are evidence, never authorization to settle or retry.

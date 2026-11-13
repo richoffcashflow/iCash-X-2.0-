@@ -7,6 +7,8 @@ import ts from 'typescript';
 import {readRecordedOutboundReadiness,recordedOutboundTarget as t} from '../lib/recorded-outbound-readiness.ts';
 import {canonical,sha,privateHeaders} from '../lib/required-call-recording.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
+import {automaticOfferGuardrails} from '../lib/automatic-offer-policy.ts';
+import {automaticOfferToolConfig,legacyAutomaticOfferToolConfig} from '../lib/seller-agreement-tool.ts';
 const key='SYNTHETIC_ONLY_PROVIDER_KEY',accountSid='AC'+'a'.repeat(32),now=Date.parse('2026-10-03T18:00:00Z'),origin='https://api.elevenlabs.io',p='/v1/convai/agents/'+t.agentId;
 const urls=[p+'?branch_id='+t.branchId,p+'/branches?include_archived=true&limit=100','/v1/convai/settings',... [t.stopToolId,t.callbackToolId,t.handoffToolId,t.contractToolId].map(id=>'/v1/convai/tools/'+id)].map(p=>origin+p);
 function fixtures(){
@@ -21,6 +23,16 @@ test('saved production approval must match even when every structural check pass
  const good=await inspect(f,undefined,{RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review)});assert.equal(good.result.providerChecksPass,true);assert.equal(good.result.checks.activeReviewMatches,true);
  const stale=await inspect(f,undefined,{RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify({...review,configHash:'a'.repeat(64)})});assert.equal(stale.result.checks.canonicalRuntimeConfiguration,true);assert.equal(stale.result.checks.activeReviewMatches,false);assert.equal(stale.result.providerChecksPass,false);
  const invalid=await inspect(f,undefined,{RECORDED_OUTBOUND_REVIEW_JSON:'invalid'});assert.equal(invalid.result.providerChecksPass,false);
+});
+test('readiness uses the current offer-policy revision for guardrails and contract schema',async()=>{
+ for(const offerPolicy of ['automatic_offer_v8','automatic_offer_v9']){
+  const f=fixtures(),a=f[0];a.platform_settings.guardrails=automaticOfferGuardrails();
+  f[6]={id:t.contractToolId,tool_config:structuredClone(offerPolicy==='automatic_offer_v8'?legacyAutomaticOfferToolConfig:automaticOfferToolConfig)};
+  const configHash=sha(JSON.stringify(canonical({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:null,procedures:null})));
+  const review={...t,offerPolicy,enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+3600000).toISOString(),configHash,providerAccountSid:accountSid,toolIds:[t.callbackToolId,t.handoffToolId,t.stopToolId,t.contractToolId],approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:'required-audio-30d-speech-v1'};
+  const result=(await inspect(f,undefined,{RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review)})).result;assert.equal(result.providerChecksPass,true);assert.equal(result.checks.contractToolMatches,true);
+  a.platform_settings.guardrails={};const drift=(await inspect(f,undefined,{RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review)})).result;assert.equal(drift.providerChecksPass,false);assert.equal(drift.checks.canonicalRuntimeConfiguration,false);
+ }
 });
 test('seven fixed reads return exact canonical hash without review, prompt or secret material',async()=>{
  const f=fixtures(),{result,calls}=await inspect(f);assert.equal(calls.length,7);assert.equal(result.status,'checked');assert.equal(result.providerChecksPass,true);assert.equal(result.mode,'read_only');

@@ -22,6 +22,7 @@ import {nextWorkFunding} from '@/lib/workspace-progress';
 import type {AssistantRequest} from '@/components/workspace-assistant';
 import type {AssistantAction} from '@/lib/workspace-assistant-policy';
 import {OwnerWorkspaceTabs} from '@/components/owner-workspace-tabs';
+import {OwnerAccountReset} from '@/components/owner-account-reset';
 import {OwnerPhonePrivacy} from '@/components/owner-phone-privacy';
 import {BotRunBar} from '@/components/bot-run-bar';
 import {FundingOutreachNotice} from '@/components/funding-outreach-notice';
@@ -51,6 +52,7 @@ export default function Home(){
  const [activityDays,setActivityDays]=useState<ActivityDays>(1);
  const [activityTimezone]=useState(()=>Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC');
  const [reviewVip,setReviewVip]=useState(false);
+ const [ownerResetRevision,setOwnerResetRevision]=useState(0);
  const [fundingNotice,setFundingNotice]=useState<{email:string;accountAtFunding:Account}|null>(null);
  useEffect(()=>{
   if(!account?.signedIn||!account.email){setFundingNotice(null);return;}
@@ -181,7 +183,7 @@ export default function Home(){
   <header className="console-header">
    <a href="/course" id="workspace-tour-course" className="workspace-course-launcher"><BookOpen size={17} aria-hidden="true"/>Training course{courseUpdateBadge}</a>
    <div className="workspace-header-links">
-    {!workspaceLocked&&<WorkspaceUpdates onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
+    {!workspaceLocked&&<WorkspaceUpdates key={ownerResetRevision} onPreferences={()=>showDetails('notification-settings')} onBudget={()=>openFunding()}/>}
     <details ref={accountMenu} className="workspace-account-menu" onBlur={event=>{if(event.relatedTarget instanceof Node&&!event.currentTarget.contains(event.relatedTarget))closeAccountMenu();}}>
      <summary id="workspace-tour-menu" aria-label="Account menu" title="Account menu"><Menu size={21} aria-hidden="true"/></summary>
      <div className="workspace-account-options">
@@ -213,6 +215,7 @@ export default function Home(){
     {fundingNotice&&fundingNotice.email===account.email&&<FundingOutreachNotice paused={account.paused} ready={botRunning&&(account.balanceCents??0)>0&&!controlBusy} stale={accountError||account.readinessPending===true||fundingNotice.accountAtFunding===account} test={account.mode==='test'} onDismiss={()=>setFundingNotice(null)}/>}
     {<WorkspaceConversion key={account.email??'account'} principal={account.email??''} balanceCents={account.balanceCents} paused={account.paused} stale={accountError||!!account.billingReview} attentionPending={attentionPending} hidden={fundingNotice?.email===account.email||walkthroughOpen||customizeOpen||fundingOpen||settingsOpen||preferencesOpen||cancellationOpen||reviewVip||needsIdentity||needsBotName||new URLSearchParams(typeof window==='undefined'?'':window.location.search).get('payment')==='funded'} busy={controlBusy} onFunding={(amountCents,reason)=>openFunding('',{amountCents,reason})} onResume={()=>void toggleBot('resume')} onVip={()=>setReviewVip(true)} onWork={openNextWork}/>}
     <div className={styles.activity}><BudgetSummary days={activityDays} onDaysChange={setActivityDays} timezone={activityTimezone} key={`${account.email}:${displayVip}`} vip={displayVip}/></div>
+    {account.isBillingOwner&&account.privateDemoPhone&&<OwnerAccountReset key={account.email} disabled={controlBusy||accountError} onReset={()=>{setOwnerResetRevision(v=>v+1);setAssistantRequest(null);setPropertyRequest(null);setAssistantOpenRequest(0);setAttentionPending(false);void refreshAccount(true);}}/>}
     {fundingOpen&&<FundingDialog title={guest||account.billingModel==='membership_credits'&&!account.membershipActive?'iCash X 2.0':returningWithoutCredits?'Out of credits':creditsExhausted?'Start your bot':'Add money'} onClose={closeFunding}>{guest||account.billingModel==='membership_credits'&&!account.membershipActive?<MembershipCheckout onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>:<FundingCheckout initialAmountCents={fundingSuggestion?.amountCents} reason={fundingSuggestion?.reason} outOfCredits={returningWithoutCredits} initialCode={fundingCode||undefined} onSignedIn={()=>{closeFunding();void refreshAccount(true);}}/>}</FundingDialog>}
     {reviewVip&&<FundingDialog title={account.isBillingOwner?'Your account plan':account.vip?'Your VIP membership':'Switch to VIP'} onClose={()=>setReviewVip(false)}><div className={styles.vipPanel}>{account.isBillingOwner?<><AdminPlanToggle plan={account.vip?'vip':'standard'} busy={controlBusy||accountError} onChange={plan=>void changePlan(plan)}/>{controlError&&<p role="alert">{controlError}</p>}</>:<MembershipSettings key={account.email} planOnly onChanged={membershipChanged}/>}</div></FundingDialog>}
     {!guest&&customizeOpen&&<FundingDialog title="Customize bot" onClose={()=>setCustomizeOpen(false)}><BotCustomization key={`${account.email}:${featureVip}`} name={profile?.displayName||account.assistantName||''} vip={featureVip} onSaved={()=>refreshAccount(true)} onUpgrade={()=>{setCustomizeOpen(false);setReviewVip(true);}}/></FundingDialog>}
@@ -231,11 +234,11 @@ export default function Home(){
      {account.mode==='live'&&account.billingModel==='legacy'&&<SpendActivationReview key={activationKey} onAvailabilityChange={updateActivationAvailability} onSaved={()=>void refreshAccount()}/>}
      <CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}>
      {<SpendingAllowance/>}
-     <OwnerPhonePrivacy phone={account.privateDemoPhone}><LiveWorkspace key={account.email} onLeadPresenceChange={updateLeadPresence} onAttentionChange={setAttentionPending} assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now(),mode:'compose'})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/></OwnerPhonePrivacy>
+     <OwnerPhonePrivacy phone={account.privateDemoPhone}><LiveWorkspace key={`${account.email}:${ownerResetRevision}`} onLeadPresenceChange={updateLeadPresence} onAttentionChange={setAttentionPending} assistantVipLocked={!featureVip} onOpenAssistant={()=>openAssistant()} propertyRequest={propertyRequest} onAsk={(screeningId,address)=>openAssistant({screeningId,address,nonce:Date.now(),mode:'compose'})} principal={account.identity?.principal??''} botPaused={account.paused===true} botAvailable={(account.billingModel!=='membership_credits'||account.membershipActive===true)&&!account.billingReview&&!!account.identity&&(account.balanceCents??0)>0&&!!(account.workReady||account.smsWorkReady||account.discoveryWorkReady||account.contactWorkReady)} accountStale={accountError} showCoach={false}/></OwnerPhonePrivacy>
      </CreditActionGate>
      </>}
     </section>
-    {!guest&&featureVip&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={account.email} openRequest={assistantAccount===account.email?assistantOpenRequest:0} request={assistantAccount===account.email?assistantRequest:null} stale={accountError} onAction={assistantAction} onVipRequired={()=>{setReviewVip(true);void refreshAccount();}}/></CreditActionGate>}
+    {!guest&&featureVip&&<CreditActionGate actionsOnly blocked={creditsExhausted} onRequireCredits={()=>openFunding()}><WorkspaceAssistant key={`${account.email}:${ownerResetRevision}`} openRequest={assistantAccount===account.email?assistantOpenRequest:0} request={assistantAccount===account.email?assistantRequest:null} stale={accountError} onAction={assistantAction} onVipRequired={()=>{setReviewVip(true);void refreshAccount();}}/></CreditActionGate>}
     </>}
    </>}
   </main>

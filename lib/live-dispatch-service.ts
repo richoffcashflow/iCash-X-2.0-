@@ -122,22 +122,31 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  if(isAdditionalBusinessPhone(businessNumber)){
   const [secondary]=await db<{outbound_enabled:boolean}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(businessNumber)}&select=outbound_enabled`);
   if(!secondary?.outbound_enabled)return hold('business_number_verification_required');
-  try{if(!await secondaryCallingReady(db,process.env,fetch,businessNumber))return hold('business_number_verification_required');}catch{return hold('business_number_verification_required');}
  }
- if(!isAdditionalBusinessPhone(businessNumber)){
-  if(!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
-  let phone:{phone_number:string};
-  try{phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);}catch{return hold('business_number_verification_required');}
-  if(!sameBusinessNumber(businessNumber,phone.phone_number))return hold('business_number_mismatch');
- }
+ if(!isAdditionalBusinessPhone(businessNumber)&&!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
+ const readCaller=async()=>{
+  if(isAdditionalBusinessPhone(businessNumber))return await secondaryCallingReady(db,process.env,fetch,businessNumber)?null:'business_number_verification_required';
+  const phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);
+  return sameBusinessNumber(businessNumber,phone.phone_number)?null:'business_number_mismatch';
+ };
+ // Caller routing and the exact reviewed agent are independent reads. Keep
+ // both fresh and complete before reserve; do not add their network waits.
+ const [callerRead,agentRead]=await Promise.allSettled([
+  readCaller(),
+  elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`),
+ ]);
+ if(callerRead.status==='rejected')return hold('business_number_verification_required');
+ if(callerRead.value)return hold(callerRead.value);
  let agent:unknown;
- try{agent=await elevenRequest<unknown>(`/v1/convai/agents/${encodeURIComponent(recordedReview.agentId)}?branch_id=${encodeURIComponent(recordedReview.branchId)}`);}catch(error){
+ if(agentRead.status==='rejected'){
+  const error=agentRead.reason;
   // Distinguish a failed read from configuration drift without logging provider
   // payloads, credentials, contact data or caller-supplied error text.
   const code=error instanceof Error&&/^(?:VOICE_UNREACHABLE|VOICE_KEY_MISSING|VOICE_SERVER_ONLY|VOICE_HTTP_[1-5][0-9]{2}(?:_(?:CONVAI_WRITE|CONVAI_READ|VOICES_READ|TEXT_TO_SPEECH))?)$/.test(error.message)?error.message:'VOICE_AGENT_READ_FAILED';
   console.warn('production_agent_preflight_held',{stage:'provider_read',code});
   return hold('production_agent_review_required');
  }
+ agent=agentRead.value;
  // Share the recording service's exact non-main branch/version, privacy,
  // override, tool-set and canonical full-projection validation before reserve.
  if(!recordingAgentMatches(recordedReview,agent)){
