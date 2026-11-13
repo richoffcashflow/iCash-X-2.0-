@@ -33,6 +33,14 @@ test('provider errors expose only typed HTTP status and do not throw into reconc
  const g=fixture({callError:Error('secret-token '+row.to_phone)});assert.deepEqual(await recordingHandoffDiagnostic(row,g.provider,{TWILIO_ACCOUNT_SID:ac},now),{status:'provider_read_unavailable'});
 });
 test('already bound or invalid local row never requests provider data',async()=>{for(const value of [{...row,conversation_id:'conv_exists'},{...row,nonce_hash:null},{...row,provider_account_sid:'wrong'}]){const f=fixture();assert.equal((await recordingHandoffDiagnostic(value,f.provider,{TWILIO_ACCOUNT_SID:ac},now)).status,'binding_unavailable');assert.equal(f.reads.length,0);}});
+test('authorized but unstarted terminal call exposes bounded callback timing without authorizing a retry',async()=>{
+ const e=structuredClone(event);e.response.request_duration=12040;
+ const f=fixture({pageValue:{page:0,page_size:100,next_page_uri:null,events:[e]}});
+ const r=await recordingHandoffDiagnostic({...row,start_claimed_at:null,recording_authorized_at:new Date(now-3600000).toISOString()},f.provider,{TWILIO_ACCOUNT_SID:ac},now);
+ assert.equal(r.status,'complete');assert.equal(r.events[0].requestDurationMs,12040);assert.deepEqual(f.reads.map(x=>x[0]),['call','events','notifications']);
+ for(const duration of ['secret',-1,Infinity,60001]){e.response.request_duration=duration;const g=fixture({pageValue:{page:0,page_size:100,next_page_uri:null,events:[e]}});assert.equal((await recordingHandoffDiagnostic(row,g.provider,{TWILIO_ACCOUNT_SID:ac},now)).events[0].requestDurationMs,undefined);}
+ const g=fixture();assert.equal((await recordingHandoffDiagnostic({...row,start_claimed_at:null,recording_authorized_at:null},g.provider,{TWILIO_ACCOUNT_SID:ac},now)).status,'binding_unavailable');assert.equal(g.reads.length,0);
+});
 
 test('notification codes are bounded, sorted, deduplicated, and never expose provider descriptions',async()=>{
  const f=fixture({notesValue:{next_page_uri:null,notifications:[31901,'31901',11200].map(error_code=>({account_sid:ac,call_sid:ca,error_code,message:'secret-token',request_url:'https://private.example'}))}});

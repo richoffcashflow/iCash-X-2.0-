@@ -19,6 +19,7 @@ import {verifyConversationInbox} from './conversation-inbox-browser.mjs';
 import {verifyCloseConversions} from './close-conversion-browser.mjs';
 import {verifyWorkspace} from './workspace-browser-scenarios.mjs';
 import {verifyWorkspaceLayout} from './workspace-layout-browser.mjs';
+import {verifyOwnerReset} from './owner-reset-browser.mjs';
 import {verifyCustomVoicePreview} from './custom-voice-preview-browser.mjs';
 import {verifyWalkthrough} from './workspace-walkthrough-browser.mjs';
 import {verifyPurchaseAccess} from './purchase-access-browser.mjs';
@@ -95,6 +96,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='ask-ai'){await verifyAssistantCoach(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace'){await verifyWorkspace(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='workspace-layout'){await verifyWorkspaceLayout(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='owner-reset'){await verifyOwnerReset(browser,base,options,name,fixtureCookies);continue;}
    if(process.env.BROWSER_SCENARIOS==='custom-voice-preview'){await verifyCustomVoicePreview(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='support-coaching'){await verifySupportCoaching(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='access-help'){await verifyAccessHelp(browser,base,options,name,fixtureCookies);continue;}
@@ -110,6 +112,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='cost-evidence'){await verifyCostEvidence(browser,base,options,name,fixtureCookies,fixture);continue;}
+   await verifyOwnerReset(browser,base,options,name,fixtureCookies);
    await verifyCostEvidence(browser,base,options,name,fixtureCookies,fixture);
    await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);
    await verifyTargeting(browser,base,options,name,fixtureCookies,fixture);

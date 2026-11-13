@@ -68,12 +68,19 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
    // Identical status text after create/claim must retain its uncertain hold.
    const beforeCreate=(status:string)=>({status,dispatchBoundary:'before_recording_create_v1' as const});
    if(!dispatchAllowed())return beforeCreate('recording_release_required');
-   const review=await readReview();if(!review||!await checkAgent(review))return beforeCreate('recording_review_required');
+   const review=await readReview();if(!review)return beforeCreate('recording_review_required');
    const fromPhone=input.fromPhone??review.fromPhone;
    if(fromPhone!==review.fromPhone){
     if(review.fromPhone!==primaryBusinessPhone||!isAdditionalBusinessPhone(fromPhone))return beforeCreate('business_number_verification_required');
-    try{if(!await secondaryCallingReady(db,env,fetch,fromPhone))return beforeCreate('business_number_verification_required');}catch{return beforeCreate('business_number_verification_required');}
    }
+   // Repeat both fresh reviews at this final boundary, concurrently. Never
+   // reuse the earlier dispatch preflight or admit while either is pending.
+   const [agentRead,callerRead]=await Promise.allSettled([
+    checkAgent(review),fromPhone!==review.fromPhone?secondaryCallingReady(db,env,fetch,fromPhone):Promise.resolve(true),
+   ]);
+   if(agentRead.status==='rejected')throw agentRead.reason;
+   if(!agentRead.value)return beforeCreate('recording_review_required');
+   if(callerRead.status==='rejected'||!callerRead.value)return beforeCreate('business_number_verification_required');
    if(!dispatchAllowed())return beforeCreate('recording_release_required');
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
    const maxSeconds=input.maxTotalSeconds??600;if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
@@ -104,6 +111,11 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
   },
   async consent(request:Request,noticeMode=false,directMode=false){
    let row:RecordingRow|null=null;
+   const began=now();let stage='request_validation';
+   const diagnostic=(reason:string,error?:unknown)=>console.warn('recording_connection_diagnostic',{
+    ...(row?{recordingId:row.id}:{}),stage,reason,elapsedMs:Math.max(0,Math.round(now()-began)),
+    ...(error instanceof RecordingProviderError?{providerStatus:error.status}:{}),
+   });
    const finishTwiml=noticeMode?sellerNoticeEndTwiml:endTwiml;
    try{
     const u=new URL(request.url),id=u.searchParams.get('id'),nonce=u.searchParams.get('nonce');
@@ -112,21 +124,37 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     const canonical=recordingBaseUrl+'/'+path+'?id='+id+'&nonce='+nonce;
     const form=verifiedTwilioForm((await boundedBytes(request,16384)).toString('utf8'),request.headers.get('x-twilio-signature'),env.TWILIO_AUTH_TOKEN??'',canonical);
     if(!form||form.get('AccountSid')!==env.TWILIO_ACCOUNT_SID||!sid(form.get('CallSid'),'CA'))return hangup();
+    stage='recording_read';
     row=await getRow(db,id);if(!row||row.nonce_hash!==sha(nonce)||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||noticeMode&&row.party!=='seller'||directMode!==(row.entry_policy==='direct_recorded_v1'))return hangup();
-    const call=await provider.getCall(form.get('CallSid')!);
+    if(row.call_sid&&row.call_sid!==form.get('CallSid'))return hangup();
+    const optOut=recordingGateOptOut(form),review=await readReview();
+    const reviewMatches=!!review&&row.agent_id===review.agentId&&row.branch_id===review.branchId&&row.version_id===review.versionId&&row.disclosure_version===recordingPolicy.disclosureVersion;
+    // These are independent authenticated reads. Serializing them consumes the
+    // carrier's short response window before recording/AI startup can begin.
+    // Await both, then retain exact call binding and final database admission.
+    stage='entry_preflight';
+    const [callRead,agentRead]=await Promise.allSettled([
+     provider.getCall(form.get('CallSid')!),
+     !optOut&&row.state==='consent_pending'&&!row.consent_at&&reviewMatches?checkAgent(review!):Promise.resolve(false),
+    ]);
+    stage='call_readback';if(callRead.status==='rejected')throw callRead.reason;
+    const call=callRead.value;
     if(!canonicalCall(row,call,now(),true))return hangup();
+    stage='call_binding';
     row=await bindCall(row,call);if(!row)return hangup();
     // Replayed or concurrent callbacks cannot start/register again. Ending is safest.
     if(row.state!=='consent_pending'||row.consent_at){await endBound(row);return hangup();}
-    const optOut=recordingGateOptOut(form);
     if(optOut){const stopped=await transition(db,row,'contact_opt_out',{nonceHash:sha(nonce),utterance:optOut});if(stopped)row=stopped;await endBound(row);return xml(finishTwiml);}
     const age=now()-Date.parse(String(call.start_time));
-    const review=await readReview();
-    if(!review||row.agent_id!==review.agentId||row.branch_id!==review.branchId||row.version_id!==review.versionId||row.disclosure_version!==recordingPolicy.disclosureVersion||!Number.isFinite(age)||age<0||age>recordingPolicy.consentWindowSeconds*1000||!await checkAgent(review)){
+    stage='agent_review';if(agentRead.status==='rejected')throw agentRead.reason;
+    const currentReview=await readReview();
+    if(!reviewMatches||!currentReview||JSON.stringify(currentReview)!==JSON.stringify(review)||!Number.isFinite(age)||age<0||age>recordingPolicy.consentWindowSeconds*1000||!agentRead.value){
+     diagnostic('review_or_call_window_invalid');
      await transition(db,row,'decline',{reason:'timeout'});await endBound(row);return hangup();
     }
     if(directMode){
-     const authorized=await transition(db,row,'authorize_recording',{nonceHash:sha(nonce),policy:'direct_recorded_v1'});if(!authorized){await endBound(row);return hangup();}row=authorized;
+     stage='recording_authorization';
+     const authorized=await transition(db,row,'authorize_recording',{nonceHash:sha(nonce),policy:'direct_recorded_v1'});if(!authorized){diagnostic('admission_changed');await endBound(row);return hangup();}row=authorized;
     }else{
     const yes=noticeMode?sellerContinuedSpeech(form):affirmativeSpeech(form);
     if(!yes){
@@ -135,13 +163,16 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
      else await transition(db,row,'decline',{reason:form.has('SpeechResult')?'ambiguous':'timeout'});
      await endBound(row);return xml(finishTwiml);
     }
-    const consented=await transition(db,row,noticeMode?'notice_continue':'consent',{nonceHash:sha(nonce),source:'twilio_gather_speech',...yes,disclosureVersion:recordingPolicy.disclosureVersion});if(!consented){await endBound(row);return hangup();}row=consented;
+    stage='recording_consent';
+    const consented=await transition(db,row,noticeMode?'notice_continue':'consent',{nonceHash:sha(nonce),source:'twilio_gather_speech',...yes,disclosureVersion:recordingPolicy.disclosureVersion});if(!consented){diagnostic('admission_changed');await endBound(row);return hangup();}row=consented;
     }
-    const claimed=await transition(db,row,'claim_start');if(!claimed){await endBound(row);return hangup();}row=claimed;
-    let handoffStage='recording_start';
+    stage='recording_claim';
+    const claimed=await transition(db,row,'claim_start');if(!claimed){diagnostic('admission_changed');await endBound(row);return hangup();}row=claimed;
+    stage='recording_start';
     try{
      const p=await provider.start(row.call_sid!,recordingBaseUrl+'/status?id='+row.id);
      if(!recordingReceipt(row,p)||p.status!=='in-progress'||!Number.isFinite(Date.parse(String(p.start_time))))throw Error('START_NOT_CONFIRMED');
+     stage='recording_receipt';
      const saved=await transition(db,row,'started',{recordingSid:p.sid,providerStartedAt:new Date(String(p.start_time)).toISOString()});
      if(saved)row=saved;else{
       // The authenticated in-progress callback may win the same immutable binding first.
@@ -152,14 +183,14 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
      const seconds=Math.floor((now()-Date.parse(String(call.start_time)))/1000),remaining=row.max_total_seconds-seconds;
      if(remaining<1||remaining>row.max_total_seconds)throw Error('CALL_CAP_REQUIRED');
      // Record confirmed before connecting AI; no unrecorded continuation.
-     handoffStage='ai_registration';
+     stage='ai_registration';
      return xml(await provider.register(row,remaining,recordingStopToken(row.operation_key,env)));
     }catch(error){
      // Typed status and fixed stage only; never provider bodies, caller data or arbitrary errors.
-     console.warn('recording_connection_diagnostic',{recordingId:row.id,stage:handoffStage,reason:'handoff_not_confirmed',...(error instanceof RecordingProviderError?{providerStatus:error.status}:{})});
+     diagnostic('handoff_not_confirmed',error);
      if(row){if(row.state==='starting')await transition(db,row,'start_unknown').catch(()=>null);await endBound(row);}return hangup();
     }
-   }catch{if(row)await endBound(row);return hangup();}
+   }catch(error){diagnostic(error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'deadline_exceeded':'entry_not_confirmed',error);if(row)await endBound(row);return hangup();}
   },
   async status(request:Request){
    try{

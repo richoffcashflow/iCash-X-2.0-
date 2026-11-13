@@ -16,6 +16,7 @@ BATCH = "00000000-0000-4000-8000-000000000001"
 ACCOUNT = "00000000-0000-4000-8000-000000000002"
 SCREENING = "00000000-0000-4000-8000-000000000003"
 TICKET = "00000000-0000-4000-8000-000000000004"
+MISSING_FINISH = os.environ.get("ICASH_TEST_MISSING_EXPORT_FINISH") == "1"
 
 
 def sql(query):
@@ -95,7 +96,8 @@ def setup():
                      "tests/fixtures/unknown-export-late-live-functions.sql",
                      "tests/fixtures/unknown-export-late-batch-function.sql",
                      "config/unknown-export-capacity.sql",
-                     "config/unknown-export-late-evidence.sql"]:
+                     "config/unknown-export-late-evidence.sql",
+                     "config/ended-export-status-recovery.sql"]:
         sql((ROOT / filename).read_text())
     sql(f"""insert into icash_research_private.owner_batches(id,account_id,primary_screening,created_at)
       values('{BATCH}','{ACCOUNT}','{SCREENING}',now()-interval '9 minutes');
@@ -106,10 +108,15 @@ def setup():
       values('{TICKET}','{ACCOUNT}','{SCREENING}','contacts','held','held_for_reconciliation',now()-interval '10 minutes',1,now()-interval '7 minutes',now()-interval '6 minutes 59 seconds');
       insert into icash_operation_spend values('original','dispatched',105);
       update icash_research_private.export_capacity_automation set enabled=true,gateway_enabled=true,empty_enabled=true;""")
+    if MISSING_FINISH:
+        sql("update icash_research_private.requests set finished_at=null,result=null where kind='owner_lookup';")
 
 
 def enable():
     sql("update icash_research_private.export_capacity_automation set unknown_enabled=true;")
+    if MISSING_FINISH:
+        assert sql("select icash_claim_automatic_export_capacity(repeat('a',40));") == "", "Missing status stays disabled independently"
+        sql("update icash_research_private.export_capacity_automation set missing_finish_enabled=true;")
 
 
 setup()
@@ -125,7 +132,7 @@ original = source_snapshot()
 for change in [
     "update icash_research_private.requests set admitted=false",
     "update icash_research_private.requests set admitted=null",
-    "update icash_research_private.requests set finished_at=null",
+    "update icash_research_private.requests set finished_at=created_at" if MISSING_FINISH else "update icash_research_private.requests set finished_at=null",
     "update icash_research_private.requests set finished_at=now()",
     "update icash_research_private.requests set finished_at=created_at-interval '1 second'",
     "update icash_research_private.requests set account_id=null",
@@ -229,6 +236,7 @@ claim = claim_and_probe(concurrent=True)
 assert sql(f"select auto_policy from icash_research_private.owner_export_capacity_reviews where id='{claim['reviewId']}';") == "unknown-idle-v1"
 for change in [
     "update icash_research_private.export_capacity_automation set unknown_enabled=false",
+    "update icash_research_private.export_capacity_automation set missing_finish_enabled=false" if MISSING_FINISH else "update icash_research_private.export_capacity_automation set unknown_enabled=false",
     "update icash_research_private.export_capacity_automation set enabled=false",
     "update icash_research_private.owner_exports set request='{\"people_ids\":[\"changed-owner\"]}'",
     "update icash_automation_tickets set completed_at=completed_at+interval '1 second'",
@@ -338,7 +346,7 @@ for status, expected in [(500, "idle-v1"), (504, "gateway-idle-v1"), (400, "empt
     paid = literal(raw) if status == 400 else "null"
     sql(f"update icash_research_private.owner_exports set receipt={literal(evidence)};"
         + f"update icash_research_private.owner_batches set paid_receipt={paid};"
-        + f"update icash_research_private.requests set result='{{\"outcome\":\"http_error\",\"httpStatus\":{status}}}' where id='{BATCH}';")
+        + f"update icash_research_private.requests set finished_at=now()-interval '7 minutes',result='{{\"outcome\":\"http_error\",\"httpStatus\":{status}}}' where id='{BATCH}';")
     baseline = source_snapshot()
     claim = claim_and_probe()
     assert sql(f"select auto_policy from icash_research_private.owner_export_capacity_reviews where id='{claim['reviewId']}';") == expected
@@ -347,4 +355,4 @@ for status, expected in [(500, "idle-v1"), (504, "gateway-idle-v1"), (400, "empt
     assert outcome == ("capacity_verified" if status == 400 else "capacity_review_held"), (status, outcome)
     assert source_snapshot() == baseline
 
-print("PASS native unknown export recovery: staged default, strict original handler/request binding, late-source races, competing free probes/finalization, original owner and money holds preserved.")
+print("PASS native export recovery (missing finish=" + str(MISSING_FINISH) + "): staged default, strict original handler/request binding, late-source races, competing free probes/finalization, original owner and money holds preserved.")
