@@ -3,7 +3,7 @@ import {fixtureAccount,makeWorkspaceFixture} from './fixtures/workspace-volume.m
 
 // Actual owner workspace and private demo; every API/provider is intercepted.
 export async function verifyOwnerReset(browser,base,options,name,fixtureCookies){
- const context=await browser.newContext({...options,ignoreHTTPSErrors:true,extraHTTPHeaders:{Cookie:fixtureCookies}}),page=await context.newPage();
+ const context=await browser.newContext({...options,ignoreHTTPSErrors:true}),page=await context.newPage();
  page.setDefaultTimeout(15000);
  const errors=[],writes=[];let resets=0,checks=0,accounts=0,pass=true,owner=true;
  const account=()=>({...fixtureAccount,mode:'live',paused:false,isBillingOwner:owner,privateDemoPhone:owner?'+12125550199':null,billingModel:'membership_credits',membershipActive:true});
@@ -12,6 +12,9 @@ export async function verifyOwnerReset(browser,base,options,name,fixtureCookies)
  await context.route('**/*',async route=>{
   const request=route.request(),url=new URL(request.url()),p=url.pathname;
   if(url.origin!==base)return route.abort();
+  // WebKit owns its Cookie header. Supply the isolated navigation proof through
+  // the same local HTTP fixture boundary used by the other private-page tests.
+  if(p==='/test-bot')return route.fulfill({response:await route.fetch({headers:{...request.headers(),cookie:fixtureCookies},maxRedirects:0})});
   if(!p.startsWith('/api/'))return route.continue();
   if(p==='/api/demo/reset'){
    assert.equal(request.method(),'POST');resets++;
@@ -54,7 +57,7 @@ export async function verifyOwnerReset(browser,base,options,name,fixtureCookies)
   owner=false;const refreshed=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/account');
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await refreshed;await reset.waitFor({state:'hidden'});
   assert.equal(resets,1,'A non-owner has no reset control');
-  await page.goto(base+'/test-bot',{waitUntil:'networkidle'});pass=false;
+  await page.goto(base+'/test-bot',{waitUntil:'networkidle'});assert.equal(new URL(page.url()).pathname,'/test-bot','The isolated navigation proof must reach the private demo');pass=false;
   await page.locator('#seller-address').fill('123 Fixture Street, Dallas, TX 75210');await page.getByRole('button',{name:'Continue',exact:true}).click();
   await page.locator('#demo-name').fill('Fixture Owner');await page.locator('input[type=checkbox]').check();
   await page.getByText('Calling connection: not verified',{exact:true}).waitFor();assert(await page.getByRole('button',{name:'Start my bot demo'}).isDisabled());

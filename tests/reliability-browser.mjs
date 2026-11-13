@@ -112,6 +112,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='cost-evidence'){await verifyCostEvidence(browser,base,options,name,fixtureCookies,fixture);continue;}
+   await verifyOwnerReset(browser,base,options,name,fixtureCookies);
    await verifyCostEvidence(browser,base,options,name,fixtureCookies,fixture);
    await verifyPlatformLearning(browser,base,options,name,fixtureCookies,fixture);
    await verifyTargeting(browser,base,options,name,fixtureCookies,fixture);
@@ -219,7 +220,6 @@ try{
    await verifyAssistantCoach(browser,base,options,name);
    await verifyWorkspace(browser,base,options,name);
    await verifyWorkspaceLayout(browser,base,options,name);
-   await verifyOwnerReset(browser,base,options,name,fixtureCookies);
    await verifyConversationInbox(browser,base,options,name);
    await verifyCourse(browser,base,options,name);
   }finally{await browser.close();}
