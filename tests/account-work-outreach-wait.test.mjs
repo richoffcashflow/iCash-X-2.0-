@@ -16,6 +16,7 @@ try{
  create function icash_outreach_voice_current(uuid) returns boolean language sql stable set search_path=public as $$select voice_enabled from fixture_work_state where account_id=$1$$;
  create view icash_timezone_names as select name from pg_timezone_names;
  create table icash_customer_identities(account_id uuid primary key,principal text);
+ create table icash_voice_configs(account_id uuid primary key,enabled boolean,reviewed_until timestamptz,seller_rate_id uuid);
  create table icash_operational_contacts(id uuid primary key,account_id uuid,screening_id uuid,channel text,phone text,timezone text,timezone_basis text,source_hash text,sending_principal text,created_at timestamptz,eligibility_until timestamptz,revoked_at timestamptz);
  create table icash_contact_permissions(account_id uuid,revoked_at timestamptz,permission_until timestamptz);
  create table icash_voice_jobs(id uuid,account_id uuid,operational_contact_id uuid,state text,due_at timestamptz,operation_key text,provider_call_sid text,conversation_id text,callback_id uuid,sms_source_message_id uuid,cancellation_notice_id uuid);
@@ -35,11 +36,18 @@ try{
  assert.equal((migration.match(/e29029fce23b3856ad9cdf32ecd6848d/g)??[]).length,1);
  migration=migration.replace('e29029fce23b3856ad9cdf32ecd6848d',fixtureHash);
  await pg.exec(migration);
+ let configuration=read('config/account-work-outreach-configuration.sql');
+ assert.equal(configuration,read('supabase/migrations/20261113135943_account_work_outreach_configuration.sql'));
+ const waitHash=await one("select md5(pg_get_functiondef('icash_reliability_private.account_outreach_wait(uuid,timestamptz,timestamptz)'::regprocedure))");
+ assert.equal((configuration.match(/3cf72e201728ade473624fc1d3df1e2a/g)??[]).length,1);
+ await pg.exec(configuration.replace('3cf72e201728ade473624fc1d3df1e2a',waitHash));
  const changed=await one("select pg_get_functiondef('public.icash_account_work_observations()'::regprocedure)");
  assert.equal(changed.replace('\n    and not icash_reliability_private.account_outreach_wait(id,completed,now())',''),original,'only the no-completed-work predicate changes');
  await q("insert into icash_accounts(id,owner_user_id,bot_paused,created_at,workspace_ack_version) values($1,$1,false,$2::timestamptz-interval '2 days','fixture')",[account,clock]);
  await q('insert into icash_wallets(account_id,balance_cents,reserved_cents) values($1,1000,0)',[account]);
  await q("insert into icash_operation_rates(id,operation,enabled,expires_at,charge_cents) values($1,'property_search',true,'infinity',100)",[account]);
+ await q("insert into icash_operation_rates(id,operation,enabled,expires_at,charge_cents) values($1,'seller_voice',true,'infinity',100)",[contact]);
+ await q("insert into icash_voice_configs values($1,true,'infinity',$2)",[account,contact]);
  await q("insert into icash_discovery_configs(account_id,enabled,auto_enabled,contacts_enabled,rate_id,contact_rate_id,data_rights_until,max_open_prospects) values($1,true,true,true,$1,$1,'infinity',1)",[account]);
  await q('insert into fixture_work_state values($1,1,null,true)',[account]);
  await q("insert into icash_customer_identities values($1,'fixture-principal')",[account]);
@@ -62,6 +70,11 @@ try{
  await deny('unknown buffer cannot prove waiting','update fixture_work_state set buffer=null');
  await deny('contact enrichment remains due',`update fixture_work_state set candidate='${screen}'`);
  await deny('disabled campaign','update fixture_work_state set voice_enabled=false');
+ await deny('disabled calling configuration','update icash_voice_configs set enabled=false');
+ await deny('expired calling review',`update icash_voice_configs set reviewed_until='${clock}'`);
+ await deny('missing calling configuration','delete from icash_voice_configs');
+ await deny('disabled calling rate',`update icash_operation_rates set enabled=false where id='${contact}'`);
+ await deny('expired calling rate',`update icash_operation_rates set expires_at='${clock}' where id='${contact}'`);
  await deny('unfinished screening',"update icash_screening_jobs set state='running'");
  await deny('no prepared job',"update icash_voice_jobs set state='held'");
  await deny('already attempted job',"update icash_voice_jobs set operation_key='original-unknown'");
@@ -89,6 +102,9 @@ try{
  await q("update icash_operational_contacts set timezone=$1,timezone_basis='recipient',created_at=now()-interval '2 hours',eligibility_until=now()+interval '1 day'",[zone]);
  await pg.exec("update icash_accounts set created_at=now()-interval '2 days';update icash_operation_spend set settled_at=now()-interval '2 hours';update icash_voice_jobs set due_at=now()-interval '2 hours';");
  assert.equal(await one('select count(*) from icash_account_work_observations()'),0,'actual monitor excludes proven scheduled waiting');
+ await pg.exec('update icash_voice_configs set enabled=false');
+ assert.equal(await one('select reason from icash_account_work_observations()'),'no_completed_work','invalid calling configuration stays observable overnight');
+ await pg.exec('update icash_voice_configs set enabled=true');
  await pg.exec('update icash_reliability_private.outreach_wait_settings set enabled=false');
  assert.equal(await one('select reason from icash_account_work_observations()'),'no_completed_work','disabling restores previous observation');
  await pg.exec("update icash_reliability_private.outreach_wait_settings set enabled=true;update icash_discovery_configs set enabled=false");
