@@ -5,7 +5,13 @@ const pg=await PGlite.create(),q=(sql,args=[])=>pg.query(sql,args),one=async(sql
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const account='00000000-0000-4000-8000-000000000001',screen='00000000-0000-4000-8000-000000000002',contact='00000000-0000-4000-8000-000000000003';
 const clock='2026-11-13T13:00:00Z',completed='2026-11-13T11:00:00Z';
-const wait=(at=clock,done=completed)=>one('select icash_reliability_private.account_outreach_wait($1,$2,$3)',[account,done,at]);
+const wait=async(at=clock,done=completed)=>{
+ const result=await one('select icash_reliability_private.account_outreach_wait($1,$2,$3)',[account,done,at]);
+ const previous=await one('select icash_reliability_private.fixture_outreach_wait_before_cost($1,$2,$3)',[account,done,at]);
+ assert.equal(result,previous,'optimized predicate preserves predecessor eligibility');
+ return result;
+};
+const evidence=()=>one('select icash_reliability_private.account_outreach_wait_evidence($1,$2,$3)',[account,completed,clock]);
 const deny=async(label,sql)=>{await pg.exec('begin');try{await pg.exec(sql);assert.equal(await wait(),false,label);}finally{await pg.exec('rollback');}};
 try{
  await pg.exec(read('tests/fixtures/account-work-repair.sql'));
@@ -41,8 +47,22 @@ try{
  const waitHash=await one("select md5(pg_get_functiondef('icash_reliability_private.account_outreach_wait(uuid,timestamptz,timestamptz)'::regprocedure))");
  assert.equal((configuration.match(/3cf72e201728ade473624fc1d3df1e2a/g)??[]).length,1);
  await pg.exec(configuration.replace('3cf72e201728ade473624fc1d3df1e2a',waitHash));
+ const beforeCost=await one("select pg_get_functiondef('icash_reliability_private.account_outreach_wait(uuid,timestamptz,timestamptz)'::regprocedure)");
+ await pg.exec(beforeCost.replace('icash_reliability_private.account_outreach_wait(', 'icash_reliability_private.fixture_outreach_wait_before_cost('));
+ let cost=read('config/account-work-outreach-observation-cost.sql');
+ assert.equal(cost,read('supabase/migrations/20261113144426_account_work_outreach_observation_cost.sql'));
+ assert.equal((cost.match(/1f4c569012dc84b148c6e4dc46c7f499/g)??[]).length,1);
+ const beforeCostHash=await one("select md5(pg_get_functiondef('icash_reliability_private.account_outreach_wait(uuid,timestamptz,timestamptz)'::regprocedure))");
+ await pg.exec(cost.replace('1f4c569012dc84b148c6e4dc46c7f499',beforeCostHash));
+ let once=read('config/account-work-observation-once.sql');
+ assert.equal(once,read('supabase/migrations/20261113144655_account_work_observation_once.sql'));
+ const observationHash=await one("select md5(pg_get_functiondef('public.icash_account_work_observations()'::regprocedure))");
+ const evidenceHash=await one("select md5(pg_get_functiondef('icash_reliability_private.account_outreach_wait_evidence(uuid,timestamptz,timestamptz)'::regprocedure))");
+ assert.equal((once.match(/ac207f34d43ecba970e86200a960ba9c/g)??[]).length,1);
+ assert.equal((once.match(/724bd1b882007feedd68a7775b3d215a/g)??[]).length,1);
+ await pg.exec(once.replace('ac207f34d43ecba970e86200a960ba9c',observationHash).replace('724bd1b882007feedd68a7775b3d215a',evidenceHash));
  const changed=await one("select pg_get_functiondef('public.icash_account_work_observations()'::regprocedure)");
- assert.equal(changed.replace('\n    and not icash_reliability_private.account_outreach_wait(id,completed,now())',''),original,'only the no-completed-work predicate changes');
+ assert.equal(changed.replace('\n    and not icash_reliability_private.account_outreach_wait(id,completed,now())','').replace('classified as materialized (','classified as ('),original,'only the no-completed-work predicate and evaluation fence change');
  await q("insert into icash_accounts(id,owner_user_id,bot_paused,created_at,workspace_ack_version) values($1,$1,false,$2::timestamptz-interval '2 days','fixture')",[account,clock]);
  await q('insert into icash_wallets(account_id,balance_cents,reserved_cents) values($1,1000,0)',[account]);
  await q("insert into icash_operation_rates(id,operation,enabled,expires_at,charge_cents) values($1,'property_search',true,'infinity',100)",[account]);
@@ -58,6 +78,7 @@ try{
  await q("insert into icash_operation_spend(operation_key,account_id,state,actual_micros,settled_at) values('fixture:owners',$1,'settled',1,$2)",[account,completed]);
  const originalMoney=await one("select jsonb_build_object('wallets',(select jsonb_agg(w) from icash_wallets w),'operations',(select jsonb_agg(o) from icash_operation_spend o))");
  assert.equal(await wait(),false,'staged disabled');
+ assert.equal(await evidence(),true,'full evidence can be verified while live observation stays disabled');
  await pg.exec('update icash_reliability_private.outreach_wait_settings set enabled=true');
  assert.equal(await wait(),true,'fresh overnight contacts, full buffer and closed canonical Chicago window');
  assert.equal(await wait('2026-11-13T14:59:59Z'),true);
@@ -93,6 +114,32 @@ try{
  await deny('alternate permission',`insert into icash_contact_permissions values('${account}',null,'2026-11-14T13:00:00Z')`);
  await deny('current seller conversation',`insert into icash_live_conversations(account_id,screening_id,state,completed_at,contact_key,conversation_id,result) values('${account}','${screen}','complete','${completed}',encode(sha256(convert_to('+12025550101','UTF8')),'hex'),'fixture-call','{"fixtureSellerResponse":true}')`);
  await deny('a second current channel is open',`insert into icash_operational_contacts select gen_random_uuid(),account_id,screening_id,'sms',phone,'Europe/London','recipient',source_hash,sending_principal,created_at,eligibility_until,revoked_at from icash_operational_contacts`);
+ // Regress the production cost bug: cheap exclusions must not evaluate any
+ // historical opportunity, enrichment or conversation scans.
+ await pg.exec('begin');
+ try{
+  await pg.exec(`
+   create or replace function icash_pending_opportunity_count(uuid) returns integer language plpgsql stable as $$begin raise exception 'unexpected opportunity history scan';end$$;
+   create or replace function icash_enrichment_before_prospecting_budget(uuid) returns uuid language plpgsql stable as $$begin raise exception 'unexpected enrichment history scan';end$$;
+   create or replace function icash_outreach_active_conversation(p_account uuid,p_screening uuid,p_phone text,p_clock timestamptz default now()) returns boolean language plpgsql stable as $$begin raise exception 'unexpected conversation history scan';end$$;
+  `);
+  for(const [label,sql] of [
+   ['old contacts',"update icash_operational_contacts set created_at='2026-11-13T02:00:00Z'"],
+   ['open window',"update icash_operational_contacts set timezone='Europe/London',timezone_basis='recipient'"],
+   ['unknown zone',"update icash_operational_contacts set timezone='Invalid/Zone',timezone_basis='recipient'"],
+   ['no contacts','delete from icash_operational_contacts'],
+   ['no prepared job',"update icash_voice_jobs set state='held'"],
+   ['disabled calling','update icash_voice_configs set enabled=false'],
+   ['wrong source',"update icash_owner_contacts set result='{}'"],
+   ['pending reply',`insert into icash_text_ai_jobs(account_id,state) values('${account}','pending')`],
+  ]){
+   await pg.exec('savepoint cheap');
+   await pg.exec(sql);
+   assert.equal(await evidence(),false,label+' skips historical scans');
+   await pg.exec('rollback to cheap');
+  }
+  await assert.rejects(evidence,/unexpected conversation history scan/,'valid evidence still checks live conversations');
+ }finally{await pg.exec('rollback');}
  assert.deepEqual(await one("select jsonb_build_object('wallets',(select jsonb_agg(w) from icash_wallets w),'operations',(select jsonb_agg(o) from icash_operation_spend o))"),originalMoney,'observations never change money or original operations');
  // Integration with the actual observation query at the test runner's clock.
  // Pick a real IANA zone that is currently 3 AM; no admission clock is stubbed.
@@ -101,6 +148,15 @@ try{
  const zone=offset===0?'Etc/GMT':`Etc/GMT${offset>0?'-':'+'}${Math.abs(offset)}`;
  await q("update icash_operational_contacts set timezone=$1,timezone_basis='recipient',created_at=now()-interval '2 hours',eligibility_until=now()+interval '1 day'",[zone]);
  await pg.exec("update icash_accounts set created_at=now()-interval '2 days';update icash_operation_spend set settled_at=now()-interval '2 hours';update icash_voice_jobs set due_at=now()-interval '2 hours';");
+ await pg.exec('begin');
+ try{
+  // A fixture-only sequence records evaluation without changing any real work.
+  await pg.exec(`create sequence fixture_observation_calls;
+   create or replace function icash_reliability_private.account_outreach_wait_evidence(p_account uuid,p_completed timestamptz,p_clock timestamptz default now()) returns boolean
+   language plpgsql stable set search_path='' as $$begin perform nextval('public.fixture_observation_calls');return false;end$$;`);
+  assert.equal(await one('select count(*) from icash_account_work_observations()'),1);
+  assert.equal(await one('select last_value::integer from fixture_observation_calls'),1,'classification evidence is evaluated once per account');
+ }finally{await pg.exec('rollback');}
  assert.equal(await one('select count(*) from icash_account_work_observations()'),0,'actual monitor excludes proven scheduled waiting');
  await pg.exec('update icash_voice_configs set enabled=false');
  assert.equal(await one('select reason from icash_account_work_observations()'),'no_completed_work','invalid calling configuration stays observable overnight');
@@ -119,6 +175,7 @@ try{
  assert.equal(await one('select reason from icash_account_work_observations()'),'pending_work','funds held by original uncertain work remain visible');
  for(const role of ['anon','authenticated']){
   assert.equal(await one("select has_function_privilege($1,'icash_reliability_private.account_outreach_wait(uuid,timestamptz,timestamptz)','execute')",[role]),false);
+  assert.equal(await one("select has_function_privilege($1,'icash_reliability_private.account_outreach_wait_evidence(uuid,timestamptz,timestamptz)','execute')",[role]),false);
   assert.equal(await one("select has_table_privilege($1,'icash_reliability_private.outreach_wait_settings','select')",[role]),false);
  }
  console.log('PASS scheduled outreach waits, exact hours, preserved outage reasons, active work, source/identity binding, staged activation, immutable money and private ACLs.');
