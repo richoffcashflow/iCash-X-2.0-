@@ -7,7 +7,9 @@ const reasons=new Set(['recording_release_required','recording_review_required',
  * provider rows never authorizes release of an uncertain operation. */
 export async function finishVoicePredialAbort(db:Db,input:{accountId:string;jobId:string;automation:VoiceAutomationClaim|undefined;
  dispatchedAt:string|null;result:{status:string;dispatchBoundary?:string}}){
- if(!input.automation||!input.dispatchedAt||input.result.dispatchBoundary!=='before_recording_create_v1'||!reasons.has(input.result.status))return false;
+ const beforeCreate=input.result.dispatchBoundary==='before_recording_create_v1'&&reasons.has(input.result.status);
+ const rejectedAdmission=input.result.dispatchBoundary==='recording_admission_rejected_v1'&&input.result.status==='recording_admission_held';
+ if(!input.automation||!input.dispatchedAt||(!beforeCreate&&!rejectedAdmission))return false;
  try{return await db<boolean>('rpc/icash_finish_voice_predial_abort','POST',{
   p_account:input.accountId,p_job:input.jobId,p_ticket:input.automation.ticketId,p_token:input.automation.token,
   p_dispatched_at:input.dispatchedAt,p_reason:input.result.status,p_boundary:input.result.dispatchBoundary,

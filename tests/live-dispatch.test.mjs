@@ -383,6 +383,9 @@ for(const variant of ['cash_interest','flexible_timing']){
 for(const marked of [true,false]){reset();recordingStatus='recording_review_required';recordingBoundary=marked?'before_recording_create_v1':undefined;
  assert.equal((await dispatchLiveVoice('account','job',{ticketId:'ticket',token:'capability'})).status,'recording_review_required');
  assert.equal(records.filter(r=>r.path==='rpc/icash_finish_voice_predial_abort').length,marked?1:0);assert.equal(jobState,'held');}
+for(const marked of [true,false]){reset();recordingStatus='recording_admission_held';recordingBoundary=marked?'recording_admission_rejected_v1':undefined;
+ assert.equal((await dispatchLiveVoice('account','job',{ticketId:'ticket',token:'capability'})).status,'recording_admission_held');
+ assert.equal(records.filter(r=>r.path==='rpc/icash_finish_voice_predial_abort').length,marked?1:0);assert.equal(jobState,'held');}
 reset();recordingStatus='recording_review_required';recordingBoundary='before_recording_create_v1';
 await dispatchLiveVoice('account','job');assert(!records.some(r=>r.path==='rpc/icash_finish_voice_predial_abort'),'No automated capability means no release');
 reset();recordingStatus='recording_review_required';predialAccepted=false;

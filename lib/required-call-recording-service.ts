@@ -86,7 +86,10 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
    const maxSeconds=input.maxTotalSeconds??600;if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
    const disclosure=recordingDisclosure(input.principal,input.assistantName,input.buyerKind),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);
    let row=await db<RecordingRow|null>('rpc/icash_create_direct_recorded_call','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
-   if(!row)return {status:'recording_admission_held'};
+   // A completed null admission response proves this handler cannot reach dial.
+   // The abort RPC still rejects an existing/conflicting recording or late proof.
+   // A thrown/lost admission response never receives this marker.
+   if(!row)return {status:'recording_admission_held',dispatchBoundary:'recording_admission_rejected_v1' as const};
    if(!dispatchAllowed())return {status:'recording_release_required'};
    let stage='dial_claim';
    try{
