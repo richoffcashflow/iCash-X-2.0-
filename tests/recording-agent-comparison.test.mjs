@@ -42,7 +42,7 @@ const bothHash='875eb33f2156f6a7e6305606b6ea3dd2868cadbc336c4a269b7497d3a9d3ec82
 const representations=[[false,false],[true,false],[false,true],[true,true]];
 const reviews=representations.map(([empty,list])=>reviewFor(fixture(empty,list)));
 
-test('current and recent approved snapshots do not enumerate historical fingerprints before matching',async()=>{
+function fullDefaultsFixture(){
  const a=fixture(true,true),config=a.conversation_config,platform=a.platform_settings,overrides=platform.overrides.conversation_config_override;
  Object.assign(a,{agent_id:eighty.agentId,branch_id:eighty.branchId,version_id:eighty.versionId});
  Object.assign(platform.call_limits,{agent_concurrency_limit:eighty.limit,daily_limit:eighty.dailyLimit});
@@ -56,6 +56,11 @@ test('current and recent approved snapshots do not enumerate historical fingerpr
  platform.privacy.encrypt_conversations=false;platform.widget={mobile_fullscreen:true,transcript_speech_sync_enabled:true};platform.summary_schedule=null;config.asr.keyterm_libraries=[];
  platform.guardrails={human_voice:{is_enabled:false},synthetic_voice:{is_enabled:false}};
  a.workflow={nodes:{start_node:{type:'start',parent_frame_id:null}},frames:{}};
+ return a;
+}
+
+test('current and recent approved snapshots do not enumerate historical fingerprints before matching',async()=>{
+ const a=fullDefaultsFixture();
  const current=reviewFor(a),recent=structuredClone(a);
  delete recent.conversation_config.agent.prompt.enable_prompt_caching;delete recent.workflow.frames;delete recent.workflow.nodes.start_node.parent_frame_id;
  let hashes=0;
@@ -68,6 +73,29 @@ test('current and recent approved snapshots do not enumerate historical fingerpr
  const original=structuredClone(a);a.platform_settings.auth.enable_auth=false;
  hashes=0;assert.equal(measured.recordingAgentMatches(current,a),false);assert.equal(hashes,0,'Invalid required controls fail before fingerprint expansion');
  assert.equal(recordingAgentMatches(current,original),true);
+});
+
+test('historical full approvals at every authorized capacity match before exhaustive intermediate combinations',async()=>{
+ const a=fullDefaultsFixture(),old=structuredClone(a),c=old.conversation_config,p=old.platform_settings,o=p.overrides.conversation_config_override;
+ delete c.agent.prompt.enable_prompt_caching;delete old.workflow.frames;delete old.workflow.nodes.start_node.parent_frame_id;
+ delete p.guardrails.human_voice;p.guardrails.synthetic_voice.trigger_action={type:'end_call'};
+ delete c.agent.prompt.built_in_tools.ask_teammate;delete c.agent.prompt.built_in_tools.identity_challenge;delete p.app_connectors;
+ delete c.avatar;delete o.agent.prompt.reasoning_effort;
+ delete c.turn.noisy_environment_detection;delete c.turn.noisy_environment_message;delete o.turn.noisy_environment_message;
+ delete c.tts.clone_strength;c.tts.pvc_strength=0;delete o.tts.clone_strength;o.tts.pvc_strength=false;
+ delete p.privacy.user_memory.identity_policy;delete p.widget.mobile_fullscreen;delete p.summary_schedule;
+ delete c.asr.keyterm_libraries;delete p.widget.transcript_speech_sync_enabled;delete p.privacy.encrypt_conversations;
+ delete c.agent.subagent_config;delete c.agent.subagents;
+ let hashes=0;
+ const measured=await loadService('lib/required-call-recording.ts',{...capacityApprovals,...offerPolicy,...consentEvidence,createHash:(...args)=>{hashes++;return createHash(...args);}});
+ for(const [concurrency,daily] of [[30,1000],[18,1000],[8,100],[2,100]]){
+  Object.assign(p.call_limits,{agent_concurrency_limit:concurrency,daily_limit:daily});
+  const review=reviewFor(old),before=structuredClone({review,a});hashes=0;const start=performance.now();
+  assert.equal(measured.recordingAgentMatches(review,a),true);
+  console.log('Historical capacity comparison:',concurrency,hashes,'fingerprints,',Math.round(performance.now()-start),'ms');
+  assert(hashes<=160,'An unchanged historical approval must not enumerate thousands of intermediate fingerprints');
+  assert.deepEqual({review,a},before,'Prioritization must not rewrite the provider snapshot or its approval');
+ }
 });
 
 test('November 12 joint cache and empty workflow defaults retain the complete original approval',()=>{
