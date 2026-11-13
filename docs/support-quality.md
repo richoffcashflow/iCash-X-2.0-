@@ -1,5 +1,7 @@
 # Support improvement workflow
 
+Direct text-sending failures request the affected property and message delivery status instead of using unrelated call holds as the explanation. Questions about adding credits or waiting for pending work distinguish checked balances from a verified repair, retain Pause and blocked/unknown checks, and never promise resumed work. Fictional replays in `tests/support-work-repair-boundaries.test.mjs` cover guest privacy, operator findings, payment/access boundaries and topic changes. These answers do not send outreach, change credits or confirm customer recovery.
+
 Personal-number questions about takeover and in-app calls/texts receive the verified business-sender explanation, including the boundary for calls or texts made outside iCash X. A general explanation never verifies a particular sender or dismisses a reported exposure. Landline delivery questions request property-bound eligibility and delivery evidence instead of unrelated activity totals. Fictional account/guest replays in `tests/support-contact-privacy.test.mjs` preserve billing, operator findings and topic changes; no call, text, identity or account change occurs.
 
 Requests for someone to reach out after a verified support handoff explain that management can reply in the conversation without promising a callback or timing. `tests/support-review-wait.test.mjs` covers later operator findings, a missing handoff, cancellation, negation and seller/bot contact boundaries. Neither explanation confirms resolution.
