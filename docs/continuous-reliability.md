@@ -1,5 +1,15 @@
 # Continuous reliability
 
+## November 13 requested seller contact
+
+The [requested-contact repair](requested-seller-followthrough.md) addresses a
+clipped mailbox number followed by repeated questions, consented introductions
+blocked by cold sender pacing, and a supported ownership clarification rejected
+during title/payoff review. Shared queue and final claim tests preserve total
+capacity, current contact controls, financial review and contract idempotency.
+Runtime mailbox instructions are verified offline; recognition and delivery are
+not reported as live-tested without actual provider receipts.
+
 ## November 13 funded work and voice recovery
 
 The [funded-work repair](funded-stall-recovery-2026-11-13.md) activated an immutable,
