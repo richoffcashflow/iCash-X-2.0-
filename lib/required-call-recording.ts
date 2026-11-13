@@ -103,6 +103,19 @@ function recordingStandardGuardrailSnapshot(snapshot:Record<string,unknown>):Rec
  const previous={...rule};delete previous.service_tier;
  return {...snapshot,platform_settings:{...platform,guardrails:{...guardrails,custom:{...custom,config:{...config,configs:[previous]}}}}};
 }
+function recordingWorkflowVersionSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
+ const workflow=object(snapshot.workflow),nodes=object(workflow.nodes),start=object(nodes.start_node);
+ const empty=(value:unknown)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===0;
+ // Observed on the unchanged reviewed version: version=1 was added to the
+ // inert single-start layout. Remove only that field, then match the complete
+ // original fingerprint. Executable nodes, edges and unknown metadata stay exact.
+ if(workflow.version!==1||Object.keys(workflow).some(k=>!['version','nodes','edges','frames','subgraphs','prevent_subagent_loops'].includes(k))
+  ||Object.keys(nodes).length!==1||start.type!=='start'||start.parent_frame_id!==null||start.parent_subgraph_id!==null
+  ||!Array.isArray(start.edge_order)||start.edge_order.length!==0||!empty(workflow.edges)||!empty(workflow.frames)
+  ||!empty(workflow.subgraphs)||workflow.prevent_subagent_loops!==false)return null;
+ const previous={...workflow};delete previous.version;
+ return {...snapshot,workflow:previous};
+}
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
  return recordingConfigHashSearch(configHash,snapshot,true)||recordingConfigHashSearch(configHash,snapshot,false);
 }
@@ -114,6 +127,8 @@ function recordingConfigHashSearch(configHash:string,snapshot:Record<string,unkn
  // representations. The expansion can otherwise block the call event loop even
  // when the first, unchanged snapshot already matches its exact approval.
  if(recordingEmptyAgentHashMatches(configHash,snapshot))return true;
+ const previousVersion=recordingWorkflowVersionSnapshot(snapshot);
+ if(previousVersion&&recordingConfigHashSearch(configHash,previousVersion,edgesOnly))return true;
  // November 12 added default prompt caching and empty layout-frame metadata
  // together to the same reviewed version's single-start workflow. Reconstruct
  // only this exact trio, then require the entire original fingerprint. Never

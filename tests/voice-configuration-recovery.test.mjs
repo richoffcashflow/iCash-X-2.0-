@@ -34,11 +34,11 @@ test('preview, disabled release, mismatched account, expired review and real pro
 });
 test('reviewed November 12 representation enters only the existing bounded recovery with original and observed hashes',async()=>{
  const f=fixture(),calls=[];
- f.agent.workflow={edges:{},nodes:{start_node:{type:'start',edge_order:[]}}};
+ f.agent.workflow={edges:{},nodes:{start_node:{type:'start',edge_order:[],parent_subgraph_id:null}},subgraphs:{},prevent_subagent_loops:false};
  const hash=()=>sha(JSON.stringify(canonical({conversation_config:f.agent.conversation_config,platform_settings:f.agent.platform_settings,workflow:f.agent.workflow,procedures:null})));
  f.review.configHash=hash();f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(f.review);
  f.agent.conversation_config.agent.prompt.enable_prompt_caching=true;
- f.agent.workflow.frames={};f.agent.workflow.nodes.start_node.parent_frame_id=null;
+ f.agent.workflow.frames={};f.agent.workflow.nodes.start_node.parent_frame_id=null;f.agent.workflow.version=1;
  const before=JSON.stringify(f);
  assert.deepEqual(await recoverVoiceConfiguration(async(...args)=>{calls.push(args);return 3;},f.agent,f.env,now),{status:'checked',requeued:3});
  assert.equal(calls.length,1);assert.equal(calls[0][0],'rpc/icash_recover_voice_configuration');

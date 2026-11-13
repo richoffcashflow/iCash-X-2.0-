@@ -59,6 +59,24 @@ function fullDefaultsFixture(){
  return a;
 }
 
+test('single-start workflow version metadata retains the complete reviewed configuration',()=>{
+ const original=fixture(),workflow={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_frame_id:null,parent_subgraph_id:null}},frames:{},subgraphs:{},prevent_subagent_loops:false};
+ original.workflow=workflow;
+ const review=reviewFor(original),current=structuredClone(original);current.workflow.version=1;
+ const before=JSON.stringify({review,current});
+ assert.equal(recordingAgentMatches(review,current),true);
+ assert.equal(JSON.stringify({review,current}),before,'No provider configuration or approval rewrite');
+ for(const mutate of [
+  ...[0,2,'1',null,true].map(v=>a=>a.workflow.version=v),
+  a=>a.workflow.nodes.start_node.type='override_agent',a=>a.workflow.nodes.extra={type:'end'},
+  a=>a.workflow.edges.edge={source:'start_node'},a=>a.workflow.frames.frame={},a=>a.workflow.subgraphs.graph={},
+  a=>a.workflow.nodes.start_node.parent_subgraph_id='graph',a=>a.workflow.prevent_subagent_loops=true,
+  a=>a.conversation_config.agent.prompt.prompt='Changed executable prompt',a=>a.workflow.future_field=false,
+  a=>a.version_id='agtvrsn_changed',
+ ]){const changed=structuredClone(current);mutate(changed);assert.equal(recordingAgentMatches(review,changed),false);}
+ assert.equal(recordingAgentMatches({...review,configHash:configHash(current)},original),false,'No reverse synthesis of a new review');
+});
+
 test('current and recent approved snapshots do not enumerate historical fingerprints before matching',async()=>{
  const a=fullDefaultsFixture();
  const current=reviewFor(a),recent=structuredClone(a);
