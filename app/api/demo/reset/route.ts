@@ -19,6 +19,7 @@ export async function POST(request:Request){
   if(Object.keys(input).length!==1||!uuid(input.requestId))return fail(400,'Invalid reset request.');
   const result=object(await db('rpc/icash_reset_owner_account','POST',{p_actor:owner.userId,p_account:owner.accountId,p_request:input.requestId},AbortSignal.timeout(18000)));
   if(result.status==='waiting'&&['active_call','active_work'].includes(String(result.reason)))return Response.json({status:'waiting',reason:result.reason},{status:202,headers:privateHeaders});
+  if(result.status==='blocked'&&result.reason==='provider_review')return fail(409,'An earlier property lookup has an unresolved provider result. It must be reconciled before resetting; no new purchase was started.');
   if(result.status!=='reset'||result.requestId!==input.requestId||result.historyPreserved!==true||result.providerWrites!==false)throw Error('RESET_NOT_VERIFIED');
   return Response.json(result,{headers:privateHeaders});
  }catch(e){return fail(e instanceof Error&&['SIGN_IN_REQUIRED','ACCOUNT_REQUIRED','DASHBOARD_PASSWORD_REQUIRED'].includes(e.message)?401:503,'Could not confirm the reset. Try again to check the same request.');}

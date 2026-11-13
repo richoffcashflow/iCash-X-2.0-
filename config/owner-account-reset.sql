@@ -65,6 +65,10 @@ begin
  or exists(select 1 from public.icash_workspace_questions where account_id=p_account and archived_at is null and state='pending')
  or exists(select 1 from public.icash_text_ai_jobs where account_id=p_account and state in ('issued','analyzing'))
  then return jsonb_build_object('status','waiting','reason','active_work');end if;
+ -- A timed-out paid lookup cannot become a fresh purchase through reset.
+ if exists(select 1 from public.icash_seller_intakes where id=any(leads) and checked_at is null
+  and (claim_token is not null or claimed_at is not null))
+ then return jsonb_build_object('status','blocked','reason','provider_review');end if;
  select jsonb_build_object(
  'screenings',(select coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) from public.icash_screening_jobs s where s.account_id=p_account and s.id=any(ids)),
  'intakes',(select coalesce(jsonb_agg(to_jsonb(l)),'[]'::jsonb) from public.icash_seller_intakes l where l.id=any(leads)),

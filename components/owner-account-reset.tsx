@@ -19,7 +19,7 @@ export function OwnerAccountReset({disabled=false,onReset,onBusyChange}:{disable
    while(!c.signal.aborted){
     const r=await fetch('/api/demo/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:requestId.current}),signal:AbortSignal.any([c.signal,AbortSignal.timeout(22000)])});
     if(c.signal.aborted)return;
-    if(!r.ok)throw Error(r.status===401?'Sign in to the owner workspace again, then retry.':'Couldn’t confirm the reset. Click again to check the same request.');
+    if(!r.ok)throw Error(r.status===401?'Sign in to the owner workspace again, then retry.':r.status===409?'An earlier property lookup is still awaiting its provider result. Reset is blocked until that result is reconciled. No new purchase was started.':'Couldn’t confirm the reset. Click again to check the same request.');
     let d;try{d=await r.json();}catch{throw Error('Couldn’t verify the reset. Click again to check the same request.');}if(c.signal.aborted)return;
     if(d.status==='waiting'){
      if(Date.now()-started>60000)throw Error('The current call or work is still finishing. Reset again after it ends.');

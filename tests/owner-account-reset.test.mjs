@@ -13,7 +13,7 @@ try{
  create table icash_operating_budget(id int primary key);insert into icash_operating_budget values(1);
  create table icash_wallets(account_id uuid,balance_cents bigint,reserved_cents bigint);
  create table icash_screening_jobs(id uuid primary key,account_id uuid,state text,created_at timestamptz default now(),snapshot jsonb default '{}');
- create table icash_seller_intakes(id uuid primary key,contact_consent_scope text,attribution jsonb,created_at timestamptz default now(),state text,next_assignment_at timestamptz,hold_reason text);
+ create table icash_seller_intakes(id uuid primary key,contact_consent_scope text,attribution jsonb,created_at timestamptz default now(),state text,next_assignment_at timestamptz,hold_reason text,checked_at timestamptz,claim_token uuid,claimed_at timestamptz);
  create table icash_seller_matches(lead_id uuid,account_id uuid,screening_id uuid);
  create table icash_call_recordings(id uuid,account_id uuid,call_ended_at timestamptz,call_sid text,dial_claimed_at timestamptz,state text);
  create schema icash_recorded_reception_private;
@@ -69,6 +69,10 @@ try{
  await q("insert into icash_recorded_reception_private.sessions values($1,now(),'stopping')",[account]);
  await q("update icash_seller_intakes set state='checking' where id=$1",[id(3)]);assert.equal((await reset()).reason,'active_work');
  await q("update icash_seller_intakes set state='received' where id=$1",[id(3)]);
+ await q("update icash_seller_intakes set state='review',claim_token=$2,claimed_at=now() where id=$1",[id(3),id(80)]);
+ assert.equal((await reset()).reason,'provider_review','Unknown paid lookup cannot be reset into a fresh purchase');
+ assert.equal(await one('select icash_demo_intake_current($1,$2)',[id(3),account]),true);
+ await q("update icash_seller_intakes set checked_at=now() where id=$1",[id(3)]);
  await pg.exec('set role service_role');const receipt=await reset();await pg.exec('reset role');
  assert.equal(receipt.status,'reset');assert.equal(receipt.propertiesCleared,1);assert.equal(receipt.requestsCleared,2);assert.equal(receipt.queuedCallsCanceled,2);assert.equal(receipt.queuedTextsCanceled,1);assert.equal(receipt.providerWrites,false);
  assert.equal(await preserved(),before,'Financial holds, wallet, signed contracts, deals and unknown provider evidence are unchanged');
@@ -104,5 +108,6 @@ const action=new Function('fetch','pending','requestId','disabled','setBusy','on
 let work=action();await action();assert.equal(requests.length,1);resolve(new Response('Bad gateway',{status:502}));await work;assert.equal(resetCount,0);assert.equal(state.busy,false);const original=requests[0];
 work=action();assert.equal(requests[1],original);resolve(Response.json({status:'reset',requestId:original,historyPreserved:true,providerWrites:false}));await work;assert.equal(resetCount,1);assert.equal(state.done,1);assert.equal(requestId.current,'');
 work=action();assert.notEqual(requests[2],original);pending.current.abort();pending.current=null;resolve(Response.json({status:'reset',requestId:requests[2],historyPreserved:true,providerWrites:false}));await work;assert.equal(resetCount,1,'Late reset response cannot clear local new state after navigation');
+work=action();const waitingRequest=requests.at(-1);resolve(Response.json({status:'waiting',reason:'active_call'}));await new Promise(r=>setTimeout(r,2100));assert.equal(requests.at(-1),waitingRequest);assert.equal(state.busy,true);resolve(Response.json({status:'reset',requestId:waitingRequest,historyPreserved:true,providerWrites:false}));await work;assert.equal(resetCount,2,'The waiting reset completes automatically after the current call ends');
 assert(source.includes('<DemoReadinessPanel'),'Confirmed reset automatically mounts the real setup check');
 console.log('PASS owner reset API/client: session and exact account checks, CSRF/body bounds, immutable retry ID, no provider calls, duplicate clicks, response verification and canceled navigation.');
