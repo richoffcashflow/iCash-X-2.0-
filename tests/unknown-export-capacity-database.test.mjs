@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
+import {testEndedExportStatusRecovery} from './helpers/ended-export-status-recovery.mjs';
 const db=new PGlite(),read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(s,a=[])=>db.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const rpc=(name,...args)=>v('select public.'+name+'('+args.map((_,i)=>'$'+(i+1)).join(',')+')',args);
@@ -23,6 +24,8 @@ try{
  const migration=read('supabase/migrations/20261105024908_unknown_export_capacity.sql');
  assert.equal(migration,source.slice(0,source.lastIndexOf('\ncommit;'))+'\n'+late.replace('\nbegin;',''));
  await db.exec(migration);
+ assert.equal(read('config/ended-export-status-recovery.sql'),read('supabase/migrations/20261113050524_ended_export_status_recovery.sql'));
+ await db.exec(read('config/ended-export-status-recovery.sql'));
  await q("insert into icash_research_private.owner_batches(id,account_id,created_at,primary_screening) values($1,$2,now()-interval '10 minutes',$3)",[batch,account,screening]);
  await q('insert into icash_research_private.owner_exports(id,request) values($1,$2)',[batch,{people_ids:['held-owner']}]);
  await q("insert into icash_research_private.requests(id,kind,account_id,operation_key,admitted,created_at,finished_at,result) values($1,'owner_lookup',$2,$3,true,now()-interval '10 minutes',now()-interval '8 minutes',$4)",[batch,account,'owner-batch:'+batch,{outcome:'unknown'}]);
@@ -37,6 +40,7 @@ try{
  await q("insert into icash_research_private.owner_export_capacity_reviews(export_id,receipt_hash,reviewed_release) values($1,md5('{}'::jsonb::text),$2)",[batch,release]);
  await db.exec('rollback');
  const before=await snapshot();
+ await testEndedExportStatusRecovery({db,q,v,rpc,probes,snapshot,release});
  for(const mutate of [
   "update icash_research_private.requests set admitted=false",
   "update icash_research_private.requests set admitted=null",
