@@ -58,6 +58,8 @@ try{
  await q("insert into icash_operation_spend values($1,$2,'dispatched',977)",['voice:'+id(11),account]);
  await q("insert into icash_text_messages values($1,$2,$3,'outgoing','ready',null),($4,$2,$3,'outgoing','needs_review','original-provider')",[id(20),account,id(1),id(21)]);
  await q("insert into icash_text_ai_jobs values($1,$2,$3,'pending',now())",[id(22),account,id(1)]);
+ await q("insert into icash_text_ai_jobs values($1,$2,$3,'drafted',now())",[id(23),account,id(1)]);
+ await q("insert into icash_operation_spend values($1,$2,'dispatched',25)",['sms-ai:'+id(23),account]);
  const preserved=async()=>JSON.stringify(await one("select jsonb_build_object('wallet',(select jsonb_agg(to_jsonb(w)) from icash_wallets w),'money',(select jsonb_agg(to_jsonb(o)) from icash_operation_spend o),'contracts',(select jsonb_agg(to_jsonb(e)) from icash_signing_envelopes e),'deals',(select jsonb_agg(to_jsonb(d)) from icash_deal_files d),'unknown',(select to_jsonb(j) from icash_voice_jobs j where operation_key is not null),'message',(select to_jsonb(m) from icash_text_messages m where provider_id is not null))"));
  const before=await preserved(),reset=()=>one('select icash_reset_owner_account($1,$2,$3)',[actor,account,id(100)]);
  await assert.rejects(one('select icash_reset_owner_account($1,$2,$3)',[other,account,id(100)]),/Owner account required/);
@@ -80,7 +82,7 @@ try{
  assert.equal(await one('select retired_at is not null and paused and ai_mode=\'off\' from icash_text_threads where id=$1',[id(1)]),true);
  assert.equal(await one('select manual from icash_property_controls where account_id=$1',[account]),false);
  assert.equal(await one('select manual from icash_property_controls where account_id=$1',[other]),true);
- assert.equal(await one('select state from icash_text_ai_jobs'),'superseded');
+ assert.equal(await one('select state from icash_text_ai_jobs where id=$1',[id(22)]),'superseded');assert.equal(await one('select state from icash_text_ai_jobs where id=$1',[id(23)]),'drafted','Original SMS AI purchase stays unchanged');
  for(const n of [1,3])assert.equal(await one('select icash_demo_intake_current($1,$2)',[id(n),account]),false,'Both assigned and unassigned old demos no longer deduplicate');
  assert.equal(await one('select icash_demo_intake_current($1,$2)',[id(2),other]),true);
  // A replayed HTTP response or duplicate click cannot clear a newer submission.

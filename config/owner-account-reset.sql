@@ -99,7 +99,7 @@ begin
  update public.icash_seller_responses set state='stopped',updated_at=cutoff where account_id=p_account and screening_id=any(ids) and state<>'stopped';
  update public.icash_text_ai_jobs j set state='superseded',updated_at=cutoff where j.account_id=p_account and j.state in ('pending','drafted','queued')
  and exists(select 1 from public.icash_text_threads t where t.id=j.thread_id and t.account_id=j.account_id and t.retired_at is not null)
- and not exists(select 1 from public.icash_operation_spend o where o.account_id=j.account_id and o.operation_key='text-ai:'||j.id);
+ and not exists(select 1 from public.icash_operation_spend o where o.account_id=j.account_id and o.operation_key='sms-ai:'||j.id);
  update public.icash_seller_gaps set state='suppressed',updated_at=cutoff where account_id=p_account and screening_id=any(ids) and state in ('open','queued','waiting','needs_review');
  update public.icash_seller_intakes set state='review',next_assignment_at='infinity',hold_reason='Owner reset; a new demo request is required' where id=any(leads) and state<>'duplicate';
  update public.icash_screening_jobs set state='archived' where account_id=p_account and id=any(ids);
