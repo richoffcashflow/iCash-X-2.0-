@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {supportVoiceEvidence} from '../lib/support-voice-evidence.ts';
+const job={state:'held',outcome:'ended_before_recording',updated_at:'2026-11-01T12:00:00Z'};
+const r=supportVoiceEvidence([job],0);
+assert.equal(r.status,'attention');assert.match(r.detail,/ended before recording/i);assert.doesNotMatch(r.detail,/no call results|the seller answered|fixed|ready to call/i);
+assert.match(r.detail,/does not (?:confirm|establish)/i);
+const unknown=supportVoiceEvidence([{...job,outcome:'future_unrecognized_hold'}],0);assert.equal(unknown.status,'attention');assert.match(unknown.detail,/cannot explain|can.t explain/i);
+assert.equal(supportVoiceEvidence([],0).code,'voice_clear');
+assert.equal(supportVoiceEvidence([{...job,state:'dispatched',outcome:null}],0).code,'voice_clear');
+assert.equal(supportVoiceEvidence([{...job,outcome:'business_number_mismatch'}],0).code,'voice_business_number_mismatch');
+assert.equal(supportVoiceEvidence([],2).code,'voice_review');
+assert.throws(()=>supportVoiceEvidence([{...job,updated_at:'invalid'}],0));
+console.log('PASS fictional terminal call evidence and unknown hold boundaries; no provider activity');

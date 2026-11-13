@@ -17,6 +17,9 @@ export function supportDuplicateCharge(text:string){
 /** Reply intent only: never authorizes cancellation or treats past cancellation as a new request. */
 export function supportRenewalCancellationRequested(text:string){
  const q=text.replace(/[’']/g,"'");
+ const stopFuture=/\b(?:stop|prevent|avoid) (?:the |my |any |all )?(?:future |next |recurring )?(?:charges?(?: to my card)?|billing(?: me)?|renewals?)\b|\b(?:make sure|ensure|get (?:this|the) (?:app|software) to)\b[^.!?\n]{0,55}\b(?:does not|doesn't|do not|don't|not) charg(?:e|ing) my card\b/i.test(q);
+ const negatedStop=/\b(?:not|don't|do not|never|no longer)(?:\s+(?:want|you|to|need|intend|plan)){0,4}\s+(?:stop|prevent|avoid)\b|\bdid (?:you|it|the app) stop\b/i.test(q);
+ if(stopFuture&&!negatedStop)return true;
  return /\bcancel(?:l?ing)?\s+(?:(?:my|the|this|our|your|current|monthly|annual|iCash\s*X)\s+){0,4}(?:subscription|membership|renewals?)\b/i.test(q)
   && !/\b(?:not|never|don't|do not|no longer)(?:\s+(?:want|intend|plan|going|to)){0,3}\s+cancel(?:l?ing)?\b/i.test(q);
 }

@@ -63,7 +63,7 @@ export async function POST(req:Request){
   if(messages.at(-1)?.content!==question||messages.at(-1)?.role!=='user')messages.push({role:'user',content:question});
   if(refundEvidenceNeeded(messages))evidence.push(await prepareSupportRefundEvidence(db,{accountId,threadId:started.threadId,requestId:i.requestId},evidence,fundingMode()));
   // Replayed receipts use the local answer; they never repeat a paid model call.
-  const answer=await replyToSupport({kind:'account',messages,evidence,historyComplete:history.length<201,handedOff:threads[0]?.status==='escalated',allowAI:!started.replay});
+  const answer=await replyToSupport({kind:'account',conversationReference:started.threadId,messages,evidence,historyComplete:history.length<201,handedOff:threads[0]?.status==='escalated',allowAI:!started.replay});
   const saved=await db<boolean>('rpc/icash_support_finish_conversation','POST',{p_account:accountId,p_user:userId,p_thread:started.threadId,p_request:i.requestId,p_message:answer.reply,p_evidence:evidence,p_status:answer.managementReview?'management_review':answer.status,p_notify:supportOwnerNotificationsEnabled()});
   if(saved===false)return NextResponse.json({threadId:started.threadId,superseded:true},{headers});
   if(saved!==true)throw Error('Unconfirmed support receipt');

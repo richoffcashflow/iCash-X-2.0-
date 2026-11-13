@@ -1,3 +1,4 @@
+import {supportVerifiedLegacyOfferReply} from './support-legacy-migration.ts';
 import {supportContinuation} from './support-reply-style.ts';
 import type {SupportContext,SupportReply,SupportTurn} from './support-conversation.ts';
 const offer=(text:string)=>/\b(?:two|2)[ -](?:calendar[ -])?months?\b.{0,30}\bfree\b|\bfree\b.{0,25}\b(?:two|2)[ -](?:calendar[ -])?months?\b|\b(?:returning|legacy|welcome.back)\b.{0,25}\boffer\b/i.test(text);
@@ -6,6 +7,7 @@ const problem=(text:string)=>/check.?out|accept(?:ing)?|not going through|did no
 /** A code requested during an offer may belong to checkout recovery, not a
  * completed purchase. Keep that distinction until the stage is established. */
 export function supportOfferCodeReply(messages:SupportTurn[]):SupportReply|null{
+ const replacement=supportOfferReplacementReply(messages);if(replacement)return replacement;
  let start=-1;
  const code=(text:string)=>/\bcode\b/i.test(text)&&!/\b(?:promo|coupon|discount|zip|area|source) code\b/i.test(text);
  const completed=(text:string)=>{
@@ -43,7 +45,23 @@ export function currentOfferProblem(messages:SupportTurn[]){
  return start<0?[]:messages.slice(start);
 }
 
+function supportOfferReplacementReply(messages:SupportTurn[]):SupportReply|null{
+ const q=messages.findLast(m=>m.role==='user')?.content??'';
+ if(/\b(?:refund|money back|cancel|charged twice|duplicate charge|unrecognized charge)\b/i.test(q))return null;
+ // A replacement request identifies the page; don't ask that question again or
+ // send an unverified entitlement link. Direct current intent bounds inheritance.
+ if(/\blegacy[ -]offer\b/i.test(q)&&/\b(?:new|replacement|another) link\b/i.test(q)&&!/\b(?:don[’']?t|do not|no longer) (?:want|need)|\b(?:course|seller|buyer|contract)\b/i.test(q)){
+  const verified=messages.findLast(m=>m.role==='operator')?.content===supportVerifiedLegacyOfferReply;
+  const next=verified?'Your earlier verified-purchase reply contains the offer link. I haven’t issued a replacement link; the existing checkout and code-delivery state still need review.':'I haven’t issued a new link or confirmed offer eligibility. The original offer’s verification and checkout state need review before a replacement can be sent.';
+  return {reply:'You’ve identified the legacy-offer page and asked for a replacement link. '+next+' A new link alone is not a confirmed fix; any failed steps already reported remain saved here. Don’t start another paid checkout to troubleshoot this.',status:'open',managementReview:true,ai:false};
+ }
+ return null;
+}
+
 export function supportCheckoutReply(context:SupportContext):SupportReply|null{
+ const q=context.messages.findLast(m=>m.role==='user')?.content??'';
+ if(/\b(?:refund|money back|cancel|charged twice|duplicate charge|unrecognized charge)\b/i.test(q))return null;
+ const replacement=supportOfferReplacementReply(context.messages);if(replacement)return replacement;
  const offerCode=supportOfferCodeReply(context.messages);if(offerCode)return offerCode;
  const active=currentOfferProblem(context.messages);if(!active.length)return null;
  const users=active.filter(m=>m.role==='user'),last=users.at(-1)?.content??'',history=users.map(m=>m.content).join('\n');

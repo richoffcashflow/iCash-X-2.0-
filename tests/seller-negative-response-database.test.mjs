@@ -62,6 +62,7 @@ try{
  create function icash_sms_reply_time(p_id uuid) returns numeric language sql stable as $$select extract(epoch from created_at) from public.icash_text_messages where id=p_id$$;`);
  await pg.exec(fn('config/seller-reply-progress.sql','icash_refresh_seller_reply_progress'));
  await pg.exec(read('config/seller-source-dispositions.sql'));
+ await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+read('config/seller-call-automated-greetings.sql')+read('config/seller-specific-price-answers.sql')+read('config/seller-unmarked-price-answers.sql')+'commit;');
 
  await pg.exec(fn('config/manual-deal-email.sql','icash_record_deal_email_reply'));
  await pg.exec('create trigger fixture_meta_observe_text after insert or update of state,provider_id on icash_text_messages for each row execute function icash_meta_observe_text()');
@@ -111,11 +112,18 @@ try{
  for(const body of ['Please remove this number from your mailing and contact list. Thanks, and goodbye.',"Don’t send me any message again",'Stop asking me cause I will not fucking sale shit','I am tired of these texts. Stop.','STOP','Stop text me','Stop contact me','Stop call me','Stop message me'])await isolated(async()=>{await sms(body);assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1);assert.equal((await one('select count(*) n from icash_email_suppressions')).n,2,'exact shared phone opt-out propagates to its bound emails');assert.equal((await one('select revoked_at is not null revoked from icash_contact_permissions where id=$1',[permission])).revoked,true);assert.equal(await allowed('text:'+manualText),false,'manual sends never bypass permanent suppression');});
  await isolated(async()=>{await sms('not interested',{account:b,thread});assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'mismatched source tenant ignored');});
  await isolated(async()=>{await q("update icash_deal_files set terms='{\"practice\":true}' where id=$1",[deal]);await sms('STOP');assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0,'practice source is excluded');});
- for(const source of ['call','inbound_call'])await isolated(async()=>{
-  const transcript=[{role:'agent',message:'Would you consider selling?'},{role:'user',message:'Not super interested'}];
+ for(const source of ['call','inbound_call'])for(const [question,answer] of [['Would you consider selling?','Not super interested'],['Is this the owner of 12 Fixture Lane?','No.'],['Are you the owner of 12 Fixture Lane?','No, sir.'],['Would you be open to a cash offer?','Nope.']])await isolated(async()=>{
+  const transcript=[{role:'agent',message:question},{role:'user',message:answer}];
   if(source==='call')await q("select icash_save_live_result($1,$2)",[call,{transcript,optedOut:false}]);
   else await q('insert into icash_seller_agreement_private.call_history values($1,$2,$3,$4,now(),$5)',[randomUUID(),a,screen,hash,JSON.stringify(transcript)]);
   await stopped();assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0);
+ });
+ for(const source of ['call','inbound_call'])for(const question of ['Would you consider selling for $120,000?','Would you consider selling for 120000?','Would you consider selling for one hundred twenty thousand?'])for(const answer of ['No.','No, thanks.'])await isolated(async()=>{
+  const transcript=[{role:'agent',message:question},{role:'user',message:answer}];
+  if(source==='call')await q('select icash_save_live_result($1,$2)',[call,{transcript,optedOut:false}]);
+  else await q('insert into icash_seller_agreement_private.call_history values($1,$2,$3,$4,now(),$5)',[randomUUID(),a,screen,hash,JSON.stringify(transcript)]);
+  assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'rejecting an amount does not stop the property conversation');
+  assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0);
  });
  await isolated(async()=>{await q('select icash_save_live_result($1,$2)',[call,{optedOut:true,transcript:[{role:'user',message:'The roof is bad but I want to sell'}]}]);assert.equal((await one('select count(*) n from icash_contact_suppressions')).n,0,'seller model flag alone is not DNC');assert.equal((await one('select count(*) n from icash_property_controls')).n,0);});
  for(const text of ['not super interested','unsubscribe','Hi,\n\nPlease unsubscribe.','Happy to proceed\n\n> unsubscribe'])await isolated(async()=>{

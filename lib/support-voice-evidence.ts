@@ -15,5 +15,7 @@ export function supportVoiceEvidence(jobs:SavedJob[],reviewCount:number):Omit<Su
  if(!Number.isSafeInteger(reviewCount)||reviewCount<0||jobs.length>1||jobs.some(j=>!Number.isFinite(Date.parse(j.updated_at))))throw Error('Invalid voice evidence');
  const job=jobs[0],reason=job?.state==='held'&&job.outcome?reasons[job.outcome]:null;
  if(reason)return {code:'voice_'+job.outcome,status:'attention',detail:`The latest saved call was held because ${reason}. This does not confirm the next call is ready; no call was restarted here.`};
+ if(job?.state==='held'&&job.outcome==='ended_before_recording')return {code:'voice_ended_before_recording',status:'attention',detail:'The latest saved call ended before recording began. This result does not establish whether a seller answered or why the call ended. Its original call receipt needs review; no call was restarted here.'};
+ if(job?.state==='held')return {code:'voice_unclassified_hold',status:'attention',detail:'The latest saved call has a hold these checks cannot explain. Its original receipt needs review; this does not confirm a repair or authorize another call.'};
  return {code:reviewCount?'voice_review':'voice_clear',status:reviewCount?'attention':'ok',detail:reviewCount?`${reviewCount}${reviewCount===20?'+':''} call results need review. Chat will not redial or repeat provider actions.`:'No call results marked for review were found. This does not confirm the next call is ready.'};
 }
