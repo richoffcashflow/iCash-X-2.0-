@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {readFileSync,readdirSync} from 'node:fs';
-for(const name of ['november_business_numbers','november_sender_pacing','november_additional_business_numbers','november_additional_sender_pacing','november_11_business_numbers','november_11_sender_pacing']){
+for(const name of ['november_business_numbers','november_sender_pacing','november_additional_business_numbers','november_additional_sender_pacing','november_11_business_numbers','november_11_sender_pacing','november_13_business_numbers','november_13_sender_pacing']){
  const file=readdirSync('supabase/migrations').find(p=>p.endsWith('_'+name+'.sql'));
  assert.equal(readFileSync('supabase/migrations/'+file,'utf8'),readFileSync('config/'+name.replaceAll('_','-')+'.sql','utf8'));
 }

@@ -18,6 +18,7 @@ try{
  await db.exec(migration);
  await db.exec(read('config/november-additional-sender-pacing.sql'));
  await db.exec(read('config/november-11-sender-pacing.sql'));
+ await db.exec(read('config/november-13-sender-pacing.sql'));
  assert.deepEqual(await one('select jsonb_agg(u order by source_id) from icash_sender_private.uses u'),before,'Existing usage survives the limit change');
  assert.equal(await one("select pg_get_functiondef('icash_sender_private.take(text,uuid,text,boolean,uuid,uuid,text,boolean)'::regprocedure)"),takeBefore,'Shared locking and admission receipts are unchanged');
  // Freeze only the clock in the real shared gate, after checking its predecessor.
