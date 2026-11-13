@@ -61,7 +61,7 @@ const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedU
 const configTemplate={enabled:true,agent_id:review.agentId,phone_number_id:'number',agent_config_hash:review.configHash,reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:review.toolIds,approved_voice_ids:[]};
 let resolvedSender=undefined;
 let textThreads=[{sender:'+14243948384'}],secondEnabled=false,secondVerified=false;
-const secondaryCallingReady=async()=>secondVerified;
+const secondaryCallingReady=async()=>{await preflightRead?.('secondary_caller');return secondVerified;};
 let reservationError=null,budgetHoldAccepted=true,flexibleFunding={maxSeconds:120};
 let metaClaimResult='claimed',spacingCurrent=true,spacingAfterReservation=true;
 let sellerConsentCurrent=true,activeConversation=false,outreachContextOverride=undefined,metaContext=null,cancellationCurrent=true;
@@ -121,7 +121,7 @@ const db=async(path,method,body)=>{
  if(path==='icash_live_conversations')return [];
  throw Error('Unexpected request '+path);
 };
-const elevenRequest=async(path,body)=>{providerReads++;providerPaths.push(path);assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};assert.equal(path,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`,'Never read main instead of the reviewed recorded branch');if(agentReadFailed)throw agentReadError??Error('Synthetic metadata read failure');const result=structuredClone(providerAgent);if(!contextOverrides)result.platform_settings.overrides.conversation_config_override.agent={first_message:false,prompt:{prompt:false}};return result;};
+const elevenRequest=async(path,body)=>{providerReads++;providerPaths.push(path);await preflightRead?.(path);assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};assert.equal(path,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`,'Never read main instead of the reviewed recorded branch');if(agentReadFailed)throw agentReadError??Error('Synthetic metadata read failure');const result=structuredClone(providerAgent);if(!contextOverrides)result.platform_settings.overrides.conversation_config_override.agent={first_message:false,prompt:{prompt:false}};return result;};
 const recordingServer=()=>({dispatch:async input=>{outboundBody=input;postCount++;if(timeout)return {status:'recording_dial_unknown_no_retry'};return {status:recordingStatus,...(recordingBoundary?{dispatchBoundary:recordingBoundary}:{})};}});
 globalThis.__voiceTest={outboundSellerCadencePrompt,voiceApprovalDiagnostics,finishVoicePredialAbort,assignSharedLearning,SharedLearningSafetyHold,acquisitionOpeners,console:{warn:(...args)=>preflightDiagnostics.push(args)},readVoiceOutreachContext,opportunityConversationInstructions,efficientSellerPrompt,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,sellerCallerIdentityPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy};
 let sharedAssignment=null;
@@ -417,6 +417,22 @@ for(const group of readGroups)for(const fail of [false,true]){
  preflightRead=null;delete snapshot.sellerRequest;
 }
 console.log('PASS independent contact, identity, voice/rate and seller-context reads overlap; pending/failed reads cannot reserve, claim or dial.');
+for(const secondary of [false,true])for(const fail of [null,'caller','agent']){
+ reset();permission={...beforeCancellationPermission};
+ if(secondary){textThreads=[{sender:secondaryBusinessPhone,sender_pool_assigned:true}];secondEnabled=secondVerified=true;}
+ const started=[],gates=new Map();
+ preflightRead=async path=>{
+  const key=path.includes('/agents/')?'agent':path.includes('/phone-numbers/')||path==='secondary_caller'?'caller':null;
+  if(!key)return;started.push(key);await new Promise(resolve=>gates.set(key,resolve));if(fail===key)throw Error('Synthetic review failure');
+ };
+ const pending=dispatchLiveVoice('account','job');await new Promise(setImmediate);
+ const noPendingAdmission=()=>{assert.equal(postCount,0);assert.equal(jobState,'issued');assert(!records.some(r=>/^rpc\/icash_(reserve|claim)_/.test(r.path??'')));};
+ assert.deepEqual(started.toSorted(),['agent','caller']);noPendingAdmission();
+ gates.get('caller')();await new Promise(setImmediate);noPendingAdmission();gates.get('agent')();
+ assert.equal((await pending).status,fail==='caller'?'business_number_verification_required':fail==='agent'?'production_agent_review_required':'call_started');
+ if(fail)noAdmission();preflightRead=null;
+}
+console.log('PASS primary and additional caller-ID reviews overlap exact agent reads; pending or failed reads never reserve, claim or dial.');
 delete process.env.CONTIGUITY_FROM;delete globalThis.__voiceTest;delete process.env.ELEVENLABS_API_KEY;Date.now=realNow;
 console.log('Voice dispatch: permissions, hours, fresh underwriting, reviewed offer ceilings, full-duration costs, Stop, practice-agent isolation, uncertain-call no-retry and honest launch readiness passed. No provider traffic.');
 

@@ -6,6 +6,7 @@ import {botDemoConsentText,botDemoConsentVersion} from '@/lib/bot-demo';
 import {optinCallNowText,optinCallNowVersion} from '@/lib/optin-call-now';
 import {sellerSubmissionStatus,type SellerSubmissionStatus} from '@/lib/seller-submission-status';
 import {DemoPhoneField} from './demo-phone-field';
+import {DemoReadinessPanel} from './demo-readiness';
 
 export function BotDemo(){
  const [step,setStep]=useState<'address'|'contact'|'saved'>('address');
@@ -13,6 +14,7 @@ export function BotDemo(){
  const [consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [access,setAccess]=useState<'loading'|'ready'|'signin'|'error'>('loading');
  const [privatePhone,setPrivatePhone]=useState<string|null>(null);
+ const [setupReady,setSetupReady]=useState(false);
  const [progress,setProgress]=useState<SellerSubmissionStatus|null>(null),[round,setRound]=useState(0),[polling,setPolling]=useState(false);
  const request=useRef(''),lock=useRef(false),nameInput=useRef<HTMLInputElement>(null),success=useRef<HTMLHeadingElement>(null);
  useEffect(()=>{const c=new AbortController();void fetch('/api/demo/intake',{cache:'no-store',signal:c.signal}).then(async r=>{if(!r.ok)throw Error();const d=await r.json();if(c.signal.aborted)return;const saved=d.ready&&typeof d.privateDemoPhone==='string'?d.privateDemoPhone:null;setPrivatePhone(saved);if(saved)setPhone(value=>value||saved);setAccess(d.ready?'ready':'signin');}).catch(()=>{if(!c.signal.aborted)setAccess('error');});return()=>c.abort();},[]);
@@ -30,7 +32,7 @@ export function BotDemo(){
  },[step,round]);
  function changed(){request.current='';setError('');}
  async function submit(e:FormEvent){
-  e.preventDefault();if(lock.current||!consent||access!=='ready')return;
+  e.preventDefault();if(lock.current||!consent||access!=='ready'||!setupReady)return;
   lock.current=true;setBusy(true);setError('');request.current||=crypto.randomUUID();
   try{const r=await fetch('/api/demo/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:request.current,name,address,phone,consented:consent,consentVersion:botDemoConsentVersion,callNowVersion:optinCallNowVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,honeypot:trap}),signal:AbortSignal.timeout(20000)});
    const d=await r.json();if(!r.ok)throw Error(d.error||'Please try again.');setProgress(d.progress??sellerSubmissionStatus('received'));setStep('saved');requestAnimationFrame(()=>success.current?.focus());
@@ -60,7 +62,8 @@ export function BotDemo(){
       <div className="demo-trap" aria-hidden="true"><label>Leave empty<input tabIndex={-1} autoComplete="off" value={trap} onChange={e=>setTrap(e.target.value)}/></label></div>
       <label className="demo-consent"><input type="checkbox" checked={consent} required disabled={busy} onChange={e=>{setConsent(e.target.checked);changed();}}/><span>{optinCallNowText} {botDemoConsentText}</span></label>
       {access==='signin'?<p className="demo-notice"><a href="/">Sign in to your iCash X account</a> in this browser, then refresh this page to start.</p>:access==='error'?<p className="demo-notice">Couldn’t check your account. Refresh this page to retry.</p>:null}
-      <button className="demo-submit" disabled={busy||!consent||access!=='ready'}>{busy?'Saving your property…':access==='loading'?'Checking your account…':'Start my bot demo'}<ArrowUpRight size={18}/></button>
+      {access==='ready'&&<DemoReadinessPanel onChange={setSetupReady}/>}
+      <button className="demo-submit" disabled={busy||!consent||access!=='ready'||!setupReady}>{busy?'Saving your property…':access==='loading'?'Checking your account…':'Start my bot demo'}<ArrowUpRight size={18}/></button>
       <p className="demo-credit-note">Runs in your workspace using your existing credits.</p>
       {error&&<p className="demo-notice" role="alert">{error}</p>}
      </form>}

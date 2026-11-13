@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/verify-production-release.mjs && node --experimental-strip-types scripts/apply-approved-parallel-capacity.mjs && node --experimental-strip-types scripts/check-telephony-connection.mjs && pnpm build",
+  "buildCommand": "node scripts/verify-production-release.mjs && node --experimental-strip-types scripts/apply-approved-parallel-capacity.mjs && node --experimental-strip-types scripts/check-telephony-connection.mjs && node --experimental-strip-types scripts/inspect-owner-startup-20261113.mjs && pnpm build",
   "crons": [
     {
       "path": "/api/internal/learning",
