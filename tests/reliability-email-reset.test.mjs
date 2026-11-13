@@ -20,6 +20,9 @@ try{
  const sql=read('config/reliability-email-reset.sql');assert.equal(sql,read('supabase/migrations/20261113191411_reliability_email_reset.sql'));await pg.exec(sql);
  const reset=(key='owner-request-outbound-recovery-20261113',snapshot=at,release='a'.repeat(40),incident=first.incidentId)=>v('select icash_reliability_private.reset_notification_baseline($1,$2,$3,$4)',[key,incident,snapshot,release]);
  assert.equal(await reset('bad'),false);assert.equal(await reset(undefined,'2020-01-01T00:00:00Z'),false);assert.equal(await reset(undefined,at,'bad'),false);
+ await pg.exec('begin');await pg.exec("update icash_reliability_private.incident_notifications set state='pending',accepted_at=null");
+ assert.equal(await reset('owner-reset-first-unconfirmed'),false,'Never cancel the first unconfirmed alert with no accepted notice to acknowledge');
+ await pg.exec('rollback');
  const before=await v('select jsonb_build_object(\'health\',(select report from fixture_monitor),\'accounts\',(select jsonb_agg(s) from icash_reliability_private.account_work_states s),\'receipts\',(select jsonb_agg(n order by id) from icash_reliability_private.incident_notifications n))');
  assert.equal(await reset(),true);assert.equal(await reset(),true,'Same request is idempotent');assert.equal(await reset(undefined,at,'b'.repeat(40)),false);
  assert.deepEqual(await v('select jsonb_build_object(\'health\',(select report from fixture_monitor),\'accounts\',(select jsonb_agg(s) from icash_reliability_private.account_work_states s),\'receipts\',(select jsonb_agg(n order by id) from icash_reliability_private.incident_notifications n))'),before);

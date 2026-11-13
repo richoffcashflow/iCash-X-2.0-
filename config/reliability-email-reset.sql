@@ -43,6 +43,9 @@ begin
    and incident_id=p_incident and snapshot_at=p_snapshot and release_sha=p_release);
  end if;
  if not exists(select 1 from icash_reliability_private.incidents where id=p_incident and recovered_at is null) then return false;end if;
+ -- A reset acknowledges a recurring notice, never the first unconfirmed alert.
+ if not exists(select 1 from icash_reliability_private.incident_notifications
+  where incident_id=p_incident and event='detected' and state='accepted' and accepted_at is not null) then return false;end if;
  report:=public.icash_reliability_status();
  if p_snapshot is null or (report->'snapshot'->>'checkedAt')::timestamptz is distinct from p_snapshot then return false;end if;
  fingerprint:=icash_reliability_private.notification_fingerprint(report);

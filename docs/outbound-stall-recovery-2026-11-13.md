@@ -37,12 +37,15 @@ are not erased to change the monitor count.
 
 ## Notification reset semantics
 
-The database-only operator function requires an active incident, an exact fresh
+The database-only operator function requires an active incident with a previously
+accepted detected notice, an exact fresh
 snapshot, a unique request key and the verified release SHA. It serializes with
 the existing observer and claimer. Repeating the exact request is idempotent;
 changing its identity is rejected. The audit records canceled pending notices.
 Normal service, authenticated and anonymous roles cannot invoke the reset or
 write its private RLS-protected history.
+The first unconfirmed alert cannot be reset; accepted history is required so
+future changed-impact reminders retain their original hourly scheduling basis.
 
 The baseline includes current component health, issue summary/count, aggregate
 account progress, the full account/reason/since set and research quota state.
