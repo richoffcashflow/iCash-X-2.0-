@@ -2,10 +2,11 @@ import {processInstantLeadWork} from '../lib/meta-instant-lead-service.ts';
 import {processSellerResponses as dispatchSellerResponses} from '../lib/seller-response-service.ts';
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
+let instantResult={status:"disabled"},instantThrows=false;
 let enabled=true,lookupFails=false,allocationFails=false,responseFails=false,assigned=false,authorized=true,emailFails=false,rateLimited=false,demoFails=false,demoRecovered=false;
 let responses=[],research=0,recovery=0,measurement=0,emails=0,contactChecks=0,contactFails=false;
 let demoRecoveries=0,demoAssignments=[],allocationEvents=[],demoResponseAllowed=true,demoDispatches=[],lookupOrder=[];
-const route=await loadService('app/api/internal/seller/route.ts',{processInstantLeadWork,
+const route=await loadService('app/api/internal/seller/route.ts',{processInstantLeadWork:async()=>{if(instantThrows)throw Error('fixture');return instantResult;},
  processSellerEmails:async()=>{emails++;if(emailFails)throw Error('SIMULATION email queue outage');return {status:'seller_emails_idle'};},
  dealEmailConfigured:()=>true,dispatchDealEmail:()=>{throw Error('No network');},
  db:async(path,method,body)=>{
@@ -65,4 +66,9 @@ assert.equal((await result.json()).ownerDemo.status,'owner_demo_recovery_unavail
 responses=[];demoFails=false;demoRecovered=false;
 result=await run();assert.equal(result.status,200);assert.deepEqual(responses,['existing','new-lead']);
 assert.deepEqual(demoAssignments,['owner-demo','owner-demo'],'empty/expired recovery cannot allocate or dispatch a demo');
+for(const active of [false,true]){
+ enabled=active;instantResult={status:'pending',failures:1};assert.equal((await run()).status,503,'Inbound failure is visible even when acquisition is disabled');
+ instantResult={status:'processed',failures:0};assert.equal((await run()).status,200);
+ instantThrows=true;assert.equal((await run()).status,503);instantThrows=false;
+}
 console.log('PASS seller maintenance: existing responses survive lookup/allocation outages and disabled acquisition; new matches are immediate; no same-tick retry or provider requests.');

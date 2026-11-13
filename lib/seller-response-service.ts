@@ -7,6 +7,7 @@ type Dispatch=(accountId:string,id:string)=>Promise<{status:string}>;
 export async function processSellerResponses(db:Database,dispatchText:Dispatch,dispatchVoice:Dispatch,leadId?:string){
  const work=await db<ResponseWork[]>('rpc/icash_prepare_seller_responses','POST',{p_lead:leadId??null});
  const results=[];
+ let receiptFailed=false;
  for(const item of work){
   const outcome:{sms?:string;voice?:string}={};
   await Promise.all(([
@@ -18,8 +19,14 @@ export async function processSellerResponses(db:Database,dispatchText:Dispatch,d
   }));
   // Conditional provider claims, rather than this status record, own delivery.
   // A bookkeeping timeout cannot reopen an operation or authorize a redial.
-  if(Object.keys(outcome).length)await db('rpc/icash_note_seller_response','POST',{p_lead:item.leadId,p_account:item.accountId,p_outcome:outcome});
+  if(Object.keys(outcome).length){
+   try{await db('rpc/icash_note_seller_response','POST',{p_lead:item.leadId,p_account:item.accountId,p_outcome:outcome});}
+   catch{receiptFailed=true;}
+  }
   results.push({leadId:item.leadId,status:item.status,...outcome});
  }
+ // Report the failed checkpoint after independently admitted sellers progress.
+ // Original channel claims own delivery; neither channel is repeated here.
+ if(receiptFailed)throw Error('SELLER_RESPONSE_RECEIPT_PENDING');
  return results;
 }

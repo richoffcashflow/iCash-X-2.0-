@@ -7,13 +7,22 @@ export function planBuyerOutreach(deal: BuyerDeal, buyers: Buyer[], now: number,
   // Research may precede contract; sending a deal package may not.
   const canSendDeal = deal.sellerContractSigned && deal.marketingAuthorized;
   const fresh = (at:number|null)=>at!==null && Number.isFinite(at) && at<=now && now-at<=30*86400000;
-  const seen = new Set<string>();
-  const ranked = buyers.filter(b=>b.id && b.entityId && [b.maxPriceCents,b.maxRepairCents,b.estimatedContactChargeCents].every(money) && [b.completedDeals,b.failedDeals].every(n=>n===null||money(n)) && b.estimatedContactChargeCents>0 && b.markets.includes(deal.market) && b.propertyTypes.includes(deal.propertyType) && b.maxPriceCents>=deal.askingPriceCents && b.maxRepairCents>=deal.repairsCents && fresh(b.criteriaConfirmedAt)).map(b=>({
+  const candidates = buyers.filter(b=>b.id && b.entityId && [b.maxPriceCents,b.maxRepairCents,b.estimatedContactChargeCents].every(money) && [b.completedDeals,b.failedDeals].every(n=>n===null||money(n)) && b.estimatedContactChargeCents>0 && b.markets.includes(deal.market) && b.propertyTypes.includes(deal.propertyType) && b.maxPriceCents>=deal.askingPriceCents && b.maxRepairCents>=deal.repairsCents && fresh(b.criteriaConfirmedAt)).map(b=>({
     ...b, ready: fresh(b.proofOfFundsVerifiedAt)&&b.authorityVerified,
     score: (b.completedDeals===null||b.failedDeals===null?30:Math.round(60*((b.completedDeals+1)/(b.completedDeals+b.failedDeals+2))))+(fresh(b.proofOfFundsVerifiedAt)?25:0)+(b.authorityVerified?15:0),
-  })).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)).filter(b=>{if(seen.has(b.entityId))return false;seen.add(b.entityId);return true;});
+  }));
+  const byScore=(a:typeof candidates[number],b:typeof candidates[number])=>b.score-a.score||a.id.localeCompare(b.id);
+  const entities=new Map<string,typeof candidates>();
+  for(const b of candidates.sort(byScore)){const contacts=entities.get(b.entityId)??[];contacts.push(b);entities.set(b.entityId,contacts);}
+  // Deduplicate after checking each contact's own permission and cost. A higher
+  // score must not hide a usable contact at the same entity or transfer consent.
+  const representatives=[...entities.values()].map(contacts=>contacts.find(b=>b.permitted)??contacts[0]).sort(byScore);
   let remaining = Math.max(0,availableCents-reserveCents);
   const outreach: string[] = [];
-  for(const b of ranked) if(canSendDeal && b.permitted && b.estimatedContactChargeCents<=remaining && outreach.length<5){outreach.push(b.id);remaining-=b.estimatedContactChargeCents;}
+  const ranked=representatives.map(representative=>{
+    const contact=canSendDeal&&outreach.length<5?entities.get(representative.entityId)!.find(b=>b.permitted&&b.estimatedContactChargeCents<=remaining):undefined;
+    if(contact){outreach.push(contact.id);remaining-=contact.estimatedContactChargeCents;}
+    return contact??representative;
+  }).sort(byScore);
   return { matches:ranked.map(b=>({id:b.id,score:b.score,ready:b.ready})),outreach,backupBuyerIds:ranked.slice(1).map(b=>b.id),reservedContactCents:Math.max(0,availableCents-reserveCents)-remaining,canSendDeal };
 }

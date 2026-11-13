@@ -8,15 +8,16 @@ export async function processBuyerNetwork(accountId:string,dealId:string){
  const added=await db<number>('rpc/icash_network_match_deal','POST',{p_account:accountId,p_deal:dealId});
  if(!dealEmailConfigured())return {status:'email_configuration_required',added,accepted:0,canContinue:false};
  const candidates=await db<{id:string}[]>('rpc/icash_network_email_targets','POST',{p_account:accountId,p_deal:dealId});
- let accepted=0,attempted=0;
- for(const match of candidates){
-  if(attempted>=3)break;
+ let accepted=0,attempted=0,held=0;
+ // Queue failures and unknown sends consume one candidate slot, never two.
+ // A full selection can leave other buyers due even if some sends were held.
+ for(const match of candidates.slice(0,3)){
   try{
    const id=await db<string|null>('rpc/icash_network_queue_email','POST',{p_account:accountId,p_match:match.id});
-   if(!id)continue;
+   if(!id){held++;continue;}
    attempted++;
-   if((await dispatchDealEmail(accountId,id)).status==='email_accepted')accepted++;
-  }catch{attempted++;} // One held buyer must not stop the other eligible packages.
+   if((await dispatchDealEmail(accountId,id)).status==='email_accepted')accepted++;else held++;
+  }catch{held++;} // One held buyer must not stop the other eligible packages.
  }
- return {status:accepted?'network_packages_processed':'network_matches_saved',added,accepted,canContinue:accepted===3};
+ return {status:accepted?'network_packages_processed':'network_matches_saved',added,accepted,attempted,held,canContinue:candidates.length>=3};
 }

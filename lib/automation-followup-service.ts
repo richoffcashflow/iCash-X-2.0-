@@ -21,9 +21,9 @@ export async function processAutomationFollowup(database:VoiceUsageDb,accountId:
   if(billing.reviewRequired>0)success=false;
  }catch{success=false;billing={status:'review_required'};}
  if(context.notify){
-  try{deadline.throwIfAborted();await dispatchCustomerUpdate(accountId,{db,signal:deadline});}catch{success=false;}
+  try{deadline.throwIfAborted();const result=await dispatchCustomerUpdate(accountId,{db,signal:deadline});if(result.status==='updates_needs_review')success=false;}catch{success=false;}
   if(process.env.ICASH_ATTENTION_EMAIL_ENABLED==='true'){
-   try{deadline.throwIfAborted();await dispatchAttentionNotification(accountId,{db,signal:deadline});}catch{success=false;}
+   try{deadline.throwIfAborted();const result=await dispatchAttentionNotification(accountId,{db,signal:deadline});if(result.status==='attention_needs_review')success=false;}catch{success=false;}
   }
  }
  // The durable acknowledgment has its own bounded deadline, even after a

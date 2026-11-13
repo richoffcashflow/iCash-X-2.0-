@@ -2,6 +2,7 @@ import {db} from './stripe-test.ts';
 import {discoverBuyerPage,nextBuyerSearchFromReceipts,type BuyerSearchReceipt} from './buyer-discovery.ts';
 import {assignSharedLearning,SharedLearningSafetyHold,type SharedAssignment} from './shared-learning.ts';
 import type {BuyerSearchStrategy} from './buyer-discovery.ts';
+import {dealMachineRequest} from './dealmachine-request.ts';
 type Config={enabled:boolean;rate_id:string;unit_cost_micros:number;rights_until:string;revision:string;since:string;zip:string;max_pages:number;per_page:number};
 export async function discoverBuyersForDeal(accountId:string,dealId:string){
  if(process.env.ICASH_LIVE_WORK_READY!=='true')return {status:'live_work_not_ready',canContinue:false};
@@ -32,7 +33,10 @@ export async function discoverBuyersForDeal(accountId:string,dealId:string){
  const [rate]=await db<{operation:string;enabled:boolean;expires_at:string;costs_micros:{dealmachine:number}}[]>(`icash_operation_rates?id=eq.${config.rate_id}&select=operation,enabled,expires_at,costs_micros`);
  if(!rate?.enabled||rate.operation!=='buyer_discovery'||!(Date.parse(rate.expires_at)>Date.now()))return {status:'buyer_rate_required',canContinue:false};
  const result=await discoverBuyerPage({zip:dealZip.slice(0,5),page:providerPage,strategy,perPage:config.per_page,since:config.since,unitCostMicros:config.unit_cost_micros,quotedCostMicros:rate.costs_micros.dealmachine},{
- request:async body=>{if(!await db<boolean>('rpc/icash_take_dealmachine_request','POST',{}))throw Error('BUYER_SEARCH_RATE_LIMIT');const r=await fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${process.env.DEALMACHINE_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(15000),cache:'no-store'});if(!r.ok){await r.body?.cancel().catch(()=>undefined);throw Error('BUYER_SEARCH_REQUEST_FAILED');}return r.json();},
+ request:async body=>{
+  const result=await dealMachineRequest(db,'estimate_cost' in body&&body.estimate_cost===true?'buyer_estimate':'buyer_search',()=>fetch('https://api.v2.dealmachine.com/v1/properties/search',{method:'POST',headers:{Authorization:`Bearer ${process.env.DEALMACHINE_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(15000),cache:'no-store'}),{accountId,operationKey});
+  if(!result.ok)throw Error('BUYER_SEARCH_REQUEST_FAILED');return result.raw;
+ },
  claim:async()=>{
  // Fresh account/property/config checks and operation claim happen in one SQL transaction.
  await db('rpc/icash_reserve_operation','POST',{p_account:accountId,p_operation:operationKey,p_rate:config.rate_id,p_permission_until:config.rights_until});

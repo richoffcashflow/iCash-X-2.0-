@@ -3,6 +3,8 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'support-contact-privacy',
+ 'automatic-outreach-bottlenecks',
+ 'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
  'requested-seller-followthrough', 'limited-seller-ownership-reply',
  'funded-stall-recovery', 'recording-admission-abort',
  'support-current-issues', 'support-terminal-call-evidence',
