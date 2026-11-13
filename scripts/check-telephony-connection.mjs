@@ -116,4 +116,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(incomingReviewSaved)console.log('Active incoming configuration mismatch saved for private review. No approval or provider changed.');
   console.log(`Telephony: forwarding=${result.forwarding.routeConfigured}; inbound=${result.incoming.status}; outbound=${result.outgoing.status}; diagnostic_saved=${saved}. No calls or messages sent.`);
  }catch{console.log('Telephony: diagnostic unavailable. No calls or messages sent.');}
+ // Keep the build command within the hosting limit. This expiring inspection
+ // has its own production/main gate and can only read the original failed call.
+ try{const {inspectOwnerStartup}=await import('./inspect-owner-startup-20261113.mjs');console.log('Owner startup inspection: '+await inspectOwnerStartup()+'. No call placed.');}
+ catch{console.log('Owner startup inspection: unavailable. No call placed.');}
 }

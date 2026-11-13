@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {inspectOwnerStartup,ownerStartupDiagnosticKey} from '../scripts/inspect-owner-startup-20261113.mjs';
 import {sha,recordingBaseUrl} from '../lib/required-call-recording.ts';
 const now=Date.parse('2026-11-13T05:00:00Z'),ac='AC'+'a'.repeat(32),nonce='f'.repeat(64);
@@ -33,3 +34,7 @@ const prior=fixture({prior:true});assert.equal(await inspectOwnerStartup(env,pri
 for(const patch of [{account_id:'wrong'},{call_sid:'wrong'},{state:'recording'},{start_claimed_at:row.recording_authorized_at},{conversation_id:'conv_other'}]){const g=fixture({patch});assert.equal(await inspectOwnerStartup(env,g.fetcher,now),'binding_unavailable');assert.equal(g.calls.length,2);assert.equal(g.saved,undefined);}
 const foreign=fixture({callPatch:{to:'+12125550999'}});assert.equal(await inspectOwnerStartup(env,foreign.fetcher,now),'carrier_binding_mismatch');assert.equal(foreign.saved,undefined);
 console.log('PASS exact failed-call inspection: production/main/expiry and canonical identity gates, GET-only provider reads, immutable private timing receipt, no credential or phone disclosure, no replay.');
+const deployment=JSON.parse(readFileSync('vercel.json','utf8'));
+assert(deployment.buildCommand.length<=256,'Hosting build command stays within its schema limit');
+assert(deployment.buildCommand.includes('scripts/check-telephony-connection.mjs'));
+assert(readFileSync('scripts/check-telephony-connection.mjs','utf8').includes("await import('./inspect-owner-startup-20261113.mjs')"));
