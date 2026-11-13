@@ -31,4 +31,3 @@ begin
  source:=replace(source,'-- Independent targeting keeps its exclusion list in the immutable query claim,','-- Versioned searches keep their exact policy in the immutable query claim,');
  execute source;
 end $patch$;
-
