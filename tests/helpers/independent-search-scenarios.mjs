@@ -18,9 +18,9 @@ export async function independentSearchScenarios(db,account,other,op,request){
   await db.exec('savepoint denied_case;');await q(sql,args);
   assert.equal(await resume(),false,message);await db.exec('rollback to savepoint denied_case;');
  };
- await denied('update icash_research_private.query_claims set policy=$2 where operation_key=$1',[op,{...policy,exclusionListId:null}],'An absent immutable list is not sufficient evidence');
+ await denied('update icash_research_private.query_claims set policy=$2 where operation_key=$1',[op,{version:policy.version}],'A missing policy field is not an explicit null list');
  await denied('update icash_research_private.query_claims set policy=$2 where operation_key=$1',[op,{...policy,version:'financial-prefilter-v1'}],'Other unknown query families remain held');
- await denied("update icash_discovery_filter_pages set plan=jsonb_set(plan,'{version}','\"seller-filters-v1\"') where operation_key=$1",[op],'A different filter family is not reclassified');
+ await denied("update icash_discovery_filter_pages set plan=jsonb_set(plan,'{version}','\"unrecognized-family\"') where operation_key=$1",[op],'An unrecognized filter family is not reclassified');
  await denied('update icash_discovery_filter_pages set account_id=$2 where operation_key=$1',[op,other],'Foreign source evidence cannot authorize recovery');
  await denied('update icash_discovery_filter_pages set revision=gen_random_uuid() where operation_key=$1',[op],'A stale filter snapshot cannot authorize recovery');
  await denied('update icash_accounts set bot_paused=true where id=$1',[account],'Customer Pause wins');
@@ -36,6 +36,36 @@ export async function independentSearchScenarios(db,account,other,op,request){
  await q("insert into icash_research_private.estimates values('discovery:other-scope',$1,'{\"locations\":[{\"type\":\"zip_code\",\"code\":\"75001\"}]}')",[other]);
  assert.equal(await resume(),false,'A different account\'s unknown excludes that alternative ZIP');
  await db.exec('rollback to savepoint shared_scope;');
+ // Cover every currently admitted query family, including baseline searches
+ // with no exclusion list and financial queries with their original tier/date.
+ for(const [savedPolicy,savedPlan] of [
+  [policy,{version:'seller-filters-v1',strategy:'baseline',mode:'explore',providerPage:17}],
+  [{...policy,exclusionListId:null},{version:'seller-filters-v1',strategy:'vacant',mode:'explore',providerPage:1}],
+  [{...policy,version:'financial-prefilter-v1',asOf:'2026-11-10',tier:0},plan],
+  [{...policy,version:'financial-prefilter-v1',asOf:'2026-11-10',tier:2},{version:'seller-filters-v1',strategy:'absentee',mode:'explore',providerPage:3}],
+ ]){
+  await db.exec('savepoint query_family;');
+  await q('update icash_research_private.query_claims set policy=$2 where operation_key=$1',[op,savedPolicy]);
+  await q('update icash_discovery_filter_pages set plan=$2 where operation_key=$1',[op,savedPlan]);
+  const original=await config();
+  const before=(await q('select * from icash_operation_spend order by operation_key')).rows;
+  assert.equal(await resume(),true,'Supported source-bound query family can recover: '+savedPolicy.version+'/'+savedPlan.version);
+  const next=await config();assert.notEqual(next.zip,original.zip);
+  assert.deepEqual((await q('select * from icash_operation_spend order by operation_key')).rows,before);
+  const receipt={queryPolicy:savedPolicy,filterPlan:savedPlan,rows:[{dm_property_id:'prop_9003',full_address:'Synthetic versioned late result',state:'TX',zip:original.zip}],creditsUsed:1,peopleCredits:0,estimatedCredits:1,hasNextPage:true,fetchedAt:new Date().toISOString()};
+  assert.equal(await value('select icash_save_research_discovery($1,$2,$3,$4,$5)',[account,op,original.revision,original.next_page,receipt]),1);
+  assert.equal(await value('select icash_save_research_discovery($1,$2,$3,$4,$5)',[account,op,original.revision,original.next_page,receipt]),1);
+  assert.deepEqual(await config(),next,'Late versioned receipt preserves new work');
+  assert.equal(await value('select count(*)::int from icash_screening_jobs where event_key=$1',[op+':prop_9003']),1);
+  await db.exec('rollback to savepoint query_family;');
+ }
+ for(const badPolicy of [
+  {...policy,exclusionListId:123},
+  {...policy,extra:true},
+  {...policy,version:'financial-prefilter-v1',asOf:'2026-02-30',tier:0},
+  {...policy,version:'financial-prefilter-v1',asOf:'2026-11-10',tier:3},
+  {...policy,version:'financial-prefilter-v1',asOf:'2026-11-10',tier:0,exclusionListId:null},
+ ])await denied('update icash_research_private.query_claims set policy=$2 where operation_key=$1',[op,badPolicy],'Malformed saved policies remain held');
  const original=await config();
  const before=(await q('select * from icash_operation_spend order by operation_key')).rows;
  const wallet=(await q('select * from icash_wallets order by account_id')).rows;

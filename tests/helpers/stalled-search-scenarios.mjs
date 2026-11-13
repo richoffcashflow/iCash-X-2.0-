@@ -17,6 +17,10 @@ export async function stalledSearchScenarios(db,account,other){
  assert.equal(independent,read('supabase/migrations/20261113043224_independent_query_stall_recovery.sql'));
  await db.exec('create table if not exists icash_research_private.estimates(operation_key text,account_id uuid,query jsonb);');
  await db.exec('begin;'+independent+'commit;');
+ await db.exec(read('config/dealmachine-financial-prequalification.sql').match(/create function icash_research_private\.financial_filters\([\s\S]*?end \$\$;/)[0]);
+ const complete=read('config/complete-query-stall-recovery.sql');
+ assert.equal(complete,read('supabase/migrations/20261113043559_complete_query_stall_recovery.sql'));
+ await db.exec('begin;'+complete+'commit;');
  const config=()=>value('select to_jsonb(c) from icash_discovery_configs c where account_id=$1',[account]);
  const original=await config(),op=`discovery:${account}:${original.revision}:${original.next_page}`;
  const resume=()=>value('select icash_continue_stalled_research($1)',[account]);

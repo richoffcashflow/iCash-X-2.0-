@@ -82,6 +82,19 @@ assert sql("select public.icash_reserve_research_discovery('"+DATA['account']+"'
 context = json.loads(sql("select public.icash_targeting_query_context(account_id,revision,next_page) from icash_discovery_configs where account_id='"+DATA['account']+"';"))
 assert context['ready'] is True, 'The fresh query context must actually become eligible'
 assert context['policy']['version'] == 'financial-prefilter-v1', 'New work uses the current query policy'
+for policy, plan in [
+    (DATA['policy'], {'version':'seller-filters-v1','strategy':'baseline','mode':'explore','providerPage':17}),
+    ({**DATA['policy'], 'exclusionListId':None}, {'version':'seller-filters-v1','strategy':'vacant','mode':'explore','providerPage':1}),
+    ({**DATA['policy'], 'version':'financial-prefilter-v1','asOf':'2026-11-10','tier':0}, DATA['plan']),
+]:
+    setup()
+    sql("update icash_research_private.query_claims set policy="+literal(policy)+" where operation_key='"+DATA['operation']+"';update icash_discovery_filter_pages set plan="+literal(plan)+" where operation_key='"+DATA['operation']+"';")
+    before = snapshot()
+    barrier = Barrier(12)
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        results = list(pool.map(contender, range(12)))
+    assert results.count('t') == 1 and results.count('f') == 11, results
+    assert snapshot() == before
 # A late receipt writer owns the original spend row: skip, never deadlock.
 setup()
 holder = fixture.holder("select 1 from public.icash_operation_spend where operation_key='"+DATA['operation']+"' for update;", 'receipt_locked')

@@ -30,7 +30,7 @@ export const seedSql=base.seedSql+`
  insert into icash_discovery_filter_pages(operation_key,account_id,revision,sequence,zip,plan,state)
  values('${operation}','${base.account}','${base.revision}',1,'75217','${JSON.stringify(plan)}','claimed');
  `;
-export const migration=read('config/independent-query-stall-recovery.sql');
+export const migration=read('config/independent-query-stall-recovery.sql')+read('config/complete-query-stall-recovery.sql');
 export const activateSql='update icash_research_private.settings set independent_query_continuation_enabled=true where id=1;';
 export const claimSql=`select public.icash_continue_stalled_research('${base.account}');`;
 if(process.argv[1]===fileURLToPath(import.meta.url))process.stdout.write(JSON.stringify({setupSql,seedSql,migration,activateSql,claimSql,operation,account:base.account,other:base.other,revision:base.revision,scope:base.scope,plan,policy}));
