@@ -2,9 +2,9 @@
 
 ## November 13 outbound stalls and owner email
 
-The [outbound recovery follow-up](outbound-stall-recovery-2026-11-13.md) reproduces
-lost queue age during contact-quota waits and an inert provider workflow-version
-serialization that prevented the original voice approval from matching. It also
+The [outbound recovery follow-up](outbound-stall-recovery-2026-11-13.md) repairs
+lost queue age during contact-quota waits and retains PR #721's independent fix
+for the inert provider workflow version blocking the original voice approval. It also
 adds an explicit, private notification baseline for the owner's requested reset.
 The reset suppresses unchanged hourly reminders only; current health, new service
 outages, changed account impact, recovery evidence and uncertain email receipts

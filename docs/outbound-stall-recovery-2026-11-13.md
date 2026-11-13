@@ -17,11 +17,13 @@ research, a call, or a delivered message.
 | Failure | Repair | Limits retained |
 | --- | --- | --- |
 | Quota-delayed contact jobs lose their original aging while the scheduler advances their next run. | Preserve the existing export-wait age for a definite `quota_wait`, as already done for `export_busy`. | Original candidate checks, bounded polling, provider request limits, final claims, Pause, money and unknown outcomes. |
-| The same reviewed voice configuration adds `workflow.version: 1`, blocking maintenance and call recovery. | Reconstruct only the observed inert single-start representation and require the entire original approval fingerprint. | Different versions, executable workflow changes, prompts, tools, agent identity and every independent approval gate. No provider write or approval replacement. |
+| The same reviewed voice configuration adds `workflow.version: 1`, blocking maintenance and call recovery. | Retain the independently merged PR #721: reconstruct only the observed inert single-start representation and require the entire original approval fingerprint. | Different versions, executable workflow changes, prompts, tools, agent identity and every independent approval gate. No provider write or approval replacement. |
 | A continuing incident sends unchanged hourly reminders despite the owner's request to reset them. | Record one fresh, exact private notification baseline and cancel only its not-yet-claimed detected notices. | New component outages/escalations, changed account impact, genuine recovery window, accepted/claimed/uncertain delivery receipts and all health records. |
 | Owner emails mix raw UTC times, workflow flags and service failures. | Use 12-hour Central timestamps, explain monitor counts, include fresh quota status and describe automatic recovery accurately. | Severity thresholds, verified recipient, deterministic send key and original receipt-only retry behavior. |
 
-The saved before/after voice snapshots differ only at `workflow.version`. The
+The saved before/after voice snapshots differ only at `workflow.version`. PR #721
+independently shipped this same correction; its stricter exact-shape comparison
+and regression suites are retained unchanged, replacing the duplicate patch. The
 comparison is deliberately narrow: one inert start node, empty edges/frames/
 subgraphs, disabled subagent looping, version exactly 1 and no unknown workflow
 keys. The full original hash is still the authority. Tests also exercise the

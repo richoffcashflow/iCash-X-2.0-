@@ -12,6 +12,7 @@ import {loadService} from './helpers/simulated-journey-services.mjs';
 // Synthetic, offline fixtures only. Keep all historical hash representations
 // pinned independently of the comparison so this never changes stored reviews.
 const emptySubagents=()=>({agents:[],self_subagent:null});
+const emptyVersionedWorkflow=()=>({edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_frame_id:null,parent_subgraph_id:null}},frames:{},version:1,subgraphs:{},prevent_subagent_loops:false});
 function fixture(withEmptyDefault=false,withEmptyList=false){
  const agent={
   agent_id:'agent_fixture',branch_id:'agtbrch_recorded',main_branch_id:'agtbrch_main',version_id:'agtvrsn_reviewed',
@@ -59,24 +60,6 @@ function fullDefaultsFixture(){
  return a;
 }
 
-test('single-start workflow version metadata retains the complete reviewed configuration',()=>{
- const original=fixture(),workflow={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_frame_id:null,parent_subgraph_id:null}},frames:{},subgraphs:{},prevent_subagent_loops:false};
- original.workflow=workflow;
- const review=reviewFor(original),current=structuredClone(original);current.workflow.version=1;
- const before=JSON.stringify({review,current});
- assert.equal(recordingAgentMatches(review,current),true);
- assert.equal(JSON.stringify({review,current}),before,'No provider configuration or approval rewrite');
- for(const mutate of [
-  ...[0,2,'1',null,true].map(v=>a=>a.workflow.version=v),
-  a=>a.workflow.nodes.start_node.type='override_agent',a=>a.workflow.nodes.extra={type:'end'},
-  a=>a.workflow.edges.edge={source:'start_node'},a=>a.workflow.frames.frame={},a=>a.workflow.subgraphs.graph={},
-  a=>a.workflow.nodes.start_node.parent_subgraph_id='graph',a=>a.workflow.prevent_subagent_loops=true,
-  a=>a.conversation_config.agent.prompt.prompt='Changed executable prompt',a=>a.workflow.future_field=false,
-  a=>a.version_id='agtvrsn_changed',
- ]){const changed=structuredClone(current);mutate(changed);assert.equal(recordingAgentMatches(review,changed),false);}
- assert.equal(recordingAgentMatches({...review,configHash:configHash(current)},original),false,'No reverse synthesis of a new review');
-});
-
 test('current and recent approved snapshots do not enumerate historical fingerprints before matching',async()=>{
  const a=fullDefaultsFixture();
  const current=reviewFor(a),recent=structuredClone(a);
@@ -94,7 +77,9 @@ test('current and recent approved snapshots do not enumerate historical fingerpr
 });
 
 test('historical full approvals at every authorized capacity match before exhaustive intermediate combinations',async()=>{
- const a=fullDefaultsFixture(),old=structuredClone(a),c=old.conversation_config,p=old.platform_settings,o=p.overrides.conversation_config_override;
+ const a=fullDefaultsFixture();a.workflow=emptyVersionedWorkflow();
+ const old=structuredClone(a),c=old.conversation_config,p=old.platform_settings,o=p.overrides.conversation_config_override;
+ delete old.workflow.version;
  delete c.agent.prompt.enable_prompt_caching;delete old.workflow.frames;delete old.workflow.nodes.start_node.parent_frame_id;
  delete p.guardrails.human_voice;p.guardrails.synthetic_voice.trigger_action={type:'end_call'};
  delete c.agent.prompt.built_in_tools.ask_teammate;delete c.agent.prompt.built_in_tools.identity_challenge;delete p.app_connectors;
@@ -113,9 +98,33 @@ test('historical full approvals at every authorized capacity match before exhaus
   const review=reviewFor(old),before=structuredClone({review,a});hashes=0;const start=performance.now();
   assert.equal(measured.recordingAgentMatches(review,a),true);
   console.log('Historical capacity comparison:',concurrency,hashes,'fingerprints,',Math.round(performance.now()-start),'ms');
-  assert(hashes<=160,'The current standard tier and historical defaults must not enumerate thousands of intermediate fingerprints');
+  assert(hashes<=320,'One additional exact workflow representation must keep the historical search bounded, not enumerate thousands of intermediate fingerprints');
   assert.deepEqual({review,a},before,'Prioritization must not rewrite the provider snapshot or its approval');
  }
+});
+
+test('the observed empty workflow version preserves the full approval without accepting other workflow changes',()=>{
+ const original=fixture();original.workflow=emptyVersionedWorkflow();delete original.workflow.version;
+ const current=structuredClone(original);current.workflow.version=1;
+ const review=reviewFor(original),before=structuredClone({review,current});
+ assert.equal(recordingAgentMatches(review,current),true,'Reproduce and repair the same-version provider representation change');
+ const snapshot=a=>({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow,procedures:null});
+ assert.equal(recordingConfigHashMatches(configHash(original),snapshot(current)),true,'Incoming comparisons preserve their complete original fingerprint');
+ assert.equal(recordingAgentMatches(reviewFor(current),original),false,'Never synthesize a newer approval in reverse');
+ assert.equal(recordingAgentMatches(reviewFor(current),current),true);
+ assert.deepEqual({review,current},before);
+ for(const mutate of [
+  ...[0,2,'1',null,true,{},[]].map(v=>a=>a.workflow.version=v),
+  a=>a.workflow.extra=null,a=>a.workflow.nodes.extra={type:'end'},a=>a.workflow.nodes.start_node.type='end',
+  a=>a.workflow.nodes.start_node.edge_order=['next'],a=>a.workflow.edges.next={target:'start_node'},
+  a=>a.workflow.frames.frame={},a=>a.workflow.subgraphs.subgraph={},a=>a.workflow.prevent_subagent_loops=true,
+  a=>a.workflow.nodes.start_node.parent_frame_id='frame',a=>a.workflow.nodes.start_node.parent_subgraph_id='subgraph',
+  a=>a.workflow.nodes.start_node.position.x=1,a=>a.workflow.nodes.start_node.extra=null,
+  a=>delete a.workflow.frames,a=>delete a.workflow.subgraphs,
+  a=>a.conversation_config.agent.prompt.prompt+=' changed',a=>a.conversation_config.agent.prompt.tool_ids.push('other_tool'),
+  a=>a.platform_settings.privacy.record_voice=true,a=>a.platform_settings.auth.enable_auth=false,
+  a=>a.agent_id='agent_other',a=>a.branch_id='agtbrch_other',a=>a.version_id='agtvrsn_other',
+ ]){const changed=structuredClone(current);mutate(changed);assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());}
 });
 
 test('November 13 explicit standard guardrail tier preserves only the complete original approval',()=>{

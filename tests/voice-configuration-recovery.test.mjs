@@ -34,11 +34,11 @@ test('preview, disabled release, mismatched account, expired review and real pro
 });
 test('reviewed November 12 representation enters only the existing bounded recovery with original and observed hashes',async()=>{
  const f=fixture(),calls=[];
- f.agent.workflow={edges:{},nodes:{start_node:{type:'start',edge_order:[],parent_subgraph_id:null}},subgraphs:{},prevent_subagent_loops:false};
+ f.agent.workflow={edges:{},nodes:{start_node:{type:'start',edge_order:[]}}};
  const hash=()=>sha(JSON.stringify(canonical({conversation_config:f.agent.conversation_config,platform_settings:f.agent.platform_settings,workflow:f.agent.workflow,procedures:null})));
  f.review.configHash=hash();f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(f.review);
  f.agent.conversation_config.agent.prompt.enable_prompt_caching=true;
- f.agent.workflow.frames={};f.agent.workflow.nodes.start_node.parent_frame_id=null;f.agent.workflow.version=1;
+ f.agent.workflow.frames={};f.agent.workflow.nodes.start_node.parent_frame_id=null;
  const before=JSON.stringify(f);
  assert.deepEqual(await recoverVoiceConfiguration(async(...args)=>{calls.push(args);return 3;},f.agent,f.env,now),{status:'checked',requeued:3});
  assert.equal(calls.length,1);assert.equal(calls[0][0],'rpc/icash_recover_voice_configuration');
@@ -82,6 +82,19 @@ test('runtime drift preserves one private redacted snapshot without provider rea
   const db=async(_path,method)=>{if((method??'GET')===failedStage){failed++;throw Error('unavailable');}return [];};
   assert.deepEqual(await recoverVoiceConfiguration(db,f.agent,f.env,now),{status:'review_required',requeued:0});assert.equal(failed,1,'No retry of an uncertain snapshot write');
  }
+});
+test('the exact empty workflow version reaches recovery with unchanged approval and actual observed hash',async()=>{
+ const f=fixture(),calls=[];
+ f.agent.workflow={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_frame_id:null,parent_subgraph_id:null}},frames:{},subgraphs:{},prevent_subagent_loops:false};
+ const hash=()=>sha(JSON.stringify(canonical({conversation_config:f.agent.conversation_config,platform_settings:f.agent.platform_settings,workflow:f.agent.workflow,procedures:null})));
+ f.review.configHash=hash();f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(f.review);f.agent.workflow.version=1;
+ const before=JSON.stringify(f);
+ assert.deepEqual(await recoverVoiceConfiguration(async(...args)=>{calls.push(args);return 2;},f.agent,f.env,now),{status:'checked',requeued:2});
+ assert.equal(calls.length,1);assert.equal(calls[0][0],'rpc/icash_recover_voice_configuration');
+ assert.equal(calls[0][2].p_config_hash,f.review.configHash);assert.equal(calls[0][2].p_observed_hash,hash());
+ assert.notEqual(hash(),f.review.configHash);assert.equal(JSON.stringify(f),before);
+ f.agent.workflow.version=2;
+ assert.deepEqual(await recoverVoiceConfiguration(async path=>{assert(path.startsWith('icash_integration_checks'));return [];},f.agent,f.env,now),{status:'review_required',requeued:0});
 });
 test('unknown database outcome is not automatically retried',async()=>{
  const f=fixture();let calls=0;
