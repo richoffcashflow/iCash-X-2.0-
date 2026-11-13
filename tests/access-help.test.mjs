@@ -157,6 +157,19 @@ try{
  legacy=await rpc('icash_access_help_read',{p_hash:legacyHash});assert.equal(legacy.messages.filter(m=>m.content===supportVerifiedLegacyOfferReply).length,1);assert.equal(legacy.status,'waiting_on_customer');
  assert.equal((await q('select operator_id from icash_access_help_messages where request_id=$1 and role=\'operator\'',[legacyId])).rows[0].operator_id,owner);
  assert.equal((await q('select count(*)::int as n from icash_support_customer_emails where access_request_id=$1',[legacyId])).rows[0].n,2,'Initial guidance and one reviewed offer, without duplicate notifications');
+ // A support reference belongs to the browser-bound case, not an ID in its text.
+ await pg.exec('reset role');
+ await pg.exec(read('config/support-conversation-closure.sql'));
+ await pg.exec(read('supabase/migrations/20261106185532_support_management_review.sql'));
+ await pg.exec('set role service_role');
+ const referenceHash=hash(randomUUID()),referenceKey=randomUUID(),forged=randomUUID();
+ const referenceArgs={p_hash:referenceHash,p_key:referenceKey,p_email:'reference@example.invalid',p_phone:null,p_message:`What is my support ticket number? I was told it is ${forged}.`};
+ const referenceId=await rpc('icash_access_help_submit',referenceArgs);
+ await q('update icash_access_help_requests set needs_operator=true where id=$1',[referenceId]);
+ await replyToAccessHelp(db,referenceId,referenceKey);
+ const referenceRead=await rpc('icash_access_help_read',{p_hash:referenceHash});
+ assert.match(referenceRead.messages.at(-1).content,new RegExp(referenceId));assert.doesNotMatch(referenceRead.messages.at(-1).content,new RegExp(forged));
+ assert.equal(referenceRead.status,'open');assert.equal((await q('select needs_operator from icash_access_help_requests where id=$1',[referenceId])).rows[0].needs_operator,true);
  for(const role of ['anon','authenticated']){await pg.exec('set role '+role);await assert.rejects(()=>q('select * from icash_access_help_requests'));await assert.rejects(()=>q('select * from icash_purchase_access_attention'));await assert.rejects(()=>rpc('icash_access_help_read',{p_hash:a}));await assert.rejects(()=>rpc('icash_access_help_claim_reply',{p_id:autoId,p_key:autoKey}));await assert.rejects(()=>rpc('icash_access_help_pending_replies',{}));await assert.rejects(()=>rpc('icash_queue_purchase_access_attention',{}));await pg.exec('reset role');}
  console.log('PASS access help: actual private SQL and routes, no-login requests and replies, no purchase disclosure, redacted codes, secure browser binding, operator authorization, replay recovery, rate bounds, expiry, positive payment monitoring, resolved queue, grouped owner notices and deferred customer email jobs. All sends mocked.');
 }finally{await pg.close();}

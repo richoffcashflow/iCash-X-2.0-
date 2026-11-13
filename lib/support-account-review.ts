@@ -1,12 +1,20 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportRenewalCancellationRequested} from './support-policy.ts';
 import {supportVoicemailComplaint} from './support-inbox-guidance.ts';
+import {supportProgressDelay} from './support-progress-evidence.ts';
 
 const existingOutreachConcern=(text:string)=>/\b(?:ai|bot|automated|automation|research|outreach|calls?|texts?|sellers?|properties|leads?)\b/i.test(text)&&/\b(?:slow|slower|not doing much|not (?:been )?doing anything|isn[’']?t doing anything|hasn[’']?t been doing anything|no interested|no interest|haven[’']?t (?:gotten|got|had|received).{0,30}interested)\b/i.test(text);
 /** A complaint about absent work is not proof of its cause. Keep the subject
  * and failure in one sentence, and let an explicit successful result reset it. */
 export function supportMissingActivityConcern(text:string){
  if(/\b(?:(?:it|(?:the |my )?(?:bot|ai)) (?:is )?working (?:now|fine|well)|problem solved|fixed now|all fixed)[.!\s]*$/i.test(text)&&!/\b(?:not working (?:now|fine|well)|not fixed|isn[’']?t working (?:now|fine|well))\b/i.test(text))return false;
+ if(/^(?:my|the) (?:ai )?(?:bot|ai) (?:has )?stopped (?:searching|researching(?: properties)?|finding (?:new |any )?leads)[.!?\s]*$/i.test(text.trim()))return true;
+ // These whole-work complaints must not fall through to model guesses about
+ // eligible inventory. A stopped seller contact or browser is a separate issue.
+ if(/^(?:why (?:did|has) (?:my|the) (?:ai )?bot stop(?:ped)?(?:[^.!?\n]{0,70}\b(?:not|didn[’']?t) pause it)?|(?:my|the) (?:ai )?bot (?:has )?stopped (?:by itself|on its own))[?!.\s]*$/i.test(text.trim()))return true;
+ if(/\b(?:my|the) (?:ai )?bot (?:is |says it is )?(?:on|running|active)\b[^.!?\n]{0,35}\b(?:not|isn[’']?t) (?:running|working)\b/i.test(text))return true;
+ if(/\b(?:my|the) (?:ai )?bot (?:is )?taking (?:so |too )?long to find (?:a |any )?deals?\b/i.test(text))return true;
+ if(/\b(?:my|the) (?:ai )?bot\b[^.!?\n]{0,25}\b(?:only|still)\b[^.!?\n]{0,25}\b(?:leads|properties) from (?:last week|yesterday|last month)\b/i.test(text))return true;
  if(/\b(?:my|the) (?:bot|ai) (?:has not|hasn[’']t) (?:completed|done) (?:any )?work\b/i.test(text))return true;
  // A running workspace with no progress is an activity complaint. Require
  // that complete statement, not unrelated browser/video or software updates.
@@ -25,6 +33,18 @@ export const supportCurrentResearchQuestion=(text:string)=>/^is (?:my |the )?(?:
 const activityProofQuestion=(text:string)=>/\b(?:how|when)(?: can| do| will)? i (?:tell|know|see)\b.{0,35}\b(?:ai|bot)\b.{0,30}\b(?:doing (?:anything|something)|working|work|active)\b/i.test(text);
 function missingActivityFollowup(context:SupportContext){
  const turns=context.messages.slice(-9),latest=turns.at(-1);
+ const previous=turns.at(-2);
+ const olderLeads=/^(?:yes[, ]+(?:but )?)?(?:it[’']?s|it is|they are|they[’']re|these are|those are)(?: all)? from (?:last week|yesterday|last month)[.!?\s]*$/i.test(latest?.content.trim()??'');
+ const notRunning=/^(?:it says (?:it[’']?s|it is|its) |it is |it[’']?s )(?:on|running|active)[, ]+but (?:it is |it[’']?s |it )?not (?:running|working)[.!?\s]*$/i.test(latest?.content.trim()??'');
+ if(latest?.role==='user'&&previous?.role==='assistant'&&
+  (notRunning||olderLeads&&/\b(?:leads|properties)\b/i.test(previous.content)&&previous.content.includes('?'))){
+  for(const turn of turns.slice(0,-1).reverse()){
+   if(turn.role==='operator')break;
+   if(turn.role!=='user')continue;
+   if(outreachConcern(turn.content))return true;
+   if(!/^(?:yes|no|running|it is running|it[’']s running)[.!\s]*$/i.test(turn.content.trim()))break;
+  }
+ }
  if(latest?.role!=='user'||!activityPage(latest.content)&&!activityProofQuestion(latest.content))return false;
  // A page name is a detail only after a matching question. Never carry an
  // earlier complaint across an operator finding or another customer topic.
@@ -54,8 +74,39 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  // Specific call-result complaints must reach their guidance before incidental
  // words such as "automated calls" and "available fix" match capability checks.
  if(supportVoicemailComplaint(q))return null;
+ // A direct request for current account issues needs the latest checks, not
+ // an old diagnosis or a generic handoff. Never inherit this across topics.
+ const currentIssues=/\bwhat(?:[’']?s| are| is)?\b[^?!\n]{0,110}\b(?:issues?|problems?)\b/i.test(q)&&/\b(?:current|currently|right now|still)\b/i.test(q)&&/\b(?:my (?:account|bot)|the software|my side)\b/i.test(q)&&!/\b(?:seller|buyer|contract|agreement|sign[ -]?in|course|vip|subscription|membership|refund|cancel|payment|charged)\b/i.test(q);
+ if(currentIssues){
+  if(context.kind!=='account')return answer('I can’t verify current account issues from this guest chat. Which part of the software is failing?');
+  const checks=context.evidence??[],outreach=checks.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
+  const work=checks.find(e=>e.key==='work'&&e.status!=='unknown');
+  const findings=checks.filter(e=>['voice','screening','readiness','research_capacity'].includes(e.key)&&e.status==='attention'&&e.detail).map(e=>e.detail);
+  if(checks.some(e=>['voice','screening','readiness','outreach','work'].includes(e.key)&&e.status==='unknown'))findings.push('Some current account checks are unavailable, so I can’t give a complete account assessment.');
+  if(work?.code==='paused'||outreach?.progress?.status==='paused')findings.unshift('Your bot is currently paused; this chat has not changed that control.');
+  if(outreach?.progress?.health?.status==='blocked'&&outreach.progress.health.reason==='no_completed_work')findings.push(supportProgressDelay(outreach,false));
+  else if(outreach?.progress?.status==='settling'||outreach?.progress?.health?.status==='blocked'&&outreach.progress.health.reason==='pending_work')findings.push('Earlier work is awaiting confirmation; its original results still need review.');
+  else if(outreach?.progress?.health?.status==='blocked')findings.push('The latest activity check flags work as blocked; its specific cause is not confirmed.');
+  else if(outreach?.progress?.status==='budget_reached')findings.push('The latest work check says available credits do not cover the next task. This does not explain an earlier technical problem.');
+  const counts=outreach?`${outreach.textsDelivered} of ${outreach.textsSent} texts have confirmed delivery overall, with ${outreach.textReplies} replies recorded. These totals do not establish current progress or seller interest.`:'';
+  const details=findings.length?findings.join(' '):outreach?.progress&&outreach.progress.health?.status!=='unavailable'?'These checks do not identify a specific current fault, but they do not prove that every part of the software is working.':'I can’t verify the current account problems from the available checks.';
+  return answer([details,counts,'Your reported issue remains open; I haven’t verified a repair or restart time.'].filter(Boolean).join(' '),true);
+ }
  if(/\b(?:(?:more|extra) (?:money|credits?)|(?:add|adding|fund)\b.{0,25}\b(?:bot|account)|buy (?:more )?credits?)\b/i.test(q)&&/\b(?:contracts?|deals?|results?|work differently|work faster|better)\b/i.test(q)&&!/\b(?:purchase price|seller price|assignment fee|offer amount)\b/i.test(q))
   return answer('Adding money buys more prepaid work credits for eligible research, contact lookup, calls and texts. It does not guarantee a contract, seller response or closed deal, and it does not change the bot’s strategy. More credits do not fix a technical problem or override Pause. You don’t need to pay more to troubleshoot missing activity.');
+ // A direct expectation of spending is a current-work question, not a request
+ // to buy credits. Do not inherit it across a new topic or infer actual spending.
+ if(/^i (?:expected|would (?:think|expect)) my credits (?:to |would (?:still )?)be (?:getting )?used(?: up)? by now[.!?\s]*$/i.test(q.trim())){
+  const explanation='Spending is evidence of charged work, not a promise that the bot is making progress. ';
+  if(context.kind!=='account')return answer(explanation+'I can’t verify your current work or credit usage from this guest chat.');
+  const workCheck=context.evidence?.find(e=>e.key==='work'&&e.status!=='unknown');
+  const outreach=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
+  if(workCheck?.code==='paused'||outreach?.progress?.status==='paused')return answer(explanation+'Your bot is currently paused; this chat has not changed that setting.');
+  if(!outreach?.progress||outreach.progress.health?.status==='unavailable')return answer(explanation+'I can’t verify current activity or explain the unchanged balance from these checks. The issue remains open.',true);
+  const progress=outreach.progress;
+  const detail=progress.health?.status==='blocked'&&progress.health.reason==='no_completed_work'?supportProgressDelay(outreach,false):progress.status==='settling'||progress.health?.status==='blocked'&&progress.health.reason==='pending_work'?'Earlier work is awaiting confirmation.':context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New research is waiting for service capacity.':'These checks do not establish why credits are unchanged or whether current work has progressed.';
+  return answer(explanation+detail+' This needs a current work review; adding credits is not a troubleshooting step, and I haven’t verified a restart.',true);
+ }
  // These existing funding-banner labels describe a status refresh, not a
  // pending checkout or proof that a task started. Never infer paid state from a quote.
  if(/\bcredits added\b/i.test(q)&&/\b(?:checking your bot[’']?s status|let[’']?s get to work)\b/i.test(q)&&!/\b(?:checkout|sign[ -]?in|code|card|charged|charges|subscription|membership|access|voice|agreements?|contracts?|unrecogni[sz]ed|unauthorized)\b/i.test(q)){
@@ -68,14 +119,39 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   if(progress?.health?.status==='blocked')return answer(explanation+' The latest activity check flags work as blocked. Earlier recorded activity does not establish that it is progressing now. This needs investigation; no repair or restart time is confirmed.',true);
   return answer(explanation+(progress?' Check the property’s saved calls and texts for actual results; the notice alone cannot confirm current progress.':' I can’t verify current activity from the available checks.'));
  }
+ // Explain an explicitly quoted workspace label without treating it as live
+ // evidence. The current account check can have changed since the screen did.
+ const statusQuestion=q.trim().replace(/["“”]/g,'');
+ const waitingWork=/^(?:(?:so[, ]+)?(?:it|(?:my|the) (?:bot|workspace|dashboard|screen)) (?:still )?(?:says|shows) |what does |why does (?:it|(?:my|the) (?:bot|workspace|dashboard|screen)) (?:say|show) )?waiting for eligible work(?: mean)?[.!?\s]*$/i.test(statusQuestion);
+ if(waitingWork){
+  const explanation='That status label means the workspace is waiting for an eligible task. It is not an activity receipt or a restart estimate, and does not establish property availability.';
+  if(context.kind!=='account')return answer(explanation+' I can’t verify your current account status from this guest chat.');
+  const workCheck=context.evidence?.find(e=>e.key==='work'&&e.status!=='unknown');
+  const outreach=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
+  const progress=outreach?.progress;
+  if(workCheck?.code==='paused'||progress?.status==='paused')return answer(explanation+' Your bot is currently paused; this chat has not changed that setting.');
+  if(!progress||progress.health?.status==='unavailable')return answer(explanation+' I can’t verify the current work status from the available checks. Your reported issue remains open.',true);
+  if(progress.health?.status==='blocked')return answer(explanation+' '+(progress.health.reason==='no_completed_work'?supportProgressDelay(outreach!,false):progress.health.reason==='pending_work'?'The latest check shows earlier work awaiting confirmation.':'The latest check flags work as blocked; the specific cause still needs investigation.')+' This remains under review.',true);
+  if(progress.status==='settling')return answer(explanation+' The latest check instead shows earlier work awaiting cost confirmation. That is not proof of new activity.',true);
+  if(progress.status==='budget_reached')return answer(explanation+' The latest check instead says available credits do not cover the next task. A quoted label alone is not a reason to pay again.',true);
+  return answer(explanation+' '+(progress.status==='paced'?'The latest recorded status also shows that waiting state.':'The latest recorded status is different from the quoted label. Refresh the workspace once to see its current status.')+' Saved calls, texts and research results are the evidence of completed work; the label does not resolve the earlier problem.');
+ }
  if(context.kind!=='account')return null;
- const o=context.evidence?.find(e=>e.key==='outreach')?.outreach;
+ const o=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
  const work=context.evidence?.find(e=>e.key==='work');
  const paused=work?.code==='paused'||o?.progress?.status==='paused';
  const state=paused?'Your bot is paused. This chat has not resumed it or authorized new work.':work?.code==='not_paused'&&work.status==='ok'?'Your bot is switched on; that setting alone does not prove outreach is running.':'I can’t confirm the current Run/Pause setting from these checks.';
  const totals=o?`${o.callsStarted} call attempts and ${o.textsSent} texts are recorded overall, with ${o.textReplies} text replies. These totals do not prove seller interest or recent automatic outreach.`:'I can’t verify the call and text records from the available checks.';
  const voice=context.evidence?.find(e=>e.key==='voice'&&e.status==='attention');
- const blocker=paused?'The pause explains why new work is stopped now, but not why outreach was missing before it.':voice?.detail??(o?.progress?.status==='settling'?'Earlier work is awaiting final cost confirmation.':o?.progress?.status==='budget_reached'?'Available work credits do not cover the next task.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='pending_work'?'An earlier task is awaiting confirmation.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='no_completed_work'?'The saved checks report no completed work and flag the activity as blocked; I haven’t verified the specific cause or a restart time.':context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New property research is waiting for capacity.':'I haven’t verified the specific cause of the missing or slow activity.');
+ const blocker=paused?'The pause explains why new work is stopped now, but not why outreach was missing before it.':voice?.detail??(o?.progress?.status==='settling'?'Earlier work is awaiting final cost confirmation.':o?.progress?.status==='budget_reached'?'Available work credits do not cover the next task.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='pending_work'?'An earlier task is awaiting confirmation.':o?.progress?.health?.status==='blocked'&&o.progress.health.reason==='no_completed_work'?supportProgressDelay(o,false):context.evidence?.some(e=>e.key==='research_capacity'&&e.code==='research_capacity_wait'&&e.status==='attention')?'New property research is waiting for capacity.':'I haven’t verified the specific cause of the missing or slow activity.');
+ // A request for restart instructions needs current controls and evidence;
+ // an old operator diagnosis is not authority to resume work or promise it.
+ const restartQuestion=/^(?:how (?:do|can|should) i|what (?:exactly )?do i (?:need to )?do to) (?:restart|resume) (?:my|the) (?:ai bot|bot|ai)(?: (?:so it can work again|to work(?: exactly)?|again))?[?!.\s]*$/i.test(q.trim());
+ if(restartQuestion){
+  if(paused)return answer('Your bot is currently paused. Select Run bot in the workspace if you want to allow eligible new work. That does not repair a service issue or confirm that a task will start. This chat has not changed the setting.');
+  if(work?.status!=='ok'||work.code!=='not_paused')return answer('I can’t confirm your current Run/Pause setting from these checks. Check that control in the workspace; I haven’t verified a restart or a repair.',true);
+  return answer('Your bot is already switched on. '+blocker+' Toggling Run or buying more credits won’t repair a service-side block. I haven’t verified that new work has resumed or a restart time.',true);
+ }
  const automatedQuestion=/\b(?:automated|automatic|automatically|ai|bot)\b/i.test(q)&&/\b(?:calls?|calling|sms|texts?|texting|outreach|speak)\b/i.test(q)&&/\b(?:available|availability|enabled|able|blocker|missing setup|bot to speak|bot to conduct|no recorded|0 calls|zero calls)\b/i.test(q);
  if(automatedQuestion){
   const capability='Eligible seller calls and texts can run automatically; the property’s Call button is for you to speak through your browser microphone.';
@@ -90,6 +166,13 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const operatorProblems=/\b(?:display problem|display bug|display correction|empty (?:contact )?thread|unfinished work|awaiting final|awaiting.*cost|tied to (?:earlier|unfinished) work)\b/i.test(operator)&&/\b(?:not live|not fixed|not.*confirmed|can’t.*confirm|still|blocking|needs? (?:review|resolution|repair))\b/i.test(operator);
  if(operatorProblems&&/\b(?:issue|problem|quality|responses?|replies|fixed|restored)\b/i.test(q)&&!/\b(?:contract|agreement|sign[ -]?in|course|vip|voice|refund|cancel)\b/i.test(q))
   return answer('The earlier operator review recorded unresolved problems with '+(/\b(?:display|thread)\b/i.test(operator)?'conversation visibility':'unfinished work')+(/\b(?:unfinished work|awaiting final|awaiting.*cost|tied to (?:earlier|unfinished) work)\b/i.test(operator)&&/\b(?:display|thread)\b/i.test(operator)?' and work awaiting final charges':'')+'. Those findings do not establish why sellers haven’t replied. I haven’t verified a repair or a restart time, so asking you to check the same tabs or buy more credits would not resolve the reported issue.',true);
+ const missingSentTexts=/\b(?:cannot|can[’']?t|unable to) (?:find|see|view) (?:the |my )?(?:exact |actual |sent )?(?:texts|messages)\b/i.test(q)&&/\b(?:bot|sent|sending)\b/i.test(q);
+ if(missingSentTexts){
+  const counts=o?`${o.textsDelivered} of ${o.textsSent} texts have delivery confirmation overall; ${o.textReplies} text replies are recorded. `:'I can’t verify saved texts from these checks. ';
+  const directed=/\b(?:Texts|selected contact)\b/i.test(previous)||/\b(?:already|tried|still)\b/i.test(q);
+  const next=directed?'The missing conversation still needs checking. Which property is affected?':'Open the property under Your leads, choose Texts and check the selected contact. If it is blank, which property is affected?';
+  return answer(counts+'These records do not prove that the messages display correctly for you or that a seller wants to sell. '+next+' '+(voice?voice.detail+' ':'')+'I haven’t verified that every part of outreach is working.',true);
+ }
  const runningFollowup=outreachConcern(users.at(-2)?.content??'')&&/\b(?:run|running|paused)\b/i.test(previous)&&previous.includes('?')&&/^(?:it(?:[’']s| is)|the bot is|my bot is) (?:running|on)(?:[;,. ]+(?:(?:it has )?the )?green light(?: is)? on)?[.!\s]*$/i.test(q.trim());
  if(outreachConcern(q)||runningFollowup||missingActivityFollowup(context))return answer('I understand why the lack of progress is frustrating. '+state+' '+totals+' '+blocker+(activityProofQuestion(q)?' Check recorded calls and texts on the property; a Run label or a researched lead does not prove recent automatic outreach.':''),true);
  if(/^(?:that sucks|this sucks|that[’']?s (?:frustrating|disappointing)|nothing(?: right now)?)[.!\s]*$/i.test(q.trim())&&users.slice(-7,-1).some(m=>outreachConcern(m.content)))

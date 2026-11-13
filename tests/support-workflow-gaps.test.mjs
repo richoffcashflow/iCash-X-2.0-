@@ -47,7 +47,7 @@ for(const question of ['Where is the Documents tab?','Contact checks expired','W
 }
 assert.equal(calls,0,'known gaps cannot be overwritten by model guesses');
 assert.equal(supportVoiceEvidence([{state:'dispatched',outcome:'production_agent_review_required',updated_at:observedAt}],0).code,'voice_clear');
-assert.equal(supportVoiceEvidence([{state:'held',outcome:'unknown_new_reason',updated_at:observedAt}],0).code,'voice_clear');
+assert.equal(supportVoiceEvidence([{state:'held',outcome:'unknown_new_reason',updated_at:observedAt}],0).code,'voice_unclassified_hold');
 assert.throws(()=>supportVoiceEvidence([{state:'held',outcome:'production_agent_review_required',updated_at:'invalid'}],0));
 assert.doesNotMatch(JSON.stringify(supportVoiceEvidence([{state:'held',outcome:'unknown_secret',updated_at:observedAt}],0)),/unknown_secret/);
 console.log('PASS support workflow replays: call holds, committed credit, agreements, resolution notes, topic changes and no provider actions');

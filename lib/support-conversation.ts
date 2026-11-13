@@ -1,4 +1,5 @@
 import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
+import {supportCallRecordingReply} from './support-call-recordings.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
 import {supportCallHoldReply} from './support-call-hold-guidance.ts';
 import {supportCreditBalanceReply} from './support-credit-balance.ts';
@@ -22,7 +23,7 @@ import {supportLegacyMigrationReply,supportVersionClarification} from './support
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCheckoutReply,supportIdentityReply} from './support-checkout.ts';
 import {supportProductClarification} from './support-product-clarifications.ts';
-import {supportPurchaseHelp,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply} from './support-purchase-help.ts';
+import {supportPurchaseHelp,supportRefundDisclosureReply,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply} from './support-purchase-help.ts';
 import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
 import {supportManagementReview} from './support-management-review.ts';
@@ -30,7 +31,7 @@ import {supportInboxGuidance} from './support-inbox-guidance.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean;managementReview?:boolean;routineGuidance?:true};
-export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean;historyComplete?:boolean;contactKnown?:boolean};
+export type SupportContext={kind:'access'|'account';messages:SupportTurn[];evidence?:SupportEvidence[];accessInvestigation?:AccessInvestigation;handedOff?:boolean;allowAI?:boolean;historyComplete?:boolean;contactKnown?:boolean;conversationReference?:string};
 const noRefunds='All sales are final; we do not offer refunds. I can help fix an access or software issue here.';
 const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'[code removed]');
 
@@ -54,6 +55,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const accountDetails=supportAccountDetailsReply(context);if(accountDetails)return accountDetails;
+ const callRecording=supportCallRecordingReply(context);if(callRecording)return callRecording;
  const voiceSetup=supportVoiceSetupReply(context);if(voiceSetup)return voiceSetup;
  const versionClarification=supportVersionClarification(context.messages);if(versionClarification)return result(versionClarification,'open');
  const location=supportLocationGuidance(context);if(location)return location;
@@ -86,6 +88,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   const details=context.kind==='account'&&checks.length?checks.map(e=>e.detail).join('\n\n')+'\n\nDo not pay again. Do both statement entries match these recorded software payments, or is one a different amount or date?':'Do not pay again. A duplicate-charge report needs its own payment check. What dates and amounts appear for the two charges? Please leave out card numbers.';
   return result(details+cancel,'waiting_on_customer');
  }
+ const disclosure=supportRefundDisclosureReply(context);if(disclosure)return disclosure;
  const closure=context.historyComplete===false?null:repeatedRefundReply(context.messages,context.kind==='account'?context.evidence:[]);
  if(closure)return closure;
  if(context.kind==='access'&&supportCodeDelivery(context.messages)==='missing'&&['refund','cancel'].includes(supportTopic(question))){
@@ -185,6 +188,7 @@ async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fet
  const fallback=reviewedTechnicalFallback(context);
  if(supportLocationParts(context))return fallback;
  if(supportCreditBalanceReply(context))return fallback;
+ if(supportCallRecordingReply(context))return fallback;
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
  if(supportVersionClarification(context.messages))return fallback;
  if(supportVoiceSetupReply(context))return fallback;

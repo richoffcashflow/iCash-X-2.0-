@@ -6,6 +6,7 @@ import {supportAccountDeletionGuidance} from './support-account-deletion.ts';
 import {supportAnswer,supportRenewalCancellationRequested} from './support-policy.ts';
 import {supportMissingActivityConcern} from './support-account-review.ts';
 import {supportActivityConfirmation} from './support-activity-confirmation.ts';
+import {supportCaseReference} from './support-case-reference.ts';
 
 const generic = /^(?:I don[’']t have (?:enough information|a confirmed answer)|I haven[’']t confirmed the cause yet|There[’']s no confirmed change|I couldn[’']t verify your account details)/i;
 const stuck = /\b(?:still|again|already|same (?:issue|problem)|did(?:n[’']t| not) (?:help|work)|not (?:working|getting)|no (?:replies|response|code)|not getting anywhere|going in circles|frustrated|upset|you keep|all day)\b/i;
@@ -30,12 +31,16 @@ function reviewExplanation(context:SupportContext,question:string,contactRequest
 export function supportManagementReview(context:SupportContext, answer:SupportReply):SupportReply {
  const index=context.messages.findLastIndex(turn=>turn.role==='user');
  if(index<0)return answer;
+ const reference=supportCaseReference(context);
+ if(reference)return reference;
  const deletion=supportAccountDeletionGuidance(context);
  if(deletion){
   // Keep independently actionable payment findings alongside the deletion review.
   const question=context.messages[index].content;
   const payment=/duplicate-charge report|do both statement entries match|reporting a charge you don’t recognize|statement details you supplied are saved/i.test(answer.reply)?answer.reply+' ':/\b(?:refund|money back)\b/i.test(question)?supportAnswer('refund',[],false)+' ':'';
-  const renewal=/\bcancel (?:my|the) (?:subscription|membership)\b/i.test(question)&&!/\b(?:can[’']?t|cannot|unable|no code|missing code)\b|\b(?:don[’']?t|do not|never|no longer) (?:want |need |intend |plan )?(?:to )?cancel\b/i.test(question)?supportAnswer('cancel',[],false).split(' If you need account deletion,')[0]+' ':'';
+  const wantsRenewalStop=supportRenewalCancellationRequested(question);
+  const accessBlocked=/\b(?:can[’']?t|cannot|unable to) (?:sign in|log in)|\b(?:no code|missing code)\b/i.test(question);
+  const renewal=wantsRenewalStop?(accessBlocked?'Your request to stop future renewals also needs review because sign-in is blocked. This chat has not cancelled the subscription. ':supportAnswer('cancel',[],false).split(' If you need account deletion,')[0]+' '):'';
   return {reply:payment+renewal+deletion+' '+(context.handedOff?'Your case is still in management review.':'I’ve flagged this conversation for management review.'),status:'open',managementReview:true,ai:false};
  }
  if(context.handedOff&&answer.status==='closed'){
