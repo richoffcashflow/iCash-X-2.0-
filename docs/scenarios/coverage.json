@@ -1,0 +1,281 @@
+{
+  "snapshot": "5bbf8c69ff912c53b3e88561a375c54987161c93",
+  "date": "November 12, 2026",
+  "method": "400 authored situations x 5 workflow branches = 2,000 design scenarios. Source links support the research context. Individual scenarios are original synthetic requirements, not reported incidents, legal determinations, or 2,000 executed tests. A mapped code path establishes an existing subsystem, not coverage of every scenario assigned to it.",
+  "sources": [
+    {
+      "id": "R1",
+      "name": "TREC wholesaling survey",
+      "url": "https://www.trec.texas.gov/node/2061",
+      "note": "Survey responses identify confusion over the wholesaler role, unexpected costs, failed end-buyer placement and title-office reluctance. This is qualitative context, not a current failure rate for iCash."
+    },
+    {
+      "id": "R2",
+      "name": "HomeVestors seller concerns",
+      "url": "https://www.homevestors.com/avoid-we-buy-houses-scams/",
+      "note": "A cash-buying operator describes seller concerns about identity, hidden fees and buyers backing out. Its marketing claims and business-specific promises are not adopted as iCash terms."
+    },
+    {
+      "id": "R3",
+      "name": "TREC written-disclosure update",
+      "url": "https://www.trec.texas.gov/node/2457",
+      "note": "Texas requires written disclosure of the wholesaler\u2019s interest to buyers and sellers. Transaction templates and advertising must reflect the actual role."
+    },
+    {
+      "id": "R4",
+      "name": "American Bar Association purchase-contract guide",
+      "url": "https://www.americanbar.org/groups/public_education/resources/law_issues_for_consumers/everyday-law/real_estate/buying_a_home/the_purchase_contract/",
+      "note": "Price, possession, contingencies, acceptance and deadlines belong to the agreement. The scenario design treats amendments and signatures as distinct from conversational intent."
+    },
+    {
+      "id": "R5",
+      "name": "Texas Department of Insurance title FAQ",
+      "url": "https://www.tdi.texas.gov/title/titlefaqs.html",
+      "note": "The state regulator distinguishes a conditional title commitment from a policy and lists ownership, authority, recording and lien defects. The scenarios turn these issue classes into evidence-gathering and professional-resolution tasks."
+    },
+    {
+      "id": "R6",
+      "name": "ALTA wire-fraud resources",
+      "url": "https://www.alta.org/topics/wire-fraud",
+      "note": "Changing payment instructions and seller impersonation require independent verification. The AI can coordinate verification without becoming the custodian or sender of closing funds."
+    },
+    {
+      "id": "R7",
+      "name": "Oregon Real Estate Agency wholesaling requirements",
+      "url": "https://www.oregon.gov/rea/pages/residential-property-wholesaling.aspx",
+      "note": "Oregon has registration or licensing and written-disclosure requirements. A nationwide workflow cannot apply one state\u2019s authorization everywhere."
+    },
+    {
+      "id": "R8",
+      "name": "CFPB closing process",
+      "url": "https://www.consumerfinance.gov/ask-cfpb/im-about-to-close-on-a-real-estate-purchase-transaction-with-a-mortgage-what-can-expect-in-the-mortgage-closing-process-en-1905/",
+      "note": "Closing coordination, execution, funding and ownership transfer are different events. Mortgage-specific disclosures are not imposed on every cash assignment by this report."
+    }
+  ],
+  "gaps": [
+    {
+      "id": "G01",
+      "title": "Seller intent must survive channel changes",
+      "current": "Direct-response refusal rules, seller evidence and callback logic exist. Every new source still needs the correct delivered-question and role context.",
+      "gap": "Cross-channel refusals, ownership denials and future-contact preferences require scenario-level verification; this audit does not claim every variant is already handled.",
+      "fix": "Use one source-bound intent record for seller texts and completed calls. Cancel unsent contradictory work; distinguish no-to-owner, no-to-sale and text-only.",
+      "status": "Existing mechanisms; scenario coverage incomplete",
+      "priority": "P0",
+      "paths": [
+        "config/seller-response-policy.sql",
+        "lib/seller-response-policy.ts",
+        "lib/call-offer-evidence.ts"
+      ]
+    },
+    {
+      "id": "G02",
+      "title": "Resolve ordinary multi-intent replies",
+      "current": "Seller dialogue and numeric offer execution can ask missing questions and explain assignment. The text analysis schema still has a broad review action.",
+      "gap": "One message can combine price, timing, repairs and a question. A single review classification can strand otherwise answerable parts.",
+      "fix": "Persist all supported intents, answer the factual parts, and ask one missing question. Store unresolved parts as typed dependencies rather than stopping the whole deal.",
+      "status": "Partial implementation",
+      "priority": "P0",
+      "paths": [
+        "lib/text-ai-policy.ts",
+        "config/seller-dialogue.sql",
+        "lib/seller-text-offer.ts"
+      ]
+    },
+    {
+      "id": "G03",
+      "title": "Keep offers evidence-based and versioned",
+      "current": "Seller high asks can receive supported automatic counteroffers. Acceptance is bound to actual delivered terms; new offers use the current formula.",
+      "gap": "New condition, payoff and net-price facts must invalidate only affected proposed terms. Already signed terms cannot silently change.",
+      "fix": "Re-underwrite from verified new facts, save the new version and request its exact acceptance. Ask for missing inputs automatically.",
+      "status": "Existing mechanisms; expanded acceptance scenarios specified",
+      "priority": "P0",
+      "paths": [
+        "lib/seller-text-offer.ts",
+        "lib/automatic-call-offer.ts",
+        "lib/buyer-assignment-pricing.ts"
+      ]
+    },
+    {
+      "id": "G04",
+      "title": "Inspection work needs its own executable tasks",
+      "current": "Condition questions, repair estimates, viewing coordination and generic closing tasks exist.",
+      "gap": "The inspected paths do not establish a complete inspector booking, utility/access, report collection and renegotiation workflow.",
+      "fix": "Add source-bound inspection tasks with access scope, responsible payer, appointment, report and contractual deadline. A new report triggers prospective underwriting and the required party decision.",
+      "status": "Dedicated workflow not verified",
+      "priority": "P1",
+      "paths": [
+        "config/title-tasks.sql",
+        "config/turnkey-deal-journey.sql",
+        "lib/automatic-call-offer.ts"
+      ]
+    },
+    {
+      "id": "G05",
+      "title": "Buyer calls can record requests without executing them",
+      "current": "Buyer voice policies explicitly record requests for review and cannot claim package, agreement or title delivery. Buyer SMS has a separate executable journey.",
+      "gap": "A useful buyer call can end without a source-bound job for its supported request.",
+      "fix": "Build a post-call action adapter for exact completed buyer-call evidence. Map package, signer-details and viewing requests to existing handlers, retaining duplicate protection and real authority. Buyer outbound remains SMS/email.",
+      "status": "Concrete execution gap",
+      "priority": "P0",
+      "paths": [
+        "lib/buyer-response-policy.ts",
+        "lib/buyer-conversation-policy.ts",
+        "lib/deal-journey-service.ts"
+      ]
+    },
+    {
+      "id": "G06",
+      "title": "Contract recovery must retain the original envelope",
+      "current": "Signing validates exact terms, required signers and original provider operations. Customer signatures and legal changes remain distinct actions.",
+      "gap": "Missing details, access problems and uncertain provider outcomes need precise recovery paths; removing every signing hold would create duplicate or unauthorized agreements.",
+      "fix": "Automate missing-field collection and original receipt reconciliation. Present only the real signature or specific terms decision to the authorized party.",
+      "status": "Existing mechanisms; expanded exceptions specified",
+      "priority": "P0",
+      "paths": [
+        "lib/signing-service.ts",
+        "lib/signing-policy.ts",
+        "lib/deal-journey-service.ts"
+      ]
+    },
+    {
+      "id": "G07",
+      "title": "Deadlines need a specific recovery owner",
+      "current": "Closing tasks and journey retry times exist. The supervisor stores a next check, but some next steps remain broad review text.",
+      "gap": "A check timestamp alone does not execute a missing inspection, extension, payoff or notice workflow.",
+      "fix": "Attach the signed deadline, responsible party, required evidence and permitted reminder to each dependency. Escalate the specific unresolved decision before expiry; never extend a signed deadline automatically.",
+      "status": "Partial implementation",
+      "priority": "P0",
+      "paths": [
+        "config/title-tasks.sql",
+        "config/deal-supervisor.sql",
+        "config/closing-coordination.sql"
+      ]
+    },
+    {
+      "id": "G08",
+      "title": "Title intake and curative work remain partly manual",
+      "current": "Title search, qualification, document handoff, messages, follow-ups and tasks exist. Automatic status confirmation expects a rigid six-line message.",
+      "gap": "Ordinary closer emails can produce suggestions or review instead of executable requests for missing documents. Legal cures are not completed by a generic status change.",
+      "fix": "Extract nonbinding document requests from verified current replies into tasks. Request missing fields automatically; use authoritative confirmation for milestones and assign specific curative work to the closer.",
+      "status": "Concrete automation gap",
+      "priority": "P0",
+      "paths": [
+        "config/closing-confirmations.sql",
+        "lib/title-reply-suggestions.ts",
+        "lib/title-service.ts",
+        "lib/title-update-service.ts"
+      ]
+    },
+    {
+      "id": "G09",
+      "title": "Showings need accurate active-step display",
+      "current": "Seller availability and separate buyer/seller confirmations exist. Access requests can resolve automatically when a buyer chooses an available time.",
+      "gap": "The UI inactivity fallback could override a proposed or confirmed visit. A fallback also claimed viewing options existed when the buyer had not requested a visit.",
+      "fix": "Preserve actual visit progress ahead of generic inactivity review and show a neutral buyer-choice step when no visit is requested. Further access/rescheduling cases remain acceptance requirements.",
+      "status": "Focused UI behavior fix implemented and tested locally",
+      "priority": "P1",
+      "paths": [
+        "lib/deal-journey-progress.ts",
+        "config/buyer-call-package-showings.sql",
+        "config/closing-completion.sql"
+      ]
+    },
+    {
+      "id": "G10",
+      "title": "Buyer search must prove usable demand",
+      "current": "Discovery, enrollment, contact metadata and ranking exist. Preferences are not verified funds or successful closing capacity.",
+      "gap": "No blanket proof exists that each property obtains a qualified buyer within its contractual deadline.",
+      "fix": "Track eligible reach, replies, verified readiness and time-to-deposit. Widen only approved search tiers and retain backup candidates without promising competing reservations.",
+      "status": "Existing mechanisms; outcome validation needed",
+      "priority": "P1",
+      "paths": [
+        "lib/buyer-discovery-service.ts",
+        "lib/buyer-engine.ts",
+        "lib/buyer-qualification.ts"
+      ]
+    },
+    {
+      "id": "G11",
+      "title": "Compound package requests fell through to review",
+      "current": "The live pure classifier returned null for \u201cSend photos and property details\u201d while recognizing \u201cSend me details\u201d. The same authorized package satisfies both nouns.",
+      "gap": "A harmless conjunction prevented an existing automatic answer.",
+      "fix": "Recognize an entire request containing only two to five package-information items. Reuse the current source-bound package reply. Mixed wire, refund, signing, access or conditional requests remain outside this narrow parser.",
+      "status": "Focused SQL fix implemented and tested locally",
+      "priority": "P0",
+      "paths": [
+        "config/buyer-request-actions.sql",
+        "config/buyer-compound-package-requests.sql",
+        "tests/seller-text-offer.test.mjs"
+      ]
+    },
+    {
+      "id": "G12",
+      "title": "Buyer exception resolution needs delegated limits",
+      "current": "The private buyer page records access, timing, price, repairs, funding and human blockers. Non-access resolution generally requires a versioned owner outcome.",
+      "gap": "Routine questions can become manual work; changed commercial terms lack a complete bounded automatic negotiation policy.",
+      "fix": "Separate factual questions from actual term changes. Answer facts automatically. Define explicit price, fee, date and deposit bounds before enabling automatic counteroffers or buyer replacement; preserve signed terms and actual human requests.",
+      "status": "Concrete automation gap",
+      "priority": "P0",
+      "paths": [
+        "config/closing-completion.sql",
+        "lib/deal-completion.ts",
+        "lib/buyer-assignment-pricing.ts"
+      ]
+    },
+    {
+      "id": "G13",
+      "title": "Payment claims are not verified money",
+      "current": "Deposit, title-reported disbursement and owner-confirmed proceeds are separate. Ordinary title replies only create suggestions; certain contractions were not excluded by the suggestion parser.",
+      "gap": "Fully automatic money receipt needs authoritative escrow/bank evidence. \u201cThe deposit wasn\u2019t received\u201d could incorrectly produce a positive suggestion, although it did not automatically settle funds.",
+      "fix": "Reject negated title suggestions. Add verified receipt integrations and exact amount/file/payee matching before automating receipt confirmation. Keep wire changes and disputes in the authorized verification process.",
+      "status": "Negation fix implemented locally; receipt integration remains",
+      "priority": "P0",
+      "paths": [
+        "lib/title-reply-suggestions.ts",
+        "config/closing-confirmations.sql",
+        "config/closing-completion.sql"
+      ]
+    },
+    {
+      "id": "G14",
+      "title": "Jurisdiction coverage cannot be assumed",
+      "current": "Signing policy and transaction authority checks exist. This audit has not verified an exhaustive current state-by-state rules catalog.",
+      "gap": "Texas disclosure and Oregon registration illustrate materially different prerequisites.",
+      "fix": "Maintain versioned jurisdiction requirements with approved templates, effective dates and required professionals. Automate document gathering; block only the unsupported regulated step until its prerequisite is satisfied.",
+      "status": "Coverage not verified",
+      "priority": "P0",
+      "paths": [
+        "lib/signing-policy.ts",
+        "lib/buyer-disposition.ts"
+      ]
+    },
+    {
+      "id": "G15",
+      "title": "Supervision must lead to an executable next step",
+      "current": "The enabled supervisor can restore an absent seller reply job, enqueue missing fulfillment and advance an existing journey. It retains original uncertain operations and isolates deal failures.",
+      "gap": "Many blocked reasons still describe what to review rather than invoking a handler to obtain the missing item. The current supervisor does not establish 2,000-case coverage.",
+      "fix": "Extend existing supervision with typed dependency resolvers, deadline-aware queues and once-only action receipts. Do not replace the existing engine or clear unknown actions to manufacture progress.",
+      "status": "Enabled narrow foundation; broader handlers needed",
+      "priority": "P0",
+      "paths": [
+        "config/deal-supervisor.sql",
+        "lib/deal-supervisor.ts",
+        "lib/deal-journey-service.ts"
+      ]
+    },
+    {
+      "id": "G16",
+      "title": "The existing UI must tell the truth about progress",
+      "current": "Property cards, messages, signing, buyer coordination and closing panels already display next actions.",
+      "gap": "Some presentation falls back to generic user review. A new internal recovery task must not appear as a completed call, contract, showing or payment.",
+      "fix": "Use existing surfaces to display actual status, the missing item and the next step. Keep technical faults in private diagnostics. This release corrects two journey-state display errors without a layout change.",
+      "status": "Focused display fixes implemented; broader mapping specified",
+      "priority": "P1",
+      "paths": [
+        "lib/workspace-guidance.ts",
+        "lib/deal-journey-progress.ts",
+        "components/workspace-view.ts"
+      ]
+    }
+  ]
+}

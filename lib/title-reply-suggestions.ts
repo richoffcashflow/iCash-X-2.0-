@@ -16,7 +16,11 @@ export function titleReplySuggestions(reply:ClosingReply):TitleSuggestion[]{
  }
  const result:TitleSuggestion[]=[];
  for(const sentence of lines.join('\n').split(/\n|(?<=[.!?])\s+/)){
-  const text=sentence.trim();if(!text||/[?]/.test(text)||/\b(?:not|no|never|pending|awaiting|waiting|if|once|will|would|should|could|expect|expected|anticipate|proposed|tentative|cancelled|canceled|delayed|unable|cannot|hasn't|haven't|isn't)\b/i.test(text))continue;
+  const text=sentence.trim();
+  // Keep the exact evidence text, but normalize apostrophes for negation.
+  // Suggestions never promote a denial or conditional statement to a milestone.
+  const meaning=text.replaceAll('’',"'");
+  if(!text||/[?]/.test(text)||/\b(?:not|no|never|pending|awaiting|waiting|if|once|will|would|should|could|expect|expected|anticipate|proposed|tentative|cancelled|canceled|delayed|unable|cannot|hasn't|haven't|isn't|wasn't|weren't|aren't|didn't|doesn't|don't|won't|wouldn't|shouldn't|couldn't|can't|hadn't)\b/i.test(meaning))continue;
   let kind:ClosingKind|null=null;
   if(/\b(?:proceeds|funds|payment)\b.{0,35}\b(?:sent|disbursed|wired)\b|\b(?:sent|disbursed|wired)\b.{0,35}\b(?:proceeds|funds|payment)\b/i.test(text))kind='funds_disbursed';
   else if(/\b(?:deposit|earnest money|EMD)\b.{0,35}\b(?:received|cleared)\b|\b(?:received|cleared)\b.{0,35}\b(?:deposit|earnest money|EMD)\b/i.test(text))kind='deposit_received';

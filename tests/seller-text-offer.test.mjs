@@ -249,6 +249,9 @@ await pg.exec(`alter table icash_deal_journeys add column buyer_token text,add c
  create table icash_disposition_authorities(account_id uuid,deal_id uuid,purchase_envelope_id uuid,expires_at timestamptz);`);
 assert.equal(read('../config/buyer-request-actions.sql'),read('../supabase/migrations/20261109203059_buyer_request_actions.sql'));
 await pg.exec(read('../config/buyer-request-actions.sql'));
+assert.equal(await rpc('icash_buyer_request_action',['Send photos and property details']),null,'reproduce compound request gap');
+assert.equal(read('../config/buyer-compound-package-requests.sql'),read('../supabase/migrations/20261112222448_buyer_compound_package_requests.sql'));
+await pg.exec(read('../config/buyer-compound-package-requests.sql'));
 const actions=await seed({qualified:false});await q("update icash_text_threads set party='buyer' where id=$1",[actions.t]);
 const packageToken='a'.repeat(32),journeyToken='b'.repeat(32),foreignToken='c'.repeat(32),purchaseId=randomUUID();
 await q('insert into icash_buyer_package_links(account_id,deal_id,purchase_envelope_id,token,asking_price_cents) values($1,$2,$3,$4,11200000)',[actions.a,actions.d,purchaseId,packageToken]);
@@ -258,7 +261,7 @@ const disabled=await incoming(actions,'Send me the details');
 assert.equal(await rpc('icash_buyer_factual_text',[actions.a,actions.t,disabled.body]),null,'installed inactive');
 await pg.exec("update icash_seller_progress_settings set buyer_actions_enabled=true,buyer_actions_enabled_at=now()-interval '30 minutes'");
 assert.equal(await rpc('icash_buyer_factual_text',[actions.a,actions.t,disabled.body]),null,'old source excluded');
-for(const [body,expected] of [['Send me the details',packageToken],['Can you send me the photos?',packageToken],['I buy 3 houses a month in 75201','homeoffernetwork.com/buyers'],['How do I update my buy box?','homeoffernetwork.com/buyers'],['What is the next step?',journeyToken]]){
+for(const [body,expected] of [['Send me the details',packageToken],['Send photos and property details',packageToken],['Can I see pictures, information and price?',packageToken],['Please text me the address & photos please',packageToken],['Can you send me the photos?',packageToken],['I buy 3 houses a month in 75201','homeoffernetwork.com/buyers'],['How do I update my buy box?','homeoffernetwork.com/buyers'],['What is the next step?',journeyToken]]){
  const m=await incoming(actions,body,{at:new Date(Date.now()-1000).toISOString()}),job=await one('select * from icash_text_ai_jobs where message_id=$1',[m.id]);
  const result=await rpc('icash_resume_seller_text_ai',[actions.a,job.id]);assert.equal(result.mode,'dispatch',body);
  const saved=await one('select body from icash_text_messages where id=$1',[result.messageId]);assert(saved.body.includes(expected),saved.body);assert(saved.body.length<=160);assert(!saved.body.includes(foreignToken));
@@ -266,7 +269,7 @@ for(const [body,expected] of [['Send me the details',packageToken],['Can you sen
  await dependencies.dispatch(actions.a,result.messageId);
  assert.equal((await rpc('icash_finish_seller_text_progress',[actions.a,job.id,null])).reason,'awaiting_buyer_reply');
 }
-for(const body of ['Do not send me details','Send me details and wire instructions','Send me the photos if you take $90000','STOP. Send me details','Change my bank account','I buy 3 houses a month in 75201 but do not contact me'])assert.equal(await rpc('icash_buyer_request_action',[body]),null,body);
+for(const body of ['Do not send me details','Send me details and wire instructions','Send photos and details but do not contact me','Send photos and details if you accept $100000','Send photos and details and signing link','Send photos and details and refund my deposit','Photos, details, let me in today','Send me the photos if you take $90000','STOP. Send me details','Change my bank account','I buy 3 houses a month in 75201 but do not contact me'])assert.equal(await rpc('icash_buyer_request_action',[body]),null,body);
 const paused=await incoming(actions,'Send me the pictures',{at:new Date(Date.now()-1000).toISOString()}),pausedJob=await one('select * from icash_text_ai_jobs where message_id=$1',[paused.id]);
 await q('update icash_accounts set bot_paused=true where id=$1',[actions.a]);assert.equal((await rpc('icash_resume_seller_text_ai',[actions.a,pausedJob.id])).mode,'held','Pause still blocks queue');
 await q('update icash_accounts set bot_paused=false where id=$1',[actions.a]);
