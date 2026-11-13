@@ -1,12 +1,13 @@
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCodeDelivery} from './support-code-delivery.ts';
-import {hasRecordedAccessPaymentCheck,missingAccessCodeReply} from './support-access-reply.ts';
+import {hasRecordedAccessPaymentCheck,missingAccessCodeReply,supportReportedPurchase} from './support-access-reply.ts';
 import {currentSupportIssue,supportRoutineGuidanceQuestion} from './support-reply-style.ts';
 import {supportCustomVoiceReply} from './support-custom-voice.ts';
 import {supportOfferCodeReply} from './support-checkout.ts';
 import {supportPurchaseEmailCorrection} from './support-purchase-help.ts';
 import {cashOfferPolicy} from './cash-offer-math.ts';
+import {supportLegacyMigrationReply} from './support-legacy-migration.ts';
 
 /** Source-backed answers to the customer's current step. Prior assistant text
  * supplies a topic only, never proof of payment, authority, delivery or a fix. */
@@ -38,12 +39,19 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
  // Payment details supplied during sign-in troubleshooting are not a question
  // about buying work credits. A missing receipt cannot be used for verification.
  const access=currentAccessConversation(context.messages);
- const missingReceipt=/\b(?:no|missing) (?:purchase |payment |email )?receipt\b|\b(?:didn[’']?t|did not|never|haven[’']?t|have not) (?:get|receive|received) (?:a |an |my |the )?(?:purchase |payment |email )?(?:receipt|email)\b/i.test(q);
- if(context.kind==='access'&&missingReceipt&&/\b(?:paid|purchase|payment|money|receipt)\b/i.test(q)){
+ const missingReceipt=/\b(?:don[’']?t|do not|can[’']?t|cannot) (?:see|find|have) (?:a |an |my |the )?(?:purchase |payment |email )?receipt\b|\b(?:no|missing) (?:purchase |payment |email )?receipt\b|\b(?:didn[’']?t|did not|never|haven[’']?t|have not) (?:get|receive|received) (?:a |an |my |the )?(?:purchase |payment |email )?(?:receipt|email)\b/i.test(q);
+ const signupEmail=context.kind==='access'&&/\bemail(?: address)?\b/i.test(q)&&/\b(?:want|wish|trying) to sign[ -]?up\b|\bemail(?: address)? (?:i want|to use)\b/i.test(q)&&!/\b(?:seller|buyer|refund|cancel|change|correct|wrong|typo)\b/i.test(q);
+ if(context.kind==='access'&&((missingReceipt&&/\b(?:paid|purchase|payment|money|receipt)\b/i.test(q))||signupEmail)&&!/\b(?:seller|buyer|contract|agreement|work credits?)\b/i.test(q)&&!supportLegacyMigrationReply(context.messages)){
+  // A requested email and absent receipt do not establish a purchase. Only
+  // customer payment context selects evidence collection, never verified access.
+  const boundary=context.messages.findLastIndex(turn=>turn.role==='operator');
+  const recent=context.messages.slice(boundary+1);
+  const paid=supportReportedPurchase(context.messages);
+  if(!hasRecordedAccessPaymentCheck(context.messages)&&!paid)return answer('Have you already completed an iCash X purchase, or are you trying to sign up for the first time? The email you want to use alone does not verify a purchase. Please don’t pay again or share a sign-in code. No email or access has been changed.');
   if(hasRecordedAccessPaymentCheck(context.messages))return missingAccessCodeReply(context.messages,context.accessInvestigation);
   const asked=context.messages.some(turn=>turn.role!=='user'&&/payment date and amount|date and amount.*(?:statement|receipt)/i.test(turn.content));
-  const supplied=access.some(turn=>turn.role==='user'&&/\$\s*\d|\b\d+(?:\.\d{2})? dollars\b/i.test(turn.content));
-  return {...answer('You haven’t received a purchase receipt, so I won’t ask you to check it. Don’t pay again. '+(supplied?'The payment details you shared still need to be matched to a purchase before access can be confirmed.':asked?'If no receipt arrived, the payment date and amount can come from your bank or card statement. Leave out card and account numbers.':'What payment date and amount appear on your bank or card statement? Leave out card and account numbers.'),supplied?'open':'waiting_on_customer'),...(supplied?{managementReview:true}:{})};
+  const supplied=recent.some(turn=>turn.role==='user'&&/\$\s*\d|\b\d+(?:\.\d{2})? dollars\b/i.test(turn.content));
+  return {...answer((missingReceipt?'You haven’t received a purchase receipt, so I won’t ask you to check it. ':'The email you want to use still needs to be matched to your purchase; this chat has not changed it. ')+'Don’t pay again. '+(supplied?'The payment details you shared still need to be matched to a purchase before access can be confirmed.':asked?'If no receipt arrived, the payment date and amount can come from your bank or card statement. Leave out card and account numbers.':'What payment date and amount appear on your bank or card statement? Leave out card and account numbers.'),supplied?'open':'waiting_on_customer'),...(supplied?{managementReview:true}:{})};
  }
  if(access.length&&supportCodeDelivery(access)==='missing'&&!supportPurchaseEmailCorrection(q)&&!/\b(?:name|where|link|address|url)\b.{0,35}\b(?:sign[ -]?in|log[ -]?in)\b/i.test(q)){
   return missingAccessCodeReply(context.messages,context.accessInvestigation);

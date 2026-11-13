@@ -74,3 +74,26 @@ for(const tail of [
 ])assert.equal(currentAccessConversation([...emailEpisode,...tail]).length,0);
 assert.equal(currentAccessConversation([user('The email matches.')]).length,0);
 console.log('PASS receipt-email confirmation continuity and operator/topic/success boundaries');
+
+// Fictional short confirmations must not erase a still-missing code.
+for(const kind of ['account','access'])for(const confirmation of ['Yes, that match.','It match','Yes it matches.','That matches.']){
+ const messages=[...emailEpisode,user(confirmation)];
+ const r=await replyToSupport({kind,messages,allowAI:false},noModel);
+ assert.doesNotMatch(r.reply,/enough information|what are you trying|enter the newest code/i,confirmation);
+ assert.match(r.reply,/code|inbox|spam/i);
+ assert.notEqual(r.status,'resolved');
+ const followup=await replyToSupport({kind,messages:[...messages,assistant(r.reply),user('I am trying to sign in to my workspace.')],allowAI:false},noModel);
+ assert.doesNotMatch(followup.reply,/enter the newest code|access restored|payment verified/i);
+ assert.notEqual(followup.status,'resolved');
+}
+for(const confirmation of ['Yes, that match.','It match','That matches.']){
+ for(const tail of [
+  [user('Where is the course?'),assistant('Open Course.'),user(confirmation)],
+  [{role:'operator',content:'The purchase email needs an ownership review.'},user(confirmation)],
+  [user('I got in.'),assistant('Glad that worked.'),user(confirmation)],
+  [user(confirmation+' How do I cancel?')],
+ ])assert.equal(currentAccessConversation([...emailEpisode,...tail]).length,0);
+ assert.equal(currentAccessConversation([user(confirmation)]).length,0);
+ assert.equal(currentAccessConversation([user('No code arrives.'),assistant('Does the seller name match?'),user(confirmation)]).length,0);
+}
+console.log('PASS short receipt-email confirmations retain missing delivery without crossing topic or operator boundaries');

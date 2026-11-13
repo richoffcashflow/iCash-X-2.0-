@@ -71,8 +71,9 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
  const reviewFollowup=/management review|flagged this conversation/i.test(previous?.content??'')||/\b(?:management|review|any update|anything yet)\b/i.test(question);
  // A verified handoff plus the immediate support topic distinguishes waiting
  // for Support from seller follow-up. Assistant text alone cannot create a handoff.
- const waitForSupport=/^(?:(?:ok(?:ay)?|so)[,\s]+)?(?:(?:do|should|can) i (?:just )?wait for (?:a |an |the |your )?(?:follow[ -]?up|reply|response|update)(?: from (?:support|management|you))?|will (?:support|management|you) follow up(?: with me)?)[.!?\s]*$/i.test(question.trim());
- if(context.handedOff&&previous?.role==='assistant'&&/management review|flagged this conversation/i.test(previous.content)&&waitForSupport){
+ const waitForSupport=/^(?:(?:ok(?:ay)?|so)[,\s]+)?(?:(?:do|should|can) i (?:just )?wait for (?:(?:a |an |the |your )?(?:follow[ -]?up|reply|response|update)(?: from (?:support|management|you))?|(?:support|management) to (?:reach out|contact me|reply|respond)(?: (?:every ?time (?:this happens|i[’']m in this situation)))?)|will (?:support|management|you) follow up(?: with me)?|what (?:should i do|is the best thing for me to do) next)[.!?\s]*$/i.test(question.trim());
+ const reviewStep=previous?.role==='assistant'&&/management review|flagged this conversation|committed to earlier work while its costs are confirmed|reserved for (?:unfinished|pending) work/i.test(previous.content);
+ if(context.handedOff&&reviewStep&&waitForSupport){
   return {reply:reviewExplanation(context,'will someone reply')+' You can check this conversation for updates or add new details here; you don’t need to repeat the steps you already reported.',status:'open',managementReview:true,ai:false};
  }
  if(context.handedOff&&reviewFollowup&&/^(?:for what|why|review|what (?:unresolved )?issue|what (?:is|does) (?:the |management )?review(?: mean)?|why (?:is|was) (?:it|this|my case) (?:in |under )?review|anything yet|any update|how long(?: will (?:it|this) take)?|will i be contacted|will (?:someone|management) (?:reply|respond|contact me)|what happens now)[.!?\s]*$/i.test(question.trim())){

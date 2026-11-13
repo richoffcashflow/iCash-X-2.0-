@@ -9,7 +9,9 @@ export function supportCodeDelivery(messages:Turn[]):'missing'|'received'|'unkno
   const text=turn.content.replace(/[’‘]/g,"'");
   codeContext ||= /\b(?:code|sign[ -]?in|log[ -]?in|email|text|sms|inbox)\b/i.test(text);
   if(!codeContext)continue;
-  const missing=/\b(?:not|never|didn't|don't|doesn't|hasn't|haven't|isn't|wasn't|won't|wouldn't|can't|cannot)\s+(?:(?:been|being|ever|yet|still|even)\s+){0,2}(?:send(?:ing)?|sent|receiv(?:e|ed|ing)|arriv(?:e|ed|ing)|come|came|email(?:ed|ing)?|text(?:ed|ing)?)\b/i.test(text)
+  const deliveryTrouble=!/\b(?:no (?:problems?|trouble)|source code|promo code|coupon code|seller|buyer|contract)\b/i.test(text)&&/\b(?:problems?|trouble) (?:with )?(?:the )?(?:(?:email|sign[ -]?in|verification) )?code (?:sending|arriving|delivery)(?: to (?:my |the )?email)?\b|\b(?:problems?|trouble) (?:getting|receiving) (?:the |my |an? )?(?:email|sign[ -]?in|verification) code\b/i.test(text);
+  const missing=deliveryTrouble
+   ||/\b(?:not|never|didn't|don't|doesn't|hasn't|haven't|isn't|wasn't|won't|wouldn't|can't|cannot)\s+(?:(?:been|being|ever|yet|still|even)\s+){0,2}(?:send(?:ing)?|sent|receiv(?:e|ed|ing)|arriv(?:e|ed|ing)|come|came|email(?:ed|ing)?|text(?:ed|ing)?)\b/i.test(text)
    ||/\b(?:not|never|didn't|don't|haven't|can't|cannot)\s+(?:get(?:ting)?|got(?:ten)?)\s+(?:\w+[ -]){0,5}(?:code|email|text|sms|either|anything|it)\b/i.test(text)
    ||/\b(?:no|without|missing)\s+(?:(?:sign[ -]?in|login|email|text|sms|verification|a|the|any|new|fresh)\s+){0,3}(?:code|email|text|sms)\b/i.test(text)
    ||/\bstill waiting\b|\bnothing (?:arrived|received|in (?:my )?(?:inbox|spam|junk))\b|\b(?:get|got|receive|received) (?:nothing|neither|no (?:code|email|text))\b/i.test(text);

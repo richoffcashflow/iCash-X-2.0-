@@ -77,6 +77,20 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  // A direct request for current account issues needs the latest checks, not
  // an old diagnosis or a generic handoff. Never inherit this across topics.
  const currentIssues=/\bwhat(?:[’']?s| are| is)?\b[^?!\n]{0,110}\b(?:issues?|problems?)\b/i.test(q)&&/\b(?:current|currently|right now|still)\b/i.test(q)&&/\b(?:my (?:account|bot)|the software|my side)\b/i.test(q)&&!/\b(?:seller|buyer|contract|agreement|sign[ -]?in|course|vip|subscription|membership|refund|cancel|payment|charged)\b/i.test(q);
+ const volumeRequest=/\b(?:increase\b[^.!?\n]{0,35}\b(?:outreach|leads?|calls?|texts?)|more (?:leads|calls|texts|outreach)|volume of (?:leads|outreach|calls|texts))\b/i.test(q)&&!/\b(?:audio|recording|sound|speaker|microphone|seller asked|buyer|contract|agreement|refund|cancel|payment|charged|do not want|don.t want)\b/i.test(q);
+ if(volumeRequest){
+  const guide='Eligible research and outreach run automatically, subject to available work credits, account controls and contact checks. More credits do not guarantee more leads or seller responses and are not a verified repair for delayed work. ';
+  if(context.kind!=='account')return answer(guide+'I can’t verify your current activity from this guest chat. Are you asking about a delay or how automatic work is selected?');
+  const work=context.evidence?.find(e=>e.key==='work'&&e.status!=='unknown');
+  const outreach=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
+  if(work?.code==='paused'||outreach?.progress?.status==='paused')return answer(guide+'Your bot is currently paused; this chat has not changed that control.');
+  const progress=outreach?.progress;
+  if(progress?.health?.status==='blocked'||progress?.status==='settling'){
+   const detail=progress.health?.reason==='no_completed_work'?supportProgressDelay(outreach!,false):progress.status==='settling'||progress.health?.reason==='pending_work'?'Earlier work is awaiting confirmation.':'The current activity check flags work as blocked.';
+   return answer(guide+detail+' The delay needs review; I haven’t verified a repair, restart time or higher lead count.',true);
+  }
+  return answer(guide+(progress?'Check the latest property research, calls and texts in Your leads → All activity to distinguish completed work from queued work. These checks do not establish a future pace.':'I can’t verify current activity or its limiting factor from the available checks.'));
+ }
  if(currentIssues){
   if(context.kind!=='account')return answer('I can’t verify current account issues from this guest chat. Which part of the software is failing?');
   const checks=context.evidence??[],outreach=checks.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
