@@ -96,6 +96,10 @@ function recordingEmptyWorkflowDefaultsSnapshot(snapshot:Record<string,unknown>)
   workflow:{...previousWorkflow,nodes:{...nodes,start_node:previousStart}}};
 }
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
+ // Compare the current complete fingerprint before expanding historical default
+ // representations. The expansion can otherwise block the call event loop even
+ // when the first, unchanged snapshot already matches its exact approval.
+ if(recordingEmptyAgentHashMatches(configHash,snapshot))return true;
  // November 12 added default prompt caching and empty layout-frame metadata
  // together to the same reviewed version's single-start workflow. Reconstruct
  // only this exact trio, then require the entire original fingerprint. Never
@@ -206,26 +210,26 @@ export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  // Only this separately approved 2 -> 8 capacity change may reproduce the
  // existing outgoing fingerprint. Every other field must still match it.
  // Incoming comparisons and historical approvals remain exact and untouched.
- const approvedCapacity=review.agentId===approval.agentId&&review.branchId===approval.branchId&&review.versionId===approval.versionId
+ const approvedCapacity=()=>review.agentId===approval.agentId&&review.branchId===approval.branchId&&review.versionId===approval.versionId
   &&limits.agent_concurrency_limit===approval.limit&&limits.bursting_enabled===false
   &&recordingConfigHashMatches(review.configHash,{...snapshot,platform_settings:{...platform,call_limits:{...limits,agent_concurrency_limit:approval.previousLimit}}});
  // The separately approved Pro change is limited to these exact two fields
  // on the same reviewed agent, branch and version. Reconstruct either saved
  // pre-Pro capacity representation; all conversation and pricing remain exact.
  const pro=outboundProApproval;
- const approvedProCapacity=review.agentId===pro.agentId&&review.branchId===pro.branchId&&review.versionId===pro.versionId
+ const approvedProCapacity=()=>review.agentId===pro.agentId&&review.branchId===pro.branchId&&review.versionId===pro.versionId
   &&limits.agent_concurrency_limit===pro.limit&&limits.daily_limit===pro.dailyLimit&&limits.bursting_enabled===false
   &&[pro.previousLimit,approval.previousLimit].some(previous=>recordingConfigHashMatches(review.configHash,
    {...snapshot,platform_settings:{...platform,call_limits:{...limits,agent_concurrency_limit:previous,daily_limit:pro.previousDailyLimit}}}));
  // Exactly the approved 18 -> 30 change. Retain each historical reviewed
  // fingerprint without permitting any other prompt, tool or daily-limit edit.
  const eighty=outboundEightyPercentApproval;
- const approvedEightyPercentCapacity=review.agentId===eighty.agentId&&review.branchId===eighty.branchId&&review.versionId===eighty.versionId
+ const approvedEightyPercentCapacity=()=>review.agentId===eighty.agentId&&review.branchId===eighty.branchId&&review.versionId===eighty.versionId
   &&limits.agent_concurrency_limit===eighty.limit&&limits.daily_limit===eighty.dailyLimit&&limits.bursting_enabled===false
   &&[[eighty.previousLimit,eighty.previousDailyLimit],[pro.previousLimit,pro.previousDailyLimit],[approval.previousLimit,pro.previousDailyLimit]]
    .some(([previous,daily])=>recordingConfigHashMatches(review.configHash,
     {...snapshot,platform_settings:{...platform,call_limits:{...limits,agent_concurrency_limit:previous,daily_limit:daily}}}));
- return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&limits.bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&(recordingConfigHashMatches(review.configHash,snapshot)||approvedCapacity||approvedProCapacity||approvedEightyPercentCapacity);
+ return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&limits.bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&(recordingConfigHashMatches(review.configHash,snapshot)||approvedCapacity()||approvedProCapacity()||approvedEightyPercentCapacity());
 }
 export function recordingDisclosure(principal:string,assistantName:string,buyerKind?:NetworkBuyerKind){
  const valid=(s:string)=>typeof s==='string'&&s.trim().length>0&&s.length<=160&&!/[<>\x00-\x1f]/.test(s);

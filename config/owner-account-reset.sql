@@ -31,7 +31,9 @@ revoke all on function public.icash_demo_intake_current(uuid,uuid) from public,a
 grant execute on function public.icash_demo_intake_current(uuid,uuid) to service_role;
 
 create or replace function public.icash_reset_owner_account(p_actor uuid,p_account uuid,p_request uuid)
-returns jsonb language plpgsql security invoker set search_path='' set lock_timeout='3s' set statement_timeout='15s' as $reset$
+-- Private call sessions and guarded seller gaps are accessible only through
+-- scoped definer functions. Never grant the API role direct access to them.
+returns jsonb language plpgsql security definer set search_path='' set lock_timeout='3s' set statement_timeout='15s' as $reset$
 declare ids uuid[];leads uuid[];snapshot jsonb;receipt jsonb;retired integer;questions integer;texts integer;calls integer;
  cutoff timestamptz:=statement_timestamp();
 begin
