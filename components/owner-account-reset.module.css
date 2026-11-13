@@ -1,0 +1,6 @@
+.reset{margin:16px 0 24px;padding:14px 16px;border:1px solid #dedede;border-radius:12px;background:#fff;text-align:left;font-size:13px;line-height:1.5;color:#333}
+.reset>button{border:1px solid #bbb;border-radius:8px;background:#fff;padding:10px 14px;color:#222;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
+.reset>button:disabled{opacity:.55;cursor:default}
+.reset>p{margin:8px 0 0;font-size:12px;text-align:left;color:#666}
+.reset li{margin:8px 0;overflow-wrap:anywhere}
+.reset button:focus-visible{outline:2px solid #555;outline-offset:3px}

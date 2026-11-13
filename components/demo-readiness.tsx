@@ -23,7 +23,7 @@ export function DemoReadinessPanel({onChange}:{onChange:(ready:boolean)=>void}){
   <div role="status" aria-live="polite">
    {result&&<><p className="demo-credit-note">{result.setupChecksPass?'Setup checks passed.':'Resolve the checks below before starting.'} No call or text was sent.</p>
     <ul>{result.checks.map(check=><li key={check.id}><strong>{check.label}: {check.status==='passed'?'passed':check.status==='blocked'?'needs attention':'not verified'}</strong><br/>{check.detail}</li>)}</ul>
-    <p className="demo-credit-note">Checked at {new Date(result.checkedAt).toLocaleTimeString()}. This checks setup, not phone ringing or delivery. The property, offer, seller consent, and final send checks still run during the demo.</p></>}
+    <p className="demo-credit-note">Checked at {new Date(result.checkedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}. This checks setup, not phone ringing or delivery. The property, offer, seller consent, and final send checks still run during the demo.</p></>}
    {error&&<p className="demo-notice">{error}</p>}
   </div>
  </div>;

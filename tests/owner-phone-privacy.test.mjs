@@ -48,6 +48,7 @@ const form=load('components/bot-demo.tsx',{
  '@/lib/bot-demo':{botDemoConsentText,botDemoConsentVersion},'@/lib/optin-call-now':{optinCallNowText,optinCallNowVersion},
  '@/lib/seller-submission-status':{sellerSubmissionStatus},'./demo-phone-field':{DemoPhoneField:'DemoPhoneField'},
  './demo-readiness':{DemoReadinessPanel:'DemoReadinessPanel'},
+ './owner-account-reset':{OwnerAccountReset:'OwnerAccountReset'},
 });
 const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)];
 const renderForm=()=>{cursor=0;tree=form.BotDemo();return nodes(tree);};
