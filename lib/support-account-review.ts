@@ -1,13 +1,22 @@
+import {supportOutreachReply} from './support-outreach.ts';
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportRenewalCancellationRequested} from './support-policy.ts';
 import {supportVoicemailComplaint} from './support-inbox-guidance.ts';
 import {supportProgressDelay} from './support-progress-evidence.ts';
 
 const existingOutreachConcern=(text:string)=>/\b(?:ai|bot|automated|automation|research|outreach|calls?|texts?|sellers?|properties|leads?)\b/i.test(text)&&/\b(?:slow|slower|not doing much|not (?:been )?doing anything|isn[’']?t doing anything|hasn[’']?t been doing anything|no interested|no interest|haven[’']?t (?:gotten|got|had|received).{0,30}interested)\b/i.test(text);
+function missingSentOutreach(text:string){
+ // Missing sent outreach is a work complaint even when phrased with past-tense
+ // verbs or a pronoun. Do not turn hypotheticals or human/seller actions into faults.
+ const missingSend=/\b(?:my bot|the bot|my ai|the ai|it) (?:(?:has|have|had|did) not|hasn[’']?t|haven[’']?t|hadn[’']?t|didn[’']?t) (?:yet )?(?:text(?:ed)?|call(?:ed)?|contact(?:ed)?)(?: or (?:text(?:ed)?|call(?:ed)?|contact(?:ed)?))? (?:anyone|any (?:sellers?|leads?|contacts?))\b|\b(?:hasn[’']?t|haven[’']?t|didn[’']?t) (?:my bot|the bot|my ai|the ai|it) (?:text(?:ed)?|call(?:ed)?|contact(?:ed)?) (?:anyone|any (?:sellers?|leads?|contacts?))\b/i;
+ const researchedNoSend=/\b(?:my bot|the bot|my ai|the ai|it) (?:found|researched) \d+ (?:properties|leads) but (?:(?:has|have|did) not|hasn[’']?t|haven[’']?t|didn[’']?t) (?:text(?:ed)?|call(?:ed)?)(?: or (?:text(?:ed)?|call(?:ed)?))? (?:anyone|any sellers?)\b/i;
+ return !/\b(?:if|hypothetically|suppose|not saying|do not think|don[’']?t think)\b/i.test(text)&&(missingSend.test(text)||researchedNoSend.test(text));
+}
 /** A complaint about absent work is not proof of its cause. Keep the subject
  * and failure in one sentence, and let an explicit successful result reset it. */
 export function supportMissingActivityConcern(text:string){
  if(/\b(?:(?:it|(?:the |my )?(?:bot|ai)) (?:is )?working (?:now|fine|well)|problem solved|fixed now|all fixed)[.!\s]*$/i.test(text)&&!/\b(?:not working (?:now|fine|well)|not fixed|isn[’']?t working (?:now|fine|well))\b/i.test(text))return false;
+ if(missingSentOutreach(text))return true;
  if(/^(?:my|the) (?:ai )?(?:bot|ai) (?:has )?stopped (?:searching|researching(?: properties)?|finding (?:new |any )?leads)[.!?\s]*$/i.test(text.trim()))return true;
  // These whole-work complaints must not fall through to model guesses about
  // eligible inventory. A stopped seller contact or browser is a separate issue.
@@ -187,7 +196,11 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   const next=directed?'The missing conversation still needs checking. Which property is affected?':'Open the property under Your leads, choose Texts and check the selected contact. If it is blank, which property is affected?';
   return answer(counts+'These records do not prove that the messages display correctly for you or that a seller wants to sell. '+next+' '+(voice?voice.detail+' ':'')+'I haven’t verified that every part of outreach is working.',true);
  }
- const runningFollowup=outreachConcern(users.at(-2)?.content??'')&&/\b(?:run|running|paused)\b/i.test(previous)&&previous.includes('?')&&/^(?:it(?:[’']s| is)|the bot is|my bot is) (?:running|on)(?:[;,. ]+(?:(?:it has )?the )?green light(?: is)? on)?[.!\s]*$/i.test(q.trim());
+ const runningFollowup=context.messages.at(-2)?.role==='assistant'&&outreachConcern(users.at(-2)?.content??'')&&/\b(?:run|running|paused)\b/i.test(previous)&&previous.includes('?')&&/^(?:yes[, ]+)?(?:it(?:[’']s| is)|the bot is|my bot is) (?:running|on)(?:[;,. ]+(?:(?:it has )?the )?green light(?: is)? on)?[.!\s]*$/i.test(q.trim());
+ if(!paused&&missingSentOutreach(q)&&outreachConcern(q)){
+  const recorded=supportOutreachReply(context.messages,context.evidence??[]);
+  if(recorded)return {...recorded,managementReview:true};
+ }
  if(outreachConcern(q)||runningFollowup||missingActivityFollowup(context))return answer('I understand why the lack of progress is frustrating. '+state+' '+totals+' '+blocker+(activityProofQuestion(q)?' Check recorded calls and texts on the property; a Run label or a researched lead does not prove recent automatic outreach.':''),true);
  if(/^(?:that sucks|this sucks|that[’']?s (?:frustrating|disappointing)|nothing(?: right now)?)[.!\s]*$/i.test(q.trim())&&users.slice(-7,-1).some(m=>outreachConcern(m.content)))
   return answer(/^nothing/i.test(q)?'Understood. The activity problem you reported remains open; you do not need to repeat it.':'I understand why you’re frustrated. Your report of slow or missing activity remains unresolved; I haven’t confirmed a fix or restart time.',true);

@@ -35,4 +35,39 @@ const unknown=await reply([problem],{evidence:evidence.filter(e=>e.key!=='voice'
 const paused=await reply([problem],{evidence:evidence.map(e=>e.key==='work'?{...e,code:'paused',status:'attention'}:e)});assert.match(paused.reply,/paused/i);assert.doesNotMatch(paused.reply,/needs a service review/i);
 const guest=await reply([problem],{kind:'access',evidence:[],allowAI:false});assert.doesNotMatch(guest.reply,/past call was blocked|calling-number setup/i);
 assert.equal(providerCalls,0);
+const notificationQuestion=assistant('Which notification or update were you expecting, and when?');
+const suppliedUpdate=await reply([notificationQuestion,user('The email alert at noon. Calls are blocked and email alerts are not arriving.')]);
+assert.doesNotMatch(suppliedUpdate.reply,/which notification or update.*expecting/i);
+assert.equal(suppliedUpdate.status,'open');
 console.log('PASS saved call holds: historical scope, useful next step, customer correction, no unrelated totals, topic/operator/success/unknown/paused boundaries');
+
+// A service-number explanation must not swallow a second, current concern.
+for(const question of [
+ 'No calls are starting. My phone and email updates are not working either.',
+ 'Calls are blocked and updates to my email are missing.',
+]){
+ const r=await reply([problem,historical,user(question)],{handedOff:true});
+ assert.match(r.reply,/past call was blocked/i);
+ assert.match(r.reply,/missing notifications.*contact details.*save/i);
+ assert.equal(r.status,'open');assert.equal(r.managementReview,true);
+}
+for(const question of [
+ 'Calls are blocked. Notifications to my phone are not arriving.',
+ 'No calls are starting and my email alerts are not working.',
+]){
+ const r=await reply([user(question)]);
+ assert.match(r.reply,/which notification or update.*expecting/i);
+ assert.equal(r.status,'open');
+}
+for(const question of [
+ 'Calls are blocked but my email updates are working now.',
+ 'Calls are blocked. I am not missing email notifications.',
+ 'Calls are not working. My phone notifications are fine.',
+ 'Calls are not working but my email updates arrive.',
+ 'Calls are blocked. Can I update my phone?',
+ 'Where is the course?',
+]){
+ const r=await reply([user('My email updates are not working.'),historical,user(question)],{allowAI:false});
+ assert.doesNotMatch(r.reply,/missing notifications.*contact details.*save|which notification or update.*expecting/i);
+}
+assert.equal(providerCalls,0);

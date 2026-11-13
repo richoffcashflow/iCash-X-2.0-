@@ -23,7 +23,7 @@ import {supportLegacyMigrationReply,supportVersionClarification} from './support
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCheckoutReply,supportIdentityReply} from './support-checkout.ts';
 import {supportProductClarification} from './support-product-clarifications.ts';
-import {supportPurchaseHelp,supportRefundDisclosureReply,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply} from './support-purchase-help.ts';
+import {supportPurchaseHelp,supportRefundDisclosureReply,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply,supportPurchaseEmailCorrection} from './support-purchase-help.ts';
 import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
 import {supportManagementReview} from './support-management-review.ts';
@@ -86,7 +86,20 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
   const wantsCancel=supportRenewalCancellationRequested(question)||/\b(?:cancel|stop|end)\b.{0,35}\b(?:billing|renewals?|charging|subscription|membership)\b/i.test(question);
   const cancel=wantsCancel?(context.kind==='account'?' To stop future renewals, open Cancel subscription in the workspace account menu and confirm.':' Your request to stop future renewals is also recorded in this conversation.'):'';
   const details=context.kind==='account'&&checks.length?checks.map(e=>e.detail).join('\n\n')+'\n\nDo not pay again. Do both statement entries match these recorded software payments, or is one a different amount or date?':'Do not pay again. A duplicate-charge report needs its own payment check. What dates and amounts appear for the two charges? Please leave out card numbers.';
-  return result(details+cancel,'waiting_on_customer');
+  // Keep a current wrong-checkout-email complaint alongside the separate
+  // charge review; neither the complaint nor a repeated question proves payment.
+  const emailCompleted=(text:string)=>/\b(?:email correction|checkout email|purchase email)\b.{0,50}\b(?:completed|corrected|fixed|now correct)\b/i.test(text)&&!/\b(?:not|never|unconfirmed|cannot|can[’']?t|haven[’']?t|hasn[’']?t)\b/i.test(text);
+  const latestOperator=context.messages.findLast(m=>m.role==='operator')?.content??'';
+  const renewedEmailProblem=/\bemail (?:is |remains )?still (?:wrong|incorrect)\b|\bstill (?:the )?wrong (?:checkout )?email\b/i.test(question);
+  const wrongEmail=supportPurchaseEmailCorrection(question)&&/\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt)\b/i.test(question)
+   &&!emailCompleted(question)&&(!emailCompleted(latestOperator)||renewedEmailProblem)
+   &&!/\b(?:email is not wrong|not (?:a |the )?wrong email|email (?:is|was) correct)\b/i.test(question);
+  const email=wrongEmail?' The wrong checkout email also needs a purchase-ownership check before it can be corrected. This chat has not changed the email or restored access. Keep any proof already supplied in this review.':'';
+  const wantsContact=wrongEmail&&/\b(?:phone|number)\b/i.test(question)&&/\b(?:reach|support|contact|call)\b/i.test(question);
+  const contact=wantsContact?' Management can review both issues in this conversation; I can’t promise a phone call or response time.':'';
+  const asked=wrongEmail&&context.messages.slice(0,-1).some(m=>m.role!=='user'&&/What dates and amounts appear for the two charges/i.test(m.content));
+  const next=asked&&details.includes('What dates and amounts appear for the two charges?')?details.replace('What dates and amounts appear for the two charges?','The payment review needs the dates and amounts of the two statement entries; keep any details already supplied in this conversation.'):details;
+  return result(next+email+contact+cancel,'waiting_on_customer');
  }
  const disclosure=supportRefundDisclosureReply(context);if(disclosure)return disclosure;
  const closure=context.historyComplete===false?null:repeatedRefundReply(context.messages,context.kind==='account'?context.evidence:[]);
