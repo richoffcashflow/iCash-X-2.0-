@@ -56,6 +56,16 @@ function delayNoticeReply(evidence:SupportEvidence[]){
 export function supportOutreachReply(messages:{role:string;content:string}[],evidence:SupportEvidence[]){
  const question=messages.filter(m=>m.role==='user').at(-1)?.content??'';
  if(/\b(?:documents?|agreements?|contracts?|human|live agent)\b/i.test(question))return null;
+ // Treat a direct low-response clarification as the current issue, not a
+ // request to choose markets. Do not infer a rate, cause or seller interest
+ // from lifetime text counts, or inherit this complaint across topic changes.
+ const lowSellerReplies=/^(?:(?:low|few|no|zero) seller(?:s[’']?|[’']s)? (?:replies|responses)|(?:few|no|zero) (?:replies|responses) from (?:the |my )?sellers|i(?:[’']m| am)? (?:getting|seeing) few seller (?:replies|responses))[.!?\s]*$/i.test(question.trim());
+ if(lowSellerReplies){
+  const o=evidence.find(e=>e.key==='outreach')?.outreach;
+  const counts=o?`Your account has ${o.textsSent} texts recorded (${o.textsDelivered} delivered) and ${o.textReplies} text replies overall. These totals don’t establish a seller response rate or interested sellers.`:'I can’t verify the recorded text delivery and reply counts right now.';
+  const paused=evidence.some(e=>e.key==='work'&&e.code==='paused')||o?.progress?.status==='paused';
+  return {reply:counts+(paused?' Your bot is currently paused.':'')+' I can’t confirm why seller replies are low or whether recent automatic outreach is progressing from these checks. That needs a review of the saved seller conversations and sending records.',status:'open' as const,ai:false,managementReview:true};
+ }
  const textDelivery=/\b(?:texts?|messages?|sms)\b.{0,60}\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b|\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b.{0,60}\b(?:texts?|messages?|sms)\b/i.test(question);
  const sourceQuestion=(text:string)=>/\b(?:cold|motivated)\b.{0,35}\b(?:leads?|sellers?)\b|\bwhere\b.{0,50}\b(?:properties|leads?)\b.{0,30}\b(?:from|coming)\b/i.test(text);
  const source=sourceQuestion(question);
