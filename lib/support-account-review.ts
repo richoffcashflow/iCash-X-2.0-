@@ -74,6 +74,24 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  // Specific call-result complaints must reach their guidance before incidental
  // words such as "automated calls" and "available fix" match capability checks.
  if(supportVoicemailComplaint(q))return null;
+ // A direct request for current account issues needs the latest checks, not
+ // an old diagnosis or a generic handoff. Never inherit this across topics.
+ const currentIssues=/\bwhat(?:[’']?s| are| is)?\b[^?!\n]{0,110}\b(?:issues?|problems?)\b/i.test(q)&&/\b(?:current|currently|right now|still)\b/i.test(q)&&/\b(?:my (?:account|bot)|the software|my side)\b/i.test(q)&&!/\b(?:seller|buyer|contract|agreement|sign[ -]?in|course|vip|subscription|membership|refund|cancel|payment|charged)\b/i.test(q);
+ if(currentIssues){
+  if(context.kind!=='account')return answer('I can’t verify current account issues from this guest chat. Which part of the software is failing?');
+  const checks=context.evidence??[],outreach=checks.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
+  const work=checks.find(e=>e.key==='work'&&e.status!=='unknown');
+  const findings=checks.filter(e=>['voice','screening','readiness','research_capacity'].includes(e.key)&&e.status==='attention'&&e.detail).map(e=>e.detail);
+  if(checks.some(e=>['voice','screening','readiness','outreach','work'].includes(e.key)&&e.status==='unknown'))findings.push('Some current account checks are unavailable, so I can’t give a complete account assessment.');
+  if(work?.code==='paused'||outreach?.progress?.status==='paused')findings.unshift('Your bot is currently paused; this chat has not changed that control.');
+  if(outreach?.progress?.health?.status==='blocked'&&outreach.progress.health.reason==='no_completed_work')findings.push(supportProgressDelay(outreach,false));
+  else if(outreach?.progress?.status==='settling'||outreach?.progress?.health?.status==='blocked'&&outreach.progress.health.reason==='pending_work')findings.push('Earlier work is awaiting confirmation; its original results still need review.');
+  else if(outreach?.progress?.health?.status==='blocked')findings.push('The latest activity check flags work as blocked; its specific cause is not confirmed.');
+  else if(outreach?.progress?.status==='budget_reached')findings.push('The latest work check says available credits do not cover the next task. This does not explain an earlier technical problem.');
+  const counts=outreach?`${outreach.textsDelivered} of ${outreach.textsSent} texts have confirmed delivery overall, with ${outreach.textReplies} replies recorded. These totals do not establish current progress or seller interest.`:'';
+  const details=findings.length?findings.join(' '):outreach?.progress&&outreach.progress.health?.status!=='unavailable'?'These checks do not identify a specific current fault, but they do not prove that every part of the software is working.':'I can’t verify the current account problems from the available checks.';
+  return answer([details,counts,'Your reported issue remains open; I haven’t verified a repair or restart time.'].filter(Boolean).join(' '),true);
+ }
  if(/\b(?:(?:more|extra) (?:money|credits?)|(?:add|adding|fund)\b.{0,25}\b(?:bot|account)|buy (?:more )?credits?)\b/i.test(q)&&/\b(?:contracts?|deals?|results?|work differently|work faster|better)\b/i.test(q)&&!/\b(?:purchase price|seller price|assignment fee|offer amount)\b/i.test(q))
   return answer('Adding money buys more prepaid work credits for eligible research, contact lookup, calls and texts. It does not guarantee a contract, seller response or closed deal, and it does not change the bot’s strategy. More credits do not fix a technical problem or override Pause. You don’t need to pay more to troubleshoot missing activity.');
  // A direct expectation of spending is a current-work question, not a request

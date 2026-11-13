@@ -1,5 +1,7 @@
 # Support improvement workflow
 
+Direct current-account-issue questions summarize fresh saved checks rather than repeat a generic handoff or an older diagnosis. Terminal calls that ended before recording and unrecognized saved holds remain visible for review; neither proves a seller connection, a current outage or readiness to redial. Unknown checks, guest identity, Pause, operator findings and changed topics retain their boundaries. Fictional replays are in `tests/support-current-issues.test.mjs` and `tests/support-terminal-call-evidence.test.mjs`; no calls or account changes are performed.
+
 Questions quoting Waiting for eligible work receive the status-label explanation and current account checks instead of a generic management-review fallback. Fresh blocked, paused, cost-confirmation and unknown states take precedence over a possibly older screen label. Historical research stays recorded; the label establishes neither missing inventory nor resumed work. Guest chats receive no private account claims. Fictional positive, negative and topic-change coverage is in `tests/support-waiting-work-status.test.mjs`.
 
 Questions quoting the existing Credits added status notices distinguish a bot-status refresh from pending payment and actual completed activity. Account checks preserve Pause, pending-work holds and unknown results; guest wording never verifies private payment or activity. Billing requests and topic changes keep their own routes. Fictional coverage: `tests/support-funding-notice.test.mjs`.
