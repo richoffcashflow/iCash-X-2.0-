@@ -83,6 +83,15 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
   &&!/access (?:is|was|has been) restored|review (?:is |was )?(?:complete|closed|resolved)/i.test(purchaseNote)){
   return {reply:'The last operator update says purchase ownership still needs verification. The transaction reference requested there can help match the payment; you do not need to resend the same screenshots or pay again. I have no confirmed access change or completion time. I’ve flagged this conversation for management review.',status:'open',managementReview:true,ai:false};
  }
+ // A next-step question must retain the operator's pending evidence request,
+ // rather than replacing it with a generic review notice or another sign-in attempt.
+ const paymentNext=/^(?:so[,\s]+)?what (?:can|should) i do (?:right )?now[?!.\s]*(?:this is (?:ridiculous|frustrating)[.!\s]*)?(?:i feel (?:like i (?:got|was) )?scammed[.!\s]*)?$/i;
+ if(context.kind==='access'&&latestOperator>=0&&paymentNext.test(question.trim())
+  &&sinceOperator.every(turn=>paymentNext.test(turn.content.trim()))
+  &&/what payment date and amount appear on your (?:bank or card )?statement\?/i.test(purchaseNote)
+  &&/no cancellation or refund is confirmed/i.test(purchaseNote)){
+  return {reply:'The next step is the payment date and amount from your bank or card statement, as the operator requested. Reply with just those details so the purchase can be located for your cancellation and access review. Leave out card numbers and sign-in codes; you do not need to pay again or repeat sign-in attempts. No cancellation, refund or restored access is confirmed.',status:'open',managementReview:true,ai:false};
+ }
  const reviewFollowup=/management review|flagged this conversation/i.test(previous?.content??'')||/\b(?:management|review|any update|anything yet)\b/i.test(question);
  // A verified handoff plus the immediate support topic distinguishes waiting
  // for Support from seller follow-up. Assistant text alone cannot create a handoff.

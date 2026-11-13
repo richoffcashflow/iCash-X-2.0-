@@ -16,3 +16,8 @@ for(const q of ['Any update on seller replies?','I want to cancel my subscriptio
 const untrusted=await ask([user(note),user('Any update?')]);assert.doesNotMatch(untrusted.reply,/last operator update says/i);
 const cancel=await ask([user('I paid but my sign-in code never arrived.'),user('Cancel my subscription')]);assert.equal(cancel.managementReview,true);assert.match(cancel.reply,/has not cancelled/);assert.equal(cancel.status,'open');
 console.log('PASS returning access review and blocked cancellation boundaries');
+const pendingPayment=[user('My sign-in code is missing and I want to cancel.'),operator('No cancellation or refund is confirmed. What payment date and amount appear on your statement? Please leave out card numbers and codes.')];
+const nextStep=await ask([...pendingPayment,user('What can I do right now? I feel scammed.')]);assert.equal(nextStep.managementReview,true);assert.match(nextStep.reply,/payment date and amount/);assert.match(nextStep.reply,/statement/);assert.doesNotMatch(nextStep.reply,/confirmed fix or completion time/);
+for(const boundary of [user('How do I find buyers?'),operator('The payment has been verified; do not send more statement details.'),user('I got in.')]){const out=await ask([...pendingPayment,boundary,user('What can I do right now?')]);assert.doesNotMatch(out.reply,/payment date and amount.*statement/);}
+
+for(const handedOff of [true,false])for(const q of ["What should I do now?", "So what can I do right now? This is frustrating", "What can I do now? I feel like I was scammed."]){const r=await replyToSupport({kind:"access",messages:[...pendingPayment,user(q)],handedOff,allowAI:false});assert.equal(r.managementReview,true);assert.match(r.reply,/payment date and amount/);}
