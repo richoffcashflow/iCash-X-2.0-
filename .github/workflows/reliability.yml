@@ -110,6 +110,8 @@ jobs:
         run: python3 scripts/test-voice-configuration-target-lookup-postgres.py --capacity-snapshot
       - name: Verify unstarted number recovery under concurrent recipient and money controls
         run: python3 scripts/test-automatic-outreach-postgres.py
+      - name: Verify quota-wait aging and owner notification reset races
+        run: python3 scripts/test-outbound-stall-recovery-postgres.py
       - name: Verify eighty-percent voice capacity claim under contention
         run: python3 scripts/test-eighty-percent-voice-capacity-postgres.py
       - name: Verify urgent voice source filtering and concurrent fair issuance

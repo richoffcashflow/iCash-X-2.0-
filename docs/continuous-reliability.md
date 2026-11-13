@@ -1,5 +1,17 @@
 # Continuous reliability
 
+## November 13 outbound stalls and owner email
+
+The [outbound recovery follow-up](outbound-stall-recovery-2026-11-13.md) repairs
+lost queue age during contact-quota waits and retains PR #721's independent fix
+for the inert provider workflow version blocking the original voice approval. It also
+adds an explicit, private notification baseline for the owner's requested reset.
+The reset suppresses unchanged hourly reminders only; current health, new service
+outages, changed account impact, recovery evidence and uncertain email receipts
+remain authoritative. Native competing-worker and notification-claim races are
+part of the release gate. Provider pacing and unresolved original outcomes still
+limit actual work; an acknowledgment is not a claim that all accounts recovered.
+
 ## November 13 concrete workflow audit
 
 The [concrete gap audit](concrete-gap-audit-2026-11-13.md) repairs 16 demonstrated
