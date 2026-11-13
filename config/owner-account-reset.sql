@@ -55,7 +55,7 @@ begin
  perform 1 from public.icash_seller_intakes where id=any(leads) for update;
  -- Wait for actual in-flight work; never terminate a call or declare unknown spending settled.
  if exists(select 1 from public.icash_call_recordings where account_id=p_account and call_ended_at is null
-  and (call_sid is not null or dial_claimed_at is not null) and state in ('consent_pending','starting','recording','stopping'))
+  and (call_sid is not null or dial_claimed_at is not null) and state in ('consent_pending','starting','recording','stopping','processing','available','absent'))
  or exists(select 1 from icash_recorded_reception_private.sessions where account_id=p_account and call_ended_at is null)
  then return jsonb_build_object('status','waiting','reason','active_call');end if;
  if exists(select 1 from public.icash_screening_jobs where account_id=p_account and id=any(ids) and state='running')

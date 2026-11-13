@@ -67,6 +67,7 @@ try{
  await q("insert into icash_call_recordings values($1,$2,null,'original-call',now(),'recording')",[id(30),account]);
  assert.equal((await reset()).reason,'active_call');assert.equal(await one('select count(*) from icash_owner_reset_private.requests'),0);
  assert.equal(await one('select state from icash_screening_jobs where id=$1',[id(1)]),'complete');
+ for(const phase of ['processing','available','absent']){await q('update icash_call_recordings set state=$1',[phase]);assert.equal((await reset()).reason,'active_call','Audio completion is not call completion');}
  await q("update icash_call_recordings set call_ended_at=now(),state='stopping'");
  await q("insert into icash_recorded_reception_private.sessions values($1,now(),'stopping')",[account]);
  await q("update icash_seller_intakes set state='checking' where id=$1",[id(3)]);assert.equal((await reset()).reason,'active_work');
