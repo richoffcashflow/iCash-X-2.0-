@@ -86,6 +86,8 @@ test('historical full approvals at every authorized capacity match before exhaus
  delete p.privacy.user_memory.identity_policy;delete p.widget.mobile_fullscreen;delete p.summary_schedule;
  delete c.asr.keyterm_libraries;delete p.widget.transcript_speech_sync_enabled;delete p.privacy.encrypt_conversations;
  delete c.agent.subagent_config;delete c.agent.subagents;
+ for(const snapshot of [a,old])snapshot.platform_settings.guardrails=automaticOfferGuardrails(snapshot.platform_settings.guardrails);
+ a.platform_settings.guardrails.custom.config.configs[0].service_tier='standard';
  let hashes=0;
  const measured=await loadService('lib/required-call-recording.ts',{...capacityApprovals,...offerPolicy,...consentEvidence,createHash:(...args)=>{hashes++;return createHash(...args);}});
  for(const [concurrency,daily] of [[30,1000],[18,1000],[8,100],[2,100]]){
@@ -93,8 +95,39 @@ test('historical full approvals at every authorized capacity match before exhaus
   const review=reviewFor(old),before=structuredClone({review,a});hashes=0;const start=performance.now();
   assert.equal(measured.recordingAgentMatches(review,a),true);
   console.log('Historical capacity comparison:',concurrency,hashes,'fingerprints,',Math.round(performance.now()-start),'ms');
-  assert(hashes<=160,'An unchanged historical approval must not enumerate thousands of intermediate fingerprints');
+  assert(hashes<=160,'The current standard tier and historical defaults must not enumerate thousands of intermediate fingerprints');
   assert.deepEqual({review,a},before,'Prioritization must not rewrite the provider snapshot or its approval');
+ }
+});
+
+test('November 13 explicit standard guardrail tier preserves only the complete original approval',()=>{
+ for(const historical of [false,true]){
+  const original=historical?fullDefaultsFixture():fixture();
+  original.platform_settings.guardrails=automaticOfferGuardrails(original.platform_settings.guardrails);
+  original.conversation_config.agent.prompt.tool_ids.push('tool_contract');
+  const review={...reviewFor(original),offerPolicy:'automatic_offer_v9',contractToolId:'tool_contract',toolIds:[...original.conversation_config.agent.prompt.tool_ids]};
+  const current=structuredClone(original);current.platform_settings.guardrails.custom.config.configs[0].service_tier='standard';
+  const before=structuredClone({review,current});
+  assert.equal(recordingAgentMatches(review,current),true);
+  const snapshot=a=>({conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:null});
+  assert.equal(recordingConfigHashMatches(configHash(original),snapshot(current)),true,'Incoming comparison retains its own exact fingerprint');
+  assert.equal(recordingAgentMatches({...review,configHash:configHash(current)},original),false,'No reverse synthesis of a newer approval');
+  assert.equal(recordingAgentMatches({...review,configHash:configHash(current)},current),true);
+  assert.deepEqual({review,current},before);
+  for(const mutate of [
+   ...['fast',null,false,0,{},'STANDARD'].map(value=>a=>a.platform_settings.guardrails.custom.config.configs[0].service_tier=value),
+   a=>a.platform_settings.guardrails.custom.config.configs.push({...a.platform_settings.guardrails.custom.config.configs[0]}),
+   a=>a.platform_settings.guardrails.custom.config.configs[0].name='Other rule',
+   a=>a.platform_settings.guardrails.custom.config.configs[0].model='other-model',
+   a=>a.platform_settings.guardrails.custom.config.configs[0].prompt+=' changed',
+   a=>a.platform_settings.guardrails.custom.config.configs[0].trigger_action.type='end_call',
+   a=>a.platform_settings.guardrails.custom.config.configs[0].history_message_count=0,
+   a=>a.platform_settings.guardrails.custom.config.configs[0].extra=null,
+   a=>a.platform_settings.auth.enable_auth=false,
+   a=>a.conversation_config.agent.prompt.prompt+=' changed',
+   a=>a.conversation_config.agent.prompt.tool_ids.push('tool_other'),
+   a=>a.branch_id='agtbrch_other',a=>a.version_id='agtvrsn_other',
+  ]){const changed=structuredClone(current);mutate(changed);assert.equal(recordingAgentMatches(review,changed),false,mutate.toString());}
  }
 });
 

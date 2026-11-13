@@ -95,6 +95,14 @@ function recordingEmptyWorkflowDefaultsSnapshot(snapshot:Record<string,unknown>)
  return {...snapshot,conversation_config:{...config,agent:{...agent,prompt:previousPrompt}},
   workflow:{...previousWorkflow,nodes:{...nodes,start_node:previousStart}}};
 }
+function recordingStandardGuardrailSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
+ const platform=object(snapshot.platform_settings),guardrails=object(platform.guardrails),custom=object(guardrails.custom),config=object(custom.config),rows=config.configs;
+ if(!Array.isArray(rows)||rows.length!==1)return null;
+ const rule=object(rows[0]);
+ if(rule.name!=='iCash server-calculated prices'||rule.model!=='gemini-3.1-flash-lite'||rule.service_tier!=='standard')return null;
+ const previous={...rule};delete previous.service_tier;
+ return {...snapshot,platform_settings:{...platform,guardrails:{...guardrails,custom:{...custom,config:{...config,configs:[previous]}}}}};
+}
 export function recordingConfigHashMatches(configHash:string,snapshot:Record<string,unknown>):boolean{
  return recordingConfigHashSearch(configHash,snapshot,true)||recordingConfigHashSearch(configHash,snapshot,false);
 }
@@ -122,16 +130,23 @@ function recordingConfigHashSearch(configHash:string,snapshot:Record<string,unkn
  // Fixed representations, each with up to four empty-agent
  // variants. Never ignore arbitrary fields or rewrite a saved approval.
  const snapshots=[snapshot];
+ // November 13 serialized this exact standard tier on the same reviewed
+ // single price guardrail. Reconstruct only its prior representation, then
+ // require the complete original fingerprint; no approval or provider write.
+ const previousGuardrail=recordingStandardGuardrailSnapshot(snapshot);
+ if(previousGuardrail)snapshots.push(previousGuardrail);
  // November 4 added these two inactive defaults together on the unchanged
  // reviewed version. Reconstruct only that exact pair, then require the SAME
  // complete saved fingerprint. Partial, enabled, extended or malformed values
  // remain exact; no tool, connector, prompt or approval is created or changed.
- const platform=object(snapshot.platform_settings),config=object(snapshot.conversation_config),agent=object(config.agent),prompt=object(agent.prompt),builtins=object(prompt.built_in_tools),connectors=platform.app_connectors;
- if(Object.hasOwn(builtins,'ask_teammate')&&builtins.ask_teammate===null
-  &&connectors!==null&&typeof connectors==='object'&&!Array.isArray(connectors)
-  &&Object.keys(connectors).length===1&&Object.hasOwn(connectors,'enabled')&&object(connectors).enabled===false){
-  const previousPlatform={...platform},previousBuiltins={...builtins};delete previousPlatform.app_connectors;delete previousBuiltins.ask_teammate;
-  snapshots.push({...snapshot,platform_settings:previousPlatform,conversation_config:{...config,agent:{...agent,prompt:{...prompt,built_in_tools:previousBuiltins}}}});
+ for(const value of [...snapshots]){
+  const platform=object(value.platform_settings),config=object(value.conversation_config),agent=object(config.agent),prompt=object(agent.prompt),builtins=object(prompt.built_in_tools),connectors=platform.app_connectors;
+  if(Object.hasOwn(builtins,'ask_teammate')&&builtins.ask_teammate===null
+   &&connectors!==null&&typeof connectors==='object'&&!Array.isArray(connectors)
+   &&Object.keys(connectors).length===1&&Object.hasOwn(connectors,'enabled')&&object(connectors).enabled===false){
+   const previousPlatform={...platform},previousBuiltins={...builtins};delete previousPlatform.app_connectors;delete previousBuiltins.ask_teammate;
+   snapshots.push({...value,platform_settings:previousPlatform,conversation_config:{...config,agent:{...agent,prompt:{...prompt,built_in_tools:previousBuiltins}}}});
+  }
  }
  // November 5 serialized an empty avatar and a disabled reasoning override
  // together on the unchanged reviewed version. Remove only this exact pair,
