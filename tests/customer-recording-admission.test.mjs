@@ -7,13 +7,13 @@ const now=Date.now(),iso=new Date(now).toISOString(),accountId='11111111-1111-41
 const agent={agent_id:'agent_fixture',branch_id:'agtbrch_recorded',main_branch_id:'agtbrch_main',version_id:'agtvrsn_reviewed',conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},agent:{prompt:{tool_ids:['tool_callback','tool_handoff','tool_stop']}}},platform_settings:{privacy:{record_voice:false},auth:{enable_auth:true},call_limits:{bursting_enabled:false},queueing_config:{enabled:false},overrides:{conversation_config_override:{conversation:{max_duration_seconds:true},agent:{first_message:true,prompt:{prompt:true}},tts:{voice_id:true}}}}};
 const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedUntil:new Date(now+3600000).toISOString(),agentId:agent.agent_id,branchId:agent.branch_id,versionId:agent.version_id,configHash:sha(JSON.stringify(canonical({conversation_config:agent.conversation_config,platform_settings:agent.platform_settings,workflow:null,procedures:null}))),fromPhone:'+12125550101',providerAccountSid:ac,stopToolId:'tool_stop',toolIds:['tool_callback','tool_handoff','tool_stop'],approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:recordingPolicy.version};
 const tool={id:'tool_stop',tool_config:{type:'webhook',name:'icash_stop_recording',api_schema:{url:recordingBaseUrl+'/stop',method:'POST',request_headers:{Authorization:{variable_name:'secret__icash_recording_stop_token'}},request_body_schema:{type:'object',required:['recordingId'],properties:{recordingId:{type:'string',dynamic_variable:'icash_recording_id'}}}}}};
-async function fixture(changeAt,change=env=>env.ICASH_RECORDED_OUTBOUND_READY='false',invalidTool=false,receiptPatch={},callbackWins=false){
+async function fixture(changeAt,change=env=>env.ICASH_RECORDED_OUTBOUND_READY='false',invalidTool=false,receiptPatch={},callbackWins=false,admission='accepted'){
  const env={ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'synthetic-provider-token-only',ELEVENLABS_API_KEY:'synthetic-only'},events=[];
  const row={id,account_id:accountId,operation_key:operationKey,provider_account_sid:ac,call_sid:null,state:'consent_pending',to_phone:'+12125550102',from_phone:review.fromPhone};
  const event=name=>{events.push(name);if(changeAt===name)change(env);};
  const db=async(path,method,body)=>{
   if(path.startsWith('icash_call_recordings?')){event('read_binding');return [structuredClone(row)];}
-  if(path==='rpc/icash_create_direct_recorded_call'){event('create');return structuredClone(row);}
+  if(path==='rpc/icash_create_direct_recorded_call'){event('create');if(admission==='lost')throw Error('Synthetic lost admission response');return admission==='rejected'?null:structuredClone(row);}
   assert.equal(path,'rpc/icash_transition_call_recording');event(body.p_action);
   if(body.p_action==='bind_call'){row.call_sid=callbackWins==='wrong_identity'?'CA'+'c'.repeat(32):ca;if(callbackWins)return null;}
   return structuredClone(row);
@@ -29,6 +29,9 @@ for(const stage of ['before','agent','tool','create','claim_dial'])for(const cha
 }
 const changed=await fixture('tool',env=>env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...review,versionId:'agtvrsn_changed'}));assert.equal(changed.result.status,'recording_release_required');assert(!changed.events.includes('create'));
 const invalid=await fixture(null,undefined,true);assert.equal(invalid.result.status,'recording_review_required');assert.equal(invalid.result.dispatchBoundary,'before_recording_create_v1');assert(!invalid.events.includes('create'));assert(!invalid.events.includes('dial'));
+const rejected=await fixture(null,undefined,false,{},false,'rejected');
+assert.equal(rejected.result.status,'recording_admission_held');assert.equal(rejected.result.dispatchBoundary,'recording_admission_rejected_v1');assert(!rejected.events.includes('dial'));assert(!rejected.events.includes('claim_dial'));
+await assert.rejects(fixture(null,undefined,false,{},false,'lost'),/lost admission response/,'An uncertain admission never returns the rejection marker');
 const ready=await fixture(null);assert.equal(ready.result.status,'recording_consent_pending');assert.equal(ready.result.dispatchBoundary,undefined);assert.deepEqual(ready.events,['agent','tool','create','claim_dial','dial','bind_call']);
 for(const date_created of [null,undefined,new Date(now+2000).toUTCString()]){
  const f=await fixture(null,undefined,false,{date_created});assert.equal(f.result.status,'recording_consent_pending');assert.equal(f.events.filter(x=>x==='dial').length,1);assert(!f.events.includes('dial_unknown'));

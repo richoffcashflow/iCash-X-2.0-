@@ -130,6 +130,8 @@ jobs:
         run: python3 scripts/test-text-ingress-health-postgres.py
       - name: Verify prospective pre-dial abort and late provider admission
         run: python3 scripts/test-voice-predial-abort-postgres.py
+      - name: Verify rejected recording admission cannot strand funds or race a real dial
+        run: python3 scripts/test-recording-admission-abort-postgres.py
       - name: Verify historical cleanup recovery and concurrent customer Pause
         run: python3 scripts/test-cleanup-ticket-recovery-postgres.py
       - name: Verify bounded saved export recovery without provider retries
@@ -156,6 +158,8 @@ jobs:
         run: python3 scripts/test-account-work-postgres.py
       - name: Verify reviewed planning relief, fresh admission and late receipts under contention
         run: python3 scripts/test-reviewed-pending-work-postgres.py
+      - name: Verify bounded November 13 recovery, concurrent admission and late costs
+        run: python3 scripts/test-funded-stall-recovery-postgres.py
       - name: Verify legacy search quarantine and customer Pause under concurrent transactions
         run: python3 scripts/test-legacy-search-postgres.py
       - name: Verify exact fresh-contact revalidation under concurrent controls
