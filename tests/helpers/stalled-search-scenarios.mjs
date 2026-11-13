@@ -13,6 +13,10 @@ export async function stalledSearchScenarios(db,account,other){
  assert.equal(bounded,read('supabase/migrations/20261026034110_bounded_research_market_selection.sql'));
  await db.exec(bounded);
  await db.exec(read('config/failed-search-continuity.sql'));
+ const independent=read('config/independent-query-stall-recovery.sql');
+ assert.equal(independent,read('supabase/migrations/20261113043224_independent_query_stall_recovery.sql'));
+ await db.exec('create table if not exists icash_research_private.estimates(operation_key text,account_id uuid,query jsonb);');
+ await db.exec('begin;'+independent+'commit;');
  const config=()=>value('select to_jsonb(c) from icash_discovery_configs c where account_id=$1',[account]);
  const original=await config(),op=`discovery:${account}:${original.revision}:${original.next_page}`;
  const resume=()=>value('select icash_continue_stalled_research($1)',[account]);
@@ -25,6 +29,7 @@ export async function stalledSearchScenarios(db,account,other){
  await db.exec('update icash_research_private.settings set stalled_search_continuation_enabled=true');
  assert.equal(await resume(),false,'The failing filter must be rolled back before continuing');
  await db.exec('update icash_research_private.settings set exclusions_enabled=false');
+ await (await import('./independent-search-scenarios.mjs')).independentSearchScenarios(db,account,other,op,request);
  // The provider also returns completed 500 errors without the old exclusion
  // list. Exercise that production case through the same exact-source fences.
  await db.exec('begin;');
