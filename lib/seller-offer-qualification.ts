@@ -2,6 +2,7 @@ import {object} from './required-call-recording.ts';
 import {sellerListingEvidence} from './seller-listing.ts';
 import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {callSellerPriceEvidence} from './call-offer-evidence.ts';
+import {sellerConversionIntent} from './seller-conversion-intent.ts';
 
 const questions={
  ownership:'Are you the owner of this property?',
@@ -47,14 +48,15 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[],ch
    if(row.role!=='user'||!answerable(text))continue;
    const ownerQuestion=/\b(?:owner|do you own|is (?:this|that|it|.+?) your property)\b/i.test(question)&&/\?/.test(question)&&!/(?:\b(?:only|sole|other|another) owner\b|\b(?:anyone|anybody) else\b)/i.test(question);
    const availabilityQuestion=/\b(?:good time|time to (?:talk|chat)|(?:have|got) (?:a (?:quick )?minute|a (?:couple|few) (?:of )?minutes))\b/i.test(question);
-   const interestQuestion=/\b(?:interested in selling|(?:want|looking|ready|like) to sell|consider(?:ing)? selling)\b/i.test(question)&&/\?/.test(question);
+   const interestQuestion=/\b(?:interested in selling|(?:want|looking|ready|like) to sell|consider(?:ing)? selling|considered a cash sale|open to a cash offer|consider selling)\b/i.test(question)&&/\?/.test(question);
    const situationQuestion=/\b(?:what(?:'s| is) going on|what.*(?:thinking|looking|want|decid)|why.*sell|reason.*sell|tell me.*situation)\b/i.test(question);
    if(ownerQuestion&&(yes.test(text)||no.test(text)))facts.ownership=!no.test(text);
    if(availabilityQuestion&&(yes.test(text)||no.test(text)))facts.availability=!no.test(text);
    if(availabilityQuestion&&/\b(?:not now|(?:can't|cannot) talk|not a good time|busy right now)\b/i.test(text))facts.availability=false;
    if(/\b(?:i(?:'m| am) (?:the |an? )?owner|i (?:still )?own (?:it|this|the (?:house|property)))\b/i.test(text))facts.ownership=true;
    if(/\b(?:not (?:the )?owner|don['’]?t own|do not own|wrong (?:number|person|property)|no longer own)\b/i.test(text))facts.ownership=false;
-   if(sellerRequestsPrice(text)||callSellerPriceEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text})!==null){
+   const intent=sellerConversionIntent(text);
+   if(sellerRequestsPrice(text)||intent==='price'||intent==='identity_price'||intent==='listed_terms'||callSellerPriceEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text})!==null){
     facts.availability??=true;facts.interest??=true;
     // An offer question is not an answer to a pending repairs/occupancy question.
     question='';continue;
@@ -67,7 +69,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[],ch
    if(/\b(?:condition|repairs?|updates?|work.*need|need.*work|shape.*(?:house|property))\b/i.test(question))facts.condition=true;
    if(/\b(?:needs? (?:a |an |some |new |major |minor )?(?:roof|work|repairs?|updat\w*|ac|paint)|gutted|good (?:shape|condition)|bad condition|fixer|recently (?:renovated|remodeled))\b/i.test(text))facts.condition=true;
    if(/\b(?:(?:anyone|anybody|someone|who).*\bliv(?:e|es|ing)|occup(?:ied|ancy)|vacant|tenants?)\b/i.test(question))facts.occupancy=true;
-   if(/\b(?:vacant|(?:no one|nobody|tenants?).*\bliv(?:e|es|ing)|i live|we live|rented out|unoccupied)\b/i.test(text))facts.occupancy=true;
+   if(/\b(?:vacant|(?:no one|nobody|tenants?).*\bliv(?:e|es|ing)|i live|we live|rented out|unoccupied|family occupied|owner occupied|tenant occupied)\b/i.test(text))facts.occupancy=true;
    if(/\b(?:when.*(?:sell|clos|mov)|(?:selling|closing) (?:timeline|timeframe)|how (?:soon|quickly)|ideal.*(?:time|date))\b/i.test(question))facts.timing=true;
    if(/\b(?:next \w+ (?:days?|weeks?|months?)|as soon as possible|asap|no (?:rush|deadline)|(?:sell|close|move) (?:in|by|before|after|within))\b/i.test(text))facts.timing=true;
    const listing=sellerListingEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text});

@@ -345,3 +345,75 @@ assert sql(f"select count(*) from icash_offer_authorities where account_id='{WA}
 assert sql(f"select analysis->'voiceReceiptWait'->>'recordingId' from icash_text_ai_jobs where id='{WJ}'") == WR
 assert sql("select has_function_privilege('anon','public.icash_seller_voice_text_wait_call(uuid,uuid)','execute')") == 'f'
 print('PASS native call receipt wait: 16 duplicate arrivals, uncommitted terminal receipts stay held, one resumed message and one final claim; original source preserved.')
+
+# New conversion replies keep the existing budget/row locks. Exercise the exact
+# current context definitions plus the forward migration under native contention.
+gaps = (ROOT / 'config/seller-gap-recovery.sql').read_text()
+sql(gaps[gaps.index('create table public.icash_seller_gaps('):gaps.index('create function public.icash_seller_contact_stop')])
+sql("""
+create schema if not exists icash_learning_policy_private;
+create table if not exists icash_learning_policy_private.cash_question_settings(id integer,enabled_at timestamptz);
+alter table icash_text_threads add column if not exists operational_contact_id uuid;
+alter table icash_seller_progress_settings add column if not exists voice_text_enabled_at timestamptz;
+alter table icash_seller_progress_settings add column if not exists initial_reply_enabled_at timestamptz;
+alter table icash_operation_spend add column if not exists dispatched_at timestamptz;
+create table if not exists icash_live_callbacks(account_id uuid,screening_id uuid,state text);
+create table if not exists icash_contact_suppressions(contact_key text);
+create table if not exists icash_cancellation_notices(account_id uuid,sms_id uuid);
+create table if not exists icash_live_conversations(account_id uuid,screening_id uuid,contact_key text,state text,completed_at timestamptz,conversation_id text,result jsonb);
+create function icash_call_has_seller_response(jsonb) returns boolean language sql as $$select false$$;
+create function icash_seller_has_cash_question(uuid,uuid) returns boolean language sql as $$select false$$;
+create function icash_seller_cash_identity_reply(text,text) returns text language sql as $$select null::text$$;
+create function icash_seller_post_call_identity_reply(uuid,uuid) returns text language sql as $$select null::text$$;
+create function icash_conversation_street(text) returns text language sql as $$select $1$$;
+create function icash_seller_sms_permission_current(uuid,uuid,boolean) returns boolean language sql as $$select true$$;
+create function icash_current_viewing_slots(uuid,uuid) returns jsonb language sql as $$select '[]'::jsonb$$;
+drop function icash_seller_recovery_nonprice_current(uuid,uuid);
+""")
+sql(function('seller-gap-recovery', 'icash_choose_seller_recovery'))
+for row in json.loads((ROOT / 'tests/fixtures/seller-conversion-baseline.json').read_text()):
+    sql(row['definition'] + ';')
+sql((ROOT / 'config/seller-conversion-followthrough.sql').read_text() + (ROOT / 'config/seller-conversion-inactive-compatibility.sql').read_text())
+sql("update icash_seller_progress_settings set enabled=true,dialogue_enabled=true,offer_enabled=true,conversion_enabled_at=now()-interval '1 minute';update fixture_flags set conversation=true;")
+CA, CT, CD, CS, CU = [f'50000000-0000-4000-8000-{n:012d}' for n in range(1, 6)]
+sql(f"""
+insert into auth.users(id,email) values('{CU}','conversion@example.invalid');
+insert into icash_accounts(id,owner_user_id) values('{CA}','{CU}');
+insert into icash_customer_identities values('{CA}','Fixture Buyer');
+insert into icash_screening_jobs(id,account_id,snapshot,result) values('{CS}','{CA}','{json.dumps(snapshot)}'::jsonb||jsonb_build_object('fetchedAt',now()),'{{"financialCheck":{{"status":"eligible"}}}}');
+insert into icash_deal_files(id,account_id,screening_id,terms) values('{CD}','{CA}','{CS}','{{"address":"45 Oak Road","buyer":"Fixture Buyer","priceCents":21500000,"priceSource":"proposed"}}');
+insert into icash_text_threads(id,account_id,deal_id,recipient) values('{CT}','{CA}','{CD}','+12145550666');
+insert into icash_sms_routes(sender,recipient,account_id) values('+15550000001','+12145550666','{CA}');
+insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id) values('{CA}','{CT}','incoming','received','Who are you?','conversion-fixture');
+""")
+CJ, CM = sql(f"select id||'|'||message_id from icash_text_ai_jobs where account_id='{CA}'").split('|')
+cc = json.loads(sql(f"select icash_seller_text_offer_context('{CA}','{CM}')"))
+assert cc['conversionEnabled'] is True
+conversion_plan = {'kind': 'message', 'action': 'answer_buyer_question', 'body': 'I am the AI assistant for Fixture Buyer. Are you the owner of this property?', 'state': {'textThreadId': CT, 'processedSource': CM}}
+conversion_save = f"select icash_save_seller_text_offer('{CA}','{CJ}','{cc['fingerprint']}',{cc['offerVersion']},'{json.dumps(conversion_plan)}')"
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    results = list(pool.map(lambda _: sql(conversion_save), range(16)))
+assert sum(bool(r) for r in results) == 1, results
+CO = json.loads(next(r for r in results if r))['messageId']
+# A cutover disable committed before a waiting final claim invalidates that plan.
+cutover, claim = Session('conversion_cutover'), Session('conversion_claim')
+try:
+    cutover.query("begin;select id from icash_operating_budget where id=1 for update;update icash_seller_progress_settings set conversion_enabled_at=null;")
+    claim.start(f"select icash_claim_text('{CA}','{CO}','+15550000001');")
+    cutover.query('commit;')
+    assert claim.finish() == ''
+finally:
+    cutover.close()
+    claim.close()
+# Independent delivered-source fixture for recovery contention; no provider call.
+sql("update icash_seller_progress_settings set conversion_enabled_at=now()-interval '1 minute';update icash_seller_recovery_variants set enabled=true where reason='no_response';")
+sql(f"update icash_text_messages set state='delivered',provider_id='SIMULATION-original-receipt',created_at=now() where id='{CO}';update icash_text_ai_jobs set analysis=jsonb_set(analysis,'{{offerAction}}','\"qualify_condition\"') where id='{CJ}';")
+CG = sql(f"insert into icash_seller_gaps(account_id,deal_id,screening_id,thread_id,source,source_id,reason,stage,channel,quote,state,due_at,expires_at,source_at) values('{CA}','{CD}','{CS}','{CT}','text','{CO}','no_response','draft','text','SIMULATION','open',now()-interval '1 minute',now()+interval '1 hour',now()) returning id")
+with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+    results = list(pool.map(lambda _: sql(f"select icash_prepare_seller_recovery('{CA}','{CG}')"), range(16)))
+assert sum(bool(r) for r in results) == 1, results
+CF = next(r for r in results if r)
+assert sql(f"select variant from icash_seller_recovery_attempts where gap_id='{CG}'") == 'context-condition-v1'
+assert sql(f"select icash_seller_recovery_nonprice_current('{CA}','{CF}')") == 't'
+assert sql(f"select count(*) from icash_seller_recovery_attempts where gap_id='{CG}'") == '1'
+print('PASS native conversion: 16 competing plans make one reply; concurrent cutover disable blocks final claim; 16 followup preparations create one source-bound contextual attempt.')

@@ -12,11 +12,12 @@ import {runScreeningJob} from './screening-job.ts';
 import {canonical,sha} from './required-call-recording.ts';
 import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {sellerResponseDisposition} from './seller-response-policy.ts';
+import {sellerConversionIntent} from './seller-conversion-intent.ts';
 
 type Message={id:string;direction:string;body:string;state:string;providerId:string|null;updatedAt?:string;action?:string;quoteRevision?:string;priceCents?:number;customerAuthored?:boolean};
 type Closing={legalName?:string;date?:string;inspection?:'yes'|'no'};
 export type TextOfferState=AutomaticOfferState&{textThreadId?:string;closing?:Closing;processedSource?:string;pendingAskingPriceCents?:number};
-export type TextOfferContext={accountId:string;jobId:string;threadId:string;sourceId:string;dealId:string;screeningId:string;phone:string;ownerUserId:string;ownerEmail:string;principal:string;address:string;snapshot:unknown;terms:unknown;offerState:TextOfferState|null;offerVersion:number;messages:Message[];history?:unknown[];fingerprint:string;activeCallSince?:string|null;callInvitationAllowed?:boolean};
+export type TextOfferContext={accountId:string;jobId:string;threadId:string;sourceId:string;dealId:string;screeningId:string;phone:string;ownerUserId:string;ownerEmail:string;principal:string;address:string;snapshot:unknown;terms:unknown;offerState:TextOfferState|null;offerVersion:number;messages:Message[];history?:unknown[];fingerprint:string;conversionEnabled?:boolean;activeCallSince?:string|null;callInvitationAllowed?:boolean};
 export type TextOfferPlan={kind:'message'|'review'|'wait'|'agreement';action:string;body?:string;reason?:string;nextStep?:string;state:TextOfferState;terms?:DealTerms;confirmation?:SellerAgreementConfirmation};
 const unqualifiedYes=(s:string)=>/^(?:yes|yeah|yep|sure|correct|okay|ok|that works|sounds good|i agree)[.! ,]*$/i.test(s.trim());
 const no=(s:string)=>/^(?:no|nope|not yet)[.! ,]*$/i.test(s.trim());
@@ -66,6 +67,7 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  const review=(reason:string,nextStep:string):TextOfferPlan=>({kind:'review',action:'review',reason,nextStep,state});
  if(c.activeCallSince){const held=review('active_call_receipt_unresolved','Wait for the active seller call and its original completion receipt before continuing by text.');return Date.parse(c.activeCallSince)>now-15*60000?{...held,kind:'wait',reason:'seller_call_active'}:held;}
  if(!source||source.direction!=='incoming'||source.state!=='received')return review('source_required','Reconcile the original seller message receipt.');
+ const intent=sellerConversionIntent(source.body);
  const turns=c.messages.filter(m=>m.direction==='incoming'||m.state==='delivered'&&m.providerId).flatMap((m,index,messages)=>{
   // An optional phone preference is not ownership, selling interest or a refusal
   // to keep texting. Reset the conversational question without altering receipts.
@@ -81,7 +83,13 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   if(['ready','accepted','dispatching'].includes(previous.state)&&Date.parse(previous.updatedAt??'')>now-15*60000)return {...result,kind:'wait',reason:'offer_receipt_pending'};
   return result;
  }
+ let replyIntro='';
  const ask=(action:string,body:string):TextOfferPlan=>{
+  if(replyIntro){
+   if(action==='cash_offer'&&state.quotedPriceCents)body=`As-is cash proposal: ${priceText(state.quotedPriceCents)}. Does that work?`;
+   body=replyIntro+' '+body;
+   if(body.length>160)return review('buyer_identity_copy_required','The full saved buyer identity and answer must fit the reviewed text rate.');
+  }
   const attempts=c.messages.filter(m=>m.direction==='outgoing'&&m.action===action&&m.state==='delivered');
   if(attempts.filter(m=>m.body===body).length>=2)return review('seller_answer_unclear',`The seller has not answered: ${body} Review their exact answer or arrange an authorized call.`);
   return {kind:'message',action,body,state};
@@ -116,7 +124,7 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
    if(amounts.length===1&&/\b(?:net|after fees|take home)\b/i.test(source.body))state.pendingAskingPriceCents=amounts[0];
   }
   if(previous?.action==='repair_budget'&&amounts.length===1&&callOfferEvidence(transcript,{action:'update_repairs',sellerStatement:source.body,repairEstimateCents:amounts[0]})){state.repairEstimateCents=amounts[0];state.conditionPending=false;state.acceptedPriceCents=null;}
-  if(previous?.action==='legal_name'){
+  if(previous?.action==='legal_name'&&intent===null&&!/[?]/.test(source.body)){
    const name=source.body.trim().replace(/^(?:my (?:full |legal |full legal )?name is|I am|I'm)\s+/i,'').replace(/[.!]+$/,'');
    if(/^[\p{L}][\p{L} .’'-]{1,119}$/u.test(name)&&name.split(/\s+/).length>=2&&!/\b(?:unknown|not sure|no|yes|maybe|trust|llc|corporation)\b/i.test(name))closing.legalName=name;
   }
@@ -138,12 +146,30 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process','We confirm property details and a cash price, agree on written terms, then coordinate signatures and title. What part would you like to discuss?');
  if(isDeliveredCallInvitation(previous)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
  const qualification=sellerOfferQualification(transcript,c.history??[],'sms');
+ // Answer the seller's actual question before resuming the missing fact. A
+ // listing reference does not establish agent representation or accept its terms.
+ if(c.conversionEnabled&&(qualification.ready||!qualification.stop)){
+  if(intent==='listed_terms')return ask('clarify_listing_terms','Is the property listed with an agent, or are you selling it yourself?');
+  if(intent==='identity'||intent==='identity_price'||intent==='buying'){
+   const principal=c.principal.trim();
+   if(!principal||principal.length>80||/[\r\n]/.test(principal))return review('buyer_identity_required','Verify the saved buyer identity before answering.');
+   const intro=intent==='buying'?`I assist ${principal} with potential cash purchases.`:`I'm the AI assistant for ${principal}.`;
+   if(!qualification.ready){
+    const body=intro+(intent==='identity_price'?' Price depends on the property details.':'')+' '+qualification.nextQuestion;
+    if(body.length>160)return review('buyer_identity_copy_required','The full saved buyer identity and answer must fit the reviewed text rate.');
+    return ask('answer_buyer_question',body);
+   }
+   // Keep the actual next action so the answer still binds to the price/name/
+   // terms question. Identity alone never authorizes agreement delivery.
+   replyIntro=intro;
+  }
+ }
  if(!qualification.ready){
   if(qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
-  if(c.callInvitationAllowed===true&&!sellerRequestsPrice(source.body)&&!source.body.includes('?')&&!qualification.missing.includes('ownership')&&!qualification.missing.includes('interest')
+  if(c.callInvitationAllowed===true&&intent!=='price'&&!sellerRequestsPrice(source.body)&&!source.body.includes('?')&&!qualification.missing.includes('ownership')&&!qualification.missing.includes('interest')
    &&!priorCallPreference(c.messages)&&!state.quotedPriceCents&&!state.acceptedPriceCents)
    return ask('invite_call',sellerCallInvitation);
-  const priceQuestion=sellerRequestsPrice(source.body);
+  const priceQuestion=sellerRequestsPrice(source.body)||intent==='price';
   return ask('qualify_'+qualification.missing[0],(priceQuestion?'An offer depends on the property details. ':'')+qualification.nextQuestion);
  }
  const offer=calculateAutomaticCallOffer({party:'seller',address:c.address,snapshot:c.snapshot},state,now);
@@ -184,6 +210,6 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   const research=runScreeningJob(c.snapshot,now);
   terms=confirmedSellerTerms(dealTermsSchema.parse(c.terms),confirmation,{address:c.address,principal:c.principal,legalDescription:research.property.legalDescription??'',ceilingCents:offer.priceCents,now,supportedRenegotiation:true});
  }catch{return review('contract_terms_required','Resolve the specific missing or changed property/contract terms before preparing this accepted proposal.');}
- if(!sellerAgreementEvidence(transcript,terms,now))return ask('confirm_terms',`${priceText(terms.priceCents!)} cash; closing ${terms.closingDate}; ${terms.inspectionDays}-day inspection. Do these terms work, and may I text the agreement now?`);
+ if(replyIntro||!sellerAgreementEvidence(transcript,terms,now))return ask('confirm_terms',`${priceText(terms.priceCents!)} cash; closing ${terms.closingDate}; ${terms.inspectionDays}-day inspection. Do these terms work, and may I text the agreement now?`);
  return {kind:'agreement',action:'prepare_agreement',state,terms,confirmation};
 }
