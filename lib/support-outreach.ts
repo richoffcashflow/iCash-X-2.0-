@@ -66,6 +66,12 @@ export function supportOutreachReply(messages:{role:string;content:string}[],evi
   const paused=evidence.some(e=>e.key==='work'&&e.code==='paused')||o?.progress?.status==='paused';
   return {reply:counts+(paused?' Your bot is currently paused.':'')+' I can’t confirm why seller replies are low or whether recent automatic outreach is progressing from these checks. That needs a review of the saved seller conversations and sending records.',status:'open' as const,ai:false,managementReview:true};
  }
+ // A call hold cannot diagnose an individual text failure. Keep this direct
+ // question on text evidence; never inherit it from an older topic/operator turn.
+ const sendingFailure=/\b(?:texts?|messages?|sms)\b.{0,45}\b(?:not|never|aren[’']?t|isn[’']?t|won[’']?t|failed|failing|stuck)\b.{0,25}\b(?:send|sending|sent)\b|\b(?:why|how come)\b.{0,20}\b(?:aren[’']?t|isn[’']?t|won[’']?t)\b.{0,30}\b(?:texts?|messages?|sms)\b.{0,20}\b(?:send|sending|sent)\b|\b(?:can[’']?t|cannot|unable to) send\b.{0,25}\b(?:texts?|messages?|sms)\b/i.test(question);
+ if(sendingFailure&&!/\b(?:code|sign[ -]?in|log[ -]?in|email|buyer|support|refund|cancel|charged|payment|not asking|no problem)\b/i.test(question)){
+  return {reply:'Account-wide delivery totals cannot verify the particular message. Which property is affected, and what error or delivery status appears in its Texts conversation? I haven’t confirmed the cause or a fix.',status:'open' as const,ai:false};
+ }
  const textDelivery=/\b(?:texts?|messages?|sms)\b.{0,60}\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b|\b(?:deliver(?:ed|ing|y)?|receiv(?:e|ed|ing))\b.{0,60}\b(?:texts?|messages?|sms)\b/i.test(question);
  const sourceQuestion=(text:string)=>/\b(?:cold|motivated)\b.{0,35}\b(?:leads?|sellers?)\b|\bwhere\b.{0,50}\b(?:properties|leads?)\b.{0,30}\b(?:from|coming)\b/i.test(text);
  const source=sourceQuestion(question);
