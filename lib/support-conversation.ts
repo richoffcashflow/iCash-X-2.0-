@@ -1,4 +1,5 @@
 import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
+import {supportContactPrivacyReply} from './support-contact-privacy.ts';
 import {supportCallRecordingReply} from './support-call-recordings.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
 import {supportCallHoldReply} from './support-call-hold-guidance.ts';
@@ -54,6 +55,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
+ const contactPrivacy=supportContactPrivacyReply(context);if(contactPrivacy)return contactPrivacy;
  const accountDetails=supportAccountDetailsReply(context);if(accountDetails)return accountDetails;
  const callRecording=supportCallRecordingReply(context);if(callRecording)return callRecording;
  const voiceSetup=supportVoiceSetupReply(context);if(voiceSetup)return voiceSetup;
@@ -207,6 +209,7 @@ async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fet
  if(supportVoiceSetupReply(context))return fallback;
  if(supportAccountDetailsReply(context))return fallback;
  if(supportPurchaseComplaintReply(context))return fallback;
+ if(supportContactPrivacyReply(context))return fallback;
  if(supportAccountReviewReply(context))return fallback;
  if(supportCurrentStepReply(context))return fallback;
  if(supportInboxGuidance(context))return fallback;
