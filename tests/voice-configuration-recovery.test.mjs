@@ -4,6 +4,7 @@ import test from 'node:test';
 import {recoverVoiceConfiguration} from '../lib/voice-configuration-recovery.ts';
 import {refreshVoiceCapacity} from '../lib/voice-capacity.ts';
 import {canonical,sha,recordingPolicy} from '../lib/required-call-recording.ts';
+import {automaticOfferGuardrails} from '../lib/automatic-offer-policy.ts';
 const now=Date.parse('2026-10-30T18:00:00Z');
 function fixture(){
  const agent={agent_id:'agent_fixture',branch_id:'agtbrch_reviewed',main_branch_id:'agtbrch_main',version_id:'agtvrsn_reviewed',
@@ -43,6 +44,20 @@ test('reviewed November 12 representation enters only the existing bounded recov
  assert.equal(calls.length,1);assert.equal(calls[0][0],'rpc/icash_recover_voice_configuration');
  assert.equal(calls[0][2].p_config_hash,f.review.configHash);assert.equal(calls[0][2].p_observed_hash,hash());assert.notEqual(hash(),f.review.configHash);
  assert.equal(JSON.stringify(f),before);
+});
+test('the exact standard guardrail representation reaches bounded recovery without changing approval',async()=>{
+ const f=fixture(),calls=[];
+ f.agent.platform_settings.guardrails=automaticOfferGuardrails();
+ const hash=()=>sha(JSON.stringify(canonical({conversation_config:f.agent.conversation_config,platform_settings:f.agent.platform_settings,workflow:null,procedures:null})));
+ f.review.configHash=hash();f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(f.review);
+ f.agent.platform_settings.guardrails.custom.config.configs[0].service_tier='standard';
+ const before=JSON.stringify(f);
+ assert.deepEqual(await recoverVoiceConfiguration(async(...args)=>{calls.push(args);return 2;},f.agent,f.env,now),{status:'checked',requeued:2});
+ assert.equal(calls.length,1);assert.equal(calls[0][0],'rpc/icash_recover_voice_configuration');
+ assert.equal(calls[0][2].p_config_hash,f.review.configHash);assert.equal(calls[0][2].p_observed_hash,hash());
+ assert.notEqual(hash(),f.review.configHash);assert.equal(JSON.stringify(f),before);
+ f.agent.platform_settings.guardrails.custom.config.configs[0].service_tier='fast';
+ assert.deepEqual(await recoverVoiceConfiguration(async path=>{assert(path.startsWith('icash_integration_checks'));return [];},f.agent,f.env,now),{status:'review_required',requeued:0});
 });
 test('runtime drift preserves one private redacted snapshot without provider reads or recovery',async()=>{
  const f=fixture(),calls=[],before=JSON.stringify(f.review);

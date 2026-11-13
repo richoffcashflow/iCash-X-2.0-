@@ -1,0 +1,9 @@
+# November 13 voice configuration compatibility
+
+During the stalled-account repair, production maintenance reported `review_required` for the outgoing agent. The saved November 13 configuration (`92e3a88702184b4a404c8d79297f358d823680a4d63641b9e2e7e4556dfb25d6`) and November 12 configuration differ only by `service_tier: "standard"` on the single custom price guardrail in their private redacted reports. Agent, branch and version identities are unchanged. Redacted reports alone do not authorize a configuration.
+
+The shared comparison now tries the prior representation of precisely that one known guardrail/model and explicit standard tier. It still requires the entire original saved fingerprint, including the unredacted prompt and all tool, price, privacy, recording and capacity controls. Unknown fields, changed values, extra guardrails and premium or malformed tiers remain exact. A newer approval is never synthesized in reverse. No review hash, provider configuration, customer balance or original uncertain operation changes.
+
+The provider's [October 26 changelog](https://elevenlabs.io/docs/changelog/2026/10/26) documents standard versus premium fast service tiers generally. Its public custom-guardrail SDK model had not yet documented this new field when inspected. The live same-version observation and complete historical fingerprint comparison therefore define the narrow accepted representation; this does not generalize to other service-tier fields.
+
+Offline tests reproduce the original rejection, check current and historical approvals, incoming comparison, exact drift rejection and bounded configuration recovery. Existing dispatch and incoming reception suites remain release gates. Production verification must show the new exact web/worker release and a fresh successful provider comparison before reporting the configuration repaired. No paid development calls or historical outreach replay are part of this work.

@@ -1,5 +1,21 @@
 # Continuous reliability
 
+## November 13 funded work and voice recovery
+
+The [funded-work repair](funded-stall-recovery-2026-11-13.md) activated an immutable,
+bounded planning-only exception for 293 old operations across 80 accounts after
+exact-release verification. The global pending-work observation fell to zero;
+all original uncertain financial rows and supplier reserves remain intact.
+Recent completed-work warnings remain separate and must not be reported resolved
+merely because planning funds are available.
+
+Maintenance also exposed a pre-existing [voice configuration mismatch](guardrail-standard-tier-2026-11-13.md):
+the same provider version added the explicit standard tier to its one price
+guardrail. Compatibility reconstructs only that exact prior representation and
+requires the complete original approval fingerprint. Actual dispatch, incoming
+recording and bounded recovery tests retain all independent gates. Production
+must verify a fresh successful comparison before declaring voice recovery.
+
 ## November 12 independent monitoring
 
 The [independent monitor](independent-reliability-monitor.md) closes the observed
