@@ -80,7 +80,10 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
    const providerId=numericId(raw[0].submission_id);
    // Keep a late provider ID even if cancellation won the race. The database preserves the hold.
    await db(`icash_signing_envelopes?id=eq.${envelope.id}&account_id=eq.${i.accountId}`,'PATCH',{provider_id:providerId,state:'awaiting_counterparty',provider_status:'Created'});
-   if(!await signingAllowed(i.accountId,envelope.id))await request(`submissions/${providerId}`,{expire_at:new Date(Date.now()-60000).toISOString()},testMode,'PUT');
+   if(!await signingAllowed(i.accountId,envelope.id)){
+    const expired=await request(`submissions/${providerId}`,{expire_at:new Date(Date.now()-60000).toISOString()},testMode,'PUT');
+    await expired.body?.cancel().catch(()=>undefined);
+   }
   };
   if(testMode)await send();else await dispatchReservedOperation({accountId:i.accountId,operationKey:`signing:${envelope.id}`,rateId:template.rate_id!,permissionUntil:template.reviewed_until},send);
   const active=await signingAllowed(i.accountId,envelope.id);
@@ -117,7 +120,8 @@ export async function refreshSigning(accountId:string,id:string){
    // One claim, one write. Unknown completion is resolved with GET on later polls, never re-signed blindly.
    signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),template.form_profile);
    if(!await signingAllowed(accountId,e.id))return {status:'cancellation_pending'};
-   await request(`submitters/${numericId(customer.id)}`,{completed:true,fields:[{name:template.customer_signature_field,default_value:signature,readonly:true},{name:template.customer_consent_field,default_value:true,readonly:true}]},e.test_mode,'PUT');
+   const signed=await request(`submitters/${numericId(customer.id)}`,{completed:true,fields:[{name:template.customer_signature_field,default_value:signature,readonly:true},{name:template.customer_consent_field,default_value:true,readonly:true}]},e.test_mode,'PUT');
+   await signed.body?.cancel().catch(()=>undefined);
    raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json();d=normalize(raw,e);
    state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
   }
@@ -140,7 +144,14 @@ export async function completedSigningPdf(accountId:string,id:string,audit=false
  const url=new URL(audit?(raw.audit_log_url??''):(docs?.[0]?.url??''));if(url.protocol!=='https:'||url.hostname!=='docuseal.com'||!['/blobs/','/file/'].some(prefix=>url.pathname.startsWith(prefix)))throw new Error('Combined PDF not ready.');
  const r=await fetch(url,{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(25000)});
  if(!r.ok||!r.headers.get('content-type')?.includes('application/pdf')){await r.body?.cancel().catch(()=>undefined);throw new Error('Signed PDF is not ready.');}
- const bytes=await r.arrayBuffer();if(bytes.byteLength>20*1024*1024)throw new Error('PDF too large.');return bytes;
+ const limit=20*1024*1024,length=r.headers.get('content-length');
+ if(length&&(!/^\d+$/.test(length)||Number(length)>limit)){await r.body?.cancel().catch(()=>undefined);throw new Error('PDF too large.');}
+ if(!r.body)throw new Error('Signed PDF is not ready.');
+ const reader=r.body.getReader(),chunks:Uint8Array[]=[];let size=0;
+ try{
+  while(true){const chunk=await reader.read();if(chunk.done)break;size+=chunk.value.byteLength;if(size>limit)throw new Error('PDF too large.');chunks.push(chunk.value);}
+ }finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
+ const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return bytes.buffer;
 }
 export async function customerSigningLink(accountId:string,id:string,email:string){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);

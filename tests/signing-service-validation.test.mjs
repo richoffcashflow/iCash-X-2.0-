@@ -10,6 +10,7 @@ import {signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields
 
 // Exercise actual server send/auto-sign entry points with only in-memory database and provider fixtures.
 let manualConsent=true;
+let cancellationAfterSend=false,allowedReads=0,cancelledWriteBodies=0;
 let formProfile='legacy',payload=null,tamperPrice=false;
 let now=Date.parse('2026-09-30T12:00:00Z'),advanceBeforeSend=false,advanceAfterAutoClaim=false,records=[],providerWrites=0,autoClaims=0;
 let terms=dealTermsSchema.parse({seller:'Fixture seller',buyer:'Fixture principal',address:'Fixture only',legalDescription:'Fixture lot',state:'TX',priceCents:100000,priceSource:'seller_reported',earnestCents:0,closingDate:'2026-10-02'});
@@ -27,7 +28,7 @@ const db=async(path,method,body)=>{
  if(path.startsWith('icash_signing_templates'))return [template()];
  if(path==='rpc/icash_begin_signing'){if(advanceBeforeSend)now=Date.parse('2026-10-04T12:00:00Z');return envelope();}
  if(path.startsWith('icash_signing_envelopes'))return method==='PATCH'?[]:[envelope()];
- if(path==='rpc/icash_signing_action_allowed')return true;
+ if(path==='rpc/icash_signing_action_allowed')return !cancellationAfterSend||++allowedReads===1;
  if(path==='rpc/icash_claim_signing_poll')return true;
  if(path==='rpc/icash_save_signing_status')return null;
  if(path==='rpc/icash_claim_auto_signature'){if(formProfile===originalContractProfile)return null;autoClaims++;if(advanceAfterAutoClaim)now=Date.parse('2026-10-04T12:00:00Z');return 'Fixture signature';}
@@ -36,6 +37,7 @@ const db=async(path,method,body)=>{
 };
 const fixtureFetch=async(url,options)=>{
  assert(String(url).startsWith('https://api.docuseal.com/'));
+ if(options.method==='PUT'){providerWrites++;return new Response(new ReadableStream({cancel(){cancelledWriteBodies++;}},{highWaterMark:0}));}
  if(options.method!=='GET'){providerWrites++;payload=JSON.parse(options.body);assert(!JSON.parse(options.body).submitters?.some(s=>s.fields.some(f=>f.name==='earnestCents')));return Response.json([{submission_id:123},{submission_id:123}]);}
  return Response.json({id:123,submitters_order:'preserved',completed_at:null,submitters:recipients.map((r,index)=>({id:index+1,submission_id:123,email:r.email,external_id:`envelope:${r.id}`,status:index===0?'completed':'awaiting',completed_at:index===0?'2026-09-30T12:00:00Z':null,metadata:{terms_hash:signingTermsHash(terms)},values:Object.entries(signingFields(terms,'purchase',false,formProfile)).filter(([,value])=>formProfile!==originalContractProfile||value!=='').map(([field,value])=>({field,value:tamperPrice&&field==='priceCents'?'999.00':value})),slug:'fixture'}))});
 };
@@ -84,6 +86,10 @@ try{
  assert(!payload.submitters.flatMap(s=>s.fields).some(f=>/escrow|email|notes|consent/i.test(f.name)));
  assert.equal((await refreshSigning('account','envelope')).status,'customer_signature_needed','blank optional fields may be absent in provider readback');
  tamperPrice=true;await assert.rejects(()=>refreshSigning('account','envelope'),/field values need review/);
+ tamperPrice=false;formProfile='legacy';cancelledWriteBodies=0;
+ await refreshSigning('account','envelope');assert.equal(cancelledWriteBodies,1,'Successful signature write releases its unused response before canonical readback');
+ cancellationAfterSend=true;allowedReads=0;
+ await sendForSignatures({...input,autoSignature:undefined});assert.equal(cancelledWriteBodies,2,'Late cancellation releases its unused expire response');
 }finally{
  globalThis.fetch=oldFetch;Date.now=oldNow;
  if(oldKey===undefined)delete process.env.DOCUSEAL_TEST_API_KEY;else process.env.DOCUSEAL_TEST_API_KEY=oldKey;

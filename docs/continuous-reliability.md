@@ -1,5 +1,14 @@
 # Continuous reliability
 
+## November 13 concrete workflow audit
+
+The [concrete gap audit](concrete-gap-audit-2026-11-13.md) repairs 16 demonstrated
+failure modes across outbound batch continuation, account recovery, inbound lead
+progress, buyer request receipts/contact selection, and signing response resources.
+It retains existing final claims,
+unknown operations, spending/contact controls and the UI. The owner's request
+for 1,000 gaps remains a target, not a fabricated count of confirmed defects.
+
 ## November 13 requested seller contact
 
 The [requested-contact repair](requested-seller-followthrough.md) addresses a

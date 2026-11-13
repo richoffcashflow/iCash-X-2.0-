@@ -20,7 +20,10 @@ export async function GET(req:Request){
  const headers={'Cache-Control':'no-store'};
  if(!authorizeOutboundBilling(req,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
  const sellerEmails=processSellerEmails({db,dispatch:dispatchDealEmail,configured:dealEmailConfigured}).catch(()=>({status:'seller_email_retry_pending'}));
- const instantWork=processInstantLeadWork({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env}).catch(()=>({status:'instant_lead_retry_pending'}));
+ let instantFailed=false;
+ const instantWork=processInstantLeadWork({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env})
+  .then(result=>{instantFailed='failures' in result&&(result.failures??0)>0;return result;})
+  .catch(()=>{instantFailed=true;return {status:'instant_lead_retry_pending'};});
  // Recovery is independent of new seller intake. A failed or slow receipt
  // lookup must not delay a newly submitted property's first response.
  const agreementRecovery=recoverAgreementDelivery({db,send:sendForSignatures,text:textPendingContract},process.env).catch(()=>{
@@ -44,7 +47,7 @@ export async function GET(req:Request){
  const contactRefresh=processSellerContactRefresh(db,process.env.DEALMACHINE_API_KEY).catch(()=>({status:'contact_refresh_requires_review'}));
  try{
   const [controls]=await db<{enabled:boolean}[]>('icash_seller_controls?id=eq.1&select=enabled');
-  if(!controls?.enabled)return Response.json({status:'seller_setup_required',sellerEmails:await sellerEmails,instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:responseFailed?503:200,headers});
+  if(!controls?.enabled)return Response.json({status:'seller_setup_required',sellerEmails:await sellerEmails,instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:responseFailed||instantFailed?503:200,headers});
   let lookupFailed=false;
   // A minute-limit/cooldown denial on the form's immediate attempt must not
   // strand its still-fresh owner request behind the ordinary intake backlog.
@@ -67,6 +70,6 @@ export async function GET(req:Request){
   const immediate=allocation?.status==='assigned'?await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation.leadId):[];
   const responses=[...await responseWork,...immediate];
   const measurement=await measurementWork;
-  return Response.json({sellerEmails:await sellerEmails,instantLeads:await instantWork,lookup,ownerDemo,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:lookupFailed||responseFailed?503:200,headers});
+  return Response.json({sellerEmails:await sellerEmails,instantLeads:await instantWork,lookup,ownerDemo,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:lookupFailed||responseFailed||instantFailed?503:200,headers});
  }catch{await Promise.all([sellerEmails,agreementRecovery,measurementWork,responseWork,instantWork,researchRefresh,contactRefresh]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
 }
