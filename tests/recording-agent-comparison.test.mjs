@@ -6,6 +6,7 @@ import {outboundParallelApproval as parallel,outboundEightyPercentApproval as ei
 import * as capacityApprovals from '../lib/outbound-parallel-approval.ts';
 import * as offerPolicy from '../lib/automatic-offer-policy.ts';
 import * as consentEvidence from '../lib/recording-consent-evidence.ts';
+import {unversionedInertWorkflow} from '../lib/inert-workflow-serialization.ts';
 import {createHash} from 'node:crypto';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 
@@ -65,7 +66,7 @@ test('current and recent approved snapshots do not enumerate historical fingerpr
  const current=reviewFor(a),recent=structuredClone(a);
  delete recent.conversation_config.agent.prompt.enable_prompt_caching;delete recent.workflow.frames;delete recent.workflow.nodes.start_node.parent_frame_id;
  let hashes=0;
- const measured=await loadService('lib/required-call-recording.ts',{...capacityApprovals,...offerPolicy,...consentEvidence,createHash:(...args)=>{hashes++;return createHash(...args);}});
+ const measured=await loadService('lib/required-call-recording.ts',{...capacityApprovals,...offerPolicy,...consentEvidence,unversionedInertWorkflow,createHash:(...args)=>{hashes++;return createHash(...args);}});
  for(const review of [current,reviewFor(recent)]){
   hashes=0;const start=performance.now();assert.equal(measured.recordingAgentMatches(review,a),true);
   console.log('Approved snapshot comparison:',hashes,'fingerprints,',Math.round(performance.now()-start),'ms');
@@ -92,7 +93,7 @@ test('historical full approvals at every authorized capacity match before exhaus
  for(const snapshot of [a,old])snapshot.platform_settings.guardrails=automaticOfferGuardrails(snapshot.platform_settings.guardrails);
  a.platform_settings.guardrails.custom.config.configs[0].service_tier='standard';
  let hashes=0;
- const measured=await loadService('lib/required-call-recording.ts',{...capacityApprovals,...offerPolicy,...consentEvidence,createHash:(...args)=>{hashes++;return createHash(...args);}});
+ const measured=await loadService('lib/required-call-recording.ts',{...capacityApprovals,...offerPolicy,...consentEvidence,unversionedInertWorkflow,createHash:(...args)=>{hashes++;return createHash(...args);}});
  for(const [concurrency,daily] of [[30,1000],[18,1000],[8,100],[2,100]]){
   Object.assign(p.call_limits,{agent_concurrency_limit:concurrency,daily_limit:daily});
   const review=reviewFor(old),before=structuredClone({review,a});hashes=0;const start=performance.now();

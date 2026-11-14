@@ -12,6 +12,10 @@ import {readRecordingReview,recordingAgentMatches,object,sha,canonical} from '..
 import {automaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
 import {receptionReviewReport} from './reception-review-report.mjs';
 
+export function sellerTurnStageFailureCode(error){
+ return typeof error?.message==='string'&&/^SELLER_TURNS_[A-Z_]+$/.test(error.message)?error.message:'SELLER_TURNS_UNCONFIRMED';
+}
+
 export async function checkTelephonyConnection(env=process.env,fetcher=fetch,onOutboundAgent,onIncomingAgent){
  const reads=await Promise.allSettled([
   readOwnerForwarding(env,fetcher),
@@ -127,6 +131,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   try{
    const {stageSellerVoiceTurns,publicSellerTurnStage}=await import('./stage-seller-voice-turns.mjs');
    console.log('Seller voice turn staging:',JSON.stringify(publicSellerTurnStage(await stageSellerVoiceTurns())));
-  }catch{console.error('Seller voice turn staging: requested staging unconfirmed.');process.exitCode=1;}
+  }catch(error){console.error('Seller voice turn staging:',sellerTurnStageFailureCode(error));process.exitCode=1;}
  }
 }

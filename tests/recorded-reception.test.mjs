@@ -79,6 +79,35 @@ test('incoming admission accepts observed empty frame metadata only with the ori
  ]){const changed=clone(current);change(changed);assert.equal(inspect(changed).safe,false);}
 });
 
+test('incoming version-one empty workflows preserve each original loop setting and the complete approval',()=>{
+ for(const preventLoops of [false,true]){
+  const cfg=configuration();
+  cfg.agent.workflow={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_subgraph_id:null}},subgraphs:{},prevent_subagent_loops:preventLoops};
+  const inspect=(a,c=cfg.c,b=cfg.branch)=>inspectRecordedReceptionAgent(c,a,b,true,cfg.tool);
+  cfg.c.config_hash=inspect(cfg.agent).hash;
+  const current=clone(cfg.agent);current.conversation_config.agent.prompt.enable_prompt_caching=true;
+  current.workflow.frames={};current.workflow.nodes.start_node.parent_frame_id=null;current.workflow.version=1;
+  const before=clone({current,c:cfg.c}),result=inspect(current);
+  assert.equal(result.checks.approvedHashMatches,true,'The entire original fingerprint must match, including the unchanged loop setting');
+  assert.equal(result.checks.inertWorkflow,true);assert.equal(result.checks.noData,true);assert.equal(result.safe,true);
+  assert.equal(result.hashMatch,'equivalent_empty_defaults');assert.deepEqual({current,c:cfg.c},before);
+  assert.equal(inspect(current,{...cfg.c,config_hash:result.hash}).safe,true,'A newly reviewed candidate retains its exact current representation');
+  assert.equal(inspect(cfg.agent,{...cfg.c,config_hash:result.hash}).safe,false,'Never synthesize a newer approval');
+  for(const change of [
+   ...[0,2,'1',null,true,{},[]].map(value=>a=>{a.workflow.version=value;}),
+   a=>{a.workflow.prevent_subagent_loops=!preventLoops;},a=>{a.workflow.prevent_subagent_loops='true';},
+   a=>{delete a.workflow.prevent_subagent_loops;},a=>{a.workflow.extra=null;},
+   a=>{a.workflow.nodes.start_node.extra=null;},a=>{a.workflow.nodes.start_node.position.z=0;},
+   a=>{a.workflow.nodes.start_node.position.x=1;},a=>{a.workflow.frames.frame={};},
+   a=>{a.workflow.subgraphs.subgraph={};},a=>{a.workflow.nodes.action={type:'tool'};},
+   a=>{a.workflow.edges.next={target:'action'};},a=>{a.workflow.nodes.start_node.edge_order=['next'];},
+   a=>{a.workflow.nodes.start_node.parent_frame_id='frame';},a=>{a.workflow.nodes.start_node.parent_subgraph_id='subgraph';},
+   a=>{a.conversation_config.agent.prompt.prompt+=' changed';},a=>{a.agent_id='agent_other';},
+   a=>{a.branch_id='agtbrch_other';},a=>{a.version_id='agtvrsn_other';},
+  ]){const changed=clone(current);change(changed);assert.equal(inspect(changed).safe,false,change.toString());}
+ }
+});
+
 test('incoming calls accept only the added null identity tool against the saved approval',()=>{
  const cfg=configuration();cfg.agent.conversation_config.agent.prompt.built_in_tools={skip_turn:null};
  cfg.c.config_hash=inspectRecordedReceptionAgent(cfg.c,cfg.agent,cfg.branch,true,cfg.tool).hash;
