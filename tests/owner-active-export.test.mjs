@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {activeOwnerColumns,activeOwnerExportRequest,parseOwnerExportCsv,allocateActiveOwnerExport,enrichActiveOwners,recoverOwnerActiveExports} from '../lib/owner-active-export.ts';
 import {ownerBatchAudience} from '../lib/owner-batch.ts';
 import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '../lib/owner-enrichment-deferral.ts';
+import {OwnerExportPreflightPendingError} from '../lib/owner-export-preflight.ts';
 const now=new Date().toISOString(),account='00000000-0000-4000-8000-000000000001';
 const owner=id=>({dm_person_id:id,contact_type:'owner',availability:{phones:3}});
 const snapshot=id=>({propertyId:id,propertyType:'house',fetchedAt:now,sellerCostReserveCents:100000,raw:{data:{dm_property_id:id,full_address:'Fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}});
@@ -166,8 +167,39 @@ try{
  }
  reset();const hugeRecovery=(url,options)=>String(url).includes('/exports/')?new Response('x'.repeat(131073)):transport(url,options);
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,hugeRecovery)).status,'export_receipt_held');assert.equal(paid,1);assert.equal(downloads,0);assert.equal(results,null);
- reset();preview.data[0].contacts[0].availability.phones=0;
- assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'empty');assert.equal(paid,1);assert.equal(results.length,2);assert.equal(saved.items.length,2);
- preview.data[0].contacts[0].availability.phones=3;
+ // A filtered-out issued primary cannot leave a sibling-only asynchronous
+ // preflight with no ticket able to resume it. Save explicit empty evidence,
+ // then let an eligible sibling receive its own ordinary ticket next time.
+ for(const primaryMissing of ['zero_phones','not_found']){
+  reset();const originalPreview=structuredClone(preview);
+  if(primaryMissing==='zero_phones')preview.data[0].contacts[0].availability.phones=0;
+  else{preview.data[0]={dm_property_id:candidates[0].snapshot.propertyId,found:false,contacts:[]};preview.totals.found=2;preview.totals.not_found=1;}
+  let emptyReceipts=0,preflightClaims=0;
+  const primaryDb=async(path,method,p)=>{
+   if(path==='rpc/icash_record_empty_owner_preview')emptyReceipts++;
+   if(path==='rpc/icash_claim_owner_preflight'){preflightClaims++;return {status:'pending'};}
+   return db(path,method,p);
+  };
+  assert.deepEqual(await enrichActiveOwners(primaryDb,account,candidates[0],config,250000,transport),{status:'empty',contacts:0});
+  assert.equal(emptyReceipts,primaryMissing==='zero_phones'?1:0,'Only explicit zero-phone evidence is saved');
+  assert.equal(previews,1);assert.equal(preflightClaims,0,'No sibling-only list is created under the completed empty ticket');
+  assert.equal(paid+gets+downloads,0);assert.equal(claimed,false);assert.equal(saved,null);
+  const siblingCandidates=candidates.slice(1),siblingPreview={...preview,data:preview.data.slice(1),totals:{submitted:2,found:2,not_found:0}};
+  const siblingDb=async(path,method,p)=>{
+   if(path==='rpc/icash_owner_batch_candidates'){assert.equal(p.p_screening,siblingCandidates[0].screeningId);return siblingCandidates;}
+   if(path==='rpc/icash_pending_owner_preflight'){assert.equal(p.p_primary,siblingCandidates[0].screeningId);assert.deepEqual(p.p_candidates,siblingCandidates);return null;}
+   if(path==='rpc/icash_claim_owner_preflight'){
+    preflightClaims++;assert.deepEqual(p.p_items.map(x=>x.screeningId),siblingCandidates.map(x=>x.screeningId));return {status:'pending'};
+   }
+   return db(path,method,p);
+  };
+  const siblingTransport=async(url,options)=>{assert(String(url).endsWith('/properties/ids'));assert.deepEqual(JSON.parse(options.body).ids,siblingCandidates.map(x=>x.snapshot.propertyId));previews++;return Response.json(siblingPreview);};
+  await assert.rejects(enrichActiveOwners(siblingDb,account,siblingCandidates[0],config,250000,siblingTransport),error=>{
+   assert(error instanceof OwnerExportPreflightPendingError);assert.equal(error.screeningId,siblingCandidates[0].screeningId);return true;
+  });
+  assert.equal(preflightClaims,1,'The sibling owns its normal deferred preflight');assert.equal(previews,2);
+  assert.equal(paid+gets+downloads,0);assert.equal(claimed,false);assert.equal(saved,null);
+  preview.data=originalPreview.data;preview.totals=originalPreview.totals;
+ }
 }finally{console.warn=originalWarn;if(originalKey===undefined)delete process.env.DEALMACHINE_API_KEY;else process.env.DEALMACHINE_API_KEY=originalKey;}
 console.log('Owner active export: exact text IDs, partial/shared owners, raw credits, DNC/activity checks, bounded CSV, one POST, quota/concurrency holds and original-only recovery passed. Offline only.');
