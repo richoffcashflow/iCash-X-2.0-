@@ -13,7 +13,7 @@ const suites = [
  'deal-supervisor', 'deal-supervisor-database',
  'assistant-text-actions', 'assistant-text-action-route', 'property-followthrough',
  'financial-prequalification', 'financial-credit-outcomes', 'financial-query-filters', 'financial-query-contract',
- 'cash-offer-math', 'offer-policy', 'screening-job', 'screening-recalculation', 'automatic-call-offer', 'seller-text-offer', 'free-sample',
+ 'cash-offer-math', 'offer-policy', 'screening-job', 'screening-recalculation', 'automatic-call-offer', 'seller-text-offer', 'seller-conversion-followthrough', 'free-sample',
  'support-access-purchase-stage', 'support-outreach-volume', 'support-review-wait', 'support-returning-access', 'support-current-research', 'support-stopped-work-phrasing', 'support-recording-question', 'support-refund-offer-followup', 'support-deletion-renewal', 'support-purchase-complaint', 'support-account-details', 'support-voice-setup', 'support-location-guidance', 'support-review-guidance', 'support-credit-exhaustion', 'support-manual-contact', 'support-account-deletion', 'support-center',
  'http-response-lifecycle', 'deferred-text-recovery', 'external-reliability-monitor',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',

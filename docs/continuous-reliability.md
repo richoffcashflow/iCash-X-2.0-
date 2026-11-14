@@ -1,5 +1,16 @@
 # Continuous reliability
 
+## November 13 seller conversion follow-through
+
+The [seller interaction review](seller-conversion-followthrough-2026-11-13.md)
+reproduced unanswered identity/price questions, repeated qualification and
+automated screening mistaken for human replies. Prospective routing now answers
+the question and resumes its exact next action; contextual reminders retain the
+last delivered negotiation or contract step. Source-bound save/claim checks,
+withdrawals, manual control and original provider holds remain enforced. Offline
+end-to-end and native contention coverage does not establish live conversion
+improvement; verify the coordinated release and fresh cutover separately.
+
 ## November 13 outbound stalls and owner email
 
 The [outbound recovery follow-up](outbound-stall-recovery-2026-11-13.md) repairs

@@ -80,11 +80,12 @@ const voicemailWire=createRecordingProviders(env,async(url,init)=>{
  return new Response('<Response><Connect><Stream url="wss://api.elevenlabs.io/fixture"/></Connect></Response>');
 });
 for(const policy of ['direct_recorded_v1','spoken_v1']){
- reset();Object.assign(row,{entry_policy:policy,state:'recording',consent_at:iso,recording_sid:re,start_claimed_at:iso,provider_started_at:iso});
+ reset();Object.assign(row,{entry_policy:policy,party:'seller',state:'recording',consent_at:iso,recording_sid:re,start_claimed_at:iso,provider_started_at:iso});
  row.call_context.prompt='Earlier saved context: leave one short voicemail message.';
  await voicemailWire.register(row,600,token);
  const data=voicemailBodies.at(-1).conversation_initiation_client_data,prompt=data.conversation_config_override.agent.prompt.prompt;
  assert(prompt.indexOf('VOICEMAIL CUTOFF:')>prompt.indexOf('Earlier saved context'));
+ assert.match(prompt,/SELLER CONVERSATION RECOVERY:/);assert.match(prompt,/one short clearer attempt/);
  assert.match(prompt,/OUTBOUND DIRECTION: You placed this call/);assert.match(prompt,/Never require qualification before honoring a request to end/);assert.match(prompt,/business phone menu, call-screening assistant/);assert.match(prompt,/Never repeat silence checks/);
  assert.match(prompt,/A no, nope, nah or "not me" to the ownership question ends this property inquiry/);
  assert.match(prompt,/Do not ask for another address, the real owner's number, why they called, or another sales question/);
