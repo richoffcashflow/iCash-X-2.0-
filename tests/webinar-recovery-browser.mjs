@@ -5,7 +5,9 @@ import {newWebinar,publicWebinar} from '../lib/webinar-policy.ts';
 export async function verifyWebinarRecovery(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true});context.setDefaultTimeout(5000);
  const id='00000000-0000-4000-8000-000000000123',sessionId='00000000-0000-4000-8000-000000000456';
- const webinar=publicWebinar({...newWebinar(id),title:'Recovery fixture',status:'published',publicCode:'123456',videoUrl:base+'/fixture-stalled.mp4',durationSeconds:600,nameAt:0,contactAt:0,pitchAt:300,offers:[{id:'primary',at:300,title:'Continue to checkout',description:'',ctaLabel:'Continue',action:'checkout',url:'',expiresAt:null}],showAudienceCount:false});
+ // Ordinary checkout has its independent fallback; custom links still require
+ // the server's recovered completion response and must never become membership.
+ const webinar=publicWebinar({...newWebinar(id),title:'Recovery fixture',status:'published',publicCode:'123456',videoUrl:base+'/fixture-stalled.mp4',durationSeconds:600,nameAt:0,contactAt:0,pitchAt:300,offers:[{id:'primary',at:300,title:'Continue to checkout',description:'',ctaLabel:'Continue',action:'link',url:base+'/fixture-checkout',expiresAt:null}],showAudienceCount:false});
  let completionAttempts=0,failCompletion=true,videoRequests=0;const held=new Set(),errors=[];
  await context.route('**/*',async route=>{
   const url=new URL(route.request().url());if(url.origin!==base)return route.abort();
