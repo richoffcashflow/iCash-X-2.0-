@@ -7,6 +7,7 @@ import {supportAnswer,supportRenewalCancellationRequested} from './support-polic
 import {supportMissingActivityConcern} from './support-account-review.ts';
 import {supportActivityConfirmation} from './support-activity-confirmation.ts';
 import {supportCaseReference} from './support-case-reference.ts';
+import {supportSubmittedPaymentDetails} from './support-purchase-help.ts';
 
 const generic = /^(?:I don[’']t have (?:enough information|a confirmed answer)|I haven[’']t confirmed the cause yet|There[’']s no confirmed change|I couldn[’']t verify your account details)/i;
 const stuck = /\b(?:still|again|already|same (?:issue|problem)|did(?:n[’']t| not) (?:help|work)|not (?:working|getting)|no (?:replies|response|code)|not getting anywhere|going in circles|frustrated|upset|you keep|all day)\b/i;
@@ -43,6 +44,8 @@ export function supportManagementReview(context:SupportContext, answer:SupportRe
   const renewal=wantsRenewalStop?(accessBlocked?'Your request to stop future renewals also needs review because sign-in is blocked. This chat has not cancelled the subscription. ':supportAnswer('cancel',[],false).split(' If you need account deletion,')[0]+' '):'';
   return {reply:payment+renewal+deletion+' '+(context.handedOff?'Your case is still in management review.':'I’ve flagged this conversation for management review.'),status:'open',managementReview:true,ai:false};
  }
+ const paymentDetails=supportSubmittedPaymentDetails(context);
+ if(paymentDetails)return paymentDetails;
  if(context.handedOff&&answer.status==='closed'){
   return {reply:'The refund policy still applies. Your case is still in management review, and your earlier details are saved here.',status:'open',managementReview:true,ai:false};
  }

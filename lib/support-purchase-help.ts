@@ -3,6 +3,26 @@ import {supportRenewalCancellationRequested,type SupportEvidence} from './suppor
 type Turn={role:string;content:string};
 type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[]};
 
+/** A direct answer to an operator's payment-detail request is useful evidence
+ * for review, not a verified purchase or permission to change an account. */
+export function supportSubmittedPaymentDetails(context:PurchaseContext){
+ if(context.kind!=='access')return null;
+ const index=context.messages.findLastIndex(turn=>turn.role==='user');
+ const before=context.messages.slice(0,index);
+ const operator=before.findLastIndex(turn=>turn.role==='operator');
+ if(index<0||operator<0||before.slice(operator+1).some(turn=>turn.role==='user'))return null;
+ const request=before[operator].content,question=context.messages[index].content;
+ if(!/\bdate and amount\b/i.test(request)||!/\b(?:payment|purchase|bank|card|statement)\b/i.test(request)
+  ||!/(?:\bwhat\b[^?]*\?|\breply\b.{0,90}\bdate and amount\b)/i.test(request))return null;
+ if(/\?|\b(?:seller|buyer|property|house|deal|offer|closing|bot|leads?|credits?|contract|agreement|course|vip|refund|duplicate|twice|unrecognized|unauthorized|dispute|chargeback|cancel(?:led|ed|lation)?|delet(?:e|ed|ion)|not|never|no|didn[’']?t|haven[’']?t|will|would|plan|hypothetically|if)\b/i.test(question))return null;
+ const date=/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/i.test(question);
+ const amount=/\$\s*\d+(?:\.\d{1,2})?\b|\b\d+(?:\.\d{1,2})?\s+(?:dollars?|USD)\b/i.test(question);
+ if(!date||!amount)return null;
+ const prior=before.slice(0,operator).findLast(turn=>turn.role==='user')?.content??'';
+ const merchant=/\bmerchant(?: name)? (?:is|was)\b|\bstatement (?:says|shows)\b/i.test(question+'\n'+prior)?'Those details remain in this conversation for the payment review.':'What merchant name appears beside that payment on your statement? Share only the merchant name, not card numbers or codes.';
+ return {reply:'You’ve supplied the payment date and amount, so you don’t need to repeat them. These details alone do not verify a purchase or ownership. '+merchant+' This reply does not confirm a cancellation, email correction or restored access. You don’t need to pay again or repeat sign-in attempts.',status:'open' as const,managementReview:true,ai:false};
+}
+
 const accessProblem=(text:string)=>/\b(?:access|sign[ -]?in|log[ -]?in|locked|subscription|membership)\b/i.test(text)&&/\b(?:can[’']?t|cannot|unable|no|not|locked|cancelled|canceled|inactive|failed|needs attention|paid|charged)\b/i.test(text);
 const cancellationRequest=(text:string)=>supportRenewalCancellationRequested(text)||/\b(?:refund|money back|cancel|charged twice|duplicate charge)\b/i.test(text);
 const deniesVipPurchase=(text:string)=>/\b(?:not|never) (?:for |the |a )?vip\b|\b(?:didn[’']?t|did not|never) (?:buy|purchase|pay for) (?:the |a )?vip\b/i.test(text);
