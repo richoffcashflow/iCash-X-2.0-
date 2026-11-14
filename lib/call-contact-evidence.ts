@@ -1,4 +1,5 @@
 import {sellerResponseDisposition} from './seller-response-policy.ts';
+import {isAutomatedCallMenu} from './automated-call-menu.ts';
 
 /** Source audio markers and automated prompts are not a seller response.
  * Keep the PostgreSQL predicate and parity fixtures aligned. Never discard the
@@ -8,12 +9,13 @@ export const automatedCallPattern=`leave (a |an |your )?((additional|brief|short
 const audioMarker=/^\s*[\[(*]?\s*(?:music(?: playing)?|silence|noise|background noise|inaudible|unintelligible|no speech|no audio)\s*[\])*]?\s*[.!]*\s*$/i;
 const fragmentedBeepGreeting=/^\s*(?:at the (?:beep|beach)[.! ,]*thank you|[. ]*(?:(?:(?:i['’]ll )?(?:see|check)) if )?(?:this )?person is available|[¿]?esta persona est[aá] disponible[?]?)[.! ,]*$/i;
 export function hasHumanCallWords(message:string){
+ if(isAutomatedCallMenu(message))return false;
  if(sellerResponseDisposition(message)==='opt_out')return true;
  return /\p{L}/u.test(message)&&!audioMarker.test(message)&&!new RegExp(automatedCallPattern+'|'+clippedMailboxPattern,'i').test(message);
 }
 export function callContactEvidence(transcript:{role:string;message?:string|null}[]){
  const words=transcript.filter(t=>t.role==='user'&&typeof t.message==='string').map(t=>t.message!);
- const automated=words.some(t=>new RegExp(automatedCallPattern+'|'+clippedMailboxPattern,'i').test(t));
+ const automated=words.some(t=>isAutomatedCallMenu(t)||new RegExp(automatedCallPattern+'|'+clippedMailboxPattern,'i').test(t));
  // A fragmented/transcribed beep greeting needs a separate canonical machine
  // prompt before it can be excluded. Standalone speech and later owners survive.
  if(words.some(t=>hasHumanCallWords(t)&&!(automated&&fragmentedBeepGreeting.test(t))))return 'human_response' as const;

@@ -79,3 +79,6 @@ assert(!runtime.includes('First learn the actual condition, reason for selling a
 assert.match(runtime,/A direct price request or volunteered property details already establishes time to talk/);
 assert.match(runtime,/Confirm the full legal name and every owner separately before preparing an agreement/);
 assert.match(runtime,/Never change it based on an invented discount/);
+
+assert.match(runtime,/ask their preferred language once/);
+assert.match(runtime,/clarify whether it is their asking price/);
