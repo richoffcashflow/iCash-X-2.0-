@@ -45,11 +45,28 @@ export async function GET(request:Request){
  })().catch(error=>{capacityOk=false;console.error('Voice capacity verification unavailable',error instanceof Error&&/^VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'read_unavailable');return {status:'verification_unavailable'};});
  const inventory=refreshInventoryGeographyBatch(db).catch(()=>({status:'metadata_unavailable'}));
  const researchExclusions=drainResearchExclusions(db).catch(()=>({status:'sync_unavailable'}));
- const ownerExports=recoverOwnerActiveExports(db).catch(()=>({status:'export_receipt_held'}));
- const ownerExportCapacity=recoverOwnerExportCapacity(db).catch(()=>({status:'capacity_review_held'}));
- const ownerPreflightCleanup=cleanupOwnerPreflight(db).catch(()=>({status:'cleanup_pending'}));
- const pruning=pruneUsageLoopObservations(db);
- const result=await maintenanceBatch({capacity:async()=>{await capacity;return new Response(null,{status:capacityOk?200:503});},senderVolume:async()=>Response.json(await retryVolumeDeferredText()),textReceipts:async()=>{const result=await recoverTextDeliveryReceipts(db);return Response.json(result,{status:result.errors===0&&['idle','checked'].includes(result.status)?200:503});},supportCustomerEmail:async()=>{const result=await processSupportCustomerNotifications({db});return Response.json(result,{status:result.failed===0?200:503});},supportCopies:async()=>{const closed=await db('rpc/icash_close_inactive_support','POST',{}).catch(()=>null);const recovered=await recoverAccessHelpReplies(db).catch(()=>null);const result=await processSupportOwnerNotifications({db,monitorAccess:true});return Response.json({...result,recovered,closed},{status:result.failed===0&&recovered!==null&&closed!==null?200:503});},purchaseEmail:async()=>{const result=await processPurchaseAccessEmails({db,reconcile:true});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},purchaseFollowups:async()=>{const result=await processPurchaseAccessFollowups({db});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request)});
+ // A failed claim/read is not the same outcome as a successfully observed
+ // workflow hold. Keep both visible, and finish these independent lanes before
+ // recording this cycle's health. Never repeat a failed provider operation.
+ const ownerExports=recoverOwnerActiveExports(db).catch(()=>({status:'export_recovery_unavailable'}));
+ const ownerExportCapacity=recoverOwnerExportCapacity(db).catch(()=>({status:'capacity_recovery_unavailable'}));
+ const ownerPreflightCleanup=cleanupOwnerPreflight(db).catch(()=>({status:'cleanup_unavailable'}));
+ const pruning=pruneUsageLoopObservations(db).catch(()=>undefined);
+ const result=await maintenanceBatch({
+  capacity:async()=>{await capacity;return new Response(null,{status:capacityOk?200:503});},
+  inventory:async()=>{const result=await inventory;return Response.json(result,{status:'pages' in result&&result.pages.every(page=>['metadata_saved','not_due','rate_limited'].includes(page.status))?200:503});},
+  researchExclusions:async()=>{const result=await researchExclusions;return Response.json(result,{status:result.status==='sync_unavailable'?503:200});},
+  ownerExports:async()=>{const result=await ownerExports;return Response.json(result,{status:result.status==='export_recovery_unavailable'?503:200});},
+  ownerExportCapacity:async()=>{const result=await ownerExportCapacity;return Response.json(result,{status:result.status==='capacity_recovery_unavailable'?503:200});},
+  ownerPreflightCleanup:async()=>{const result=await ownerPreflightCleanup;return Response.json(result,{status:result.status==='cleanup_unavailable'?503:200});},
+  senderVolume:async()=>{const result=await retryVolumeDeferredText();return Response.json(result,{status:['messaging_configuration_required','business_number_verification_required','inbound_invitation_not_ready'].includes(result.status)?503:200});},
+  textReceipts:async()=>{const result=await recoverTextDeliveryReceipts(db);return Response.json(result,{status:result.errors===0&&['idle','checked'].includes(result.status)?200:503});},
+  supportCustomerEmail:async()=>{const result=await processSupportCustomerNotifications({db});return Response.json(result,{status:result.failed===0?200:503});},
+  supportCopies:async()=>{const closed=await db('rpc/icash_close_inactive_support','POST',{}).catch(()=>null);const recovered=await recoverAccessHelpReplies(db).catch(()=>null);const result=await processSupportOwnerNotifications({db,monitorAccess:true});return Response.json({...result,recovered,closed},{status:result.failed===0&&recovered!==null&&closed!==null?200:503});},
+  purchaseEmail:async()=>{const result=await processPurchaseAccessEmails({db,reconcile:true});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},
+  purchaseFollowups:async()=>{const result=await processPurchaseAccessFollowups({db});return Response.json(result,{status:result.ready&&result.failed===0?200:503});},
+  outbound:()=>outbound(request),recording:()=>recording(request),ownerRecording:()=>ownerRecording(request),reception:()=>reception(request),
+ });
  const monitored=await refreshReliability(db,result.ok);
  await pruning;
  return Response.json({...result,monitored,capacity:await capacity,inventory:await inventory,researchExclusions:await researchExclusions,ownerExports:await ownerExports,ownerExportCapacity:await ownerExportCapacity,ownerPreflightCleanup:await ownerPreflightCleanup},{status:result.ok&&monitored?200:503,headers});
