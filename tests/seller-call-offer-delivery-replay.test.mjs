@@ -11,7 +11,7 @@ import {sellerPayoffEvidence} from '../lib/seller-payoff.ts';
 import {sellerAgreementAction} from '../lib/seller-agreement-service.ts';
 import {dealTermsSchema} from '../lib/deal-documents.ts';
 const token='a'.repeat(64),now=Date.now(),conversationId='conv_replay';
-for(const direction of ['inbound','outbound']){
+for(const direction of ['inbound','outbound'])for(const interrupted of [false,true]){
  const history={transcript:[]},a=message=>history.transcript.push({role:'agent',message}),u=message=>history.transcript.push({role:'user',message});
  const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:100000,raw:{data:{dm_property_id:'prop_123',full_address:'45 Fixture Lane',legal_description:'Lot 1 Block 2',estimated_value:177000,estimated_repair_cost:28875,total_estimated_loan_balance:0,estimated_equity_percentage:100,num_total_active_liens:1}}};
  const current={party:'seller',accountId:'account',dealId:'deal',address:'45 Fixture Lane',snapshot,offerState:null,offerVersion:0};
@@ -50,20 +50,31 @@ for(const direction of ['inbound','outbound']){
  assert.equal(early.quoteAllowed,false,'incomplete qualification cannot expose a price');
  assert.equal(current.offerState.quotedPriceCents,8500000);
  a('Is anyone living in the property?');u('No one.');
- a('When are you hoping to sell?');u("I'm looking to sell within the next 30 to 60 days.");
+ if(interrupted){
+  a('Got it. Is the property currently listed with a real estate agent?');u('No.');
+  await call({action:'report_change',sellerStatement:'No.'});
+  a('One moment. When would you ideally like to sell?');u('Um, in the next-');
+  a('Are you still there?');u('Yes. I want to sell in the next 30 days.');
+ }else{a('When are you hoping to sell?');u("I'm looking to sell within the next 30 to 60 days.");}
  await call({action:'report_change',sellerStatement:'30 to 60 days.'});
  assert.notEqual(current.offerState.factsPending,true,'the failed real call must no longer erase its quote');
- a('Is the property currently listed with a real estate agent?');u('No.');
- await call({action:'report_change',sellerStatement:'No.'});
- a('Are there any other owners who need to agree to the sale?');u('No.');
+ if(!interrupted){
+  a('Is the property currently listed with a real estate agent?');u('No.');
+  await call({action:'report_change',sellerStatement:'No.'});
+ }
+ a(interrupted?'Is there any other owner who needs to agree to the sale?':'Are there any other owners who need to agree to the sale?');u('No.');
  await call({action:'report_change',sellerStatement:'No.'});
  let quote=await call({action:'get_offer'});
  assert.equal(quote.quoteAllowed,true);assert.equal(quote.priceCents,8500000);assert.equal(quote.contractAllowed,false);
  a(quote.spokenOffer);u('What else do you need?');
- a('What is the current mortgage payoff balance?');u('It is paid off.');
- quote=await call({action:'report_change',sellerStatement:'It is paid off.'});
- assert.equal(quote.contractAllowed,false,'a lien flag still needs the other-debt answer');
- a('Are there any other loans, liens, unpaid taxes or HOA balances besides that mortgage?');u('No.');
+ if(interrupted){
+  a('One moment. Thanks for that. Is there any mortgage, liens, taxes, or HOA debts on the property that need to be paid off?');u('No.');
+ }else{
+  a('What is the current mortgage payoff balance?');u('It is paid off.');
+  quote=await call({action:'report_change',sellerStatement:'It is paid off.'});
+  assert.equal(quote.contractAllowed,false,'a lien flag still needs the other-debt answer');
+  a('Are there any other loans, liens, unpaid taxes or HOA balances besides that mortgage?');u('No.');
+ }
  quote=await call({action:'report_change',sellerStatement:'No.'});
  assert.equal(quote.contractAllowed,true);assert.equal(quote.priceCents,8500000);assert.equal(quote.payoffVerified,false);
  a('We can offer $85,000 cash, as is. Does that work?');u('Yes.');

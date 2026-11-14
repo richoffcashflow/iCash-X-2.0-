@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'seller-intake-start', 'seller-voice-turn-policy', 'stage-seller-voice-turns', 'recording-review-transition', 'seller-call-offer-delivery-replay', 'seller-timing-answer', 'seller-ownership-answer',
  'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
  'support-current-intent-regressions', 'support-sale-workflow-boundaries',
  'support-contact-privacy',
@@ -30,7 +31,7 @@ const suites = [
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service', 'outcome-ranker-continuous-evidence',
  'seller-interest-cash-offer-statements', 'seller-call-contact-cost-learning', 'cash-question-learning', 'targeting-call-exposure-clocks',
  'pro-voice-capacity', 'pro-voice-capacity-database',
- 'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-call-invitation', 'seller-initial-reply',
+ 'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-voice-warmth', 'seller-helpful-text', 'seller-call-invitation', 'seller-initial-reply',
  'support-purchase-topic', 'support-work-repair-boundaries', 'support-pending-explanation',
  'support-checkout-email', 'support-seller-text-review', 'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
@@ -92,5 +93,8 @@ const suites = [
 ];
 for (const suite of suites) {
  const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});
- if(result.error||result.status!==0)process.exit(result.status||1);
+ if(result.error||result.status!==0){
+  console.error(`Failed release suite: ${suite}${result.error?` (${result.error.message})`:` (exit ${result.status}, signal ${result.signal??'none'})`}`);
+  process.exit(result.status||1);
+ }
 }

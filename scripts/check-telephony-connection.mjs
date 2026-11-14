@@ -120,4 +120,13 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  // has its own production/main gate and can only read the original failed call.
  try{const {inspectOwnerStartup}=await import('./inspect-owner-startup-20261113.mjs');console.log('Owner startup inspection: '+await inspectOwnerStartup()+'. No call placed.');}
  catch{console.log('Owner startup inspection: unavailable. No call placed.');}
+ // An explicit exact-release request may stage isolated turn-setting branches.
+ // Ordinary diagnostics/builds never enter this path. The staging function
+ // independently verifies production/main, source reviews and durable intents.
+ if(process.env.ICASH_SELLER_TURN_STAGE_COMMIT&&process.env.ICASH_SELLER_TURN_STAGE_COMMIT===process.env.VERCEL_GIT_COMMIT_SHA){
+  try{
+   const {stageSellerVoiceTurns,publicSellerTurnStage}=await import('./stage-seller-voice-turns.mjs');
+   console.log('Seller voice turn staging:',JSON.stringify(publicSellerTurnStage(await stageSellerVoiceTurns())));
+  }catch{console.error('Seller voice turn staging: requested staging unconfirmed.');process.exitCode=1;}
+ }
 }

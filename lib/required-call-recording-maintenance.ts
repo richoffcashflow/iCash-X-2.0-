@@ -146,7 +146,27 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
     outcome='available';payload=finalRecordingPayload(receipt);
    }
    else if(receipt.status==='absent'){const ended=await provider.end(row.call_sid!);if(ended.sid!==row.call_sid||ended.account_sid!==row.provider_account_sid||ended.status!=='completed')throw Error('REQUIRED_RECORDING_END_UNCONFIRMED');outcome='absent';payload={};}
-   else{outcome='processing';payload={recordingSid:receipt.sid,providerStartedAt:new Date(String(receipt.start_time)).toISOString()};}
+   else{
+    const providerStartedAt=new Date(String(receipt.start_time)).toISOString();
+    // A Recording GET reports the coarse "processing" status even while the
+    // call is still being recorded. It is not evidence that a known active
+    // recording stopped. Preserve its established state and release this lease
+    // for the next receipt check; never turn that ambiguous status into new
+    // recording authority for a starting/unknown call. The leased retry also
+    // preserves a stop or ended callback that arrives during this provider GET.
+    if(['processing','in-progress'].includes(String(receipt.status))&&row.state==='recording'&&!row.end_requested_at&&!row.call_ended_at){
+     if(row.recording_sid!==receipt.sid||!row.provider_started_at||Date.parse(row.provider_started_at)!==Date.parse(providerStartedAt))throw Error('RECORDING_START_REVIEW_REQUIRED');
+     outcome='retry';payload={reason:'recording_completion_pending'};
+    }else if(receipt.status==='in-progress'){
+     if(!['starting','recording','stopping','processing'].includes(row.state)||row.call_ended_at&&!['stopping','processing'].includes(row.state))throw Error('RECORDING_STATUS_UNCONFIRMED');
+     // Do not revive a failed/stopped row if a callback wins while this read is
+     // outstanding. The ordinary start callback or a final receipt owns any
+     // new recording evidence; polling only releases its original lease.
+     outcome='retry';payload={reason:row.state==='starting'?'recording_start_confirmation_pending':'recording_completion_pending'};
+    }else if(['processing','paused','stopped'].includes(String(receipt.status))){
+     outcome='processing';payload={recordingSid:receipt.sid,providerStartedAt};
+    }else throw Error('RECORDING_STATUS_UNCONFIRMED');
+   }
    stage='receipt_commit';
    const saved=await finish(row,'reconcile',outcome,payload);
    if(saved){

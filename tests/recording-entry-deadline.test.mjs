@@ -1,3 +1,4 @@
+import {readRecordingReviews,recordingReviewInPair} from '../lib/recording-review-transition.ts';
 // Actual callback server/service with a deterministic clock. No live providers.
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
@@ -41,7 +42,7 @@ async function run(options={}){
   register:async r=>{event('register');assert.equal(r.state,'recording');assert.equal(r.recording_sid,re);await sleep(750);return '<Response><Connect><Stream url="wss://api.elevenlabs.io/fixture"/></Connect></Response>';},
   end:async()=>{event('end');return {sid:ca,account_sid:ac,status:'completed'};},
  };
- const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:(_env,_fetch,s)=>{signal=s;return provider;},readRecordingReview,recordingService:(env,deps)=>{serviceEnv=env;return recordingService(env,{...deps,now:()=>base+elapsed});},process:{env},AbortSignal:timerApi});
+ const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:(_env,_fetch,s)=>{signal=s;return provider;},readRecordingReview,readRecordingReviews,recordingReviewInPair,recordingService:(env,deps)=>{serviceEnv=env;return recordingService(env,{...deps,now:()=>base+elapsed});},process:{env},AbortSignal:timerApi});
  const url=recordingBaseUrl+'/connect?id='+id+'&nonce='+nonce;
  const form=new URLSearchParams({AccountSid:ac,CallSid:options.foreignCall?'CA'+'f'.repeat(32):ca,...(options.optOut?{SpeechResult:'stop calling me',Confidence:'.99'}:{})});
  const signature=createHmac('sha1',env.TWILIO_AUTH_TOKEN).update(url+[...form.keys()].sort().map(k=>k+form.get(k)).join('')).digest('base64');

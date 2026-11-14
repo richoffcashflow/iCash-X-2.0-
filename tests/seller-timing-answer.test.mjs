@@ -10,4 +10,17 @@ for(const q of ['What is the mortgage payoff?','Can we close in 30 days for $85,
 assert(!evidence(question,'30 days.',{action:'report_change',sellerStatement:'60 days.'}));
 assert(!evidence(question,'30 days.',{action:'accept_offer',sellerStatement:'30 days.'}));
 assert(!sellerRoutineTimingAnswer({transcript:[{role:'user',message:'30 days.'}]},{action:'report_change',sellerStatement:'30 days.'}));
+const a=message=>({role:'agent',message}),u=message=>({role:'user',message});
+const resumed='Yes. I want to sell in the next 30 days.';
+const interrupted=(fragment,nudge='Are you still there?',q='One moment. When would you ideally like to sell?',answer=resumed)=>({transcript:[a(q),u(fragment),a(nudge),u(answer)]});
+const routine=history=>sellerRoutineTimingAnswer(history,{action:'report_change',sellerStatement:history.transcript.at(-1).message});
+assert(routine(interrupted('Um, in the next-')),'a presence nudge must not turn a resumed timeline into changed ownership');
+assert(routine(interrupted('In the next…','Can you hear me?')));
+assert(routine(interrupted('In the next 30 days.')),'repeating a completed timeline after a presence check is still timing');
+for(const fragment of ['30 days, but my wife owns it-','My mortgage is paid off-','There is another owner-','No.','Um, the property-'])assert(!routine(interrupted(fragment)),fragment);
+for(const nudge of ['Are there other owners?','Can you hear me? Is the roof damaged?','Are you still there? We can offer $90,000.'])assert(!routine(interrupted('Um, in the next-',nudge)),nudge);
+for(const q of ['What is the payoff?','When do you want to sell, and are there other owners?'])assert(!routine(interrupted('Um, in the next-','Are you still there?',q)),q);
+for(const answer of ['Yes.','Thirty days if you pay $100,000.','30 days and my wife owns it.','30 days, but the roof needs replacement.'])assert(!routine(interrupted('Um, in the next-','Are you still there?',question,answer)),answer);
+assert(!routine({transcript:[a(question),u('Um, in the next-'),a('Are you still there?'),u('Yes.'),a('Are you still there?'),u(resumed)]}),'do not search across arbitrary intervening turns');
+assert(!sellerRoutineTimingAnswer(interrupted('Um, in the next-'),{action:'report_change',sellerStatement:'30 days.'}),'still requires the complete latest source statement');
 console.log('PASS source-bound routine selling timeline; mixed financial, property, ownership and contract answers remain material.');

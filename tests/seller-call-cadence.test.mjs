@@ -58,6 +58,10 @@ for(const intake of [false,true]){
  assert.match(assembled,/Silence or "uh-huh" alone is not consent or acceptance/);
  assert.match(assembled,/Keep required disclosures and exact terms complete/);
  assert.match(assembled,/Stop requests override resuming/);
+ assert.match(assembled,/unfinished name is not a silence check: wait for the answer to finish/);
+ assert.match(assembled,/never restart the pitch or greeting after a tool result/);
+ assert.match(assembled,/corrected name replaces the opening name in conversation, never ownership verification/);
+ assert.match(assembled,/Do not add "One moment", thanks or a recap to every answer/);
 }
 console.log('PASS seller cadence: assembled inbound/full/intake, idempotence, unchanged buyer/unknown/limited/cancellation and exact original policy preservation. Offline instruction contracts, not generated speech.');
 
@@ -69,3 +73,6 @@ assert.match(compact,/quoteAllowed=true permits a conditional quote even if cont
 assert.match(compact,/report_change\/update_repairs returned current price and revision/);
 assert.match(compact,/Tool delay is not grounds to hang up/);
 assert.match(compact,/end only for goodbye, opt-out or completed conversation/);
+assert.match(compact,/Run routine tools without a spoken preface/);
+assert.match(compact,/once in this call/);
+assert(!compact.includes('Before a tool calculation say'));

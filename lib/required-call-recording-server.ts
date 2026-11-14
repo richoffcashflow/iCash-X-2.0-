@@ -1,8 +1,9 @@
 import {db} from '@/lib/stripe-test';
 import {createRecordingProviders} from './required-call-recording-provider.ts';
-import {readRecordingReview} from './required-call-recording.ts';
+import {type RecordingReview} from './required-call-recording.ts';
+import {readRecordingReviews,recordingReviewInPair} from './recording-review-transition.ts';
 import {recordingService} from './required-call-recording-service.ts';
-export function recordingServer(signal?:AbortSignal,purpose:'callback'|'dispatch'='callback'){
+export function recordingServer(signal?:AbortSignal,purpose:'callback'|'dispatch'='callback',dispatchReview?:RecordingReview){
  // Outgoing setup includes provider review, recording admission and the one-use
  // dial claim. Its total budget must allow those sequential bounded operations;
  // callbacks keep their short response budget. Per-request limits stay intact.
@@ -13,6 +14,8 @@ export function recordingServer(signal?:AbortSignal,purpose:'callback'|'dispatch
   // result. This separate, bounded writer is only used after the dial claim.
   receiptDb:(path,method,body)=>db(path,method,body,AbortSignal.timeout(8000)),
   provider:createRecordingProviders(env,fetch,deadline),
-  dispatchAllowed:()=>!deadline.aborted&&process.env.ICASH_LIVE_WORK_READY==='true'&&process.env.ICASH_RECORDED_OUTBOUND_READY==='true'&&process.env.ICASH_RECORDING_RECEIPTS_READY==='true'&&process.env.RECORDED_OUTBOUND_REVIEW_JSON===env.RECORDED_OUTBOUND_REVIEW_JSON&&!!readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON),
+  dispatchReview,
+  reviewUnchanged:()=>process.env.RECORDED_OUTBOUND_REVIEW_JSON===env.RECORDED_OUTBOUND_REVIEW_JSON&&process.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON===env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON,
+  dispatchAllowed:()=>!deadline.aborted&&process.env.ICASH_LIVE_WORK_READY==='true'&&process.env.ICASH_RECORDED_OUTBOUND_READY==='true'&&process.env.ICASH_RECORDING_RECEIPTS_READY==='true'&&process.env.RECORDED_OUTBOUND_REVIEW_JSON===env.RECORDED_OUTBOUND_REVIEW_JSON&&process.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON===env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON&&!!readRecordingReviews(process.env)&&(dispatchReview===undefined||!!recordingReviewInPair(process.env,dispatchReview)),
  });
 }
