@@ -68,7 +68,7 @@ try{
   const c=await val('select icash_meta_claim_lookup_admitted($1)',[id]);if(paused)assert.equal(c,null);else assert.equal(c.id,id);
   assert.equal(await val('select day_used from icash_dealmachine_request_budget'),paused?0:1);assert.equal(await val("select current_setting('icash.meta_lookup_lead',true)"),'');
  });
- let busyCalls=0;assert.equal((await processSellerIntake(async()=>{busyCalls++;return {status:'admission_busy'};},'dm_sk_live_fixture',async()=>{throw Error('no provider');},randomUUID())).status,'rate_limited');assert.equal(busyCalls,1,'quota contention must not invoke demo fallback');
+ let busyCalls=0;assert.equal((await processSellerIntake(async(path)=>{if(path.startsWith('icash_optin_call_requests?'))return [];busyCalls++;return {status:'admission_busy'};},'dm_sk_live_fixture',async()=>{throw Error('no provider');},randomUUID())).status,'admission_busy');assert.equal(busyCalls,1,'quota contention without a fresh exact request cannot retry or invoke demo fallback');
  let calls=[];const transport=async()=>{throw Error('provider must never run');};
  for(const run of [processSellerIntake,processSellerResearchRefresh]){calls=[];assert.equal((await run(async(path)=>{calls.push(path);return null;},'dm_sk_live_fixture',transport)).status,'idle_or_setup_required');assert.equal(calls.length,1);assert.match(calls[0],/_admitted$/);}
  let demo=0;assert.equal((await processSellerIntake(async(path)=>{if(path==='rpc/icash_claim_owner_demo_lookup'){demo++;return null;}return null;},'dm_sk_live_fixture',transport,randomUUID())).status,'idle_or_setup_required');assert.equal(demo,0,'idle does not invoke exception');

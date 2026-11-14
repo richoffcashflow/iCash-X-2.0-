@@ -42,6 +42,16 @@ export function sellerPayoffEvidence(value:unknown,input:Record<string,unknown>)
 }
 function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
  if(/\b(another owner|other owner|not the owner|ownership|deed|inherited|divorce|wrong (?:property|address)|new (?:roof|foundation)|fire damage)\b/i.test(latest))return null;
+ // A single unqualified "no" can answer the complete debt inventory. Keep it
+ // tied to that exact final question: a mortgage-only or additional-debt
+ // question cannot establish both balances, and a mixed/corrected answer
+ // cannot erase an unknown debt. These remain seller reports, not title proof.
+ const question=(previous.match(/[^.!?;\n]+[.!?;]?/g)??[]).map(s=>s.trim()).filter(Boolean).at(-1)??'';
+ const inventory=/^(?:is there|are there|do you have|does (?:the|this|your) (?:property|house|home) have) (?:any )?(.+?)(?: on (?:the|this|your) (?:property|house|home))?(?: that (?:need|needs) to be paid(?: off)?(?: at closing)?)?\?$/i.exec(question)?.[1]??'';
+ const wholeDebtQuestion=/\b(?:mortgages?|loans?)\b/i.test(inventory)&&/\bliens?\b/i.test(inventory)&&/\btaxes\b/i.test(inventory)&&/\bhoa (?:debts?|balances?)\b/i.test(inventory)
+  &&inventory.replace(/\b(?:mortgages?|loans?|liens?|(?:unpaid )?taxes|hoa (?:debts?|balances?)|and|or)\b|[ ,]/gi,'')==='';
+ const completeNo=/^(?:(?:um|uh|well)[,.\s]+)*(?:no|nope|none)(?:[,. ]+(?:no|none|not any|there (?:are not|aren't|is not|isn't) any))*[.! ]*$/i.test(latest.replace(/[’]/g,"'"));
+ if(wholeDebtQuestion&&completeNo)return {mortgageCents:0,otherDebtCents:0};
  const amounts=spokenMoneyAmounts(latest);
  const uncertain=/\b(between|not sure|don['’]?t know|no idea|more than|less than|at least|at most|under|over|or maybe)\b/i.test(latest);
  const coverageQuestion=/\b(cover|bring|pay)\b/i.test(previous)&&/\b(difference|shortfall|out of pocket|closing)\b/i.test(previous);

@@ -22,6 +22,12 @@ assert.deepEqual(evidence('Are there any other liens besides the mortgage?','But
 assert.deepEqual(evidence(payoffQuestion,'It is paid off.'),{mortgageCents:0});
 assert.deepEqual(evidence('Are there any other liens besides the mortgage?','10K'),{otherDebtCents:1000000});
 assert.equal(evidence(payoffQuestion,'It is not paid off.'),null);
+const completeDebtQuestion='One moment. Thanks for that. Is there any mortgage, liens, taxes, or HOA debts on the property that need to be paid off?';
+for(const answer of ['No.','Nope.','None.','No, there aren’t any.'])assert.deepEqual(evidence(completeDebtQuestion,answer),{mortgageCents:0,otherDebtCents:0},answer);
+for(const answer of ['No, but I owe taxes.','No, the HOA balance is unknown.','Not sure.','No, only the mortgage.','No, unless there is a lien.','No, my wife owns it.'])assert.notDeepEqual(evidence(completeDebtQuestion,answer),{mortgageCents:0,otherDebtCents:0},answer);
+for(const question of ['Do you have a mortgage?','Are there any liens, taxes or HOA balances?','Any other loans, liens, taxes or HOA balances besides the mortgage?','The mortgage, liens, taxes and HOA are paid off. Are you the sole owner?','Is there any mortgage, liens, taxes or HOA debt, and are you willing to sell?'])assert.notDeepEqual(evidence(question,'No.'),{mortgageCents:0,otherDebtCents:0},question);
+for(const question of ['Do you have money to pay the mortgage, liens, taxes and HOA debts?','Do you have no mortgage, liens, taxes or HOA debts?','Are there any mortgage, liens, taxes or HOA debts that have been paid off?','Is there a problem paying your mortgage, liens, taxes or HOA debts?'])assert.notDeepEqual(evidence(question,'No.'),{mortgageCents:0,otherDebtCents:0},question);
+assert.equal(evidence(completeDebtQuestion,'There are taxes, but I do not know how much.','No.'),null,'arguments cannot erase unknown debt');
 // The tool may be interrupted after the mortgage answer but before saving it.
 // The adjacent other-debt answer must retain both source-bound facts.
 const debtTurns=(balance,other='No')=>({transcript:[{role:'agent',message:payoffQuestion},{role:'user',message:balance},{role:'agent',message:'Any other loans, liens, unpaid taxes or HOA balances besides that mortgage?'},{role:'user',message:other}]});
