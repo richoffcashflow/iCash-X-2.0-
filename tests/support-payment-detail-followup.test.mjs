@@ -67,3 +67,11 @@ assert.equal(modelCalls,0);
 const produced=supportSubmittedPaymentDetails({kind:'access',messages:[request,u('Today $42.')]});
 assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[request,u('Where is the course?'),a(produced.reply),u('It says Example Software')]}),null,'A stale assistant question after a topic change is not context');
 assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[a(produced.reply),u('It says Example Software')]}),null,'An isolated older assistant question has no source-bound details');
+const bankDetailsRequest=o('Open the transaction itself and look for merchant or transaction details. Share only that business name or description, without card or account numbers. Your cancellation request and the fact that no receipt arrived remain in this review.');
+for(const handedOff of [false,true]){
+ const r=await replyToSupport({kind:'access',handedOff,allowAI:false,messages:[u('I want my subscription cancelled; no receipt arrived.'),bankDetailsRequest,u('Example Software Austin Texas 2468')],evidence:[]},noModel);
+ assert.match(r.reply,/supplied the statement description/);assert.match(r.reply,/email you entered when paying/);assert.match(r.reply,/no receipt arrived/);assert.doesNotMatch(r.reply,/send the original purchase receipt|What merchant name|confirmed fix or completion time/);assert.equal(r.status,'open');
+}
+for(const q of ['Cancel it now','Where is my receipt','How do I call a seller','I paid already','Example Software refund it'])assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[bankDetailsRequest,u(q)]}),null,q);
+assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[u(bankDetailsRequest.content),u('Example Software Austin Texas 2468')]}),null);
+assert.equal(modelCalls,0);
