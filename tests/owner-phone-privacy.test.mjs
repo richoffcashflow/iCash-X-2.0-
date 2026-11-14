@@ -41,13 +41,13 @@ assert.match(html,/type="tel"/,'Ordinary forms retain their normal input');
 
 // Exercise the real form's account load, address step and submission without
 // contacting any provider. The display value must never become the recipient.
-let cells=[],cursor=0,effects=[],tree,requests=[];
+let cells=[],cursor=0,effects=[],tree,requests=[],ready=false,readinessCalls=0;
 const hooks={useState(value){const i=cursor++;if(!(i in cells))cells[i]=value;return[cells[i],next=>{cells[i]=typeof next==='function'?next(cells[i]):next;}];},useRef(value){const i=cursor++;return cells[i]??={current:value};},useEffect(fn){const i=cursor++;if(!(i in cells)){cells[i]=true;effects.push(fn);}}};
 const form=load('components/bot-demo.tsx',{
  react:hooks,'@/components/seller-address-input':{SellerAddressInput:'AddressInput'},
  '@/lib/bot-demo':{botDemoConsentText,botDemoConsentVersion},'@/lib/optin-call-now':{optinCallNowText,optinCallNowVersion},
  '@/lib/seller-submission-status':{sellerSubmissionStatus},'./demo-phone-field':{DemoPhoneField:'DemoPhoneField'},
- './demo-readiness':{DemoReadinessPanel:'DemoReadinessPanel'},
+ './demo-readiness':{checkDemoReadiness:async signal=>{assert(!signal.aborted);readinessCalls++;return ready;}},
  './owner-account-reset':{OwnerAccountReset:'OwnerAccountReset'},
 });
 const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)];
@@ -62,10 +62,10 @@ try{
  ns=renderForm();assert.equal(ns.find(n=>n.type==='DemoPhoneField').props.value,phone);
  ns.find(n=>n.props?.id==='demo-name').props.onChange({target:{value:'Fixture Owner'}});
  ns.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});
- ns=renderForm();await ns.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(requests.length,0,'An unchecked setup does not start the demo');
- ns.find(n=>n.type==='DemoReadinessPanel').props.onChange(true);
+ ns=renderForm();await ns.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(requests.length,0,'A failed background check does not submit the demo');
+ assert.equal(readinessCalls,1);ready=true;
  ns=renderForm();await ns.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
- assert.equal(requests.length,1);assert.equal(requests[0].phone,phone);assert.equal(requests[0].consented,true);
+ assert.equal(readinessCalls,2,'The same Start action can retry its background check');assert.equal(requests.length,1);assert.equal(requests[0].phone,phone);assert.equal(requests[0].consented,true);
  assert(!requests[0].phone.includes('*'),'Submission always retains the real recipient');
 }finally{Object.assign(globalThis,saved);}
 
