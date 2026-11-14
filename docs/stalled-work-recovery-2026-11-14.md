@@ -1,0 +1,120 @@
+# Stalled-work recovery: staged rollout
+
+This incident is open. A green build, fresh heartbeat, funding/resume event,
+reconciliation ticket, or accepted message does not establish recovery.
+
+## Current evidence
+
+Read-only production observations on November 14, 2026 at 14:34–14:47 UTC:
+
+* Production health returns 503 with fresh maintenance and worker heartbeats.
+* The dated enrollment contains 363 positive-wallet accounts with live credited
+  funding. Membership, Pause, available funds after protected holds, configuration,
+  contact freshness and hours are separate eligibility dimensions, not exclusions
+  silently removed from the cohort. Preliminary monitor flags are not a count of
+  confirmed preventable stalls.
+* The existing monitor misses overdue original operations in the contact/search
+  quote gap. The private audit identified 71 candidate accounts at that boundary.
+* In the preceding 24-hour message creation window, 650 messages reached provider
+  acceptance, including 77 with delivery confirmation; 573 remain accepted only.
+* There are 1,971 ready unsent messages across history; 1,652 use disabled senders,
+  1,941 have expired operational-contact eligibility, and 1,623 have screening
+  older than seven days. These categories overlap. Some other authority families
+  have no operational-contact screening and require their own checks.
+* Canonical receipt reads include top-level `delivered` responses whose tracking
+  ends at `delivery.awaiting_confirmation` or `numbers.delayed`. Do not upgrade
+  those records to delivered. Unleased old sender identities remain unresolved.
+* Recording failures include provider call IDs; `ended_before_recording` must not
+  be classified as an unattempted dial or automatically redialed.
+
+Customer IDs and private original receipts belong in the retained private audit,
+never this public repository. Requery these figures before each operational action.
+
+## Stage 1: independent detection
+
+`config/stalled-work-boundary.sql` changes only the captured observation function
+at MD5 `37f703a603daa4dd5e15ae049a15a71a`. A 30-minute-old unsettled original remains
+visible when there has been no recent work, including available balances between
+the contact and search quotes. Recent independent output, Pause, membership,
+cancellation, configuration and initial grace retain their existing boundaries.
+`pending_work` means unresolved original work, not proven failure or permission
+to replay. This patch does not repair the underlying operation.
+
+Run the focused boundary suite, all tests, build and isolated native PostgreSQL
+job. The native job executes captured production function bodies and schema
+fixtures, checks service-role permissions, concurrent reads and rollback.
+Production is never the rehearsal database. Apply only after that exact head has
+passed its full checks and review. Read back function/ACL evidence afterward.
+
+Rollback restores the captured `observations` definition in
+`tests/fixtures/stalled-work-production-20261114.json` only if the installed body
+still matches this patch. This restores the known detection gap, so preserve the
+private incident cohort and unresolved findings; do not clear account states.
+
+## Stage 2: continuation fairness, disabled first
+
+`config/preflight-continuation-fairness.sql` installs an inactive policy. The
+existing scheduler already uses durable tickets, exact source hashes, original
+operation fences, bounded scans and an operating-budget lock. This change gives
+valid continuations two selection turns followed by one ordinary-work turn, with
+fallback when the preferred class has no eligible work. Existing age, starter
+priority and account ordering remain within each class.
+
+The fair turn and append-only decision commit with the original ticket issuance.
+An interrupted transaction rolls back both. Competing workers serialize through
+the existing budget lock. Ordinary work cannot be starved by an endless stream
+of continuations. Failed/no-work selections do not consume a turn. Independent
+screening, voice, messages and recovery pools keep their existing dispatch paths.
+
+The due predicate, original waiting creation+30-minute rule, existing positive
+check window, three-request gate, pacing headroom, minute/day caps, final request
+admission and spending limits remain unchanged. No retry deadline, provider list,
+receipt, contact permission or original operation is rewritten. Expired lists
+remain a separate cleanup/reconciliation queue; retryable tickets do not revive
+them. The prior local incident patches were not available in the mounted
+worktrees or current incident branches; captured production bodies are the
+guarded baseline here.
+
+After exact-head native fairness/concurrency/cost/permission/performance tests,
+full CI, review, main-push CI and exact web/worker production verification:
+
+1. Install disabled and verify the scheduler and due hashes stored in
+   `icash_work_private.continuation_policy`; verify all other gates are unchanged.
+2. Activate using `icash_work_private.activate_continuation_fairness(<exact main SHA>)`
+   from the authorized migration connection. An application role cannot activate.
+3. Observe naturally due, source-bound continuations and ordinary work. Follow
+   original preflight/ticket/operation IDs through actual output and settlement.
+   A fair issue receipt alone is not completed customer work.
+4. On unexpected cost, unfairness, repeated preflight refusal, source mismatch or
+   scheduler latency regression, lock `icash_operating_budget` and set this policy
+   `enabled=false`. Keep its decisions and all financial/provider evidence.
+   The one-time activation refuses accidental reactivation after rollback.
+
+## Remaining recovery gates
+
+* Reconcile every uncertain operation by its original key and provider evidence.
+  Missing receipts imply unknown cost/outcome. Do not free holds, mint bypass IDs,
+  replay calls/texts/purchases, or treat reconciliation alone as completed work.
+* Refresh unsent outreach only through the current source-bound refresh workflow:
+  ownership, phone, national eligibility, consent/opt-out/suppression, fresh
+  financial screening, customer/system budget, quota, hours and sender readiness
+  must all pass. Its enabled policy is not proof the old queue can safely resume.
+* Established sender continuity requires verified ownership and service readiness
+  for the existing identity. A replacement needs an explicit audited continuity
+  design and review; no silent rotation or accepted-message test resend.
+* Keep active and historical unresolved health findings visible and account for
+  overlapping accounts. Retain the same enrolled accounts when funds, membership
+  or consent change; record intentional waits and unknowns in each dated snapshot.
+* Support PR #725 remains held until its corrected exact head passes all checks
+  and review. Its failing clarification assertion was reported to the existing
+  owner on the same PR. Support deployment is separate from this incident.
+
+## Sustained verification
+
+Keep append-only dated snapshots with original work/receipt IDs, source hashes,
+eligible-stage conditions and explicit unknowns. Prioritize accounts with no or
+little receipt-backed work. Report genuine stalls separately from intentional
+waits and unknowns; calls must distinguish queue/claim/provider ID/verified answer,
+and texts must distinguish ready/accepted/confirmed/failed/unconfirmed.
+Compare the fixed cohort over multiple weeks, retain missing observation periods,
+and never infer a continuous zero-stall streak from intermittent snapshots.
