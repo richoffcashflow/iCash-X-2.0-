@@ -2,7 +2,7 @@ import {signingTermsHash} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 type Job={id:string;accountId:string;userId:string;customerEmail:string;dealId:string;phone:string;sellerName:string;expectedTerms:unknown};
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Database;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string}>};
+type Dependencies={db:Database;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms:unknown})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string}>};
 /** One owner-authorized request, one provider creation. An uncertain send stays
  * in review instead of recreating a contract. All normal signing/SMS checks run. */
 export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,string|undefined>){
@@ -21,7 +21,10 @@ export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,
    if(existing.length!==1||e.state!=='awaiting_counterparty'||!e.provider_id||signingTermsHash(dealTermsSchema.parse(e.terms))!==signingTermsHash(dealTermsSchema.parse(job.expectedTerms))||e.recipients.length!==2||e.recipients[0].phone!==job.phone||e.recipients[0].name!==job.sellerName)throw Error('existing_agreement_needs_review');
    envelopeId=e.id;
   }else{
-   const sent=await d.send({accountId:job.accountId,userId:job.userId,customerEmail:job.customerEmail,dealId:job.dealId,kind:'purchase',signers:[{name:job.sellerName,phone:job.phone}],phoneLinkOnly:true});
+   // Keep the claim's seller-confirmed document through signing's fresh read.
+   // An edit after the claim cannot become an unconfirmed replacement contract.
+   if(!job.expectedTerms||typeof job.expectedTerms!=='object'||Array.isArray(job.expectedTerms)||Object.keys(job.expectedTerms).length===0)throw Error('Agreement terms snapshot required');
+   const sent=await d.send({accountId:job.accountId,userId:job.userId,customerEmail:job.customerEmail,dealId:job.dealId,kind:'purchase',signers:[{name:job.sellerName,phone:job.phone}],phoneLinkOnly:true,expectedTerms:job.expectedTerms});
    if(sent.testMode)throw Error('live_agreement_required');envelopeId=sent.id;
   }
   textAttempted=true;

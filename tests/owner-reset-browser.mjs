@@ -5,7 +5,7 @@ import {fixtureAccount,makeWorkspaceFixture} from './fixtures/workspace-volume.m
 export async function verifyOwnerReset(browser,base,options,name,fixtureCookies){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true}),page=await context.newPage();
  page.setDefaultTimeout(15000);
- const errors=[],writes=[];let resets=0,checks=0,accounts=0,pass=true,owner=true;
+ const errors=[],writes=[];let resets=0,checks=0,accounts=0,intakes=0,pass=true,owner=true;
  const account=()=>({...fixtureAccount,mode:'live',paused:false,isBillingOwner:owner,privateDemoPhone:owner?'+12125550199':null,billingModel:'membership_credits',membershipActive:true});
  page.on('pageerror',e=>errors.push(e.message));
  page.on('console',m=>{if(/same key|unique.*key/i.test(m.text()))errors.push(m.text());});
@@ -21,6 +21,8 @@ export async function verifyOwnerReset(browser,base,options,name,fixtureCookies)
    await new Promise(resolve=>setTimeout(resolve,120));
    return route.fulfill({json:{status:'reset',requestId:request.postDataJSON().requestId,historyPreserved:true,providerWrites:false}});
   }
+  if(p==='/api/demo/intake'&&request.method()==='POST'){intakes++;return route.fulfill({json:{received:true,progress:{phase:'saved',title:'Your property is in.',message:'Fictional request saved.',terminal:true}}});}
+  if(p==='/api/seller/status')return route.fulfill({json:{phase:'saved',title:'Your property is in.',message:'Fictional request saved.',terminal:true}});
   if(p==='/api/work/experience')return route.fulfill({json:{recorded:true}});
   if(request.method()!=='GET'){writes.push(p);return route.fulfill({status:403,json:{error:'Fixture only'}});}
   if(p==='/api/account'){accounts++;return route.fulfill({json:account()});}
@@ -42,9 +44,11 @@ export async function verifyOwnerReset(browser,base,options,name,fixtureCookies)
   await page.goto(base+'/',{waitUntil:'networkidle'});
   const reset=page.getByRole('region',{name:'Owner account reset'}),card=page.getByRole('region',{name:'Your next step'});
   await reset.waitFor();await card.waitFor();
+  const preparedAfterReset=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/demo/readiness');
   await reset.getByRole('button',{name:'Reset owner account',exact:true}).click();
   assert(await reset.getByRole('button',{name:'Resetting owner account…',exact:true}).isDisabled());
-  await reset.getByText('Reset complete. Setup checks passed. You can start a new demo.',{exact:true}).waitFor();
+  await reset.getByText('Owner account reset.',{exact:true}).waitFor();
+  assert(await reset.getByRole('button',{name:'Reset owner account',exact:true}).isEnabled());await preparedAfterReset;
   assert.equal(resets,1);assert.equal(checks,1);assert.equal(await reset.count(),1);assert.equal(await card.count(),1);
   for(let i=0;i<3;i++){
    const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/account');
@@ -60,12 +64,18 @@ export async function verifyOwnerReset(browser,base,options,name,fixtureCookies)
   await page.goto(base+'/test-bot',{waitUntil:'networkidle'});assert.equal(new URL(page.url()).pathname,'/test-bot','The isolated navigation proof must reach the private demo');pass=false;
   await page.locator('#seller-address').fill('123 Fixture Street, Dallas, TX 75210');await page.getByRole('button',{name:'Continue',exact:true}).click();
   await page.locator('#demo-name').fill('Fixture Owner');await page.locator('input[type=checkbox]').check();
-  await page.getByText('Calling connection: not verified',{exact:true}).waitFor();assert(await page.getByRole('button',{name:'Start my bot demo'}).isDisabled());
-  pass=true;await page.getByRole('button',{name:'Reset owner account',exact:true}).click();
-  await page.getByText('Reset complete. Setup checks passed. You can start a new demo.',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Demo setup check').count(),0);
+  await page.getByRole('button',{name:'Start my bot demo'}).click();
+  await page.getByRole('alert').getByText('Couldn’t start your demo yet. Please try again.',{exact:true}).waitFor();
+  assert.equal(intakes,0);assert(await page.getByRole('button',{name:'Start my bot demo'}).isEnabled());
+  pass=true;await page.getByRole('button',{name:'Start my bot demo'}).click();
+  await page.getByRole('heading',{name:'Your property is in.',exact:true}).waitFor();assert.equal(intakes,1);
+  await page.getByRole('button',{name:'Reset owner account',exact:true}).click();
+  await page.getByText('Owner account reset.',{exact:true}).waitFor();
   assert.equal(resets,2);assert.equal(await page.locator('#seller-address').inputValue(),'');
+  assert.equal(await page.getByLabel('Demo setup check').count(),0);assert.equal(await page.getByRole('button',{name:'Check setup again'}).count(),0);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
-  console.log(`PASS ${name}: owner-only reset, one automatic setup check, repeated workspace refresh without duplicated cards, failed setup blocks Start, demo draft clears; no live calls/texts.`);
+  console.log(`PASS ${name}: owner-only reset, silent reset check, repeated workspace refresh without duplicated cards, failed preparation prevents submission and retries through Start, demo draft clears; no live calls/texts.`);
  }finally{await context.close();}
 }
