@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/internal/learning",
-      "schedule": "17 * * * *"
+      "schedule": "2,17,32,47 * * * *"
     },
     {
       "path": "/api/internal/lead-costs",

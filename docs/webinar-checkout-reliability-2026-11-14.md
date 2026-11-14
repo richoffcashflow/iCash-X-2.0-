@@ -1,0 +1,15 @@
+# Webinar payment access and startup reliability
+
+The November 14 audit found several reachable failure paths: the completion redirect waited on an event-save response; returning completed viewers could replay after all offers expired; Stripe script/embedded initialization could wait indefinitely; optional checkout context/attribution and chat reads could delay primary work by the database's full timeout.
+
+Ordinary completion checkout now has a 1.5-second fallback independent of the progress-save receipt. It retains the same session, leaves active checkout and verified purchases alone, defers while offline, and preserves owner previews, disabled end redirects and expired custom products. A best-effort once-keyed completion beacon does not mark an unconfirmed event as saved. The existing server response still owns custom redirects.
+
+Startup selects only the latest unsuperseded session, matching the existing return policy, and reads the last opened offer only for an actual checkout return. Completed ordinary-checkout sessions remain reachable after offer expiry. Optional chat history receives a 1.5-second cancellation budget. Optional checkout prefill, private campaign binding and advertising attribution use bounded 2-second budgets; missing private campaign evidence skips ad measurement. Purchase eligibility, session ownership, payment creation, deduplication and verified paid access are unchanged.
+
+Stripe loading and embedded checkout creation each receive a 20-second timeout. Failure exposes the existing form recovery action, which remounts the exact original client secret. It does not create another checkout or retry a charge. A late obsolete SDK result is destroyed and cannot mount over the new form.
+
+Read-only baseline: webinar/checkout shells returned cached HTTP 200; all 13 initial scripts returned 200 (246,830 compressed bytes); all four published recordings returned cached 206 ranges with fast-start metadata and decoded from their first 4 MiB. Anonymous membership readiness reported live embedded checkout available. No payment/session creation, messages or charges were used for the production audit. Synthetic latency/recovery tests are separate from measured customer performance.
+
+Regression coverage includes failed/hanging completion, offline recovery, late payment engagement, owner/custom-link boundaries, expired return offers, session filtering before pagination, canceled optional reads, script/SDK failures, stale instance destruction, exact-secret retries and private-campaign isolation. The browser checkout suite also verifies the completion-save failure on desktop and mobile with intercepted payment fixtures.
+
+The owner also requested a prominent red urgency treatment on direct payment and explicitly selected keeping enrollment open. Direct checkout and its matching owner preview use strong enrollment messaging without a fabricated spot count or expiry. The existing homepage and in-video presentation remain separate, and the urgency disappears after confirmed purchase.

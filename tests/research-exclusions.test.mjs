@@ -55,11 +55,11 @@ const route=await loadService('app/api/internal/maintenance/route.ts',{
  recoverTextDeliveryReceipts:async actualDb=>{assert.equal(actualDb,maintenanceDb);receiptRuns++;return {status:'idle',errors:0};},
  processSupportCustomerNotifications:async()=>({failed:0}),
  applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
- refreshInventoryGeographyBatch:async()=>({status:'idle'}),readRecordingReview:()=>null,
+ refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),readRecordingReview:()=>null,
  processPurchaseAccessEmails:async()=>({ready:true,failed:0}),recoverAccessHelpReplies:async()=>({status:'idle'}),
  processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
  authorizeOutboundBilling:()=>authorized,maintenanceBatch,
- refreshReliability:async(_db,healthy)=>{assert.equal(healthy,true);maintenanceRuns++;return true;},
+ refreshReliability:async(_db,healthy)=>{assert.equal(healthy,!claimUnavailable);maintenanceRuns++;return true;},
  recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>({status:'idle'}),drainResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
  pruneUsageLoopObservations:async()=>null,outbound:ok,recording:ok,ownerRecording:ok,reception:ok,
  process:{env:{}},
@@ -77,7 +77,7 @@ calls=[];claim=null;response=await run();assert.equal(response.status,200);
 assert.equal((await response.json()).researchExclusions.status,'not_due');assert.equal(calls.length,0,'A disabled or already-claimed sync does no provider work');
 claim={action:'sync',token,name,listId:'fixture-list',ids:['prop_1']};allowed=false;
 response=await run();assert.equal(response.status,200);assert.equal((await response.json()).researchExclusions.status,'pending');assert.equal(calls.length,0,'Maintenance obeys the shared request quota');
-allowed=true;claimUnavailable=true;response=await run();assert.equal(response.status,200);
+allowed=true;claimUnavailable=true;response=await run();assert.equal(response.status,503);
 assert.equal((await response.json()).researchExclusions.status,'sync_unavailable');assert.equal(maintenanceRuns,4,'An exclusion failure cannot suppress unrelated maintenance');assert.equal(receiptRuns,4,'Receipt recovery remains independent of exclusion availability and quota');
 assert.equal(calls.length,0);
 console.log('Exclusion maintenance: authenticated free backfill without paid discovery, shared claim/quota guards, and independent maintenance through failures passed.');

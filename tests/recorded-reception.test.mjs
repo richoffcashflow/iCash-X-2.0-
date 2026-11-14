@@ -408,7 +408,7 @@ test('provider 404/deleted is accepted for cleanup, but 403, foreign receipt or 
   for(const options of [{readError:403},{badReceipt:{call_sid:'CA'+'d'.repeat(32)}},{deleteThrows:true},{unconfirmed:true}]){const f=await cleanupFixture(options);const result=await maintainRecordedReception(f.rpc,f.provider,env,now);assert.equal(result.deleted,0);assert.equal(result.held,1);assert.equal(f.completions.at(-1).p_outcome,'retry');}
 });
 test('cleanup cannot claim durable success when lease-specific completion loses its CAS',async()=>{
-  const f=await cleanupFixture({finishNull:true});const result=await maintainRecordedReception(f.rpc,f.provider,env,now);assert.equal(result.deleted,0);assert.equal(result.held,1);
+  const f=await cleanupFixture({finishNull:true});await assert.rejects(maintainRecordedReception(f.rpc,f.provider,env,now),{message:'RECORDED_RECEPTION_MAINTENANCE_INCOMPLETE'});
 });
 test('disabled-lane reconciliation still terminates an overdue gate without starting recording or AI',async()=>{
   const f=await fixture({endThrows:true}).ready();f.setNow(now+600000);const completions=[];

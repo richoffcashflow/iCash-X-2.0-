@@ -8,6 +8,18 @@ let calls=[];
 const database=async(path,method,body)=>{calls.push(path);if(path.endsWith('claim_ranker_training'))return {token,asOf:new Date().toISOString(),samples:[]};assert.equal(body.p_token,token);assert.equal(body.p_result.status,'collecting');return true;};
 assert.equal((await runOutcomeRanker(database)).status,'collecting');
 assert.deepEqual(calls,['rpc/icash_claim_ranker_training','rpc/icash_finish_ranker_training']);
+const sampling={version:'age-fair-v2',sequence:8,eligible:6400,selected:0,newlyCovered:0,remainingUnseen:1400};
+let savedResult;
+await runOutcomeRanker(async(path,_method,body)=>{
+ if(path.endsWith('claim_ranker_training'))return {token,asOf:new Date().toISOString(),samples:[],sampling};
+ savedResult=body.p_result;return true;
+});
+assert.equal(savedResult.status,'collecting');assert.equal(savedResult.model,null);
+assert.deepEqual(Object.fromEntries(Object.entries(savedResult.metrics).filter(([key])=>key.startsWith('sampling'))),{
+ samplingVersion:'age-fair-v2',samplingSequence:8,samplingEligible:6400,samplingSelected:0,samplingNewlyCovered:0,samplingRemainingUnseen:1400,
+},'Stored receipts distinguish bounded sample coverage from positive outcomes');
+await assert.rejects(runOutcomeRanker(async()=>({token,asOf:new Date().toISOString(),samples:[],sampling:{...sampling,selected:1}})));
+await assert.rejects(runOutcomeRanker(async()=>({token,asOf:new Date().toISOString(),samples:[],sampling:{...sampling,newlyCovered:1}})));
 assert.equal((await runOutcomeRanker(async()=>null)).status,'idle');
 await assert.rejects(runOutcomeRanker(async(path)=>path.endsWith('claim_ranker_training')?{token,asOf:new Date().toISOString(),samples:[]}:false),/receipt not confirmed/);
 await assert.rejects(runOutcomeRanker(async()=>({token,samples:[]})));
