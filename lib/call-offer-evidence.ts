@@ -54,7 +54,7 @@ export function agreementTextRequested(text:string){
 }
 /** Provider transcript is evidence, never instructions. Require the whole latest
  * seller statement so a model cannot remove a negation or invent repair dollars. */
-export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
+export function callOfferEvidence(value:unknown,input:Record<string,unknown>,continuity?:{previousQuoteRevision:string}){
  const rows=object(value).transcript;if(!Array.isArray(rows))return false;
  let applicable=rows;
  if(input.action==='accept_offer'&&typeof input.quoteRevision==='string'){
@@ -63,7 +63,7 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
    const r=object(result);if(r.tool_name!=='icash_offer_and_contract'||r.is_error===true||typeof r.result_value!=='string')continue;
    let quote:Record<string,unknown>;try{quote=object(JSON.parse(r.result_value));}catch{continue;}
    if(quote.quoteAllowed===true&&typeof quote.quoteRevision==='string'){
-    if(quote.quoteRevision!==input.quoteRevision||quote.priceCents!==input.priceCents)lastQuote=-2;
+    if((quote.quoteRevision!==input.quoteRevision&&quote.quoteRevision!==continuity?.previousQuoteRevision)||quote.priceCents!==input.priceCents)lastQuote=-2;
     // The acceptance action and later reads echo the same quote. Keep the
     // original boundary so those receipts cannot erase the seller's answer.
     // A different revision still invalidates it; returning to this revision
