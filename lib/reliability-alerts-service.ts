@@ -20,7 +20,7 @@ export function reliabilityNotificationContext(value:unknown,now=Date.now()){
  const progress=snapshot.accountProgress;
  const progressAge=progress?now-Date.parse(progress.checkedAt):Infinity;
  const impact=progress&&progressAge>=-5000&&progressAge<=120000
-  ?`Accounts needing attention: ${progress.affectedAccounts}. Stalled accounts: ${progress.stalledAccounts}. Accounts with pending work or receipts: ${progress.pendingAccounts}. These counts are not a count of confirmed outages.`
+  ?`Accounts needing attention: ${progress.affectedAccounts}. Accounts with no recent completed task recorded: ${progress.stalledAccounts}. Accounts with earlier work awaiting confirmation: ${progress.pendingAccounts}. These counts are not a count of confirmed outages.`
   :'Account impact and interrupted work: unverified.';
  const components=(['worker','maintenance'] as const).map(name=>{
   const c=report.components[name],age=c.checkedAt?now-Date.parse(c.checkedAt):Infinity;

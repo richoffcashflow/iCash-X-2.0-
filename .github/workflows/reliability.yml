@@ -88,6 +88,10 @@ jobs:
         run: python3 scripts/test-preflight-receipt-ranking-postgres.py
       - name: Verify due contact list priority, competing issuers and late holds
         run: python3 scripts/test-owner-preflight-priority-postgres.py
+      - name: Verify production stalled-work boundary and fair continuation selection
+        run: python3 scripts/test-stalled-work-postgres.py
+      - name: Verify pending originals cannot become completed checkpoints
+        run: python3 scripts/test-followup-pending-postgres.py
       - name: Verify fair due-retry progress and bounded generic-plan history lookup
         run: python3 scripts/test-owner-retry-priority-postgres.py
       - name: Verify verified contact cohorts retain their original admission window

@@ -201,7 +201,10 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  const allAudience=ownerBatchAudience(preview,candidates,c.contact_credit_cap);
  await savePhoneLessOwnerPreviews(db,accountId,batchId,previewRequestId,preview,candidates,allAudience);
  const audience=allAudience.filter(a=>a.ids.length);
- if(!audience.length)return {status:'empty',contacts:0};
+ // An asynchronous list must retain the issued ticket's primary. Otherwise
+ // this ticket completes empty while its sibling-only list has no resumable
+ // ticket. Eligible siblings remain available for ordinary scheduling.
+ if(!audience.some(a=>a.screeningId===primary.screeningId))return {status:'empty',contacts:0};
  const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))],mobileOnly,true);
  const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
  const preflight=await preflightOwnerExport(db,accountId,items,request,transport);

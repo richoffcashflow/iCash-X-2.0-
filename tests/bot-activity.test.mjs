@@ -19,6 +19,9 @@ for(const reason of ['configuration_expired','configuration_disabled','system_pa
  const value=currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{status:'ready',health:{status:'blocked',reason}}},now);
  assert.equal(value.blocked,true);assert.equal(value.active,false,'a claimed ticket cannot prove account recovery');
  assert(!value.label.includes('next task'));
+ assert.doesNotMatch(value.label,/stalled|work is delayed|work delayed/i);
+ if(reason==='pending_work')assert.equal(value.label,'Earlier work is awaiting confirmation.','A pending original does not prove every workflow is delayed');
+ if(reason==='no_completed_work')assert.equal(value.label,'No recent completed task was recorded.','Missing completion evidence remains explicit');
 }
 assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{health:{status:'unavailable'}}},now).unavailable,true);
 const account='00000000-0000-4000-8000-000000000001';

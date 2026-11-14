@@ -29,7 +29,7 @@ function harness(){
  return {async flush(){for(let i=0;i<20;i++){if(dirty){cursor=0;dirty=false;tree=mod.exports.OwnerOverviewView();}const effects=pending;pending=[];effects.forEach(fn=>fn());await tick();if(!dirty&&!pending.length)return;}throw Error('Render did not settle');},find(predicate){const node=nodes(tree).find(predicate);assert(node,'Expected UI control');return node;},text:()=>text(tree),focus:()=>listeners.get('focus')?.(),dispose(){slots.forEach(s=>s?.cleanup?.());}};
 }
 let count=0;
-async function scenario(name,fn){await fn();console.log(`PASS ${++count}/8 ${name}`);}
+async function scenario(name,fn){await fn();console.log(`PASS ${++count}/9 ${name}`);}
 try{
  await scenario('Switching periods cancels old reads and never displays old totals under a new filter',async()=>{
   let late,signal;globalThis.fetch=async(path,init)=>{if(path.includes('days=7&')){signal=init.signal;return new Promise(resolve=>{late=resolve;});}return Response.json(fixture(path,path.includes('days=1&')?'Today seller':'Private seller'));};
@@ -62,5 +62,10 @@ try{
   globalThis.fetch=async path=>{const f=fixture(path),r=f.report;r.costEvidence={days:r.days,includeOwner:r.includeOwner,startAt:r.startAt,endAt:r.endAt,completedCount:2,missingManifestCount:1,mismatchedManifestCount:0,recordedCostMicros:200000,verifiedMicros:25000,estimatedMicros:100000,unclassifiedMicros:75000,dealmachineCredits:12,providers:[{provider:'dealmachine',verifiedMicros:0,estimatedMicros:100000,unclassifiedMicros:75000},{provider:'elevenlabs',verifiedMicros:25000,estimatedMicros:0,unclassifiedMicros:0}]};return Response.json(f);};
   const ui=harness();try{await ui.flush();const body=ui.text().replace(/\s+/g,' ');assert.match(body,/Verified components \$0.03/);assert.match(body,/Estimated components \$0.10/);assert.match(body,/Unclassified components \$0.08/);assert.match(body,/1 missing cost breakdowns/);assert.match(body,/12 credits for settled operations/);assert.match(body,/Actual profit requires matching provider invoices/);assert.match(body,/ElevenLabs/);}finally{ui.dispose();}
  });
+ await scenario('Pending original work stays distinct from missing completion evidence without clearing warnings',async()=>{
+  const at=new Date().toISOString(),part={status:'ok',checkedAt:at};
+  globalThis.fetch=async path=>{const f=fixture(path);f.report.reliability={status:'degraded',fresh:true,components:{worker:part,maintenance:part},snapshot:{checkedAt:at,issueCount:5,issues:[],texts:{accepted:4,delivered:3,review:0},contracts:{created:0,completed:0,review:0},accountProgress:{checkedAt:at,affectedAccounts:5,expiredConfigurations:0,unexpectedPauses:0,stalledAccounts:2,pendingAccounts:3,samples:[{accountId:'00000000-0000-4000-8000-000000000099',reason:'pending_work',since:new Date(Date.now()-3600000).toISOString(),lastCompletedAt:at,availableCents:1000},{accountId:'00000000-0000-4000-8000-000000000098',reason:'no_completed_work',since:new Date(Date.now()-3600000).toISOString(),lastCompletedAt:null,availableCents:1000}]}}};return Response.json(f);};
+  const ui=harness();try{await ui.flush();const body=ui.text().replace(/\s+/g,' ');assert.match(body,/Workflow reliability · Critical priority/);assert.match(body,/5 accounts with work needing attention/);assert.match(body,/2 with no recent completed task recorded/);assert.match(body,/3 with earlier work awaiting confirmation/);assert.match(body,/Earlier work is awaiting confirmation/);assert.match(body,/No completed task recorded for at least 30 minutes/);assert.match(body,/Review affected accounts/);assert.doesNotMatch(body,/stalled accounts|Work delayed|Earlier work is holding available credits|5 (?:without|with no) recent completed/i);}finally{ui.dispose();}
+ });
 }finally{globalThis.fetch=originalFetch;}
-assert.equal(count,8);
+assert.equal(count,9);

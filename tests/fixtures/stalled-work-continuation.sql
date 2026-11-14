@@ -1,0 +1,12 @@
+create schema icash_work_private;
+alter table icash_research_private.owner_export_preflights add column indexing_next_step text,add column indexing_checks integer not null default 0;
+create function public.icash_dealmachine_capacity_available(integer,uuid) returns boolean language sql stable set search_path='' as $$select public.icash_dealmachine_capacity_available($1)$$;
+create table icash_work_private.dispatch_policy(id integer primary key,enabled boolean);
+insert into icash_work_private.dispatch_policy values(1,true);
+create table icash_work_private.acquisition_export_waits(account_id uuid primary key,waiting_since timestamptz,updated_at timestamptz);
+create function icash_work_private.warm_seller_due(uuid) returns boolean language sql stable as $$select false$$;
+create function icash_work_private.record_export_wait(uuid,timestamptz) returns boolean language sql as $$select false$$;
+create function public.icash_acquisition_capacity_available(uuid) returns boolean language sql stable set search_path='' as $$select public.icash_dealmachine_capacity_available(2)$$;
+create function public.icash_owner_active_export_capacity(uuid) returns text language sql stable set search_path='' as $$select public.icash_owner_active_export_capacity()$$;
+create function public.icash_new_user_request_reserve_eligible(uuid) returns boolean language sql stable as $$select false$$;
+create function public.icash_owner_retry_due_at(uuid) returns timestamptz language sql stable as $$select null::timestamptz$$;
