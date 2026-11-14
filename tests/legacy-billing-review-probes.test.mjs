@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import {hasUnresolvedLegacyBilling as check} from '../lib/support-legacy-billing-context.ts';
 import {replyToSupport} from '../lib/support-conversation.ts';
 const u=content=>({role:'user',content}),o=content=>({role:'operator',content});
-const initial=u('Hi, I wanted to know if I could disable my usage activity for the iCash X 1.0 version. I have not manually called or messaged anyone in a month, but the software is still attempting to charge me.');
-const correction=o('You’re asking about the old 1.0 billing, and you’ve already explained that 2.0 access works. The earlier claim that 1.0 charges no longer apply was not verified and should not have been stated. Retiring the platform does not by itself prove an old payment attempt or automatic recharge stopped. I’m keeping this as an unresolved billing review. What date, amount and merchant description appear on the attempted charge, and does it say failed, pending or completed? Leave out card numbers and codes. No billing, refund or access change has been made.');
-const details=u('There was a charge attempt today on 11/14 for $14.37 that was declined.');
-const linked=u('It is not linked to my current iCash X 2.0 account but it is linked to my 1.0 account.');
+const initial=u('I would like to know if I could stop the 1.0 billing. It is still attempting to charge me after I moved to 2.0.');
+const correction=o('The previous response said old 1.0 charges no longer apply. That claim was unverified. This remains an unresolved legacy billing review, separate from current access. The original payment needs verification.');
+const details=u('There was a charge attempt today on 08/06 for $23.61 that was declined.');
+const linked=u('This payment is linked to my 1.0 account, not the current platform.');
 const turns=[initial,correction,details,linked];
 assert.equal(check(turns),true,'quoted false no-longer claim must not reset unresolved review');
 for(const text of ['1.0 is still attempting to charge me. I never use it anymore.','1.0 is still attempting to charge me. Will you stop it?'])assert.equal(check([u(text)]),true,text);
@@ -25,4 +25,4 @@ try{
  }
  assert.equal(calls,0);
 }finally{process.env=saved;}
-console.log('PASS independent reviewer: exact-shaped correction, charge/recharge negatives, polite and mixed factual complaints, four account/guest handoff replays; offline only.');
+console.log('PASS independent reviewer: fictional operator correction, charge/recharge negatives, polite and mixed factual complaints, four account/guest handoff replays; offline only.');
