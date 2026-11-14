@@ -22,6 +22,13 @@ export type TextOfferPlan={kind:'message'|'review'|'wait'|'agreement';action:str
 const unqualifiedYes=(s:string)=>/^(?:yes|yeah|yep|sure|correct|okay|ok|that works|sounds good|i agree)[.! ,]*$/i.test(s.trim());
 const no=(s:string)=>/^(?:no|nope|not yet)[.! ,]*$/i.test(s.trim());
 const priceText=(n:number)=>offerPricePresentation(n).displayPrice;
+/** Only these fixed informational replies change wording. Keep earlier delivered
+ * versions equivalent for the existing repeat limit; never rewrite history. */
+const sellerAnswerCopy:Record<string,{current:string;previous:string}>={
+ explain_cash_price:{current:'Our cash proposal factors in property value, repairs and holding costs. What recent work or other detail should we take into account?',previous:'The cash proposal reflects current value, repairs and holding costs. What property detail do you think the estimate is missing?'},
+ explain_costs:{current:'The buyer pays transaction closing costs. Mortgages, liens and required seller charges can reduce your payout; the title company must confirm the final amount.',previous:'The purchase terms cover buyer-paid transaction closing costs. Seller debts and required charges are handled at closing; net proceeds need title confirmation.'},
+ explain_process:{current:'We check the property details, agree on a cash price and written terms, then sign. The title company checks ownership and handles closing.',previous:'We confirm property details and a cash price, agree on written terms, then coordinate signatures and title. What part would you like to discuss?'},
+};
 function closingDateAnswer(body:string){
  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
  // A contract date must be an unqualified answer. Date.parse normalizes an
@@ -91,7 +98,8 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
    if(body.length>160)return review('buyer_identity_copy_required','The full saved buyer identity and answer must fit the reviewed text rate.');
   }
   const attempts=c.messages.filter(m=>m.direction==='outgoing'&&m.action===action&&m.state==='delivered');
-  if(attempts.filter(m=>m.body===body).length>=2)return review('seller_answer_unclear',`The seller has not answered: ${body} Review their exact answer or arrange an authorized call.`);
+  const revised=sellerAnswerCopy[action];
+  if(attempts.filter(m=>m.body===body||(revised&&body===revised.current&&m.body===revised.previous)).length>=2)return review('seller_answer_unclear',`The seller has not answered: ${body} Review their exact answer or arrange an authorized call.`);
   return {kind:'message',action,body,state};
  };
  // Keep the deterministic offer lane aligned with the source-word contact
@@ -140,10 +148,10 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   return ask('seller_counterprice','What price did you have in mind?');
  }
  if(state.pendingAskingPriceCents)return ask('clarify_gross_price','Do you mean the purchase price before any mortgage payoff, liens or closing adjustments?');
- if(/^(?:why|how).*(?:price|offer)|\b(?:too low|lowball)\b/i.test(source.body)&&state.quotedPriceCents)return ask('explain_cash_price',`The cash proposal reflects current value, repairs and holding costs. What property detail do you think the estimate is missing?`);
+ if(/^(?:why|how).*(?:price|offer)|\b(?:too low|lowball)\b/i.test(source.body)&&state.quotedPriceCents)return ask('explain_cash_price',sellerAnswerCopy.explain_cash_price.current);
  if(previous?.action==='explain_cash_price'&&/\b(?:renovated|new roof|repaired|repairs?|square feet|bedrooms?|bathrooms?)\b/i.test(source.body))return ask('repair_budget','What is your estimate of the total remaining repair budget?');
- if(/^(?:who pays (?:the )?closing costs|(?:are there|what about|what are|any) (?:the |any )?fees)[?! .]*$/i.test(source.body))return ask('explain_costs','The purchase terms cover buyer-paid transaction closing costs. Seller debts and required charges are handled at closing; net proceeds need title confirmation.');
- if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process','We confirm property details and a cash price, agree on written terms, then coordinate signatures and title. What part would you like to discuss?');
+ if(/^(?:who pays (?:the )?closing costs|(?:are there|what about|what are|any) (?:the |any )?fees)[?! .]*$/i.test(source.body))return ask('explain_costs',sellerAnswerCopy.explain_costs.current);
+ if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process',sellerAnswerCopy.explain_process.current);
  if(isDeliveredCallInvitation(previous)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
  const qualification=sellerOfferQualification(transcript,c.history??[],'sms');
  // Answer the seller's actual question before resuming the missing fact. A
