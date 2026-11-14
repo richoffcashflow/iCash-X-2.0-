@@ -46,6 +46,9 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
  if(!env.ELEVENLABS_API_KEY||!env.SUPABASE_SECRET_KEY||env.SUPABASE_URL!=='https://ofjbbpwugyjfxbhqfguh.supabase.co')throw Error('SELLER_TURNS_CONFIGURATION_REQUIRED');
  const database=env.SUPABASE_URL+'/rest/v1/';
  async function request(url,headers,method='GET',body){
+  // Fetch canonicalizes JSON-path operators in query strings. Compare the
+  // exact canonical target, while still rejecting redirects or URL changes.
+  url=new URL(url).href;
   let r;try{r=await fetcher(url,{method,headers:{...headers,Accept:'application/json','Content-Type':'application/json',Prefer:'return=representation'},...(body===undefined?{}:{body:JSON.stringify(body)}),redirect:'error',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(15000)});}catch{throw Error('SELLER_TURNS_REQUEST_UNCONFIRMED');}
   if(!r.ok||r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??'')){await r.body?.cancel().catch(()=>undefined);throw Error('SELLER_TURNS_REQUEST_UNCONFIRMED');}
   try{return JSON.parse((await boundedBytes(r,1024*1024)).toString('utf8'));}catch{throw Error('SELLER_TURNS_RESPONSE_UNCONFIRMED');}
