@@ -40,6 +40,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-learning-timeout-postgres.mjs
+      - name: Verify expired preflight cleanup and renewal under concurrent claims
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-owner-preflight-cleanup-postgres.mjs
       - name: Verify rotating training evidence under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
@@ -160,6 +164,8 @@ jobs:
         run: python3 scripts/test-cleanup-ticket-recovery-postgres.py
       - name: Verify bounded saved export recovery without provider retries
         run: python3 scripts/test-owner-export-artifact-postgres.py
+      - name: Verify admitted-only original export recovery and quota deferrals
+        run: python3 scripts/test-owner-export-quota-postgres.py
       - name: Verify unanswered call settlement and late child races
         run: python3 scripts/test-customer-phone-unanswered-postgres.py
       - name: Verify unanswered child settlement preserves priced parent and audio

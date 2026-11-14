@@ -43,10 +43,20 @@ reader remain service-role-only; application roles cannot activate either policy
 Both policies remain disabled, with zero issued turns, decisions and follow-up
 attempts and null activation/release fields. Do not reapply either correction.
 
-The release hold now awaits the latest integrated head's full checks and review.
-After the normal expected-head merge, require exact-main push checks and matching
-production web/worker verification before separately activating either policy.
-Installation and cleared release prerequisites do not establish completed work.
+PR #727 merged as `8c77bfa18a160d9e356bb89da427750d66e59282`. Exact-main
+Reliability run `43641484860` passed all six jobs, including 949 suites. At
+21:24:46 UTC, Vercel production `dpl_AmFDBMcvc2KwDCuwAkBgBf2QDkwv` was READY
+with the live domains, worker `226d0d00-08d3-48ad-bd13-ffe3f321868e` was SUCCESS,
+and monitor `89ed53e8-0582-48e0-85e7-28f823e89eb9` was SUCCESS on that same SHA.
+The monitor required one normal redeploy after an HTTP 403 prevented its first
+GitHub verification; all release checks remained enforced.
+
+Guarded continuation activation returned true at 21:24:54 UTC; follow-up step
+activation returned true at 21:24:57 UTC. Readback at 21:25:08 confirmed both
+policies enabled for the verified release, two natural issuance decisions and
+four recovery-step attempts. Those receipts are not completed customer work.
+The incident remains open pending actual source-bound output and outstanding
+provider evidence. No original operations, controls or financial holds were reset.
 
 The issuance correction used the supported migration runner's atomic SQL-and-ledger
 transaction. Both correction files contain no top-level `BEGIN` or `COMMIT`: an
