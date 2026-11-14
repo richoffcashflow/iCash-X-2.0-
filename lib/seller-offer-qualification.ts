@@ -37,7 +37,12 @@ function latestQualificationQuestion(message:string):string{
 export function sellerOfferQualification(current:unknown,history:unknown[]=[],channel:'voice'|'sms'='voice'):SellerQualification{
  const facts:Partial<Record<Fact,boolean>>={};let listed:boolean|null=null,priceRequested=false;
  const currentRows=object(current).transcript;
- const disposition=Array.isArray(currentRows)?sellerCallDisposition(currentRows):null;
+ // A contextual "no" answers the final question, not an acknowledgement
+ // such as "you want to sell" before an occupancy/repairs question.
+ const disposition=Array.isArray(currentRows)?sellerCallDisposition(currentRows.map(row=>{
+  const turn=object(row);
+  return {role:String(turn.role??''),message:typeof turn.message==='string'?(turn.role==='agent'?latestQualificationQuestion(turn.message):turn.message):null};
+ })):null;
  if(disposition)return {ready:false,missing:[],stop:true,nextQuestion:'The seller has stopped this discussion or requested review. Honor the request; do not continue qualification.'};
  for(const conversation of [...history,current]){
   // Reconfirm a prior refusal on a new conversation; never carry a past bad
