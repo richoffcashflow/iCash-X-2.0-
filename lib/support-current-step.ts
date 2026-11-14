@@ -21,6 +21,8 @@ export function supportCurrentStepReply(context:SupportContext):SupportReply|nul
  const guidance=(reply:string,status:SupportReply['status']='open'):SupportReply=>({...answer(reply,status),...(supportRoutineGuidanceQuestion(q)?{routineGuidance:true as const}:{})});
  if(/\b(?:refund|cancel|charged twice|duplicate charge|unrecognized charge)\b/i.test(q))return null;
  if(supportUnansweredCallQuestion(q))return {reply:supportSimpleProductAnswer(q)!,status:'open',ai:false};
+ if(/^(?:how (?:fast|soon) (?:does|can) (?:a person|someone|somebody|i) (?:make|get|close) (?:they|their|my|a) (?:first|1st) (?:sale|sell|deal)(?: using (?:this|the) (?:website|platform|software))?|how long does it takes? for a (?:sale|sell|deal) to go through)[?!.\s]*$/i.test(q.trim()))
+  return answer('There is no guaranteed time to a first sale or a completed deal. Finding a property, reaching an interested seller, agreeing terms, finding a buyer and completing title and closing are separate steps. A signed agreement does not guarantee payment; payment depends on closing and disbursement. This timing guidance does not resolve an earlier account issue.');
  // Deal timing and selection questions are product questions, not requests to
  // import leads. Anchoring keeps a real fault or unrelated timing question out.
  if(/^(?:how long does it take (?:for (?:it|the bot|my bot) )?to find a deal|how many (?:days|hours|weeks) until (?:the |my )?bot finds a deal|when will (?:the |my )?bot find a deal|how long (?:until|will it be (?:until|before|to)) (?:i see (?:my |a )?(?:first )?deal|see (?:my |a )?(?:first )?deal(?: come through)?|(?:my |a )?(?:first )?deal comes through))[?!.\s]*$/i.test(q.trim()))

@@ -83,6 +83,12 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const answer=(reply:string,managementReview=false):SupportReply=>({reply,status:'open',ai:false,...(managementReview?{managementReview:true}:{})});
  if(supportRenewalCancellationRequested(q))return null;
  if(/\b(?:refund|money back|cancel (?:my|the|this) (?:subscription|membership)|charged twice|duplicate charge)\b/i.test(q))return null;
+ if(/\b(?:bot|automation|it)\b/i.test(q)&&/\boutreach\b/i.test(q)&&/\b(?:research|looking for properties)\b/i.test(q)&&/\bcredits?\b/i.test(q)&&/\b(?:all|only|just)\b/i.test(q)&&/\b(?:rest of (?:the )?(?:wholesale|wholesaling)(?: process)?|everything else|handle (?:the )?rest of wholesaling)\b/i.test(q)&&!/\b(?:unrecognized|unauthorized|sign[ -]?in|log[ -]?in|seller asked|buyer asked|not all|not only|not just|working fine|what if|hypothetically|suppose)\b/i.test(q)){
+  const o=context.kind==='account'?context.evidence?.find(e=>e.key==='outreach')?.outreach:undefined;
+  const work=context.kind==='account'?context.evidence?.find(e=>e.key==='work'):undefined;
+  const recorded=o?`The current records show ${o.screened} properties checked, ${o.callsStarted} call attempts and ${o.textsSent} texts overall. These totals do not establish recent automatic activity. `:'Current account activity could not be verified from these checks. ';
+  return answer('The bot is designed to research properties, contact eligible sellers, follow up, pursue agreements, find buyers and coordinate closing. Research alone is not outreach or a completed deal. New seller calls and first texts follow the seller’s 9 AM–9 PM window, with Central Time used when the time zone is unknown, and still require contact, credit and readiness checks. '+(work?.code==='paused'?'Your bot is currently paused, which stops new work; this chat has not changed that setting. ':'')+recorded+'A research charge alone does not explain why outreach is missing. That still needs investigation; there is no confirmed start time. You still review agreements, sign where required and complete title and closing requests. Any earlier unresolved account issue remains open.',true);
+ }
  // Specific call-result complaints must reach their guidance before incidental
  // words such as "automated calls" and "available fix" match capability checks.
  if(supportVoicemailComplaint(q))return null;
