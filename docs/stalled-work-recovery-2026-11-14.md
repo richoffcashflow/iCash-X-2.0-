@@ -11,6 +11,27 @@ receipts; their SQL bytes are unchanged. Do not reapply them. Detection is activ
 both behavioral policies remained disabled on readback at 16:52 UTC. Exact-main
 web/worker verification and separate activation are still required.
 
+Independent review reproduced two pre-activation defects. A valid continuation
+reuses its original ticket, so a ledger keyed only by ticket ID rejected its next
+issuance. Also, a zero-due voice poll can mean a five-minute cooldown, while one
+estimate batch can leave held or additional originals. Neither proves a complete
+recovery step. Keep both policies disabled until the additive
+`preflight-continuation-issuance.sql` and `followup-pending-originals.sql` corrections
+pass exact-head native/full CI and are installed and read back. Do not rewrite or
+reapply the first three successful migrations.
+
+The issuance correction preserves the original ticket and records each distinct
+one-use token hash under its fair turn; identical acknowledgments do not advance
+the turn. It also records only the current exact original preflight. The pending
+reader requires the current consumed account-recovery lease and observes original
+reserved/dispatched rows by rate family, independent of due time and conversation
+availability. Unknown rates remain pending. Its definition hash is part of
+activation, and a new operation's existing wake trigger preserves the next source
+version even if it arrives after an older version's zero-pending observation.
+Both additive corrections refuse already-activated/used policies. Their tests
+cover repeated ticket issuance, cooldowns, partial batches, unknown rates, source
+version races, private permissions and original financial evidence.
+
 The same incident release also isolates original accepted-message evidence reads
 from current leased-number availability. Existing SQL identity/delivery gates,
 attempt limits, historical follow-up fences and financial holds remain unchanged.

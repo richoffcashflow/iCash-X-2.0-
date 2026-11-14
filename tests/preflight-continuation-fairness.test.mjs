@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {continuationSetup} from './helpers/stalled-work-fixture.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
@@ -18,8 +18,44 @@ try{
  await pg.exec(migration);
  assert.equal(await v('select enabled from icash_work_private.continuation_policy'),false);
  await isolated(async()=>{const a=await issue();assert.ok(ordinary.some(c=>c.account===a),'Disabled install preserves original selection');});
+ const makeDue=async c=>{
+  await q("update icash_automation_tickets set state='held',outcome='owner_preview_rate_limited',completed_at=now(),owner_preview_deferrals=owner_preview_deferrals+1,owner_preview_retry_after=now()-interval '1 second' where id=$1",[c.ticket]);
+  await q("update icash_discovery_configs set next_run_at=now()-interval '1 second' where account_id=$1",[c.account]);
+ };
+ await isolated(async()=>{
+  await v("select icash_work_private.activate_continuation_fairness(repeat('a',40))");
+  const account=await issue(),c=waiting.find(c=>c.account===account);assert(c);
+  await q('update icash_accounts set bot_paused=true where id<>$1',[account]);
+  await makeDue(c);assert(await v('select icash_owner_preflight_due_at($1,$2)',[account,c.screening]));
+  await assert.rejects(issue,/continuation_decisions_pkey/,'Reproduce second valid continuation aborting on the reused original ticket ID');
+ });
+ const issuance=read('config/preflight-continuation-issuance.sql');
+ const receiptName=readdirSync(new URL('../supabase/migrations/',import.meta.url)).find(n=>n.endsWith('_preflight_continuation_issuance.sql'));
+ assert(receiptName);assert.equal(issuance,read('supabase/migrations/'+receiptName));await pg.exec(issuance);
  assert.equal(await v("select icash_work_private.activate_continuation_fairness('bad')"),false);
  assert.equal(await v("select icash_work_private.activate_continuation_fairness(repeat('a',40))"),true);
+ await isolated(async()=>{
+  const c=waiting[0];await q('update icash_accounts set bot_paused=true where id<>$1',[c.account]);
+  await q(`insert into icash_research_private.owner_export_preflights(id,account_id,fingerprint,items,request,state,list_name,list_id,receipts,created_at,started_at,next_check_at)
+   select md5('stale-overlap')::uuid,account_id,md5('stale-overlap'),items,request,'waiting','stale-overlap','"stale-overlap"','{}',now()-interval '9 minutes',now()-interval '9 minutes',now()-interval '7 minutes'
+   from icash_research_private.owner_export_preflights where id=$1`,[c.preflight]);
+  assert.equal(await issue(),c.account);
+  assert.equal(await v('select preflight_id from icash_work_private.continuation_decisions'),c.preflight,'Decision binds the actual current source, not an older unverified overlapping list');
+ });
+ await isolated(async()=>{
+  const account=await issue(),c=waiting.find(c=>c.account===account);assert(c);
+  await q('update icash_accounts set bot_paused=true where id<>$1',[account]);
+  const originals=await v('select jsonb_agg(to_jsonb(p) order by id) from icash_research_private.owner_export_preflights p');
+  for(let n=0;n<2;n++){await makeDue(c);assert.equal(await issue(),account,'A normal original ticket safely continues through multiple preflight steps');}
+  const saved=await v('select jsonb_agg(to_jsonb(d) order by turn) from icash_work_private.continuation_decisions d');
+  assert.equal(saved.length,3);assert(saved.every(d=>d.ticket_id===c.ticket&&d.preflight_id===c.preflight));
+  assert.equal(new Set(saved.map(d=>d.issue_token_hash)).size,3);
+  for(let n=0;n<2;n++)await v('select icash_work_private.record_continuation_decision($1,$2,$3,true)',[c.ticket,account,c.screening]);
+  assert.equal(await v('select issued from icash_work_private.continuation_policy'),3,'Identical acknowledgment does not consume a turn');
+  assert.deepEqual(await v('select jsonb_agg(to_jsonb(d) order by turn) from icash_work_private.continuation_decisions d'),saved);
+  assert.deepEqual(await v('select jsonb_agg(to_jsonb(p) order by id) from icash_research_private.owner_export_preflights p'),originals);
+  assert.equal(await v('select count(*) from icash_operation_spend'),0);
+ });
  await isolated(async()=>{
   const kinds=[];for(let n=0;n<9;n++){const a=await issue();kinds.push(waiting.some(c=>c.account===a)?'continuation':'ordinary');}
   assert.deepEqual(kinds,['continuation','continuation','ordinary','continuation','continuation','ordinary','continuation','continuation','ordinary']);

@@ -16,12 +16,18 @@ export async function processAutomationFollowup(database:VoiceUsageDb,accountId:
  if(context.stepCheckpoints===true){
   const {success,outcomes}=await processFollowupCheckpoints(database,accountId,ticketId,[
    {name:'estimates',timeoutMs:10000,run:async database=>{
-    await database('rpc/icash_settle_pending_estimates','POST',{p_account:accountId,p_limit:25});
-    return {complete:true,evidence:{status:'original_estimates_checked'}};
+    const result=await database<{settled:number;held:number}|null>('rpc/icash_settle_pending_estimates','POST',{p_account:accountId,p_limit:25});
+    const valid=!!result&&Number.isSafeInteger(result.settled)&&result.settled>=0&&Number.isSafeInteger(result.held)&&result.held>=0&&result.settled+result.held<=25;
+    const pending=await database<boolean|null>('rpc/icash_account_followup_pending','POST',{p_account:accountId,p_ticket:ticketId,p_step:'estimates'});
+    return {complete:valid&&result!.held===0&&pending===false,evidence:{...(valid?{status:'original_estimates_checked',settled:result!.settled,held:result!.held}:{status:'estimate_result_unverified'}),pending:pending!==false}};
    }},
    {name:'voice_receipts',timeoutMs:20000,run:async(database,signal)=>{
     const result=await settlePendingVoiceUsage(database,accountId,readVoiceUsagePolicies(process.env.VOICE_USAGE_POLICIES_JSON,process.env.VOICE_USAGE_POLICY_ACTIVATIONS_JSON),reconcileLiveConversation,signal);
-    return {complete:result.reviewRequired===0&&result.held===0,evidence:{...result}};
+    const valid=!!result&&[result.settled,result.held,result.reviewRequired].every(n=>Number.isSafeInteger(n)&&n>=0);
+    // Zero due reads can mean a cooldown, missing conversation or unavailable
+    // policy. Only original terminal state proves this step has no work left.
+    const pending=await database<boolean|null>('rpc/icash_account_followup_pending','POST',{p_account:accountId,p_ticket:ticketId,p_step:'voice_receipts'});
+    return {complete:valid&&result.reviewRequired===0&&result.held===0&&pending===false,evidence:{...(valid?{settled:result.settled,held:result.held,reviewRequired:result.reviewRequired}:{status:'voice_result_unverified'}),pending:pending!==false}};
    }},
    ...(context.notify?[{name:'customer_updates' as const,timeoutMs:10000,run:async(database:VoiceUsageDb,signal:AbortSignal)=>{
     const result=await dispatchCustomerUpdate(accountId,{db:database,signal});

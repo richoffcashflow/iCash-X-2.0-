@@ -57,6 +57,7 @@ sql("select fixture_preflight_seed(n,false,interval '20 minutes') from generate_
 before = sql('select md5(jsonb_agg(to_jsonb(p) order by id)::text) from icash_research_private.owner_export_preflights p')
 sql(read('config/preflight-continuation-fairness.sql'))
 assert sql('select enabled from icash_work_private.continuation_policy') == 'f'
+sql(read('config/preflight-continuation-issuance.sql'))
 assert sql("select icash_work_private.activate_continuation_fairness(repeat('a',40))") == 't'
 started = time.monotonic()
 with ThreadPoolExecutor(max_workers=9) as pool:
@@ -65,6 +66,26 @@ assert all(results)
 assert time.monotonic()-started < 10, 'Bounded 1,006-account selection exceeds performance budget'
 assert sql('select string_agg(continuation::text,\',\' order by turn) from icash_work_private.continuation_decisions') == 'true,true,false,true,true,false,true,true,false'
 assert sql('select count(distinct ticket_id) from icash_work_private.continuation_decisions') == '9'
+# Subsequent valid preflight steps reuse the SAME contacts ticket. Concurrent
+# workers must admit each fresh issuance once and preserve every earlier turn.
+target=cases[0]
+first_issuance=sql(f"select to_jsonb(d) from icash_work_private.continuation_decisions d where ticket_id='{target['ticket']}';")
+for expected_count in (2,3):
+    sql(f"""update icash_automation_tickets set state='held',outcome='owner_preview_rate_limited',completed_at=now(),
+     owner_preview_deferrals=owner_preview_deferrals+1,owner_preview_retry_after=now()-interval '1 second' where id='{target['ticket']}';
+     update icash_discovery_configs set next_run_at=now()-interval '1 second' where account_id='{target['account']}';""")
+    with ThreadPoolExecutor(max_workers=9) as pool:
+        repeated=list(pool.map(lambda _:sql('set role service_role;select icash_next_acquisition();'),range(9)))
+    assert all(repeated)
+    assert sql(f"select count(*) from icash_work_private.continuation_decisions where ticket_id='{target['ticket']}';")==str(expected_count)
+    assert sql(f"select count(distinct issue_token_hash) from icash_work_private.continuation_decisions where ticket_id='{target['ticket']}';")==str(expected_count)
+    assert sql(f"select to_jsonb(d) from icash_work_private.continuation_decisions d where ticket_id='{target['ticket']}' order by turn limit 1;")==first_issuance
+    assert sql(f"select bool_and(preflight_id='{target['preflight']}') from icash_work_private.continuation_decisions where ticket_id='{target['ticket']}';")=='t'
+before_ack=sql('select issued from icash_work_private.continuation_policy;')
+with ThreadPoolExecutor(max_workers=9) as pool:
+    list(pool.map(lambda _:sql(f"set role service_role;select icash_work_private.record_continuation_decision('{target['ticket']}','{target['account']}','{target['screening']}',true);"),range(9)))
+assert sql('select issued from icash_work_private.continuation_policy;')==before_ack
+assert sql('select count(*) from icash_work_private.continuation_decisions') == '27'
 assert sql('select md5(jsonb_agg(to_jsonb(p) order by id)::text) from icash_research_private.owner_export_preflights p') == before
 for table in ('icash_operation_spend','icash_credit_reservations','icash_credit_ledger','icash_cost_manifests'):
     assert sql(f'select count(*) from {table}') == '0', 'Selection created paid work: '+table
@@ -80,8 +101,8 @@ assert sql('select count(*) from icash_automation_tickets') == before_tickets
 # Rollback affects future ordering only, preserving all durable evidence.
 sql('begin;select 1 from icash_operating_budget where id=1 for update;update icash_work_private.continuation_policy set enabled=false;commit;')
 sql('set role service_role;select icash_next_acquisition();')
-assert sql('select count(*) from icash_work_private.continuation_decisions') == '9'
-print('PASS PostgreSQL 17: exact monitor boundary, 36 concurrent service-role reads, 1,006-account fair selection with 9 competing workers, immutable originals, unchanged financial ledgers, ACLs and rollback.')
+assert sql('select count(*) from icash_work_private.continuation_decisions') == '27'
+print('PASS PostgreSQL 17: exact monitor boundary, 36 concurrent service-role reads, 1,006-account fair selection, same-original-ticket multi-step continuation and identical acknowledgment with 9 competing workers, immutable originals, unchanged financial ledgers, ACLs and rollback.')
 
 reset()
 setup = subprocess.run(['node','--input-type=module','-e',
