@@ -1,5 +1,6 @@
 import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
 import {supportBillingComplaintReply} from './support-billing-complaints.ts';
+import {supportEmailRepurchaseReply} from './support-email-repurchase.ts';
 import {supportContactPrivacyReply} from './support-contact-privacy.ts';
 import {supportCallRecordingReply} from './support-call-recordings.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
@@ -55,6 +56,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&supportAcknowledgment(question))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Got it.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
+ const emailRepurchase=supportEmailRepurchaseReply(question,context.messages.findLast(m=>m.role==='operator')?.content);if(emailRepurchase)return emailRepurchase;
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const contactPrivacy=supportContactPrivacyReply(context);if(contactPrivacy)return contactPrivacy;
