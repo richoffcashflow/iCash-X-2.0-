@@ -1,12 +1,32 @@
 import assert from 'node:assert/strict';
 import {makeWorkspaceFixture,fixtureAccount,uuid} from './fixtures/workspace-volume.mjs';
 
+// This layout suite needs an unavailable optional feed, not a network stream.
+// Repeated full navigations can make WebKit report an access-control page error
+// for an abandoned intercepted request, even when the local server returns 204.
+export function installUnavailableLayoutFeed(){
+ const fetch=window.fetch.bind(window);
+ window.__layoutUnavailableFeedReads=0;
+ window.fetch=async(input,init)=>{
+  let url;
+  try{url=new URL(input instanceof Request?input.url:String(input),location.href);}catch{return fetch(input,init);}
+  const method=(init?.method??(input instanceof Request?input.method:'GET')).toUpperCase();
+  if(url.origin!==location.origin||url.pathname!=='/api/work/events'||method!=='GET')return fetch(input,init);
+  const signal=init?.signal??(input instanceof Request?input.signal:undefined);
+  const checkAbort=()=>{if(signal?.aborted)throw signal.reason??new DOMException('The request was aborted.','AbortError');};
+  checkAbort();window.__layoutUnavailableFeedReads++;
+  await Promise.resolve();checkAbort();
+  return new Response(null,{status:204,headers:{'Cache-Control':'no-store'}});
+ };
+}
+
 // Every API is intercepted. These forms must remain usable with real-world
 // text lengths, narrow screens, browser text enlargement, and failed saves.
 export async function verifyWorkspaceLayout(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true}),page=await context.newPage();
+ await context.addInitScript(installUnavailableLayoutFeed);
  page.setDefaultTimeout(12000);
- const errors=[],unexpectedWrites=[],saved=[];
+ const errors=[],unexpectedWrites=[],unexpectedFeedRequests=[],saved=[];
  page.on('pageerror',error=>errors.push(error.message));
  page.on('dialog',dialog=>void dialog.accept());
  let mode='seller',failSave=true;
@@ -38,7 +58,7 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
   }
   if(p==='/api/account')return route.fulfill({json:{...fixtureAccount,mode:'live',vip:false,vipFeatures:false,billingModel:'membership_credits',membershipActive:true}});
   if(p==='/api/work/activity')return route.fulfill({json:work(url)});
-  if(p==='/api/work/events')return route.continue();
+  if(p==='/api/work/events'){unexpectedFeedRequests.push(p);return route.fulfill({status:500,json:{error:'Feed fixture was bypassed'}});}
   if(p==='/api/funding/status')return route.fulfill({json:{enabled:true,mode:'live',paidCents:0,needsClaim:false,packs:[]}});
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip:false,priceCents:5000,paidThrough:'2027-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/property-photo')return route.fulfill({json:{photo:null}});
@@ -146,6 +166,8 @@ export async function verifyWorkspaceLayout(browser,base,options,name){
   await attention.getByRole('button',{name:'Save resolution',exact:true}).first().click();
   await page.locator(`#recovery-${uuid(8001)}`).waitFor({state:'hidden'});
   assert.deepEqual(saved.at(-1),{id:uuid(8001),version,resolution:'Confirmed the next step with the seller.'},'layout changes preserve the exact save request');
+  assert(await page.evaluate(()=>window.__layoutUnavailableFeedReads>0),'Layout remains usable while its optional feed is unavailable');
+  assert.deepEqual(unexpectedFeedRequests,[],'The unavailable feed fixture must never enter network transport');
   assert.deepEqual(unexpectedWrites,[]);assert.deepEqual(errors,[]);
   console.log(`PASS ${name}: attention forms, long content, pagination, narrow/tablet widths, enlarged text, errors and resolution saves. No live requests.`);
  }catch(error){await page.screenshot({path:`/tmp/icash-layout-failure-${name.startsWith('mobile')?'mobile':'desktop'}.png`,fullPage:true});throw error;}

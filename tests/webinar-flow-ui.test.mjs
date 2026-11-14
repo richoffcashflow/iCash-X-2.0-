@@ -488,3 +488,56 @@ for(const recordingVersion of ['day','night']){
  }finally{instance.close();}
 }
 console.log('PASS expired Day/Night preview completion opens the isolated checkout preview without reopening offers.');
+
+// Completion analytics may fail or never return; ordinary payment stays reachable.
+{
+ const originalTimeout=globalThis.setTimeout,originalClear=globalThis.clearTimeout;
+ const timers=new Map();let timerId=0;
+ globalThis.setTimeout=(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id;};
+ globalThis.clearTimeout=id=>timers.delete(id);
+ try{
+  for(const scenario of ['failed','hanging','offline','owner','custom-link','redirect-disabled','unmounted']){
+   const beacons=[];let finishRequest;
+   const ending={...w,redirectAtEnd:scenario!=='redirect-disabled',offers:[{id:'closed',at:0,title:'Final offer',description:'',ctaLabel:'Continue',action:scenario==='custom-link'?'link':'checkout',url:scenario==='custom-link'?'https://example.test/custom':'',expiresAt:new Date(Date.now()-1000).toISOString()}]};
+   const instance=await harness('components/webinar-room.tsx',{...roomDeps,webinarBeacon:(url,body)=>beacons.push({url,body}),post:async(url,body)=>{
+    if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(ending),progress:ending.durationSeconds,name:'Viewer',messages:[],preview:false,ownerWatching:scenario==='owner',serverNow:Date.now()};
+    if(body.kind==='completed'){
+     if(scenario==='failed')throw Error('Connection interrupted');
+     return new Promise(resolve=>{finishRequest=resolve;});
+    }
+    return {saved:true};
+   }});
+   const draw=()=>instance.render('WebinarRoom',{});draw();await flush();let current=draw();current=draw();
+   const before=redirects.length;
+   find(current,'WebinarPlayer').props.onEnded();current=draw();await flush();
+   const fallback=[...timers.values()].find(t=>t.delay===1500);
+   assert.equal(!!fallback,scenario!=='owner');
+   if(scenario==='unmounted')instance.close();
+   if(scenario==='offline')navigator.onLine=false;
+   fallback?.fn();await flush();
+   if(scenario==='offline'){assert.equal(redirects.length,before,'Offline playback remains in the room');navigator.onLine=true;listeners.get('online')();await flush();}
+   const shouldNavigate=!['owner','custom-link','redirect-disabled','unmounted'].includes(scenario);
+   assert.equal(redirects.length,before+(shouldNavigate?1:0),scenario);
+   if(shouldNavigate){assert.equal(redirects.at(-1),`/webinar/checkout?webinar_session=${sessionId}`);assert.equal(beacons.length,1);}
+   finishRequest?.({saved:true,redirect:policy.webinarCompletionDestination(ending,ending.offers,sessionId)});await flush();
+   assert.equal(redirects.length,before+(shouldNavigate?1:0),'A late save cannot redirect twice');
+   instance.close();timers.clear();
+  }
+  for(const scenario of ['engaged','paid']){
+   let finishRequest;const beacons=[];
+   const instance=await harness('components/webinar-room.tsx',{...roomDeps,webinarBeacon:(...args)=>beacons.push(args),post:async(url,body)=>{
+    if(url.endsWith('/start'))return {sessionId,webinar:policy.publicWebinar(w),progress:w.durationSeconds,name:'Viewer',messages:[],preview:false,serverNow:Date.now()};
+    if(body.kind==='completed')return new Promise(resolve=>{finishRequest=resolve;});return {saved:true};
+   }});
+   const draw=()=>instance.render('WebinarRoom',{});draw();await flush();let current=draw();current=draw();const before=redirects.length;
+   find(current,'WebinarPlayer').props.onEnded();current=draw();
+   if(scenario==='engaged')find(current,'WebinarCheckout').props.onEngaged();
+   else find(current,'WebinarCheckout').props.onPurchased('standard','/live/123457');
+   [...timers.values()].find(t=>t.delay===1500).fn();await flush();
+   assert.equal(redirects.length,before,'A late payment/engagement is not replaced by ordinary checkout');assert.equal(beacons.length,0);
+   finishRequest?.({saved:true,redirect:'/webinar/checkout'});await flush();assert.equal(redirects.length,before);
+   instance.close();timers.clear();
+  }
+ }finally{globalThis.setTimeout=originalTimeout;globalThis.clearTimeout=originalClear;}
+}
+console.log('PASS completion latency: failed/hanging progress cannot strand ordinary checkout; late saves, payment engagement, custom offers, owner and unmounted rooms remain isolated.');

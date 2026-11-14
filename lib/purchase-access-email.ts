@@ -55,3 +55,21 @@ export async function recordPurchaseEmailDelivery(event:{type?:string;data?:{ema
  const id=data.tags?.icash_purchase_email_id;
  await db('rpc/icash_purchase_access_email_delivery','POST',{p_id:typeof id==='string'&&uuid.test(id)?id:null,p_provider:data.email_id,p_recipient:data.to[0],p_kind:kind});
 }
+
+/** A signed provider observation can stop a reminder; it never proves a human read or product access. */
+export async function recordPurchaseEmailEngagement(event:unknown,eventId:unknown,db:Database,now=Date.now()){
+ if(!event||typeof event!=='object'||Array.isArray(event)||typeof eventId!=='string'||!/^[A-Za-z0-9_-]{1,200}$/.test(eventId))return;
+ const observation=event as Record<string,unknown>;
+ if(observation.type!=='email.opened'&&observation.type!=='email.clicked')return;
+ if(typeof observation.created_at!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(observation.created_at))return;
+ const at=Date.parse(observation.created_at);
+ if(!Number.isFinite(at)||at<=0||at>now+300_000)return;
+ if(!observation.data||typeof observation.data!=='object'||Array.isArray(observation.data))return;
+ const data=observation.data as Record<string,unknown>;
+ if(typeof data.email_id!=='string'||!uuid.test(data.email_id)||!Array.isArray(data.to)||data.to.length!==1||typeof data.to[0]!=='string'||data.to[0].length>254||!email.test(data.to[0]))return;
+ if(data.tags!==undefined&&(!data.tags||typeof data.tags!=='object'||Array.isArray(data.tags)))return;
+ const id=(data.tags as Record<string,unknown>|undefined)?.icash_purchase_email_id;
+ if(id!==undefined&&(typeof id!=='string'||!uuid.test(id)))return;
+ // The database verifies the original provider/recipient binding, including callbacks received before send bookkeeping.
+ await db('rpc/icash_record_purchase_email_engagement','POST',{p_event:eventId,p_id:id??null,p_provider:data.email_id,p_recipient:data.to[0],p_kind:observation.type.slice(6),p_at:new Date(at).toISOString()});
+}

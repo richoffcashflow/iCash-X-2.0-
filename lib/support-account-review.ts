@@ -17,6 +17,8 @@ function missingSentOutreach(text:string){
 export function supportMissingActivityConcern(text:string){
  if(/\b(?:(?:it|(?:the |my )?(?:bot|ai)) (?:is )?working (?:now|fine|well)|problem solved|fixed now|all fixed)[.!\s]*$/i.test(text)&&!/\b(?:not working (?:now|fine|well)|not fixed|isn[’']?t working (?:now|fine|well))\b/i.test(text))return false;
  if(missingSentOutreach(text))return true;
+ if(/^(?:my|the) (?:ai )?bot (?:froze|is frozen|has frozen)[.!?\s]*$/i.test(text.trim()))return true;
+ if(/^(?:my|the) (?:ai )?bot (?:has not|hasn[’']?t) found (?:any )?more (?:deals|leads|properties)[.!?\s]*$/i.test(text.trim()))return true;
  if(/^(?:my|the) (?:ai )?(?:bot|ai) (?:has )?stopped (?:searching|researching(?: properties)?|finding (?:new |any )?leads)[.!?\s]*$/i.test(text.trim()))return true;
  // These whole-work complaints must not fall through to model guesses about
  // eligible inventory. A stopped seller contact or browser is a separate issue.
@@ -43,6 +45,7 @@ const activityProofQuestion=(text:string)=>/\b(?:how|when)(?: can| do| will)? i 
 function missingActivityFollowup(context:SupportContext){
  const turns=context.messages.slice(-9),latest=turns.at(-1);
  const previous=turns.at(-2);
+ if(latest?.role==='user'&&previous?.role==='assistant'&&/^how (?:would|do|can) i know (?:that|it)[?!.\s]*$/i.test(latest.content.trim())&&turns.at(-3)?.role==='user'&&/^(?:it is |it[’']s )?running[.!\s]*$/i.test(turns.at(-3)!.content.trim())&&turns.at(-4)?.role==='assistant'&&turns.at(-5)?.role==='user'&&outreachConcern(turns.at(-5)!.content))return true;
  const olderLeads=/^(?:yes[, ]+(?:but )?)?(?:it[’']?s|it is|they are|they[’']re|these are|those are)(?: all)? from (?:last week|yesterday|last month)[.!?\s]*$/i.test(latest?.content.trim()??'');
  const notRunning=/^(?:it says (?:it[’']?s|it is|its) |it is |it[’']?s )(?:on|running|active)[, ]+but (?:it is |it[’']?s |it )?not (?:running|working)[.!?\s]*$/i.test(latest?.content.trim()??'');
  if(latest?.role==='user'&&previous?.role==='assistant'&&
@@ -80,6 +83,12 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  const answer=(reply:string,managementReview=false):SupportReply=>({reply,status:'open',ai:false,...(managementReview?{managementReview:true}:{})});
  if(supportRenewalCancellationRequested(q))return null;
  if(/\b(?:refund|money back|cancel (?:my|the|this) (?:subscription|membership)|charged twice|duplicate charge)\b/i.test(q))return null;
+ if(/\b(?:bot|automation|it)\b/i.test(q)&&/\boutreach\b/i.test(q)&&/\b(?:research|looking for properties)\b/i.test(q)&&/\bcredits?\b/i.test(q)&&/\b(?:all|only|just)\b/i.test(q)&&/\b(?:rest of (?:the )?(?:wholesale|wholesaling)(?: process)?|everything else|handle (?:the )?rest of wholesaling)\b/i.test(q)&&!/\b(?:unrecognized|unauthorized|sign[ -]?in|log[ -]?in|seller asked|buyer asked|not all|not only|not just|working fine|what if|hypothetically|suppose)\b/i.test(q)){
+  const o=context.kind==='account'?context.evidence?.find(e=>e.key==='outreach')?.outreach:undefined;
+  const work=context.kind==='account'?context.evidence?.find(e=>e.key==='work'):undefined;
+  const recorded=o?`The current records show ${o.screened} properties checked, ${o.callsStarted} call attempts and ${o.textsSent} texts overall. These totals do not establish recent automatic activity. `:'Current account activity could not be verified from these checks. ';
+  return answer('The bot is designed to research properties, contact eligible sellers, follow up, pursue agreements, find buyers and coordinate closing. Research alone is not outreach or a completed deal. New seller calls and first texts follow the seller’s 9 AM–9 PM window, with Central Time used when the time zone is unknown, and still require contact, credit and readiness checks. '+(work?.code==='paused'?'Your bot is currently paused, which stops new work; this chat has not changed that setting. ':'')+recorded+'A research charge alone does not explain why outreach is missing. That still needs investigation; there is no confirmed start time. You still review agreements, sign where required and complete title and closing requests. Any earlier unresolved account issue remains open.',true);
+ }
  // Specific call-result complaints must reach their guidance before incidental
  // words such as "automated calls" and "available fix" match capability checks.
  if(supportVoicemailComplaint(q))return null;
@@ -196,7 +205,7 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   const next=directed?'The missing conversation still needs checking. Which property is affected?':'Open the property under Your leads, choose Texts and check the selected contact. If it is blank, which property is affected?';
   return answer(counts+'These records do not prove that the messages display correctly for you or that a seller wants to sell. '+next+' '+(voice?voice.detail+' ':'')+'I haven’t verified that every part of outreach is working.',true);
  }
- const runningFollowup=context.messages.at(-2)?.role==='assistant'&&outreachConcern(users.at(-2)?.content??'')&&/\b(?:run|running|paused)\b/i.test(previous)&&previous.includes('?')&&/^(?:yes[, ]+)?(?:it(?:[’']s| is)|the bot is|my bot is) (?:running|on)(?:[;,. ]+(?:(?:it has )?the )?green light(?: is)? on)?[.!\s]*$/i.test(q.trim());
+ const runningFollowup=context.messages.at(-2)?.role==='assistant'&&outreachConcern(users.at(-2)?.content??'')&&/\b(?:run|running|paused)\b/i.test(previous)&&previous.includes('?')&&/^(?:yes[, ]+)?(?:(?:it(?:[’']s| is)|the bot is|my bot is) )?(?:running|on)(?:[;,. ]+(?:(?:it has )?the )?green light(?: is)? on)?[.!\s]*$/i.test(q.trim());
  if(!paused&&missingSentOutreach(q)&&outreachConcern(q)){
   const recorded=supportOutreachReply(context.messages,context.evidence??[]);
   if(recorded)return {...recorded,managementReview:true};

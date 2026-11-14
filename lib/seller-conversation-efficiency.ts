@@ -10,7 +10,7 @@ export function sellerRequestsPrice(message:string):boolean{
  return /^(?:(?:okay|ok|yeah|yes|sure|well|so|then|but)[,.!? ]+)*(?:(?:how much|what) (?:would|will|can|could|do|are) (?:you|you'll|you all) (?:give|pay|offer)(?: me| us)?\b|(?:how much|what) (?:you'll|you) (?:give|pay|offer)(?: me| us)?\b|what(?:'s| is) your (?:cash )?offer\b|(?:can|could|would|will) you (?:make|give|send)(?: me| us)? (?:a |an |your )?(?:cash )?offer\b)/i.test(text);
 }
 
-export const sellerConversationEfficiencyInstructions=`A direct request for our price answers availability/interest, not ownership or property facts. Use get_offer and its nextQuestion; never restart answered questions, invent a price or override a refusal. On an explicit voicemail greeting, record-after-tone instruction or disconnected announcement, end_call immediately without a pitch or repeated silence checks. Screening assistants get one truthful AI/business identity; wait for a person, then end_call if unavailable. Machines and silence are not seller interest.`;
+export const sellerConversationEfficiencyInstructions=`A direct request for our price answers availability/interest, not ownership or property facts. Use get_offer and its nextQuestion; never restart answered questions, invent a price or override a refusal. On an explicit voicemail greeting, record-after-tone instruction or disconnected announcement, end_call immediately without a pitch or repeated silence checks. End confirmed call-screening assistants through the bound stop tool; do not answer their prompts or wait for a person. Machines and silence are not seller interest.`;
 
 /** Keep room for actual seller answers within the unchanged provider limit.
  * The frozen provider policy stays intact; this is the outbound runtime prompt. */

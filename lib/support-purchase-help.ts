@@ -3,19 +3,27 @@ import {supportRenewalCancellationRequested,type SupportEvidence} from './suppor
 type Turn={role:string;content:string};
 type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[]};
 
-/** A direct answer to an operator's payment-detail request is useful evidence
+/** A direct answer to a source-bound payment-detail request is useful evidence
  * for review, not a verified purchase or permission to change an account. */
 export function supportSubmittedPaymentDetails(context:PurchaseContext){
  if(context.kind!=='access')return null;
  const index=context.messages.findLastIndex(turn=>turn.role==='user');
  const before=context.messages.slice(0,index);
- const operator=before.findLastIndex(turn=>turn.role==='operator');
+ const operator=before.findLastIndex(turn=>turn.role==='operator'||turn.role==='assistant');
  if(index<0||operator<0||before.slice(operator+1).some(turn=>turn.role==='user'))return null;
  const request=before[operator].content,question=context.messages[index].content;
+ // A supplied description is a locating detail, never a verified merchant/payment.
+ if(before[operator].role==='operator'&&/What merchant name appears beside that payment on your (?:statement|receipt or bank statement)\?/i.test(request)
+  &&/^(?:it (?:says|shows)|(?:the )?merchant(?: name)? is) [\p{L}\p{N} &.'’-]{1,80}[.!]?$/iu.test(question)
+  &&!/[?]|\b(?:seller|buyer|property|house|deal|offer|closing|bot|leads?|credits?|contract|agreement|course|vip|refund|cancel|dispute|chargeback|not|no|never|if|fixed|working|resolved)\b|\b(?:signed|logged) in\b/i.test(question)){
+  return {reply:`You’ve supplied the statement description; it does not by itself verify the purchase or ownership. If you already emailed the receipt, do not send the same receipt again; reply with that email’s subject and date. Otherwise, send the original purchase receipt to ${supportLegacyProofEmail} and mention this access conversation. If no receipt arrived, tell us that here instead. Your access and any cancellation or refund request remain unresolved. Don’t share card numbers or codes, pay again or repeat failed sign-in steps.`,status:'open' as const,managementReview:true,ai:false};
+ }
+ // Older assistant text is only a source-bound question, never policy or proof.
+ if(before[operator].role==='assistant'&&(before.some(turn=>turn.role==='operator')||!/^The code requests (?:haven[’']t|have not) restored access\. What are the payment date and amount on your receipt\? Leave out card details and codes; you (?:don[’']t|do not) need to pay again\.$/i.test(request)))return null;
  if(!/\bdate and amount\b/i.test(request)||!/\b(?:payment|purchase|bank|card|statement)\b/i.test(request)
   ||!/(?:\bwhat\b[^?]*\?|\breply\b.{0,90}\bdate and amount\b)/i.test(request))return null;
  if(/\?|\b(?:seller|buyer|property|house|deal|offer|closing|bot|leads?|credits?|contract|agreement|course|vip|refund|duplicate|twice|unrecognized|unauthorized|dispute|chargeback|cancel(?:led|ed|lation)?|delet(?:e|ed|ion)|not|never|no|didn[’']?t|haven[’']?t|will|would|plan|hypothetically|if)\b/i.test(question))return null;
- const date=/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/i.test(question);
+ const date=/\b(?:today|yesterday)\b|\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/i.test(question);
  const amount=/\$\s*\d+(?:\.\d{1,2})?\b|\b\d+(?:\.\d{1,2})?\s+(?:dollars?|USD)\b/i.test(question);
  if(!date||!amount)return null;
  const prior=before.slice(0,operator).findLast(turn=>turn.role==='user')?.content??'';

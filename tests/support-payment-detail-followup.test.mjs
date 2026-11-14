@@ -30,3 +30,28 @@ for(const messages of [[...history,u('Where is the course?')],[...history,u('Can
 }
 assert.equal(modelCalls,0);
 console.log('PASS supplied payment details: useful review next step, unverified ownership, guest source/operator/topic/negative boundaries; no model calls.');
+
+// A completed payment-detail answer can follow the product's own question.
+const automated=a('The code requests have not restored access. What are the payment date and amount on your receipt? Leave out card details and codes; you do not need to pay again.');
+for(const day of ['today','yesterday'])for(const handedOff of [false,true]){
+ const r=await replyToSupport({kind:'access',handedOff,allowAI:false,messages:[u('I paid but no sign-in code arrived.'),automated,u(`Payment date is ${day} and it was $42 dollars`)],evidence:[]},noModel);
+ assert.match(r.reply,/supplied the payment date and amount/);assert.match(r.reply,/merchant name/);assert.equal(r.status,'open');
+}
+for(const q of ['I did not pay $42 today.','I will pay $42 today.','If I pay $42 today will I get access?','The seller paid $42 today.','Today $42, refund it.','Today $42, cancel my subscription.','Where is the course?'])assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[automated,u(q)]}),null,q);
+for(const messages of [[u(automated.content),u('Today $42.')],[automated,o('The purchase is matched. Continue verified recovery.'),u('Today $42.')],[automated,u('Where is the course?'),a('Open Course.'),u('Today $42.')],[a('What is your payment date and amount?'),u('Today $42.')]])assert.equal(supportSubmittedPaymentDetails({kind:'access',messages}),null,'Customer, operator, topic and arbitrary older-assistant boundaries');
+assert.equal(modelCalls,0);
+
+const merchantRequest=o('You have supplied the date and amount. What merchant name appears beside that payment on your receipt or bank statement? Share only that name, not card numbers or codes.');
+for(const handedOff of [false,true]){
+ const r=await replyToSupport({kind:'access',handedOff,allowAI:false,messages:[u('I paid $42 today but no code arrived.'),merchantRequest,u('It says Example Software')],evidence:[]},noModel);
+ assert.match(r.reply,/supplied the statement description/);assert.match(r.reply,/original purchase receipt/);assert.match(r.reply,/support@geticashx.com/);assert.equal(r.status,'open');assert.doesNotMatch(r.reply,/What merchant name|confirmed fix or completion time/);
+}
+for(const messages of [[u(merchantRequest.content),u('It says Example Software')],[merchantRequest,o('The receipt has been matched; use verified recovery.'),u('It says Example Software')],[merchantRequest,u('Where is the course?'),a('Open Course.'),u('It says Example Software')]])assert.equal(supportSubmittedPaymentDetails({kind:'access',messages}),null);
+for(const q of ['It says Example Software, refund it.','It says the seller is ready.','It says no payment.','It says Example Software?','Citizens Bank'])assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[merchantRequest,u(q)]}),null,q);
+const alreadySent=supportSubmittedPaymentDetails({kind:'access',messages:[u('I already emailed support my receipt.'),merchantRequest,u('It says Example Software')]});
+assert.match(alreadySent.reply,/do not send the same receipt again/);
+assert.doesNotMatch(alreadySent.reply,/forward the original purchase receipt/i);
+assert.equal(modelCalls,0);
+console.log('PASS relative payment dates and submitted statement descriptions; original evidence, topic/operator/negative boundaries preserved.');
+assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[o('The purchase is matched; use verified recovery.'),automated,u('Today $42.')]}),null,'An older automated question cannot supersede operator findings');
+for(const q of ['It says I am signed in now.','It says the contract is ready.','It says working now.'])assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[merchantRequest,u(q)]}),null,q);

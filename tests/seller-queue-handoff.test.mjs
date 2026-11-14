@@ -19,8 +19,9 @@ assert.equal((await route.GET(req)).status,200);assert.equal(target,'recovered-l
 allocation=null;assert.equal((await route.GET(req)).status,200);assert.equal(target,undefined,'An idle assignment tick still services the existing response queue');
 allocation={status:'waiting_for_budget'};await route.GET(req);assert.equal(target,undefined);
 recoveryFails=true;allocation={status:'assigned',leadId:'new-seller'};
-const isolated=await route.GET(req);assert.equal(isolated.status,200);
+const isolated=await route.GET(req);assert.equal(isolated.status,503,'Independent work continues without hiding the failed recovery lane');
 const outcome=await isolated.json();assert.equal(outcome.agreementRecovery.status,'agreement_recovery_unavailable');
+assert.deepEqual(outcome.recoveryFailures,['agreementRecovery']);
 assert.equal(outcome.lookup.status,'property_checked');assert.equal(target,'new-seller','A broken agreement recovery cannot block a new seller response');
 recoveryFails=false;let releaseRecovery;
 recoveryWait=new Promise(resolve=>{releaseRecovery=resolve;});

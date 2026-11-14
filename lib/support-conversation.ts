@@ -1,4 +1,5 @@
 import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
+import {supportBillingComplaintReply} from './support-billing-complaints.ts';
 import {supportContactPrivacyReply} from './support-contact-privacy.ts';
 import {supportCallRecordingReply} from './support-call-recordings.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
@@ -53,6 +54,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in(?=[.!]|$|\s+now\b)|got in(?=[.!]|$|\s+now\b)|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&supportAcknowledgment(question))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Got it.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
+ const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const contactPrivacy=supportContactPrivacyReply(context);if(contactPrivacy)return contactPrivacy;

@@ -6,6 +6,7 @@ import {callContactEvidence,hasHumanCallWords,automatedAnswerInstructions} from 
 import {liveConversationResult,productionDealInstructions} from '../lib/deal-conversation.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const fixtures=[
+ ['Again, press any key to continue.',false],['An AI assistant recording this call for the person you are trying to reach. Please say who you are and why you are calling.',false],['Please try your call again later. Goodbye.',false],['I use an AI assistant to record calls, and I own the property.',true],['This person is available.',true],
  ['Finished recording. You may hang up.',false],['... have finished recording, you may hang up.',false],
  ["When that's finished recording, you may hang up.",false],['... recording, you may hang up.',false],
  ['... phone, press the pound key to end recording.',false],['To end recording.',false],
@@ -43,6 +44,8 @@ try{
  const variants=read('supabase/migrations/20261105072921_seller_voicemail_response_variants.sql');
  await db.exec(variants);
  await db.exec(read('config/automated-call-evidence-variants.sql'));
+ assert.equal(read('config/seller-screening-evidence.sql'),read('supabase/migrations/20261113163711_seller_screening_evidence.sql'));
+ await db.exec(read('config/seller-screening-evidence.sql'));
  for(const [message,expected] of fixtures){
   assert.equal(hasHumanCallWords(message),expected,message);
   const result={transcript:[{role:'user',message},{role:'user',message:'...'}]};
@@ -53,6 +56,9 @@ try{
  }
  assert.equal(callContactEvidence([{role:'user',message:'Please stay on the line.'},{role:'user',message:'Yes, this is my property.'}]),'human_response','A person answering after screening still counts');
  for(const [words,expected] of [
+  [['This person is available.','Thanks. Please stay on the line.'],false],
+  [['This person is available.','Thanks. Please stay on the line.','I own it.'],true],
+  [['This person is available.','Thanks. Please stay on the line.','Stop calling me.'],true],
   [['At the beach. Thank you.','At the tone, please record your message.'],false],
   [['At the beep. Thank you.','When you have finished recording, you may hang up.'],false],
   [['At the beach. Thank you.'],true],
@@ -73,6 +79,8 @@ try{
  await db.exec(read('tests/fixtures/call-response-fast-path.sql'));
  await db.exec(variants);
  await db.exec(read('config/automated-call-evidence-variants.sql'));
+ assert.equal(read('config/seller-screening-evidence.sql'),read('supabase/migrations/20261113163711_seller_screening_evidence.sql'));
+ await db.exec(read('config/seller-screening-evidence.sql'));
  const fast=(await db.query("select pg_get_functiondef('icash_call_has_seller_response(jsonb)'::regprocedure) as definition")).rows[0].definition;
  assert.match(fast,/case when/);assert.match(fast,/else public.icash_seller_response_disposition/);
  for(const [message,expected] of fixtures)assert.equal((await db.query('select icash_call_has_seller_response($1) value',[{transcript:[{role:'user',message}]}])).rows[0].value,expected);

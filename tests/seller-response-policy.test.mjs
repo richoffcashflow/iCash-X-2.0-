@@ -9,6 +9,8 @@ import {validateTextAnalysis} from '../lib/text-ai-policy.ts';
 import {liveConversationResult} from '../lib/deal-conversation.ts';
 import {replyToInstantLeadText} from '../lib/meta-instant-text.ts';
 const fixtures=[
+ ['STOP. Who are you?','opt_out'],['Please stop! What is your name?','opt_out'],['You said "STOP. Who are you?"',null],['Do not say stop. Who are you?',null],
+ ['Yes. Never mind','declined'],['Nevermind!','declined'],['Forget it.','declined'],['Go away','declined'],['Go to hell','declined'],['Never mind the paint, I want to sell.',null],['I did not say never mind',null],['You said "forget it" yesterday',null],
  ['It is not up for sale.','declined'],["I don't own the property.",'declined'],["I'm not the owner",'declined'],
  ['You said "I am not the owner", but I own it.',null],['I did not say I do not own the property',null],
  ['Please remove this number from your mailing and contact list. Thanks, and goodbye.','opt_out'],
@@ -58,6 +60,10 @@ try{
  const unmarkedSql=readFileSync(new URL('../config/seller-unmarked-price-answers.sql',import.meta.url),'utf8');
  assert.equal(unmarkedSql,readFileSync(new URL('../supabase/migrations/20261112224920_seller_unmarked_price_answers.sql',import.meta.url),'utf8'));
  await pg.exec('begin;'+unmarkedSql+'commit;');
+ const withdrawal=readFileSync(new URL('../config/seller-soft-withdrawal.sql',import.meta.url),'utf8');
+ assert.equal(withdrawal,readFileSync(new URL('../supabase/migrations/20261113163659_seller_soft_withdrawal.sql',import.meta.url),'utf8'));
+ assert.equal((await pg.query("select icash_seller_response_disposition('Yes. Never mind') d")).rows[0].d,null,'reproduce soft withdrawal gap');
+ await pg.exec(withdrawal);
  for(const pattern of Object.values(sellerCallAnswerPatterns))assert((answerSql+priceSql+unmarkedSql).includes(pattern.replaceAll('\\b','\\y')),'context SQL/TS pattern parity');
  const runtimeSql=(await pg.query("select string_agg(pg_get_functiondef(p.oid),E'\\n') definitions from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('icash_seller_direct_response_match','icash_seller_response_disposition','icash_seller_call_disposition')")).rows[0].definitions;
  for(const pattern of Object.values(sellerResponsePatterns))assert(runtimeSql.includes(pattern.replaceAll('\\b','\\y')),'installed SQL contains the exact mirrored regex');

@@ -1,12 +1,13 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {DemoReadinessPanel} from './demo-readiness';
+import {checkDemoReadiness} from './demo-readiness';
 import styles from './owner-account-reset.module.css';
 /** A retry retains its receipt ID: a lost response must not clear a newer demo. */
 export function OwnerAccountReset({disabled=false,onReset,onBusyChange}:{disabled?:boolean;onReset:()=>void;onBusyChange?:(busy:boolean)=>void}){
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[done,setDone]=useState(0);
  const pending=useRef<AbortController|null>(null),requestId=useRef('');
  useEffect(()=>()=>{pending.current?.abort();pending.current=null;},[]);
+ useEffect(()=>{if(!done)return;const c=new AbortController();void checkDemoReadiness(c.signal);return()=>c.abort();},[done]);
  async function reset(){
   if(pending.current||disabled)return;
   const c=new AbortController();pending.current=c;
@@ -28,15 +29,13 @@ export function OwnerAccountReset({disabled=false,onReset,onBusyChange}:{disable
     }
     if(d.status!=='reset'||d.requestId!==requestId.current||d.historyPreserved!==true||d.providerWrites!==false)throw Error('Couldn’t verify the reset. Click again to check the same request.');
     requestId.current='';try{sessionStorage.removeItem('icash-owner-reset-request-v1');}catch{/* Nothing to clear. */}
-    onReset();setDone(v=>v+1);setMessage('Reset complete. Your old demo is cleared. Checking the setup now…');return;
+    onReset();setDone(v=>v+1);setMessage('Owner account reset.');return;
    }
   }catch(e){if(!c.signal.aborted)setMessage(e instanceof Error?e.message:'Couldn’t confirm the reset. Click again to check the same request.');}
   finally{if(pending.current===c){pending.current=null;if(!c.signal.aborted){setBusy(false);onBusyChange?.(false);}}}
  }
  return <section className={styles.reset} aria-label="Owner account reset">
   <button type="button" className="workspace-quiet demo-secondary" disabled={disabled||busy} onClick={()=>void reset()}>{busy?'Resetting owner account…':'Reset owner account'}</button>
-  <p className="demo-credit-note">Clears demo properties, conversations, and queued work, then checks the setup. Keeps credits and payment/contract history.</p>
   {message&&<p role="status" aria-live="polite">{message}</p>}
-  {done>0&&<DemoReadinessPanel key={done} onChange={ready=>setMessage(ready?'Reset complete. Setup checks passed. You can start a new demo.':'Reset complete. See the setup check below before starting a new demo.')}/>}
  </section>;
 }

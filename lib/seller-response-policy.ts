@@ -12,6 +12,8 @@ export const sellerResponsePatterns={
  machine:"^(?:(?:hi|hello)[,.! ]+)?(?:you.{0,8}(?:have reached|ve reached)|(?:this is |welcome to ).{0,60}(?:voice[ -]?mail|mailbox|automated (?:system|assistant))|(?:please )?leave.{0,25}(?:message|name|number)|after.{0,12}(?:tone|beep)|(?:the person|the subscriber|the number|your call|the call|this number).{0,80}(?:not available|unavailable|forwarded|disconnected|not in service)|no se ha grabado nada[.! ]|no one is available|press [0-9]|comunicarte.{0,30}no est[aá] disponible|(?:buz[oó]n de voz|correo de voz)|(?:graba|grabe|deja|deje).{0,25}mensaje)",
 };
 const normalize=(body:string)=>body.toLowerCase().replace(/[’‘]/g,"'").replace(/[“”]/g,'"').replace(/\s+/g,' ').trim();
+export const sellerStandaloneStopPattern="(?:^|[.!?;] +)(?:please )?stop[.!;](?: +|$)";
+export const sellerWithdrawalPattern="(?:^|[.!?;] +)(?:(?:ok(?:ay)?|yes)[, ]+)?(?:never mind|nevermind|forget it|go away|go to hell)(?: please)?[.! ,]*$";
 function directMatch(body:string,pattern:string){
  for(const match of body.matchAll(new RegExp(pattern,'g'))){
   const sentence=body.slice(0,match.index).split(/[.!?;]|\bbut\b/).at(-1)??'';
@@ -24,7 +26,8 @@ function directMatch(body:string,pattern:string){
 }
 export function sellerResponseDisposition(source:string):SellerResponseDisposition{
  const body=normalize(source);
- if(directMatch(body,sellerResponsePatterns.optOut))return 'opt_out';
+ if(directMatch(body,sellerResponsePatterns.optOut)||directMatch(body,sellerStandaloneStopPattern))return 'opt_out';
+ if(directMatch(body,sellerWithdrawalPattern))return 'declined';
  // Exclude only the channel preference, never a separate refusal in the same message.
  const declineBody=/\b(?:call|talk)\b/.test(body)?body.replace(/\bnot (?:(?:super|very|really|that|at all) )?interested in (?:texting|emailing|emails|texts)\b/g,''):body;
  if(directMatch(declineBody,sellerResponsePatterns.declined)){

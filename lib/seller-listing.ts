@@ -22,6 +22,10 @@ export function sellerListingEvidence(value:unknown,input:Record<string,unknown>
  if(!answer||answer!==String(input.sellerStatement??'').trim())return null;
  const question=String(turns.slice(0,i).findLast(t=>t.role==='agent')?.message??'');
  const listingQuestion=asksListingStatus(question);
+ // A choice between agent listing and self-sale needs an explicit choice;
+ // a bare yes/no must not answer both alternatives.
+ if(/\bor\b/i.test(question)&&/selling (?:it )?yourself/i.test(question)
+  &&/^(?:yes|no|yeah|nope|correct)[.! ]*$/i.test(answer))return null;
  if(/\b(?:but|however|although|except)\b/i.test(answer)&&/\b(?:agent|realtor|broker|agreement|listed|listing)\b/i.test(answer))return null;
  // Speech transcripts include fillers and complete short replies such as
  // "No, it's not." Bind these only to the actual positive listing question;
@@ -33,6 +37,7 @@ export function sellerListingEvidence(value:unknown,input:Record<string,unknown>
  if(listingQuestion&&/^(yes|yeah|yep|correct|it is)[.! ]*$/i.test(answer))return true;
  if(/\b(not|isn['’]t|is not|no longer)\s+(currently\s+)?listed\b/i.test(answer))return false;
  if(/\b(listing|agent agreement)\s+(has\s+)?(expired|ended|was cancelled|was canceled)\b/i.test(answer))return false;
+ if(/^(?:(?:i am|i'm|we are|we're) )?(?:selling (?:it )?(?:myself|ourselves)|for sale by owner|fsbo)[.! ]*$/i.test(answer))return false;
  if(/\b(listed|listing)\b/i.test(answer)&&/\b(agent|realtor|broker)\b/i.test(answer)
   &&! /\b(not|no|never|was|used to|might|maybe|planning|considering|expired|cancelled|canceled)\b/i.test(answer))return true;
  return null;

@@ -39,12 +39,12 @@ responses=[];enabled=false;research=0;const beforeDisabled=demoRecoveries;result
 responses=[];enabled=true;lookupFails=false;assigned=true;result=await run();assert.equal(result.status,200);assert.deepEqual(responses,['existing','new-lead'],'new assignments still get an immediate targeted response');
 responses=[];allocationFails=true;assert.equal((await run()).status,503);assert.deepEqual(responses,['existing'],'allocation failure cannot cancel existing response work');
 responses=[];allocationFails=false;assigned=false;responseFails=true;assert.equal((await run()).status,503);assert.deepEqual(responses,['existing'],'failed response work is not retried in the same tick');
-responses=[];responseFails=false;assigned=true;emailFails=true;result=await run();assert.equal(result.status,200);
+responses=[];responseFails=false;assigned=true;emailFails=true;result=await run();assert.equal(result.status,503,'A failed recovery lane must remain visible without stopping seller responses');
 const emailFailure=await result.json();assert.equal(emailFailure.sellerEmails.status,'seller_email_retry_pending');
 assert.deepEqual(responses,['existing','new-lead'],'an email outage cannot swallow existing or immediate seller responses');
 assert.equal(emailFailure.agreementRecovery.status,'recovery_idle');assert.equal(emailFailure.measurement.status,'measurement_idle');
 assert(recovery>0&&measurement>0&&emails>0,'independent agreement, measurement and email work still run');
-responses=[];emailFails=false;contactFails=true;result=await run();assert.equal(result.status,200);
+responses=[];emailFails=false;contactFails=true;result=await run();assert.equal(result.status,503,'A failed contact-refresh read must not report a healthy maintenance pass');
 assert.equal((await result.json()).contactRefresh.status,'contact_refresh_requires_review');
 assert.deepEqual(responses,['existing','new-lead'],'contact refresh failure cannot swallow existing or immediate seller responses');
 assert(demoRecoveries>0,'enabled maintenance checks for a still-fresh owner request before ordinary backlog');
@@ -71,4 +71,47 @@ for(const active of [false,true]){
  instantResult={status:'processed',failures:0};assert.equal((await run()).status,200);
  instantThrows=true;assert.equal((await run()).status,503);instantThrows=false;
 }
-console.log('PASS seller maintenance: existing responses survive lookup/allocation outages and disabled acquisition; new matches are immediate; no same-tick retry or provider requests.');
+// Exercise every isolated recovery boundary, including disabled acquisition and
+// a late failure. Responses must progress before recovery finishes; the route
+// must await the original work and never retry a failed stage in this pass.
+const recoveryNames=['sellerEmails','agreementRecovery','measurement','researchRefresh','contactRefresh'];
+for(const active of [false,true])for(const failed of ['none',...recoveryNames]){
+ const started=[],finished=[];let release,done=false;
+ const pendingRecovery=new Promise(resolve=>{release=resolve;});
+ const recoveryTask=(name,status)=>async()=>{
+  started.push(name);
+  if(name===failed)await pendingRecovery;
+  finished.push(name);
+  if(name===failed)throw Error('PRIVATE source credentials and customer data');
+  return {status};
+ };
+ const subject=await loadService('app/api/internal/seller/route.ts',{
+  authorizeOutboundBilling:()=>true,process:{env:{}},
+  processSellerEmails:recoveryTask('sellerEmails','seller_emails_idle'),dealEmailConfigured:()=>true,dispatchDealEmail:()=>assert.fail('No provider calls'),
+  recoverAgreementDelivery:recoveryTask('agreementRecovery','idle'),sendForSignatures:()=>assert.fail('No agreement creation'),textPendingContract:()=>assert.fail('No contract text'),
+  processSellerResearchRefresh:recoveryTask('researchRefresh','rate_limited'),
+  processSellerContactRefresh:recoveryTask('contactRefresh','current_controls_hold'),
+  processInstantLeadWork:async()=>({status:'disabled'}),
+  deliverSellerEvent:async()=>({status:'measurement_setup_required'}),
+  processSellerResponses:async()=>{started.push('responses');return [];},dispatchTextMessage:()=>assert.fail('No text transport'),dispatchLiveVoice:()=>assert.fail('No call transport'),
+  recoverPendingOwnerDemoLookup:async()=>({status:'owner_demo_recovery_idle'}),processSellerIntake:async()=>({status:'rate_limited'}),
+  db:async path=>{
+   if(path==='icash_seller_controls?id=eq.1&select=enabled')return [{enabled:active}];
+   if(path==='rpc/icash_collect_seller_milestones')return recoveryTask('measurement','collected')();
+   if(path==='rpc/icash_assign_seller_lead')return null;
+   assert.fail('Unexpected database path '+path);
+  },
+ });
+ const pending=subject.GET(new Request('https://fixture.invalid/api/internal/seller')).then(value=>{done=true;return value;});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert(started.includes('responses'),'Independent responses start despite the delayed recovery lane');
+ assert.equal(done,failed==='none','The route must await every original recovery promise');
+ for(const name of recoveryNames)assert.equal(started.filter(value=>value===name).length,1,name+' starts exactly once');
+ release();
+ const response=await pending,body=await response.json();
+ assert.equal(response.status,failed==='none'?200:503,failed+' is visible with acquisition '+active);
+ assert.deepEqual(body.recoveryFailures,failed==='none'?[]:[failed]);
+ for(const name of recoveryNames)assert.equal(finished.filter(value=>value===name).length,1,name+' finishes exactly once');
+ assert(!JSON.stringify(body).includes('PRIVATE'),'Only fixed lane names and statuses are returned');
+}
+console.log('PASS seller maintenance: visible isolated recovery failures; awaited independent lanes; disabled acquisition; no same-tick retry or provider requests.');
