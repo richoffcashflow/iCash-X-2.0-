@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'support-payment-detail-followup',
  'support-contact-privacy',
  'automatic-outreach-bottlenecks',
  'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
@@ -28,7 +29,7 @@ const suites = [
  'pro-voice-capacity', 'pro-voice-capacity-database',
  'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-call-invitation', 'seller-initial-reply',
  'support-purchase-topic', 'support-work-repair-boundaries', 'support-pending-explanation',
- 'support-checkout-email', 'support-seller-text-review', 'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
+ 'support-checkout-email', 'support-proof-submission-boundaries', 'support-seller-text-review', 'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
  'validation-compatibility',
  'buyer-contact-quality', 'buyer-links', 'buyer-funnel-evidence', 'deal-learning-report',
