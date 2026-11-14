@@ -8,10 +8,17 @@ type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportE
 export function supportProofSubmissionFollowup(messages:Turn[]){
  const index=messages.findLastIndex(turn=>turn.role==='user');
  const request=messages[index-1];
+ const q=messages[index]?.content.trim()??'';
+ const checkoutDetails=request?.role==='operator'
+  &&/\breply to (?:that|the same|this) email\b[^.!?]{0,100}\b(?:first and last name|checkout name)\b/i.test(request.content)
+  &&/\bcheckout email\b/i.test(request.content)
+  &&!/\b(?:do not|don[’']t|never) reply\b/i.test(request.content);
+ const detailsClaim=/^I (?:have )?already (?:did that|sent (?:it|those details))\b/i.test(q)&&q.length<=240
+  &&!/\b(?:seller|buyer|bot|property|house|contract|course|vip|credits?|delete|deletion|refund|cancel|not yet|never|haven[’']t|did not|didn[’']t|would|will|if|friend|not to you|working now|fixed|resolved|signed in)\b/i.test(q);
+ if(checkoutDetails&&detailsClaim)return {reply:'You’re saying you sent the checkout details requested in the last support reply. That submission still needs to be checked against the purchase; you do not need to send those same details again. The earlier operator findings remain part of this review. This reply does not confirm any new email, subscription, refund or access change.',status:'open' as const,managementReview:true as const,ai:false as const};
  if(!request||request.role!=='operator'||!request.content.includes(supportLegacyProofEmail)
   ||!/\b(?:email|forward|send)\b[^.!?]{0,55}\b(?:purchase receipt|checkout (?:email|address)|original checkout address)\b/i.test(request.content)
   ||/\b(?:not|never|don[’']?t|do not|no need to)\s+(?:email|forward|send)\b/i.test(request.content))return null;
- const q=messages[index].content.trim();
  if(!/^(?:(?:done|yes)[,.!\s]+)?I (?:(?:have )?already did(?: that)?|(?:have |already |just )?sent it(?: to (?:your email|you|support))?)[.!\s]*$/i.test(q))return null;
  return {reply:'You’ve said you sent the requested purchase information. I have not confirmed that the email has been received or matched to the purchase. You do not need to send the same information again. What subject and date did you use for that email? That will help locate it. Your access and any cancellation or refund request remain unresolved; this reply has not changed your email, subscription or access.',status:'open' as const,managementReview:true as const,ai:false as const};
 }
