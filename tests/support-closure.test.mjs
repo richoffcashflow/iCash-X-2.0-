@@ -118,5 +118,46 @@ try{
  await rpc('icash_access_help_operator_update',{p_operator:operator,p_id:visitor,p_key:randomUUID(),p_status:'waiting_on_customer',p_reply:null});
  assert.equal(await rpc('icash_access_help_finish_reply',{...visitorReply,p_key:more,p_token:next.token}),false);
  assert.deepEqual(await row('select status,needs_operator from icash_access_help_requests where id=$1',[visitor]),{status:'waiting_on_customer',needs_operator:false});
- console.log('PASS support closure: polite policy/warning/close, new issues and payment evidence protected, inactive-only bounded closure, no email fanout, preserved history, account/guest reopen, idempotency, operator races, private ACLs. Local fixtures only.');
+ // Current policy: waiting for a reply never establishes customer recovery.
+ // Install the prospective correction after exercising the historical migration.
+ await pg.exec('reset role');
+ const waitingAccount=await chat({role:'operator',age:49});
+ const waitingGuest=await guest({role:'operator',age:49});
+ await q("update icash_support_messages set content='The display correction is installed. Please confirm whether your original issue is resolved.' where thread_id=$1",[waitingAccount]);
+ await q("update icash_access_help_messages set content='The purchase email correction is complete. Access is still unconfirmed; please tell us whether sign-in works.' where request_id=$1",[waitingGuest]);
+ const changedTopic=await chat({age:49});
+ await q("update icash_support_messages set content='The course is in your workspace. Your earlier activity issue has no confirmed result.' where thread_id=$1",[changedTopic]);
+ const ordinaryQuestion=await guest({age:49});
+ const resolvedAccount=await chat({status:'resolved',role:'user',age:49});
+ const resolvedGuest=await guest({status:'resolved',role:'user',age:49});
+ for(const [table,column,id] of [['icash_support_messages','thread_id',resolvedAccount],['icash_access_help_messages','request_id',resolvedGuest]])await q(`update ${table} set content='That worked. I can sign in now.' where ${column}=$1`,[id]);
+ const historicalClosed=await guest({status:'closed',age:49});
+ const beforeFunction=await row("select oid,proowner,proacl::text,prosecdef,proconfig from pg_proc where oid='public.icash_close_inactive_support()'::regprocedure");
+ await pg.exec(read('supabase/migrations/20261113161650_preserve_waiting_support_cases.sql'));
+ await pg.exec(read('supabase/migrations/20261113161650_preserve_waiting_support_cases.sql')); // Exact replay is harmless.
+ const afterFunction=await row("select oid,proowner,proacl::text,prosecdef,proconfig from pg_proc where oid='public.icash_close_inactive_support()'::regprocedure");
+ assert.deepEqual(afterFunction,beforeFunction,'Function identity, owner, private ACLs and invoker mode remain intact');
+ const capture=async()=>row(`select
+  (select jsonb_agg(to_jsonb(t) order by id) from icash_support_threads t) accounts,
+  (select jsonb_agg(to_jsonb(t) order by id) from icash_access_help_requests t) guests,
+  (select count(*)::int from icash_support_messages) account_messages,
+  (select count(*)::int from icash_access_help_messages) guest_messages,
+  (select count(*)::int from icash_support_customer_emails) customer_emails`);
+ const beforeMaintenance=await capture();
+ await pg.exec('set role service_role');
+ for(let i=0;i<2;i++)assert.deepEqual(await rpc('icash_close_inactive_support',{}),{accountChats:0,guestChats:0},'Silence cannot close unresolved cases, including after an operator repair');
+ assert.deepEqual(await capture(),beforeMaintenance,'No timestamps, statuses, queue flags, history or customer notifications change');
+ for(const id of [waitingAccount,changedTopic])assert.equal((await row('select status from icash_support_threads where id=$1',[id])).status,'waiting_on_customer');
+ for(const id of [waitingGuest,ordinaryQuestion])assert.equal((await row('select status from icash_access_help_requests where id=$1',[id])).status,'waiting_on_customer');
+ assert.equal((await row('select status from icash_access_help_requests where id=$1',[historicalClosed])).status,'closed','No bulk historical reopening');
+ assert.equal((await row('select status from icash_support_threads where id=$1',[resolvedAccount])).status,'resolved','Preserve independently confirmed outcomes');
+ assert.equal((await row('select status from icash_access_help_requests where id=$1',[resolvedGuest])).status,'resolved');
+ await pg.exec('reset role');
+ for(const role of ['anon','authenticated'])await assert.rejects(pg.exec(`set role ${role};select icash_close_inactive_support();`).finally(()=>pg.exec('reset role')));
+ // Refuse to overwrite an independently changed maintenance implementation.
+ await pg.exec('begin');
+ await pg.exec("create or replace function public.icash_close_inactive_support() returns jsonb language plpgsql security invoker set search_path='' as $$begin return '{}'::jsonb;end$$");
+ await assert.rejects(pg.exec(read('supabase/migrations/20261113161650_preserve_waiting_support_cases.sql')),/Support inactivity source changed/);
+ await pg.exec('rollback');
+ console.log('PASS support closure: polite policy/warning/close, new issues and payment evidence protected, historical bounded closure and prospective waiting-case preservation, no email fanout, preserved history, account/guest reopen, idempotency, operator races, private ACLs. Local fixtures only.');
 }finally{await pg.close();}

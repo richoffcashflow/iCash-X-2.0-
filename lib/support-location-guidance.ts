@@ -8,11 +8,12 @@ export function supportLocationGuidance(context:SupportContext):SupportReply|nul
  if(/\b(?:not (?:working|calling|texting|doing|running)|no (?:calls|texts)|stalled|blocked|missing activity)\b/i.test(q))return null;
  const searchLocation=/\b(?:search|target)(?:ing)? (?:locations?|areas?|markets?)\b/i.test(q)&&/\b(?:how|where|choose|select|set|change)\b/i.test(q);
  const focusRequest=/^(?:please |i (?:want|need) (?:you|the bot) to )?(?:only )?focus(?: my bot| the bot)? (?:only )?on (?:cities|states|markets)(?: like| such as| in)?\b/i.test(q.trim());
- if(!/\bleads?\b/i.test(q)&&!searchLocation&&!focusRequest)return null;
+ const dealSearchLocation=/\b(?:cities|city|states?|markets?)\b/i.test(q)&&/\b(?:look|search|find)(?:ing)?(?: for)? deals?\b/i.test(q)&&/\b(?:want|would like|how)\b/i.test(q)&&!/\b(?:seller|do not|don[’']?t|no longer)\b/i.test(q);
+ if(!/\bleads?\b/i.test(q)&&!searchLocation&&!focusRequest&&!dealSearchLocation)return null;
  const origin=/\bleads?\b[^.!?]{0,30}\b(?:coming|come) (?:out of|from)\s+[a-z]/i.test(q);
  const geography=/\b(?:cities|city|states?|zip codes?|markets?|locations?|any ?where else)\b/i.test(q)&&/\b(?:why|where|choose|select|change|getting|find|get)\b/i.test(q);
  const request=/^(?:please )?(?:get|find|search for)(?: me)? leads? in [a-z .'-]+[.!?\s]*$/i.test(q.trim());
- if(!origin&&!geography&&!request&&!searchLocation&&!focusRequest)return null;
+ if(!origin&&!geography&&!request&&!searchLocation&&!focusRequest&&!dealSearchLocation)return null;
  return {reply:'The bot selects markets automatically. The workspace has no city, state or ZIP-code selector, and this chat has not changed your search area. Leads appearing in one area do not establish why other areas are missing; that needs a check of the saved search settings and property records.',status:'open',ai:false};
 }
 

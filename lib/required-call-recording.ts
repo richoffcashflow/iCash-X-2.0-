@@ -95,6 +95,14 @@ function recordingEmptyWorkflowDefaultsSnapshot(snapshot:Record<string,unknown>)
  return {...snapshot,conversation_config:{...config,agent:{...agent,prompt:previousPrompt}},
   workflow:{...previousWorkflow,nodes:{...nodes,start_node:previousStart}}};
 }
+function recordingEmptyWorkflowVersionSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
+ const workflow=object(snapshot.workflow);
+ if(workflow.version!==1)return null;
+ const observed={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_frame_id:null,parent_subgraph_id:null}},frames:{},version:1,subgraphs:{},prevent_subagent_loops:false};
+ if(JSON.stringify(canonical(workflow))!==JSON.stringify(canonical(observed)))return null;
+ const previous={...workflow};delete previous.version;
+ return {...snapshot,workflow:previous};
+}
 function recordingStandardGuardrailSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
  const platform=object(snapshot.platform_settings),guardrails=object(platform.guardrails),custom=object(guardrails.custom),config=object(custom.config),rows=config.configs;
  if(!Array.isArray(rows)||rows.length!==1)return null;
@@ -114,6 +122,11 @@ function recordingConfigHashSearch(configHash:string,snapshot:Record<string,unkn
  // representations. The expansion can otherwise block the call event loop even
  // when the first, unchanged snapshot already matches its exact approval.
  if(recordingEmptyAgentHashMatches(configHash,snapshot))return true;
+ // November 13 added version=1 to the same reviewed empty start graph.
+ // Only reconstruct that exact representation; the entire unredacted original
+ // fingerprint must still match. This never accepts another workflow version.
+ const previousWorkflowVersion=recordingEmptyWorkflowVersionSnapshot(snapshot);
+ if(previousWorkflowVersion&&recordingConfigHashSearch(configHash,previousWorkflowVersion,edgesOnly))return true;
  // November 12 added default prompt caching and empty layout-frame metadata
  // together to the same reviewed version's single-start workflow. Reconstruct
  // only this exact trio, then require the entire original fingerprint. Never

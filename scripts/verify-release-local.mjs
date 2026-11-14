@@ -2,6 +2,10 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'support-contact-privacy',
+ 'automatic-outreach-bottlenecks',
+ 'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
+ 'requested-seller-followthrough', 'limited-seller-ownership-reply',
  'funded-stall-recovery', 'recording-admission-abort',
  'support-current-issues', 'support-terminal-call-evidence',
  'support-waiting-work-status',
@@ -23,7 +27,7 @@ const suites = [
  'outcome-ranker', 'outcome-ranker-database', 'outcome-ranker-service',
  'pro-voice-capacity', 'pro-voice-capacity-database',
  'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-call-invitation', 'seller-initial-reply',
- 'support-purchase-topic',
+ 'support-purchase-topic', 'support-work-repair-boundaries', 'support-pending-explanation',
  'support-checkout-email', 'support-seller-text-review', 'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
  'validation-compatibility',
@@ -69,7 +73,7 @@ const suites = [
  'text-sender-routing', 'sender-health-routing', 'sms-channel-admission', 'contiguity-service-webhook', 'carrier-blocked-sms', 'seller-text-replies', 'contract-text', 'contract-text-resend',
  'seller-callback-route', 'seller-callback-database', 'owner-outreach-route', 'owner-outreach-ui', 'owner-outreach-database', 'owner-overview-route', 'owner-overview-ui', 'lead-supply', 'lead-supply-database', 'admin-experience-route', 'admin-experience-ui',
  'workspace-attention-readback', 'seller-default-conversation', 'workspace-panel-content', 'workspace-archived-attention', 'seller-recovery-route', 'workspace-attention-ui', 'production-release-gate', 'production-health',
- 'workspace-experience', 'workspace-experience-database', 'reliability-alerts', 'reliability-stable-recovery', 'reliability-component-outages', 'operational-sms-candidate-fence',
+ 'workspace-experience', 'workspace-experience-database', 'reliability-alerts', 'reliability-stable-recovery', 'reliability-component-outages', 'reliability-email-reset', 'outbound-quota-wait-aging', 'operational-sms-candidate-fence',
  'workspace-request-recovery', 'server-request-deadlines', 'workspace-event-stream', 'scheduler-nonblocking-poll', 'durable-work-billing-stop',
  'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',

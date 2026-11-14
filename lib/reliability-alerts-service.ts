@@ -7,6 +7,10 @@ type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Dependencies={db:Database;env?:Record<string,string|undefined>;transport?:typeof fetch;delay?:(ms:number)=>Promise<void>};
 const email=/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+export function reliabilityEmailTime(value:string){
+ const time=Date.parse(value);
+ return Number.isFinite(time)?new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'short',hour12:true}).format(time)+' Central':'unverified';
+}
 /** Aggregate observations only; never put account IDs or raw provider data in email. */
 export function reliabilityNotificationContext(value:unknown,now=Date.now()){
  const parsed=reliabilitySchema.safeParse(value);
@@ -22,7 +26,11 @@ export function reliabilityNotificationContext(value:unknown,now=Date.now()){
   const c=report.components[name],age=c.checkedAt?now-Date.parse(c.checkedAt):Infinity;
   return `${name}: ${age>=-5000&&age<=120000?c.status:'unverified'}`;
  }).join('; ');
- return `Observed at: ${snapshot.checkedAt}\n${impact}\nOperational checks: ${components}. Heartbeats alone do not prove completed work.\nRecorded activity in the monitor window: ${snapshot.texts.accepted} texts accepted, ${snapshot.texts.delivered} delivered; ${snapshot.contracts.completed} contracts completed. Independent eligible workflows can continue within their own controls.`;
+ const quota=snapshot.researchQuota;
+ const quotaAge=quota?.checkedAt?now-Date.parse(quota.checkedAt):Infinity;
+ const research=quota?.fresh&&quotaAge>=-5000&&quotaAge<=120000
+  ?`\nContact research capacity: ${quota.status.replaceAll('_',' ')}.${quota.nextAvailableAt?` Next capacity check: ${reliabilityEmailTime(quota.nextAvailableAt)}.`:''} Provider limits remain in effect.`:'';
+ return `Observed at: ${reliabilityEmailTime(snapshot.checkedAt)}\n${impact}\nOperational checks: ${components}. Heartbeats alone do not prove completed work.${research}\nRecorded activity in the monitor window: ${snapshot.texts.accepted} texts accepted, ${snapshot.texts.delivered} delivered; ${snapshot.contracts.completed} contracts completed. Independent eligible workflows can continue within their own controls.`;
 }
 function configuration(env:Record<string,string|undefined>){
  if(env.ICASH_RELIABILITY_EMAIL_ENABLED!=='true')return {state:'disabled' as const};
@@ -54,14 +62,14 @@ export async function dispatchReliabilityAlerts(dependencies:Dependencies){
  if(raw===null)return 'idle';
  const claim=reliabilityAlertClaimSchema.parse(raw);
  const detected=claim.event==='detected';
- const labels={worker:'background worker',maintenance:'maintenance',monitor:'monitor freshness',workflows:'stalled work'};
+ const labels={worker:'background worker',maintenance:'maintenance',monitor:'monitor freshness',workflows:'workflow recovery'};
  const summary=claim.reasons.map(reason=>labels[reason]).join(', ')||'workflow checks';
  // A failed context read must not suppress the already-claimed incident alert.
  const current=await db<unknown>('rpc/icash_reliability_status','POST',{}).catch(()=>null);
- const context=`Incident started: ${claim.openedAt}\n${reliabilityNotificationContext(current)}\nRecovery status: ${detected?'a verified clear recovery window has not yet been recorded for this notification. Owner review is required for unresolved blockers.':'a clear recovery window was recorded. Review the latest observations above before assuming all work resumed.'}`;
+ const context=`Incident started: ${reliabilityEmailTime(claim.openedAt)}\n${reliabilityNotificationContext(current)}\nRecovery status: ${detected?'automatic recovery continues; a verified clear recovery window has not yet been recorded. Original uncertain provider outcomes stay held for verification.':'a clear recovery window was recorded. Review the latest observations above before assuming all work resumed.'}`;
  const message={from:`iCash X <${config.from}>`,to:[recipient],
   subject:detected?`iCash X · ${reliabilitySeverityLabels[claim.severity]} priority`:'iCash X monitoring recovered',
-  text:detected?`${reliabilitySeverityLabels[claim.severity]} priority — ${summary}. ${claim.issueCount} workflow item${claim.issueCount===1?'':'s'} flagged.\n\n${context}\n\n${reliabilitySeverityGuidance[claim.severity]}\n\nReview the current state: https://www.geticashx.com/admin\n\nCheck original provider receipts before repeating any send or payment. Incident reference: ${claim.incidentId}`:
+  text:detected?`${reliabilitySeverityLabels[claim.severity]} priority — ${summary}. ${claim.issueCount} monitor flag${claim.issueCount===1?'':'s'}. These are not all confirmed outages or failed sends.\n\n${context}\n\n${reliabilitySeverityGuidance[claim.severity]}\n\nReview the current state: https://www.geticashx.com/admin\n\nCheck original provider receipts before repeating any send or payment. Incident reference: ${claim.incidentId}`:
    `No active workflow alerts or core-service failures were observed during the recovery window for incident ${claim.incidentId}. Reviewed historical alerts may still have unresolved provider receipts or blocked work. This does not confirm every message was delivered or every deal completed.\n\n${context}\n\nReview the current state and acknowledged history: https://www.geticashx.com/admin`,
  };
  let provider:string|null=null;

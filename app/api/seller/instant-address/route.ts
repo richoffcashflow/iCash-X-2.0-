@@ -38,7 +38,10 @@ export async function POST(req:Request){
   if(i.action==='session')return Response.json({state:session.state,address:session.address},{headers});
   const saved=await db<{status:string}>('rpc/icash_meta_save_address','POST',{p_lead:session.leadId,p_address:i.address,p_channel:'form',p_evidence:'address-link:'+hashLeadToken(i.token)});
   if(saved.status==='unavailable'||saved.status==='review_required'||saved.status==='unmatched')return Response.json({error:saved.status==='unmatched'?'We could not match that address. Check the street, unit, city and state before submitting a correction.':'Your earlier address is already being checked. Reply to your text if it needs a correction.'},{status:409,headers});
-  after(async()=>{try{await researchInstantAddress(deps(),session.leadId);await processInstantLead(deps(),session.leadId);}catch{console.warn('instant_address_research_pending');}});
+  after(async()=>{
+   const work=await Promise.allSettled([researchInstantAddress(deps(),session.leadId),processInstantLead(deps(),session.leadId)]);
+   if(work.some(result=>result.status==='rejected'))console.warn('instant_address_research_pending');
+  });
   return Response.json({received:true,message:'Your address is confirmed and attached to your request. We are checking the property details.'},{headers});
  }catch(error){
   const limited=typeof error==='object'&&error!==null&&'status' in error&&error.status===429;

@@ -11,6 +11,37 @@ withdrawals, manual control and original provider holds remain enforced. Offline
 end-to-end and native contention coverage does not establish live conversion
 improvement; verify the coordinated release and fresh cutover separately.
 
+## November 13 outbound stalls and owner email
+
+The [outbound recovery follow-up](outbound-stall-recovery-2026-11-13.md) repairs
+lost queue age during contact-quota waits and retains PR #721's independent fix
+for the inert provider workflow version blocking the original voice approval. It also
+adds an explicit, private notification baseline for the owner's requested reset.
+The reset suppresses unchanged hourly reminders only; current health, new service
+outages, changed account impact, recovery evidence and uncertain email receipts
+remain authoritative. Native competing-worker and notification-claim races are
+part of the release gate. Provider pacing and unresolved original outcomes still
+limit actual work; an acknowledgment is not a claim that all accounts recovered.
+
+## November 13 concrete workflow audit
+
+The [concrete gap audit](concrete-gap-audit-2026-11-13.md) repairs 16 demonstrated
+failure modes across outbound batch continuation, account recovery, inbound lead
+progress, buyer request receipts/contact selection, and signing response resources.
+It retains existing final claims,
+unknown operations, spending/contact controls and the UI. The owner's request
+for 1,000 gaps remains a target, not a fabricated count of confirmed defects.
+
+## November 13 requested seller contact
+
+The [requested-contact repair](requested-seller-followthrough.md) addresses a
+clipped mailbox number followed by repeated questions, consented introductions
+blocked by cold sender pacing, and a supported ownership clarification rejected
+during title/payoff review. Shared queue and final claim tests preserve total
+capacity, current contact controls, financial review and contract idempotency.
+Runtime mailbox instructions are verified offline; recognition and delivery are
+not reported as live-tested without actual provider receipts.
+
 ## November 13 funded work and voice recovery
 
 The [funded-work repair](funded-stall-recovery-2026-11-13.md) activated an immutable,
