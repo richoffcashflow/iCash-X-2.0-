@@ -15,9 +15,9 @@ Independent review reproduced two pre-activation defects. A valid continuation
 reuses its original ticket, so a ledger keyed only by ticket ID rejected its next
 issuance. Also, a zero-due voice poll can mean a five-minute cooldown, while one
 estimate batch can leave held or additional originals. Neither proves a complete
-recovery step. Keep both policies disabled until both additive corrections are
-installed and read back, exact-main web/worker verification succeeds, and their
-separate guarded activation completes. Do not rewrite or reapply successful
+recovery step. Both additive corrections are now installed and read back. Keep
+both policies disabled until exact-main web/worker verification succeeds and
+their separate guarded activation completes. Do not rewrite or reapply successful
 migrations.
 
 The reviewed correction head `34926db9a2e754d8d3ef4175c3ed2e5fc7c91e96`
@@ -30,21 +30,30 @@ unchanged. Independent readback at 18:21 UTC confirmed its stored and actual
 pending-reader hash `290dd463df7fa763bace9c733ec6e5f6`, disabled follow-up policy,
 null activation/release fields and zero follow-up attempts. Do not reapply it.
 
-The second correction, `20261114170728_preflight_continuation_issuance.sql`,
-remains pending: two installation confirmations expired, and independent readback
-at 18:21 UTC found no migration receipt. The continuation policy remains disabled,
-with zero issued turns and decisions and null activation/release fields. Keep the
-release hold until the remaining installation and guarded readback succeed and
-the latest exact head passes its full release checks. This status update changes
-no SQL bytes, policy, operation, delivery or financial evidence.
+The second correction was installed on November 14 at 20:51:34 UTC as
+`20261114205134_preflight_continuation_issuance`. Its repository filename now
+matches that actual ledger receipt; SQL SHA-256
+`abffb8e6a7ea28dcafe2d9d48ee8417ff686c0762ea358a4fc18105435c8c43b`
+is unchanged. Readback at 20:52:05 UTC confirmed the non-null issuance token-hash and
+recorder-hash columns, primary key on the fair turn, and unique original-ticket /
+token-hash pair. The corrected recorder hash is `4743daa455436603b3bee5f31de43e15`;
+the activation hash is `2b4b3dabfbaf7cca1b26cad71f1410a7`. Stored and actual
+scheduler, due, recorder and pending-reader hashes match. The recorder and pending
+reader remain service-role-only; application roles cannot activate either policy.
+Both policies remain disabled, with zero issued turns, decisions and follow-up
+attempts and null activation/release fields. Do not reapply either correction.
 
-Install only the remaining issuance correction with the supported migration
-runner's atomic SQL-and-ledger transaction. Both correction files contain no
-top-level `BEGIN` or `COMMIT`: an inner commit could persist schema changes before
-the runner records its migration receipt. The required predecessor
-`followup_pending_originals` is now installed; verify that receipt and its guarded
-definition before applying `preflight_continuation_issuance`. Never run its
-statements separately in autocommit.
+The release hold now awaits the latest integrated head's full checks and review.
+After the normal expected-head merge, require exact-main push checks and matching
+production web/worker verification before separately activating either policy.
+Installation and cleared release prerequisites do not establish completed work.
+
+The issuance correction used the supported migration runner's atomic SQL-and-ledger
+transaction. Both correction files contain no top-level `BEGIN` or `COMMIT`: an
+inner commit could persist schema changes before the runner records its migration
+receipt. The installed `followup_pending_originals` predecessor and guarded
+definitions were verified before installation. Never run these statements
+separately in autocommit or replace successful migration receipts.
 Native and PGlite tests force a late ledger insert to fail and verify that the
 issuance schema, function and disabled policy all roll back. The earlier three
 already-installed migrations retain their original bytes and ledger history.
@@ -60,6 +69,17 @@ version even if it arrives after an older version's zero-pending observation.
 Both additive corrections refuse already-activated/used policies. Their tests
 cover repeated ticket issuance, cooldowns, partial batches, unknown rates, source
 version races, private permissions and original financial evidence.
+
+The application also prevents a new orphaned preflight when a validated owner
+preview removes the issued ticket's primary property but retains eligible
+siblings. Previously it created the sibling-only asynchronous list before
+completing the original ticket as empty, leaving no matching continuation ticket.
+It now returns empty before claiming a list or admitting a purchase. Existing
+explicit zero-phone preview evidence is still saved, and eligible siblings can
+receive their own ordinary primary-bound tickets. Regression cases cover a
+zero-phone primary, a not-found primary, and the sibling's subsequent normal
+pending deferral. Existing saved preflights, original recovery, financial holds
+and historical orphaned lists are unchanged; this is prospective prevention.
 
 The same incident release also isolates original accepted-message evidence reads
 from current leased-number availability. Existing SQL identity/delivery gates,

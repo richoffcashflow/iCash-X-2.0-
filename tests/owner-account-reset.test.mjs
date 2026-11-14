@@ -121,5 +121,7 @@ let work=action();await action();assert.equal(requests.length,1);resolve(new Res
 work=action();assert.equal(requests[1],original);resolve(Response.json({status:'reset',requestId:original,historyPreserved:true,providerWrites:false}));await work;assert.equal(resetCount,1);assert.equal(state.done,1);assert.equal(requestId.current,'');
 work=action();assert.notEqual(requests[2],original);pending.current.abort();pending.current=null;resolve(Response.json({status:'reset',requestId:requests[2],historyPreserved:true,providerWrites:false}));await work;assert.equal(resetCount,1,'Late reset response cannot clear local new state after navigation');
 work=action();const waitingRequest=requests.at(-1);resolve(Response.json({status:'waiting',reason:'active_call'}));await new Promise(r=>setTimeout(r,2100));assert.equal(requests.at(-1),waitingRequest);assert.equal(state.busy,true);resolve(Response.json({status:'reset',requestId:waitingRequest,historyPreserved:true,providerWrites:false}));await work;assert.equal(resetCount,2,'The waiting reset completes automatically after the current call ends');
-assert(source.includes('<DemoReadinessPanel'),'Confirmed reset automatically mounts the real setup check');
+assert.equal(state.message,'Owner account reset.','Completion does not claim delivery or expose setup diagnostics');
+assert(source.includes('void checkDemoReadiness(c.signal)'),'Confirmed reset retains its read-only background check');
+assert(!source.includes('DemoReadinessPanel'),'Reset has no setup checklist');
 console.log('PASS owner reset API/client: session and exact account checks, CSRF/body bounds, immutable retry ID, no provider calls, duplicate clicks, response verification and canceled navigation.');

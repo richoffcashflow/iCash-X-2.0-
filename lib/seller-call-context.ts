@@ -100,7 +100,7 @@ function sellerRequest(value:SellerRequestContext|undefined){
  // Invalid or absent names are never promoted into a greeting.
  return {...(/^[\p{L}][\p{L}'’-]{0,30}$/u.test(firstName)?{firstName}:{}),submittedAt:value.submittedAt};
 }
-export type SellerCallContext={address:string;principal:string;assistantName:string;history:VoiceSmsContext|null;priorCalls?:unknown;buyerKind?:NetworkBuyerKind;request?:SellerRequestContext;callbackRequestedNow?:boolean};
+export type SellerCallContext={address:string;principal:string;assistantName:string;history:VoiceSmsContext|null;priorCalls?:unknown;buyerKind?:NetworkBuyerKind;request?:SellerRequestContext;callbackRequestedNow?:boolean;contactName?:string|null};
 export function sellerCallContext(input:SellerCallContext){
  const context={buyerKind:input.buyerKind,address:field(input.address,300),principal:field(input.principal,120),assistantName:field(input.assistantName,80),history:boundedVoiceSmsContext(input.history),priorCalls:boundedSellerPriorCalls(input.priorCalls),request:sellerRequest(input.request)};
  const history=combinedHistory(context);
@@ -112,6 +112,8 @@ export function sellerFirstMessage(input:SellerCallContext,alreadyIntroduced=fal
  const address=spokenStreet(c.address);
  if(c.ownershipAlreadyConfirmed&&c.callbackRequestedNow)return `${greeting}Let's go over the cash offer for ${address}.`;
  if(ownershipAlreadyConfirmed(history,c.address))return `${greeting}Is now a good time to talk about ${address}?`;
+ const candidate=name??callFirstName(input.contactName);
+ if(candidate)return `Hi, is this ${candidate}, the owner of ${address}?`;
  return `${greeting}Is this the owner of ${address}?`;
 }
 export function sellerCallPrompt(input:SellerCallContext,privateOfferCeilingCents:number|null=null,closing:SellerClosingContext|null=null,contractTextEnabled=false,cashOfferPriceCents:number|null=null,proposal:SellerOfferPresentation|null=null,agreementToolsEnabled=false,purchaseTerms:Record<string,unknown>|null=null){

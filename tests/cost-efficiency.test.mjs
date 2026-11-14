@@ -16,9 +16,9 @@ assert.equal((await maintenanceBatch({a:async()=>new Response(null,{status:200})
 assert.equal(automationChanged('waiting_for_active_call'),false);assert.equal(automationChanged('awaiting_counterparty'),false);assert.equal(automationChanged('updates_idle'),false);assert.equal(automationChanged('completed'),true);assert.equal(automationChanged('contacts_saved'),true);
 const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url)));assert.equal(config.crons.find(x=>x.path==='/api/internal/maintenance').schedule,'* * * * *');
 assert.equal(config.crons.find(x=>x.path==='/api/internal/lead-costs').schedule,'*/15 * * * *','Read-only ad-cost sync stays on a bounded 15-minute schedule');
-assert.equal(config.crons.find(x=>x.path==='/api/internal/learning').schedule,'17 * * * *','Model training gets only 24 scheduled invocations per day');
-const dailyInvocations={'*/5 * * * *':288,'* * * * *':1440,'17 * * * *':24};
-assert.equal(config.crons.filter(c=>c.path!=='/api/internal/lead-costs').reduce((n,c)=>{assert(c.schedule in dailyInvocations,'Review the invocation budget for new schedules');return n+dailyInvocations[c.schedule];},0),5208);
+assert.equal(config.crons.find(x=>x.path==='/api/internal/learning').schedule,'2,17,32,47 * * * *','Model evidence rotates in at most 96 bounded scheduled invocations per day');
+const dailyInvocations={'*/5 * * * *':288,'* * * * *':1440,'2,17,32,47 * * * *':96};
+assert.equal(config.crons.filter(c=>c.path!=='/api/internal/lead-costs').reduce((n,c)=>{assert(c.schedule in dailyInvocations,'Review the invocation budget for new schedules');return n+dailyInvocations[c.schedule];},0),5280);
 console.log('Cost efficiency: safe build skipping, independent maintenance failure and unchanged minute cadence passed.');
 
 const {createPollCadence}=await import('../lib/poll-cadence.ts');

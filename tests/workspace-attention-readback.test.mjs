@@ -19,12 +19,12 @@ function add(n,changes={},receiptChanges={},shown=true){
 }
 add(0,{}, {},false); // Confirmed expired automatic reminder must disappear.
 add(1,{reason:'human'});
-add(2,{}, {state:'accepted'});
-add(3,{}, {state:'failed'});
-add(4,{}, {customer_author_id:uuid(999)});
-add(5,{}, {account_id:other}); // Account-scoped receipt read returns no foreign row.
-add(6,{}, {direction:'incoming'});
-add(7,{}, null); // Missing receipt.
+add(2,{}, {state:'accepted'},false);
+add(3,{}, {state:'failed'},false);
+add(4,{}, {customer_author_id:uuid(999)},false);
+add(5,{}, {account_id:other},false); // Account-scoped receipt read returns no foreign row.
+add(6,{}, {direction:'incoming'},false);
+add(7,{}, null,false); // Missing receipt.
 add(8,{expires_at:'2999-01-01T00:00:00Z'});
 add(9,{expires_at:null});
 add(10,{stage:null});
@@ -32,9 +32,11 @@ add(11,{reason:null});
 add(12,{review_reason:'unknown_review'});
 add(13,{review_reason:'contact_checks_expired'}, {},false);
 add(14,{expires_at:now}, {},false); // Equality is expired, not future.
-add(15,{}, {state:null});
+add(15,{}, {state:null},false);
 add(16,{}, {},false);properties.at(-1).state='archived';
 add(17,{reason:'human'}, {},false);properties.at(-1).account_id=other;
+add(18,{reason:'callback'});
+add(19,{reason:'delivery_unknown'});
 
 const json=value=>new Response(JSON.stringify(value));
 const inFilter=value=>value?.slice(4,-1).split(',');
@@ -93,7 +95,7 @@ function fixture(options={}){
    }
    if(options.noHidden)rows=rows.map(row=>({...row,reason:'human'}));
    if(options.nullReceipts)rows=rows.map(row=>({...row,outgoing_id:null}));
-   if(options.microsecondOrder)rows=rows.map(row=>row.id===gaps[7].id?{...row,updated_at:'2026-10-08T00:00:00.000002+00:00'}:row.id===gaps[8].id?{...row,updated_at:'2026-10-08T00:00:00.000001+00:00'}:row);
+   if(options.microsecondOrder)rows=rows.map(row=>row.id===gaps[18].id?{...row,updated_at:'2026-10-19T00:00:00.000002+00:00'}:row.id===gaps[19].id?{...row,updated_at:'2026-10-19T00:00:00.000001+00:00'}:row);
    if(options.noVisible)rows=rows.map(row=>({...row,review_reason:null,reason:'no_response',stage:'draft',expires_at:'2020-01-01T00:00:00Z',outgoing_id:gaps[0].outgoing_id}));
    if(options.changed&&metadataReads===4)rows=rows.map(row=>({...row,state:'resolved'}));
    if(options.malformed)rows=rows.map(({expires_at,...rest})=>rest);
@@ -122,7 +124,7 @@ function fixture(options={}){
   assert.equal(q.get(prefix+'and'),sellerAttentionFilters(account,nested?'icash_seller_gaps':'',now).get(prefix+'and'));
   assert(q.get('select').includes(sellerReminderDeliveryEmbed));
   let shown=gaps.filter(row=>visibleIds.includes(row.id));
-  if(options.noHidden||options.nullReceipts)shown=gaps.filter(row=>row.review_reason!=='contact_checks_expired'&&row!==gaps[16]&&row!==gaps[17]);
+  if(options.noHidden)shown=gaps.filter(row=>row.review_reason!=='contact_checks_expired'&&row!==gaps[16]&&row!==gaps[17]);
   if(options.noVisible)shown=[];
   // PostgreSQL places the later UUID first because its time is one microsecond
   // earlier. These two retained rows straddle the seven-row page boundary.
@@ -149,11 +151,11 @@ function fixture(options={}){
 
 const base=fixture(),original=JSON.stringify({gaps,properties,receipts});
 const result=await checkWorkspaceAttentionReadback({env,now,fetcher:base.fetcher});
-assert.equal(result.status,'passed');assert.equal(result.completedRemindersChecked,2);assert.equal(result.retainedRequestsChecked,visibleIds.length);
+assert.equal(result.status,'passed');assert.equal(result.completedRemindersChecked,9);assert.equal(result.retainedRequestsChecked,visibleIds.length);
 assert(result.requests<=90);assert(!JSON.stringify(result).includes(account));assert(!JSON.stringify(result).includes(env.SUPABASE_SECRET_KEY));
 assert.deepEqual(base.calls.filter(c=>c.table==='icash_seller_gaps'&&c.q.has('offset')).map(c=>c.q.get('offset')),['0','7','14'],'Pagination includes an empty terminal page');
 assert.equal(JSON.stringify({gaps,properties,receipts}),original,'Readback leaves all history unchanged');
-assert.deepEqual(expectedAttentionRows(gaps,properties,receipts,account,now).visible.map(g=>g.id),visibleIds,'Unknown, manual, foreign and missing receipts cannot hide requests');
+assert.deepEqual(expectedAttentionRows(gaps,properties,receipts,account,now).visible.map(g=>g.id),visibleIds,'Expired automatic reminders are not seller requests, independent of their delivery receipt');
 assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:fixture({microsecondOrder:true}).fetcher})).status,'passed','Microsecond ordering cannot cause a false cross-page mismatch');
 for(const expires_at of ['2026-11-07T20:00:00.000001Z','2026-11-07T15:00:00.000001-05:00']){
  const precise=expectedAttentionRows([{...gaps[0],expires_at}],properties,receipts,account,now);
@@ -178,8 +180,8 @@ assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:absent.fetc
 assert.equal(absent.calls.length,4,'Empty cohorts still exercise both direct and nested shapes after both bounded discoveries');
 assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:fixture({noHidden:true}).fetcher})).status,'not_observed','Unconfirmed completed history cannot be labeled passed');
 const nullReceipts=fixture({nullReceipts:true});
-assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:nullReceipts.fetcher})).status,'not_observed');
-assert(!nullReceipts.calls.some(call=>call.table==='icash_text_messages'),'An all-null receipt cohort never sends an empty ID query or hides its requests');
+assert.equal((await checkWorkspaceAttentionReadback({env,now,fetcher:nullReceipts.fetcher})).status,'passed');
+assert(!nullReceipts.calls.some(call=>call.table==='icash_text_messages'),'An all-null receipt cohort never sends an empty ID query; expired automatic history is still excluded');
 const noVisible=await checkWorkspaceAttentionReadback({env,now,fetcher:fixture({noVisible:true}).fetcher});
 assert.equal(noVisible.status,'passed');assert(noVisible.completedRemindersChecked>0);assert.equal(noVisible.retainedRequestsChecked,0,'A clean retained queue is legitimate when observed completed history is verified');
 for(const option of ['emptyShapeFailure','emptyShapeMismatch'])await assert.rejects(checkWorkspaceAttentionReadback({env,now,fetcher:fixture({discovery:[],[option]:true}).fetcher}),/Attention API verification failed:/);
@@ -291,4 +293,4 @@ const runner=readFileSync(new URL('../scripts/check-contact-rpcs.mjs',import.met
 assert(runner.includes('await checkWorkspaceAttentionReadback()'));
 const productionMissing=spawnSync(process.execPath,['--experimental-strip-types','scripts/check-contact-rpcs.mjs'],{env:{...process.env,VERCEL_ENV:'production',SUPABASE_URL:'',SUPABASE_SECRET_KEY:''},encoding:'utf8',timeout:10000});
 assert.notEqual(productionMissing.status,0);assert.match(productionMissing.stderr,/verification failed/);
-console.log('PASS attention API readback: bounded account-scoped GETs, actual direct/nested shared shapes, independent receipt-backed result oracle, pagination, unknown/manual/foreign receipts, absent proof and failure gates; offline fixtures only.');
+console.log('PASS attention API readback: bounded account-scoped GETs, actual direct/nested shared shapes, independent source-state result oracle, pagination, unknown/manual/foreign receipts, absent proof and failure gates; offline fixtures only.');

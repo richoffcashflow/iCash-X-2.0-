@@ -11,6 +11,12 @@ const guide='iCash X supports call recording. Open the property’s conversation
  * complaint. Keep follow-ups bounded to that subject, including guest help. */
 export function supportCallRecordingReply(context:SupportContext):SupportReply|null{
  const q=context.messages.findLast(turn=>turn.role==='user')?.content??'';
+ // A new introduction complaint must not disappear behind an older audio
+ // handoff. The report alone establishes neither the cause nor a voice repair.
+ const introduction=/\b(?:seller|sellers|homeowner|homeowners)\b/i.test(q)&&/\b(?:hang(?:s|ing)? up|hung up)\b/i.test(q)
+  &&/\b(?:ai agent|ai assistant|artificial intelligence|introduc(?:e|es|ed|tion))\b/i.test(q)
+  &&!/\b(?:not|never|don[’']?t|doesn[’']?t|didn[’']?t|if|hypothetically|refund|cancel|unsubscribe|delete|billing|charged|sign[ -]?in)\b/i.test(q);
+ if(introduction)return {reply:'Your report about sellers hanging up during the AI introduction is a separate call-quality issue. I can’t verify the cause from chat or promise that changing the introduction will prevent hang-ups. The agent must remain truthful about being AI. Which property and call time should be reviewed? Earlier unresolved issues stay open.',status:'open',managementReview:true,ai:false};
  if(otherTopic(q)||/\b(?:press|click|tap) (?:the )?call\b|\b(?:microphone|hear me|hear (?:the )?seller|during (?:the |my )?call)\b/i.test(q))return null;
  let active=false,unresolved=false,asked=false;
  for(const turn of context.messages.slice(-12)){

@@ -35,7 +35,7 @@ assert.notEqual(planSellerTextOffer(context([...history,outgoing('When is a good
 for(const request of ['How much','How much?','How much for it?','What is the offer?']){
  assert(sellerRequestsPrice(request));
  const plan=planSellerTextOffer(context([...history,incoming(request)],{callInvitationAllowed:true}));
- assert.equal(plan.action,'qualify_situation');assert.match(plan.body,/An offer depends/);
+ assert.equal(plan.action,'qualify_condition');assert.match(plan.body,/An offer depends/);
 }
 for(const request of ['How much is rent?','How much do repairs cost?','The buyer said how much','How much? Stop texting me.'])assert.equal(sellerRequestsPrice(request),false,request);
 const soldHistory=[outgoing('Do you own 123 Example Road?'),incoming('Sold'),incoming('How much')];

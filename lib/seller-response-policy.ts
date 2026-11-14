@@ -1,4 +1,5 @@
 import {sellerCallAnswerDisposition,sellerCallAnswerPatterns} from './seller-call-answer.ts';
+import {isAutomatedCallMenu} from './automated-call-menu.ts';
 /** Source-word policy, not sentiment scoring. A soft refusal pauses automation;
  * only an actual stop-contact request establishes permanent suppression.
  * Keep the SQL implementation and parity fixtures in sync. */
@@ -43,13 +44,13 @@ export function sellerResponseDisposition(source:string):SellerResponseDispositi
 }
 export function sellerCallDisposition(transcript:{role:string;message?:string|null}[]):SellerResponseDisposition{
  const words=transcript.filter(t=>t.role==='user'&&typeof t.message==='string').map(t=>t.message!);
- if(words.some(t=>sellerResponseDisposition(t)==='opt_out'))return 'opt_out';
+ if(words.some(t=>!isAutomatedCallMenu(t)&&sellerResponseDisposition(t)==='opt_out'))return 'opt_out';
  if(!words.some(t=>/[a-z0-9]/i.test(t)))return null;
  let disposition:SellerResponseDisposition=null,lastAgent='';
  for(const turn of transcript){
   if(turn.role==='agent'){lastAgent=turn.message??'';continue;}
   if(turn.role!=='user'||typeof turn.message!=='string')continue;
-  if(new RegExp(sellerResponsePatterns.machine,'i').test(turn.message.trim())){lastAgent='';continue;}
+  if(isAutomatedCallMenu(turn.message)||new RegExp(sellerResponsePatterns.machine,'i').test(turn.message.trim())){lastAgent='';continue;}
   let current=sellerResponseDisposition(turn.message);
   const answerDisposition=sellerCallAnswerDisposition(lastAgent,turn.message);
   // A polite no to repairs or a call invitation is not a refusal to sell.

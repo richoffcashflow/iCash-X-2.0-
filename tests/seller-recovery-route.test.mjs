@@ -10,7 +10,7 @@ const route=await loadService('app/api/work/seller-recovery/route.ts',{z,sellerA
  const q=new URLSearchParams(path.split('?')[1]);assert(q.get('select').includes(sellerReminderDeliveryEmbed));
  assert.equal(q.get('completed_reminder.account_id'),'eq.'+account);
  assert.equal(q.get('completed_reminder.direction'),'eq.outgoing');assert.equal(q.get('completed_reminder.state'),'eq.delivered');
- assert.equal(q.get('completed_reminder.customer_author_id'),'is.null');assert(q.get('and').includes('completed_reminder.is.null'));
+ assert.equal(q.get('completed_reminder.customer_author_id'),'is.null');assert(!q.get('and').includes('completed_reminder.is.null'));
  assert(q.get('and').includes('or(state.is.null,state.neq.needs_review,'),'The legacy multi-state list must preserve non-review and unknown states');
 return [{id:gap,reason:'owners'}];
 }});

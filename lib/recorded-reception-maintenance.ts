@@ -11,6 +11,7 @@ import type {RecordedReceptionProviders} from './recorded-reception-provider.ts'
  * control recovery or deletion. Provider deletion is verified before finalizing. */
 export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provider:RecordedReceptionProviders,env:RecordedReceptionEnv,now=Date.now()){
  const result={deleted:0,reconciled:0,settled:0,held:0};
+ let persistenceFailed=false;
  async function finish(row:RecordedReceptionRow,kind:string,outcome:string,payload:Record<string,unknown>={}){
   const current=await getRecordedReception(rpc,row.id,row.account_id);if(!current)throw Error('SESSION_MISSING');
   const saved=await rpc('icash_finish_recorded_reception_work',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_kind:kind,p_lease_token:row[kind==='delete'?'deletion_lease_token':'reconcile_lease_token'],p_expected_version:current.row_version,p_outcome:outcome,p_payload:payload});
@@ -26,7 +27,11 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    if(before&&before.status!=='deleted')await provider.deleteRecording(row.recording_sid);
    let gone=false;try{const after=await provider.getRecording(row.recording_sid,true);gone=receptionRecordingMatches(row,after)&&after.status==='deleted';}catch(e){if(e instanceof RecordingProviderError&&e.status===404)gone=true;else throw e;}
    if(!gone)throw Error('DELETION_UNCONFIRMED');await finish(row,'delete','deleted');result.deleted++;
-  }catch{await finish(row,'delete','retry',{reason:'deletion_confirmation_required'}).catch(()=>null);result.held++;}
+  }catch{
+   try{await finish(row,'delete','retry',{reason:'deletion_confirmation_required'});}
+   catch{persistenceFailed=true;}
+   result.held++;
+  }
  }
  for(const initial of await rpc<RecordedReceptionRow[]>('icash_claim_recorded_reception_work',{p_kind:'reconcile',p_limit:3,p_lease_seconds:120})){
   let row=initial,stage='provider_binding';
@@ -136,8 +141,13 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    console.warn('recorded_reception_reconciliation_held',{sessionId:row.id,stage,code,...(error instanceof RecordingProviderError?{httpStatus:error.status}:{})});
    const reason=stage==='conversation_readback'&&['UNIQUE_CONVERSATION_REQUIRED','CONVERSATION_ID_REQUIRED'].includes(code)?'conversation_identity_required'
     :stage==='conversation_readback'&&code==='CONVERSATION_BINDING_REQUIRED'?'conversation_binding_required':'provider_reconciliation_required';
-   await finish(initial,'reconcile','retry',{reason}).catch(()=>null);result.held++;
+   try{await finish(initial,'reconcile','retry',{reason});}
+   catch{persistenceFailed=true;}
+   result.held++;
   }
  }
+ // Finish the other original claims before reporting infrastructure failure.
+ // A missing retry checkpoint is not a healthy hold and never authorizes replay.
+ if(persistenceFailed)throw Error('RECORDED_RECEPTION_MAINTENANCE_INCOMPLETE');
  return result;
 }

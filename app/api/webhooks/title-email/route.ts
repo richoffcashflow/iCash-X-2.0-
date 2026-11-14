@@ -1,5 +1,5 @@
 import {recordSupportCustomerDelivery} from '@/lib/support-customer-notifications';
-import {recordPurchaseEmailDelivery} from '@/lib/purchase-access-email';
+import {recordPurchaseEmailDelivery,recordPurchaseEmailEngagement} from '@/lib/purchase-access-email';
 import {recordSupportOwnerDelivery} from '@/lib/support-owner-notifications';
 import {scheduleSupportOwnerNotifications} from '@/lib/support-owner-dispatch';
 import {intakeWebinarReply} from '@/lib/webinar-email-replies';
@@ -15,6 +15,9 @@ export async function POST(req:Request){
  if(!secret||(!mailbox&&!supportMailbox&&!customerEmailDomains())||!process.env.RESEND_API_KEY)return NextResponse.json({error:'Receiving not configured'},{status:503});
  let event;
  try{const body=await req.text();if(Buffer.byteLength(body)>262144)return new Response(null,{status:413});event=verifyTitleWebhook(body,req.headers,secret);}catch{return new Response(null,{status:400});}
+ if(event?.type==='email.opened'||event?.type==='email.clicked'){
+  try{await recordPurchaseEmailEngagement(event,req.headers.get('svix-id'),db);return NextResponse.json({received:true});}catch{return NextResponse.json({error:'Retry required'},{status:503});}
+ }
  if(['email.delivered','email.bounced','email.complained','email.delivery_delayed','email.failed','email.suppressed'].includes(event.type)){
  try{await recordSupportCustomerDelivery(event,db);await recordSupportOwnerDelivery(event,db);await recordPurchaseEmailDelivery(event,db);if(event.type!=='email.delivery_delayed')await db('rpc/icash_webinar_followup_delivery','POST',{p_channel:'email',p_provider:event.data?.email_id,p_kind:event.type.replace('email.','')});await recordCustomerUpdateDelivery(event,db);await db("rpc/icash_legacy_delivery","POST",{p_channel:"email",p_provider:event.data?.email_id,p_kind:event.type.replace("email.","")});if(event.type!=='email.suppressed')await db('rpc/icash_record_email_delivery','POST',{p_event:req.headers.get('svix-id'),p_provider:event.data?.email_id,p_kind:event.type,p_at:event.created_at});return NextResponse.json({received:true});}catch{return NextResponse.json({error:'Retry required'},{status:503});}
  }
