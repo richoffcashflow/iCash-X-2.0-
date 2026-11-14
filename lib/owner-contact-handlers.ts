@@ -31,7 +31,9 @@ export async function messagesGET(req:Request,access:OwnerContact){
   const selected=await db<Thread[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&id=eq.${threadId}&retired_at=is.null&select=id,recipient,paused,party&limit=1`);
   if(selected.length!==1||selected[0].id!==threadId)throw Error();threads.push(selected[0]);
  }
- const summaries=threads.length?await db<{thread_id:string;preview:string;received_at:string;unread_count:number}[]>('rpc/icash_text_thread_reply_summaries','POST',{p_account:accountId,p_threads:threads.map(t=>t.id)}):[];
+ // Reply previews are optional navigation metadata. A failed preview lookup
+ // must not hide the account-bound saved conversation below.
+ const summaries=threads.length?await db<{thread_id:string;preview:string;received_at:string;unread_count:number}[]>('rpc/icash_text_thread_reply_summaries','POST',{p_account:accountId,p_threads:threads.map(t=>t.id)}).catch(()=>[]):[];
  const before=params.get('before');if(before)z.string().datetime({offset:true}).parse(before);const beforeId=before?z.guid().parse(params.get('beforeId')):null;
  const requestKey=params.get('requestKey');if(requestKey)z.guid().parse(requestKey);
  const [rows,receipts,firstRows]=threadId?await Promise.all([

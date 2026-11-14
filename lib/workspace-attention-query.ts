@@ -10,13 +10,14 @@ const attentionStates = {
 export type WorkspaceAttentionTable = keyof typeof attentionStates;
 export const workspaceAttentionTables = Object.keys(attentionStates) as WorkspaceAttentionTable[];
 
-// An expired automatic no-response reminder is history once delivery is known.
+// An expired unanswered draft reminder is history, not a seller request.
+// Delivery failures keep their own source-bound attention and receipt work.
 // The empty LEFT embed is used only as a receipt predicate; never return its body.
 export const sellerReminderDeliveryEmbed='completed_reminder:icash_text_messages!outgoing_id()';
 export function sellerAttentionFilters(accountId:string,prefix='',now=new Date().toISOString()){
  const params=new URLSearchParams();
  const key=(name:string)=>prefix?`${prefix}.${name}`:name;
- params.set(key('and'),`(or(review_reason.is.null,review_reason.neq.contact_checks_expired),or(state.is.null,state.neq.needs_review,review_reason.not.is.null,reason.is.null,reason.neq.no_response,stage.is.null,stage.neq.draft,expires_at.is.null,expires_at.gt.${now},completed_reminder.is.null))`);
+ params.set(key('and'),`(or(review_reason.is.null,review_reason.neq.contact_checks_expired),or(state.is.null,state.neq.needs_review,review_reason.not.is.null,reason.is.null,reason.neq.no_response,stage.is.null,stage.neq.draft,expires_at.is.null,expires_at.gt.${now}))`);
  params.set(key('completed_reminder.account_id'),`eq.${accountId}`);
  params.set(key('completed_reminder.direction'),'eq.outgoing');
  params.set(key('completed_reminder.state'),'eq.delivered');

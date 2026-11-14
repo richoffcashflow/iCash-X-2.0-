@@ -22,5 +22,5 @@ test('seller and buyer return calls greet the matched first name and property',(
 test('outbound greetings use the same personal name rules',()=>{
  assert.equal(buyerFirstMessage({address:'45 Oak Road',firstName:'ALEX'}),'Hi Alex. Are you buying investment properties near 45 Oak Road?');
  assert.equal(buyerFirstMessage({address:'45 Oak Road',firstName:'Potential buyer'}),'Are you buying investment properties near 45 Oak Road?');
- assert.equal(sellerFirstMessage({address:'45 Oak Road',principal:'Fixture Homes',assistantName:'Robin',history:null,request:{name:'James Ross',submittedAt:'2026-10-07T00:00:00Z'}}),'Hi James. Is this the owner of 45 Oak Road?');
+ assert.equal(sellerFirstMessage({address:'45 Oak Road',principal:'Fixture Homes',assistantName:'Robin',history:null,request:{name:'James Ross',submittedAt:'2026-10-07T00:00:00Z'}}),'Hi, is this James, the owner of 45 Oak Road?');
 });

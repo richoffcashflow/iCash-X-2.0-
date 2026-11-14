@@ -3,6 +3,7 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'support-payment-detail-followup',
+ 'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
  'support-current-intent-regressions', 'support-sale-workflow-boundaries',
  'support-contact-privacy',
  'automatic-outreach-bottlenecks',

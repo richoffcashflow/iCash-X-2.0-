@@ -37,12 +37,11 @@ export function attentionBadgeReadbackQuery(accountId,propertyIds,now){
  return 'icash_screening_jobs?'+params;
 }
 
-// Independent source/receipt oracle, not a reimplementation of URL parsing.
+// Independent source-state oracle, not a reimplementation of URL parsing.
 export function expectedAttentionRows(gaps,properties,receipts,accountId,now){
  const active=new Set(properties.filter(p=>p.account_id===accountId&&p.state==='complete').map(p=>p.id));
- const delivered=new Set(receipts.filter(m=>m.account_id===accountId&&m.direction==='outgoing'&&m.state==='delivered'&&m.customer_author_id===null).map(m=>m.id));
  const relevant=gaps.filter(g=>g.account_id===accountId&&g.state==='needs_review'&&active.has(g.screening_id));
- const completed=g=>g.review_reason===null&&g.reason==='no_response'&&g.stage==='draft'&&time(g.expires_at)&&compareTime(g.expires_at,now)<=0&&delivered.has(g.outgoing_id);
+ const completed=g=>g.review_reason===null&&g.reason==='no_response'&&g.stage==='draft'&&time(g.expires_at)&&compareTime(g.expires_at,now)<=0;
  return {hidden:relevant.filter(completed),visible:relevant.filter(g=>g.review_reason!=='contact_checks_expired'&&!completed(g))};
 }
 
@@ -105,7 +104,7 @@ export async function checkWorkspaceAttentionReadback({env=process.env,fetcher=f
     checkIds(await read(table+'?'+params),[],'empty_shape');
    }
   }
-  // Two bounded identifier-only discoveries keep old delivered history from
+  // Two bounded identifier-only discoveries keep expired reminder history from
   // crowding out genuine active requests in different accounts. All later
   // source, property, receipt and projection reads are explicitly account scoped.
   const discovered=await read(path('icash_seller_gaps',{state:'eq.needs_review',reason:'eq.no_response',stage:'eq.draft',review_reason:'is.null',expires_at:'lte.'+now,outgoing_id:'not.is.null',select:'id,account_id',order:'updated_at.desc,id',limit:String(discoveryLimit)}));

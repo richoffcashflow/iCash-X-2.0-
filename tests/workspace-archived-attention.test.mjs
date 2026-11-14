@@ -41,7 +41,7 @@ const assertReceiptFilters=(q,prefix='')=>{
  assert.equal(q.get(key('completed_reminder.state')),'eq.delivered');
  assert.equal(q.get(key('completed_reminder.customer_author_id')),'is.null');
  assert(q.get('select').includes(sellerReminderDeliveryEmbed));
- assert(q.get(key('and')).includes('completed_reminder.is.null'));
+ assert(!q.get(key('and')).includes('completed_reminder.is.null'));
 };
 // Model the relevant PostgREST predicates, including SQL NULL != value semantics.
 const splitClauses=expression=>{const result=[];let depth=0,start=0;for(let i=0;i<expression.length;i++){if(expression[i]==='(')depth++;if(expression[i]===')')depth--;if(expression[i]===','&&depth===0){result.push(expression.slice(start,i));start=i+1;}}result.push(expression.slice(start));return result;};
@@ -164,17 +164,20 @@ assert.equal((await workspaceAssistantContext(account,'America/Chicago','What ne
 // Every boundary stays visible instead of disappearing as completed history.
 for(const change of [
  {reason:'human'}, {stage:'under_contract'}, {review_reason:'unknown_error'},
- {expires_at:'9999-01-01T00:00:00Z'}, {expires_at:null}, {stage:null}, {reason:null}, {reminder:null},
- {reminder:{account_id:account,direction:'outgoing'}}, {reminder:{account_id:account,state:null,direction:'outgoing'}},
- ...['ready','accepted','needs_review','failed','cancelled'].map(state=>({reminder:{account_id:account,state,direction:'outgoing'}})),
- {reminder:{account_id:other,state:'delivered',direction:'outgoing'}},
- {reminder:{account_id:account,state:'delivered',direction:'incoming'}},
- {reminder:{account_id:account,state:'delivered',direction:'outgoing',customer_author_id:uuid(950)}}
+ {expires_at:'9999-01-01T00:00:00Z'}, {expires_at:null}, {stage:null}, {reason:null},
+
 ]){
  const row=completedReminders[0],before={...row};Object.assign(row,change);
  response=await get('');assert.equal(response.body.sellerRecovery.length,1,JSON.stringify(change));
  assert.deepEqual(response.body.propertyAttentionIds,[row.screening_id]);
  assert.equal((await workspaceAssistantContext(account,'America/Chicago','What needs me?')).needsYou,true);
+ Object.assign(row,before);
+}
+for(const reminder of [null,...['ready','accepted','needs_review','failed','cancelled'].map(state=>({account_id:account,state,direction:'outgoing'}))]){
+ const row=completedReminders[0],before={...row};row.reminder=reminder;
+ response=await get('');assert.equal(response.body.sellerRecovery.length,0,'Expired unanswered contact is not a seller review');
+ assert.deepEqual(response.body.propertyAttentionIds,[]);
+ assert.equal((await workspaceAssistantContext(account,'America/Chicago','What needs me?')).needsYou,false);
  Object.assign(row,before);
 }
 properties.forEach((p,i)=>{p.state=recoveryStates[i];});

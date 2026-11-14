@@ -66,7 +66,7 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
   humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote,party:expected.party,
   callbackStatus:optedOut?'blocked_opt_out':!humanResponse?'not_requested':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
   callbackDueAt:optedOut||followupHeld||!humanResponse?null:r.dueAt,callbackTimezone:optedOut||followupHeld||!humanResponse?null:r.timezone,callbackQuote:humanResponse?r.callbackQuote:null,callbackEvidence:humanResponse?r.callbackEvidence:null,
-  nextAction:optedOut?'Do not contact again.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
+  nextAction:optedOut?'Do not contact again.':expected.party==='seller'&&!humanResponse?'No seller response. Continue only through the existing eligible unanswered-contact workflow.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
   // Provider/model analysis is not signature, escrow, title, or payoff evidence.
   underContract:false as const,
  };
