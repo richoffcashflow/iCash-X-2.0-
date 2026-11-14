@@ -1,7 +1,7 @@
 import {processAutomationFollowup} from '@/lib/automation-followup-service';
 import {ProspectingBudgetError} from '@/lib/voice-budget-failure';
 import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '@/lib/owner-enrichment-deferral';
-import {OwnerExportPreflightPendingError} from '@/lib/owner-export-preflight';
+import {OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError} from '@/lib/owner-export-preflight';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
 import {dispatchAttentionNotification} from '@/lib/attention-notifications-service';
@@ -61,7 +61,9 @@ export async function POST(request:Request){
    if(error instanceof OwnerExportCapacityBusyError)console.info('automation_waiting',{kind:'contacts',reason:'OWNER_EXPORT_CAPACITY_BUSY'});
    // The RPC checks the exact consumed capability and absence of all paid-work
    // evidence under lock. It schedules a new capability, never reuses this token.
-   try{if(await db<boolean>(error instanceof OwnerExportPreflightPendingError?'rpc/icash_defer_owner_preflight':'rpc/icash_defer_owner_enrichment','POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey})===true)return NextResponse.json({status:error instanceof OwnerExportPreflightPendingError?'owner_export_preflight_pending':'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
+   const cleanup=error instanceof OwnerPreflightCleanupPendingError;
+   const deferral=cleanup?'rpc/icash_defer_owner_preflight_cleanup':error instanceof OwnerExportPreflightPendingError?'rpc/icash_defer_owner_preflight':'rpc/icash_defer_owner_enrichment';
+   try{if(await db<boolean>(deferral,'POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey,...(cleanup?{p_preflight:error.preflightId}:{})})===true)return NextResponse.json({status:cleanup?'owner_preflight_cleanup_pending':error instanceof OwnerExportPreflightPendingError?'owner_export_preflight_pending':'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
    // A lost deferral response may already have led to a fresh issued/consumed
    // capability. Never let this stale worker finish that newer attempt by ID.
    console.error('automation_held',{kind:'contacts',reason:error instanceof OwnerExportPreflightPendingError?'OWNER_PREFLIGHT_DEFERRAL_HELD':'OWNER_PREVIEW_DEFERRAL_HELD'});

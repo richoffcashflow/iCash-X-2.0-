@@ -74,6 +74,7 @@ const db=async(path,method,p)=>{
  }
  if(path==='rpc/icash_record_owner_export_receipt'){saved.receipt=p.p_receipt;assert.equal(paid,1);return true;}
  if(path==='rpc/icash_claim_owner_export_recovery')return saved?.receipt?structuredClone(saved):null;
+ if(path==='rpc/icash_claim_owner_export_quota_recovery')return null;
  if(path==='rpc/icash_record_owner_export_recovery'){saved.recovery=p.p_receipt.raw;return true;}
  if(path==='rpc/icash_record_owner_export_artifact'){saved.csv=p.p_csv;return !artifactFail;}
  if(path==='rpc/icash_save_owner_active_export'){results=p.p_results;assert.equal(p.p_rows.length,2);return true;}
