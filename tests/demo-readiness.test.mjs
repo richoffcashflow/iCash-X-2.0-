@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {readRecordingReview,object,privateHeaders} from '../lib/required-call-recording.ts';
+import {recordingReviewForConfig} from '../lib/recording-review-transition.ts';
 import {boundedBytes} from '../lib/required-call-recording-provider.ts';
 import {secondaryCallingReady} from '../lib/business-voice-numbers.ts';
 import {primaryBusinessPhone,isAdditionalBusinessPhone,businessVoiceIngress} from '../lib/business-phone-policy.ts';
@@ -12,7 +13,7 @@ function fixture(){
  const rows={account:[{owner_user_id:user,bot_paused:false}],wallet:[{balance_cents:737,reserved_cents:0}],member:true,channel:true,stops:[],voice:[{enabled:true,reviewed_until:future,agent_id:review.agentId,agent_config_hash:review.configHash,phone_number_id:'phnum_fixture',max_duration_seconds:600,required_tool_ids:review.toolIds}],senders:[{phone:primaryBusinessPhone},{phone:line}],callers:[{phone:line}],smsRates:[{id:'sms-rate'}],smsRate:true,settings:[{enabled:true,model:'gpt-4.1-mini',rate:{enabled:true,operation:'sms_ai',expires_at:future}}],templates:[{provider_template_id:'123',placeholder_names:['Seller','Buyer'],field_map:{address:'Address'},reviewed_until:future,rate:{enabled:true,operation:'contract_signing',expires_at:future}}],business:[{outbound_enabled:true,forwarding_ready:true,provider_account_sid:ac,caller_id_sid:pn}]};
  const payloads={carrier:{sid:ac,status:'active',auth_token:'SYNTHETIC_SECRET_TOKEN'},leases:{data:{numbers:[primaryBusinessPhone,line].map(e164=>({number:{e164},lease_status:'active',capabilities:{channels:['sms']}}))}},primary:{phone_number:primaryBusinessPhone},caller:{outgoing_caller_ids:[{phone_number:line,account_sid:ac,sid:pn}],next_page_uri:null},ingress:{incoming_phone_numbers:[{phone_number:businessVoiceIngress,account_sid:ac,capabilities:{voice:true},voice_method:'POST',voice_url:'https://www.geticashx.com/api/reception/recorded/inbound'}],next_page_uri:null},forward:{object:'response',data:{number:line,call_forwarding:{enabled:true,to:businessVoiceIngress,status:'active',estimated_completion:null}}},template:{id:123,submitters:[{name:'Seller'},{name:'Buyer'}],fields:[{name:'Address'}]}};
  const env={ICASH_LIVE_WORK_READY:'true',ICASH_RECORDED_OUTBOUND_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'SYNTHETIC_SECRET_TOKEN',ELEVENLABS_API_KEY:'SYNTHETIC_SECRET_TOKEN',CONTIGUITY_FROM:primaryBusinessPhone,CONTIGUITY_API_KEY:'SYNTHETIC_SECRET_TOKEN',CONTIGUITY_WEBHOOK_SECRET:'SYNTHETIC_SECRET_TOKEN',OPENAI_API_KEY:'SYNTHETIC_SECRET_TOKEN',DOCUSEAL_API_KEY:'SYNTHETIC_SECRET_TOKEN',DOCUSEAL_MODE:'live'};
- const calls=[],queries=[];let agentPass=true,fail=null;
+ const calls=[],queries=[],inspections=[];let agentPass=true,fail=null;
  const db=async(path,method='GET',body)=>{
   queries.push({path,method,body});
   if(path.startsWith('rpc/')){assert.equal(method,'POST');if(path==='rpc/icash_membership_work_allowed'){assert.deepEqual(body,{p_account:account});return rows.member;}if(path==='rpc/icash_outreach_voice_current')return rows.channel;if(path==='rpc/icash_sms_intake_rate_current'){assert.deepEqual(body,{p_rate:'sms-rate'});return rows.smsRate;}assert.fail('No other RPC permitted: '+path);}
@@ -28,10 +29,10 @@ function fixture(){
   return Response.json(payloads[key]);
  };
  const inspect=async()=>{
-  const {readDemoReadiness}=await loadService('lib/demo-readiness.ts',{ownerInboundTarget,readRecordingReview,object,boundedBytes,secondaryCallingReady,primaryBusinessPhone,isAdditionalBusinessPhone,readRecordedOutboundReadiness:async(input,options)=>{assert.equal(input.RECORDED_OUTBOUND_REVIEW_JSON,env.RECORDED_OUTBOUND_REVIEW_JSON);assert(options.signal);return {providerChecksPass:agentPass};}});
+  const {readDemoReadiness}=await loadService('lib/demo-readiness.ts',{ownerInboundTarget,recordingReviewForConfig,object,boundedBytes,secondaryCallingReady,primaryBusinessPhone,isAdditionalBusinessPhone,readRecordedOutboundReadiness:async(input,options)=>{const selected=recordingReviewForConfig(env,rows.voice[0],now);assert(selected);assert.deepEqual(readRecordingReview(input.RECORDED_OUTBOUND_REVIEW_JSON,now),selected);inspections.push(selected);assert(options.signal);return {providerChecksPass:agentPass};}});
   return readDemoReadiness(env,{db,fetcher,now:()=>now});
  };
- return {rows,payloads,env,calls,queries,inspect,fail:value=>{fail=value;},agent:value=>{agentPass=value;}};
+ return {rows,payloads,env,calls,queries,inspections,inspect,fail:value=>{fail=value;},agent:value=>{agentPass=value;}};
 }
 const good=fixture(),result=await good.inspect();assert.equal(result.setupChecksPass,true);assert.equal(result.checks.length,5);assert.equal(result.mode,'read_only');assert.equal(result.callsPlaced,0);assert.equal(result.messagesSent,0);assert.equal(result.liveCallVerified,false);assert.equal(good.calls.length,7);
 for(const sensitive of ['SYNTHETIC_SECRET_TOKEN',account,user,ac,pn,line,ownerInboundTarget.ownerPhone,review.configHash])assert(!JSON.stringify(result).includes(sensitive));
@@ -43,6 +44,19 @@ for(const [id,mutate] of [
  ['contract',f=>f.rows.templates.push(f.rows.templates[0])],['contract',f=>f.payloads.template.fields=[]],['contract',f=>f.payloads.template.id=999],['contract',f=>f.rows.templates[0].rate.enabled=false],['contract',f=>f.env.DOCUSEAL_MODE='test'],
 ]){const f=fixture();mutate(f);const r=await f.inspect();assert.equal(r.setupChecksPass,false,id);assert.equal(r.checks.find(c=>c.id===id).status,'blocked',id);}
 for(const [failure,id] of [['api.docuseal.com','contract'],['OutgoingCallerIds','calling'],['numbers/leased','text'],['database','account']]){const f=fixture();f.fail(failure);const r=await f.inspect();assert.equal(r.setupChecksPass,false);assert.equal(r.checks.find(c=>c.id===id).status,'unavailable');assert(!JSON.stringify(r).includes('SYNTHETIC_SECRET_TOKEN'));}
+
+// During an explicitly reviewed branch cutover, inspect the exact provider
+// version named by the account's real config, never an arbitrary fallback.
+const nextReview={...review,branchId:'agtbrch_next',versionId:'agtvrsn_next',configHash:'e'.repeat(64),reviewedAt:new Date(now-500).toISOString()};
+for(const selected of [review,nextReview]){
+ const f=fixture();f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(nextReview);f.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON=JSON.stringify(review);
+ f.rows.voice[0].agent_config_hash=selected.configHash;
+ assert.equal((await f.inspect()).setupChecksPass,true);assert.deepEqual(f.inspections,[selected]);
+}
+for(const change of [f=>f.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON='malformed',f=>f.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON=JSON.stringify({...review,fromPhone:'+12125550198'}),f=>f.rows.voice[0].agent_config_hash='f'.repeat(64),f=>f.rows.voice[0].required_tool_ids=[...review.toolIds,'tool_extra']]){
+ const f=fixture();f.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(nextReview);f.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON=JSON.stringify(review);change(f);
+ const result=await f.inspect();assert.equal(result.checks.find(c=>c.id==='agent').status,'blocked');assert.equal(f.inspections.length,0,'Malformed review pairs or unrelated config never inspect a fallback branch');
+}
 
 let owner={accountId:account,userId:user},reads=0;
 const route=await loadService('app/api/demo/readiness/route.ts',{dashboardWorkAccount:async()=>owner,ownerInboundTarget,privateHeaders,readDemoReadiness:async()=>{reads++;return result;},db:()=>assert.fail('No direct database action'),process:{env:{}}});

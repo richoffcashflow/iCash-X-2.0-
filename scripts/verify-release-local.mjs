@@ -2,7 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
- 'seller-intake-start', 'seller-voice-turn-policy', 'stage-seller-voice-turns', 'seller-call-offer-delivery-replay', 'seller-timing-answer', 'seller-ownership-answer',
+ 'seller-intake-start', 'seller-voice-turn-policy', 'stage-seller-voice-turns', 'recording-review-transition', 'seller-call-offer-delivery-replay', 'seller-timing-answer', 'seller-ownership-answer',
  'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
  'support-current-intent-regressions', 'support-sale-workflow-boundaries',
  'support-contact-privacy',
@@ -93,5 +93,8 @@ const suites = [
 ];
 for (const suite of suites) {
  const result=spawnSync(process.execPath,['--experimental-strip-types',`tests/${suite}.test.mjs`],{stdio:'inherit',timeout:60000});
- if(result.error||result.status!==0)process.exit(result.status||1);
+ if(result.error||result.status!==0){
+  console.error(`Failed release suite: ${suite}${result.error?` (${result.error.message})`:` (exit ${result.status}, signal ${result.signal??'none'})`}`);
+  process.exit(result.status||1);
+ }
 }
