@@ -28,15 +28,15 @@ export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,v
   document.addEventListener('visibilitychange',visibility);
   return()=>{disposed=true;clearInterval(timer);controller?.abort();document.removeEventListener('visibilitychange',visibility);};
  },[running,modeRunning,stale,principalKey,apiBase,readOnly]);
- const current=activity?.principalKey===principalKey&&activity&&Date.now()-Date.parse(activity.checkedAt)<25000?activity:null;
+ const current=!stale&&activity?.principalKey===principalKey&&activity&&Date.now()-Date.parse(activity.checkedAt)<25000?activity:null;
  const funded=(balanceCents??0)>0;
  const blocked=current?.blocked===true,healthUnavailable=current?.unavailable===true;
  const observedLive=running&&funded&&!stopped&&!paymentRequired&&!stale&&!busy&&!!current&&current.label!=='Paused'&&!blocked&&!healthUnavailable;
  const active=observedLive&&current?.active===true;
  const runEnabled=modeRunning&&funded&&!stopped&&!paymentRequired;
  const live=readOnly?observedLive:runEnabled;
- const liveLabel=!readOnly?(runEnabled?'Run enabled':stopped?'Paused':'Not running'):blocked?'Work delayed':healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':live?'Live':'Not live';
- const title=readOnly&&(stale||healthUnavailable)?'Checking status':paymentRequired?'Restore access':readOnly&&blocked?'Work delayed':readOnly&&active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped||readOnly&&current?.label==='Paused'?'Bot paused':(readOnly?running:modeRunning)?(readOnly?'Run enabled':'Bot running'):'Bot ready';
+ const liveLabel=!readOnly?(runEnabled?'Run enabled':stopped?'Paused':'Not running'):blocked?'Work needs attention':healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':live?'Live':'Not live';
+ const title=readOnly&&(stale||healthUnavailable)?'Checking status':paymentRequired?'Restore access':readOnly&&blocked?'Work needs attention':readOnly&&active?'Bot working':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped||readOnly&&current?.label==='Paused'?'Bot paused':(readOnly?running:modeRunning)?(readOnly?'Run enabled':'Bot running'):'Bot ready';
  let detail: string;
  if (readOnly && stale) detail='Reconnecting…';
  else if (paymentRequired) detail='Update your subscription to continue.';

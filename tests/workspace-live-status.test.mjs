@@ -32,22 +32,32 @@ activity={...activity,checkedAt:new Date(Date.now()-60000).toISOString()};
 assert.equal(live(render()),false,'Expired activity is not live');
 activity={...activity,checkedAt:new Date().toISOString(),active:false,label:'Paused'};
 assert.equal(live(render()),false,'Server pause overrides cached account availability');
+// A stale owner account read invalidates the cached health announcement before
+// the polling effect runs; fresh blocked health remains visible to the owner.
+activity={principalKey:'fixture',active:false,blocked:true,label:'No recent completed task was recorded.',checkedAt:new Date().toISOString()};
+for(const stale of [false,true,false]){
+ const tree=render({stale}),expected=stale?'Checking status':'Work needs attention';
+ assert.equal(text(all(tree).find(n=>n.type==='h2')),expected,'The owner heading follows current account evidence');
+ assert.equal(text(all(tree).find(n=>n.props?.role==='status')).trim(),expected,'The accessible status agrees with the owner heading before effects run');
+ assert.equal(live(tree),false,'Neither blocked nor stale status claims healthy work');
+ if(stale)assert.doesNotMatch(text(tree),/Work needs attention|No recent completed task/,'Cached blocked details cannot survive a stale account read');
+}
 // Customer Run mode is independent of a temporary health/readiness failure.
 activity=null;
 const customer={readOnly:false,enabled:true};
 assert.match(text(render(customer)),/Bot running/);
 assert.match(text(render(customer)),/Run enabled/);
 assert.match(text(render(customer)),/Searching for a deal/);
-assert.doesNotMatch(text(render(customer)),/Checking status|Not live|Work delayed/);
+assert.doesNotMatch(text(render(customer)),/Checking status|Not live|Work delayed|Work needs attention/);
 for(const change of [{stale:true},{busy:true},{running:false}]){
  const tree=render({...customer,...change});
  assert.match(text(tree),/Bot running/);assert.match(text(tree),/Searching for a deal/);assert.equal(live(tree),true,'The indicator describes saved Run mode');
- assert.doesNotMatch(text(tree),/Checking status|Reconnecting|Not live|Work delayed/);
+ assert.doesNotMatch(text(tree),/Checking status|Reconnecting|Not live|Work delayed|Work needs attention/);
 }
 for(const health of [{blocked:true,label:'A service issue is blocking work on your account.'},{unavailable:true,label:'Work status is temporarily unavailable'},{label:'Confirming earlier work costs'}]){
  activity={principalKey:'fixture',active:false,checkedAt:new Date().toISOString(),...health};
  const tree=render({...customer,hasLeads:true});assert.match(text(tree),/Bot running/);assert.match(text(tree),/Searching for a deal/);
- assert.doesNotMatch(text(tree),/service issue|unavailable|Work delayed|earlier work costs/);
+ assert.doesNotMatch(text(tree),/service issue|unavailable|Work delayed|Work needs attention|earlier work costs/);
 }
 activity={principalKey:'fixture',active:false,label:'Paused',checkedAt:new Date().toISOString()};
 assert.match(text(render(customer)),/Bot running/,'Saved account Run mode wins over an earlier activity read');
@@ -69,7 +79,7 @@ try{
  effects=[];assert.match(text(render(customer)),/Contacting an owner/);
  cleanup=effects.at(-1)();await new Promise(resolve=>setImmediate(resolve));
  const afterFailure=render(customer);
- assert.doesNotMatch(text(afterFailure),/Contacting an owner|Checking status|Work delayed/);
+ assert.doesNotMatch(text(afterFailure),/Contacting an owner|Checking status|Work delayed|Work needs attention/);
  assert(!afterFailure.props.className.includes('is-active'),'A failed poll clears the stale task animation');
  assert.match(text(afterFailure),/Searching for a deal/);assert.match(text(afterFailure),/Bot running/);assert.equal(live(afterFailure),true,'The saved Run mode remains unchanged');
  cleanup();cleanup=undefined;

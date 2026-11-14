@@ -18,7 +18,7 @@ Maintenance observes funded accounts independently of worker heartbeats. It dete
 
 Three affected accounts make the incident critical. Account outages have independent detection, escalation and 15-minute observed recovery memory, so an older unresolved workflow incident cannot hide a new outage. Existing bounded hourly reminders and uncertain-notification protections remain intact.
 
-The owner dashboard shows exact counts and up to 25 affected account references. Customer status uses the account-bound cached finding to display “Work delayed”; a new ticket alone does not clear an outage. Stale monitoring displays unavailable status. This does not promise seller replies, leads, spending targets or completed deals.
+The owner dashboard shows exact counts and up to 25 affected account references. Its read-only account preview displays “Work needs attention” for an account-bound blocked finding. Pending original work is described as awaiting confirmation; it does not establish that all work has stopped or all available credits are held. Missing recent completion evidence remains a separate category in the preview, dashboard and owner alerts. A new ticket alone does not clear a finding. Stale monitoring displays unavailable status, and a stale account read immediately clears its cached activity announcement. The ordinary customer workspace continues to show saved Run/Pause mode. These labels do not promise seller replies, leads, spending targets or completed deals; backend classifications, incident counts, severity and recovery gates are unchanged.
 
 ## Verification and release
 

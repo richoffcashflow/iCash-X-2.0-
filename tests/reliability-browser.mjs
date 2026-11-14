@@ -162,7 +162,7 @@ try{
    reliability.snapshot.issueCount=4;
    await page.getByRole('button',{name:'Refresh',exact:true}).click();
    await panel.getByText('Workflow reliability · Critical priority',{exact:true}).waitFor();
-   await panel.getByText('3 accounts with work needing recovery',{exact:true}).waitFor();
+   await panel.getByText('3 accounts with work needing attention',{exact:true}).waitFor();
    assert.match(await panel.innerText(),/individual workflows and accounts that still need recovery/);
    assert.match(await panel.innerText(),/Failed scheduler checks retry automatically/);
    await panel.getByText('Review affected accounts',{exact:true}).click();
