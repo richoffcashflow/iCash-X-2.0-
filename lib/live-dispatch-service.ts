@@ -18,7 +18,8 @@ import {selectedCustomCallVoice} from './custom-voice.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {loadSellerClosingContext} from './seller-closing-context.ts';
 import {recordingServer} from './required-call-recording-server.ts';
-import {object,readRecordingReview,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
+import {readRecordingReviews,recordingReviewForConfig} from './recording-review-transition.ts';
+import {object,recordingAgentMatches,recordingPolicy} from './required-call-recording.ts';
 import {voiceApprovalDiagnostics} from './voice-approval-diagnostics.ts';
 import {createHash} from 'node:crypto';
 import {assignSharedLearning,SharedLearningSafetyHold,type SharedAssignment} from './shared-learning.ts';
@@ -52,15 +53,15 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  if(p&&!outboundVoiceParties.has(p.party))return hold('buyer_outbound_calls_disabled');
  // Every customer call uses consent-first recording. Capture OFF is a hold, never a legacy fallback.
  const reviewJson=process.env.RECORDED_OUTBOUND_REVIEW_JSON;
+ const previousReviewJson=process.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON;
  const recordingReleaseHold=()=>{
   if(process.env.ICASH_LIVE_WORK_READY!=='true')return 'live_work_not_ready';
   if(process.env.ICASH_RECORDED_OUTBOUND_READY!=='true')return 'recorded_call_release_required';
-  const review=readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON);
-  if(process.env.ICASH_RECORDING_RECEIPTS_READY!=='true'||!review||process.env.RECORDED_OUTBOUND_REVIEW_JSON!==reviewJson||review.providerAccountSid!==process.env.TWILIO_ACCOUNT_SID||!process.env.TWILIO_AUTH_TOKEN)return 'recorded_call_review_required';
+  const reviews=readRecordingReviews(process.env),review=reviews?.[0];
+  if(process.env.ICASH_RECORDING_RECEIPTS_READY!=='true'||!review||process.env.RECORDED_OUTBOUND_REVIEW_JSON!==reviewJson||process.env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON!==previousReviewJson||review.providerAccountSid!==process.env.TWILIO_ACCOUNT_SID||!process.env.TWILIO_AUTH_TOKEN)return 'recorded_call_review_required';
   return null;
  };
  const releaseHold=recordingReleaseHold();if(releaseHold)return hold(releaseHold);
- const recordedReview=readRecordingReview(reviewJson)!;
  const [c]=await db<Config[]>(`icash_voice_configs?account_id=eq.${accountId}&select=*`);
  // Operational targets contain routing/DNC evidence only, never a fabricated consent record.
  if(j.operational_contact_id&&await db<boolean>('rpc/icash_operational_contact_current','POST',{p_account:accountId,p_contact:j.operational_contact_id,p_channel:'voice',p_check_hour:false})!==true)return hold('contact_operating_checks_required');
@@ -69,7 +70,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  if(!c?.enabled||!(Date.parse(c.reviewed_until)>Date.now())||!p||!snapshot||!process.env.ELEVENLABS_API_KEY)return hold('voice_configuration_required');
  // Recorded dispatch binds the account config to the complete reviewed projection,
  // not the legacy main-branch conversation-only hash or its two-tool subset.
- if(c.agent_id!==recordedReview.agentId||c.agent_config_hash!==recordedReview.configHash||c.max_duration_seconds!==recordedReview.maxTotalSeconds||!Array.isArray(c.required_tool_ids)||c.required_tool_ids.length!==recordedReview.toolIds.length||!recordedReview.toolIds.every(id=>c.required_tool_ids.includes(id)))return hold('recorded_call_review_required');
+ const recordedReview=recordingReviewForConfig(process.env,c);
+ if(!recordedReview)return hold('recorded_call_review_required');
  if(createHash('sha256').update(p.phone).digest('hex')!==p.contact_key)return hold('contact_binding_invalid');
  // These independent reads share a preflight boundary; none admits work or
  // replaces the database's final contact/clock checks at reservation and dial.
@@ -256,7 +258,7 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  const finishPredial=(result:{status:string;dispatchBoundary?:string})=>finishVoicePredialAbort(db,{accountId,jobId,automation,dispatchedAt:dispatchOperation?.dispatched_at??null,result});
  await db(`icash_voice_jobs?id=eq.${j.id}&account_id=eq.${accountId}&state=eq.dispatching`,'PATCH',{sms_context:smsContext});
  const dispatchHold=recordingReleaseHold();if(dispatchHold){await finishPredial({status:dispatchHold,dispatchBoundary:'before_recording_create_v1'});return hold(dispatchHold);}
- const result=await recordingServer(undefined,'dispatch').dispatch({accountId,operationKey,fromPhone:businessNumber,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:cancellation?`Hello, this is ${account.assistant_name}, an AI assistant calling for ${identity.principal} about an agreement update. Am I speaking with the property seller?`:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
+ const result=await recordingServer(undefined,'dispatch',recordedReview).dispatch({accountId,operationKey,fromPhone:businessNumber,maxTotalSeconds:fundedCall.maxSeconds,...(p.party==='seller'?{buyerKind}:{}),principal:identity.principal,assistantName:account.assistant_name,voiceId:callVoiceId,firstMessage:cancellation?`Hello, this is ${account.assistant_name}, an AI assistant calling for ${identity.principal} about an agreement update. Am I speaking with the property seller?`:sellerGreeting??buyerFirstMessage(buyerContext!),prompt,strategyKey:strategy});
  // A started call is connecting; only the recording service can confirm capture.
  if(result.status==='recording_consent_pending'){
   if(j.sms_source_message_id)try{
