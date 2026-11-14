@@ -19,7 +19,13 @@ export const maxDuration=120;
 export async function GET(req:Request){
  const headers={'Cache-Control':'no-store'};
  if(!authorizeOutboundBilling(req,process.env.CRON_SECRET))return Response.json({error:'Unauthorized'},{status:401,headers});
- const sellerEmails=processSellerEmails({db,dispatch:dispatchDealEmail,configured:dealEmailConfigured}).catch(()=>({status:'seller_email_retry_pending'}));
+ // A caught lane failure must not make this cycle look healthy. Keep the
+ // failure names private and fixed; expected source/recipient holds returned
+ // by the services are workflow outcomes, not infrastructure failures.
+ const recoveryFailures:string[]=[];
+ const failedRecovery=(lane:string,status:string)=>{recoveryFailures.push(lane);return {status};};
+ const sellerEmails=processSellerEmails({db,dispatch:dispatchDealEmail,configured:dealEmailConfigured})
+  .catch(()=>failedRecovery('sellerEmails','seller_email_retry_pending'));
  let instantFailed=false;
  const instantWork=processInstantLeadWork({db,sms:dispatchTextMessage,voice:dispatchLiveVoice,env:process.env})
   .then(result=>{instantFailed='failures' in result&&(result.failures??0)>0;return result;})
@@ -28,13 +34,13 @@ export async function GET(req:Request){
  // lookup must not delay a newly submitted property's first response.
  const agreementRecovery=recoverAgreementDelivery({db,send:sendForSignatures,text:textPendingContract},process.env).catch(()=>{
    console.warn('seller_agreement_recovery_unavailable');
-   return {status:'agreement_recovery_unavailable'};
+   return failedRecovery('agreementRecovery','agreement_recovery_unavailable');
  });
  // Saved conversion receipts do not depend on lookup funding or call dispatch.
  const measurementWork=(async()=>{
   await db('rpc/icash_collect_seller_milestones','POST',{});
   return deliverSellerEvent(db,process.env);
- })().catch(()=>({status:'measurement_retry_pending'}));
+ })().catch(()=>failedRecovery('measurement','measurement_retry_pending'));
  // Existing paid leads must keep progressing during a new-address provider
  // outage or when acquisition is disabled. Final channel claims own dispatch.
  let responseFailed=false;
@@ -43,11 +49,13 @@ export async function GET(req:Request){
  });
  // Delayed shared assignments can outlive their original research. Refresh
  // only unsent work; current responses and new intake remain independent.
- const researchRefresh=processSellerResearchRefresh(db,process.env.DEALMACHINE_API_KEY).catch(()=>({status:'research_refresh_requires_review'}));
- const contactRefresh=processSellerContactRefresh(db,process.env.DEALMACHINE_API_KEY).catch(()=>({status:'contact_refresh_requires_review'}));
+ const researchRefresh=processSellerResearchRefresh(db,process.env.DEALMACHINE_API_KEY)
+  .catch(()=>failedRecovery('researchRefresh','research_refresh_requires_review'));
+ const contactRefresh=processSellerContactRefresh(db,process.env.DEALMACHINE_API_KEY)
+  .catch(()=>failedRecovery('contactRefresh','contact_refresh_requires_review'));
  try{
   const [controls]=await db<{enabled:boolean}[]>('icash_seller_controls?id=eq.1&select=enabled');
-  if(!controls?.enabled)return Response.json({status:'seller_setup_required',sellerEmails:await sellerEmails,instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:responseFailed||instantFailed?503:200,headers});
+  if(!controls?.enabled)return Response.json({status:'seller_setup_required',sellerEmails:await sellerEmails,instantLeads:await instantWork,responses:await responseWork,measurement:await measurementWork,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh,recoveryFailures},{status:responseFailed||instantFailed||recoveryFailures.length>0?503:200,headers});
   let lookupFailed=false;
   // A minute-limit/cooldown denial on the form's immediate attempt must not
   // strand its still-fresh owner request behind the ordinary intake backlog.
@@ -70,6 +78,6 @@ export async function GET(req:Request){
   const immediate=allocation?.status==='assigned'?await processSellerResponses(db,dispatchTextMessage,dispatchLiveVoice,allocation.leadId):[];
   const responses=[...await responseWork,...immediate];
   const measurement=await measurementWork;
-  return Response.json({sellerEmails:await sellerEmails,instantLeads:await instantWork,lookup,ownerDemo,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh},{status:lookupFailed||responseFailed||instantFailed?503:200,headers});
- }catch{await Promise.all([sellerEmails,agreementRecovery,measurementWork,responseWork,instantWork,researchRefresh,contactRefresh]);return Response.json({status:'seller_processing_requires_review'},{status:503,headers});}
+  return Response.json({sellerEmails:await sellerEmails,instantLeads:await instantWork,lookup,ownerDemo,allocation,responses,measurement,agreementRecovery:await agreementRecovery,researchRefresh:await researchRefresh,contactRefresh:await contactRefresh,recoveryFailures},{status:lookupFailed||responseFailed||instantFailed||recoveryFailures.length>0?503:200,headers});
+ }catch{await Promise.all([sellerEmails,agreementRecovery,measurementWork,responseWork,instantWork,researchRefresh,contactRefresh]);return Response.json({status:'seller_processing_requires_review',recoveryFailures},{status:503,headers});}
 }
