@@ -14,9 +14,9 @@ import '@/app/icash-brand.css';
 import '@/app/launch-homepage.css';
 import '@/app/homepage-features.css';
 
-type Props={preview?:boolean;previewBackHref?:string;showFeatures?:boolean;checkingAccount?:boolean;accountError?:boolean;signInReady?:boolean;onRetry?:()=>void;onSignedIn?:()=>void};
+type Props={preview?:boolean;previewBackHref?:string;showFeatures?:boolean;showEnrollmentPrompt?:boolean;checkingAccount?:boolean;accountError?:boolean;signInReady?:boolean;onRetry?:()=>void;onSignedIn?:()=>void};
 
-export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-studio',showFeatures=false,checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
+export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-studio',showFeatures=false,showEnrollmentPrompt=false,checkingAccount=false,accountError=false,signInReady=true,onRetry,onSignedIn}:Props={}){
  const [webinarSessionId,setWebinarSessionId]=useState<string>();
  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('webinar_session');if(id&&/^[0-9a-f-]{36}$/i.test(id))setWebinarSessionId(id);},[]);
  const [signInOpen,setSignInOpen]=useState(false);
@@ -33,6 +33,10 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
    <a className="wb-express-brand" href="/" aria-label="iCash X home"><IcashMark/>{showFeatures&&!checkingAccount&&<span className="wb-home-wordmark">iCash X<span>2.0</span></span>}</a>
    <button type="button" className="wb-express-sign-in" aria-haspopup="dialog" onClick={()=>setSignInOpen(true)}>Sign in</button>
   </header>
+  {showEnrollmentPrompt&&!checkingAccount&&!purchased&&<aside className="wb-checkout-urgency" aria-label="Complete your enrollment">
+   <strong>YOUR NEXT STEP STARTS NOW</strong>
+   <span>Complete your enrollment below. <ArrowDown size={15} aria-hidden="true"/></span>
+  </aside>}
   <main className="wb-express">
    {checkingAccount?<section className="wb-express-status" aria-label="Account status">
     {!accountError&&<h1>One moment…</h1>}
@@ -68,7 +72,7 @@ export function WebinarExpressCheckout({preview=false,previewBackHref='/webinar-
      <p>Property research, seller calls, texts and contracts—all in one workspace.</p>
     </section>:null}
     <div className="wb-express-card wb-plan-card" id="your-plan" role="region" aria-label="Secure checkout" tabIndex={0}>
-     <MembershipCheckout preview={preview} redirectToVip embedded autoOpen webinarSessionId={webinarSessionId} presentation="plan" onSignedIn={openWorkspace} onPurchased={showFeatures?()=>setPurchased(true):undefined}/>
+     <MembershipCheckout preview={preview} redirectToVip embedded autoOpen webinarSessionId={webinarSessionId} presentation="plan" onSignedIn={openWorkspace} onPurchased={showFeatures||showEnrollmentPrompt?()=>setPurchased(true):undefined}/>
     </div>
    </div>}
   </main>

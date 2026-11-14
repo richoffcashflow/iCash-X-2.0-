@@ -9,8 +9,8 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
   const start=new Date('2026-10-20T05:00:00Z');await page.clock.install({time:start});
   const vip=scenario==='vip',id='00000000-0000-4000-8000-000000000123',sessionId='00000000-0000-4000-8000-000000000456';
   const webinar=publicWebinar({...newWebinar(id),title:'Checkout timer fixture',status:'published',publicCode:'123456',videoUrl:base+'/fixture-video.mp4',showAudienceCount:false,parentWebinarId:vip?'00000000-0000-4000-8000-000000000999':null,offers:[{id:'primary',at:0,title:'Your original offer',description:'',ctaLabel:'Continue',action:'checkout',url:'',expiresAt:new Date(+start+30000).toISOString()}]});
-  let preparations=0,vipAttempts=0,paid=false;const preparationSources=[];
-  const status=()=>({ready:true,mode:'test',embeddedReady:true,needsClaim:false,customerName:'Fixture',email:scenario==='card'||vip?'fixture@example.invalid':null,offer:{revision:1,priceCents:5000},membership:vip||paid?{accessible:true,vip:vip&&paid}:null,postPurchaseUrl:'/live/123457'});
+  let preparations=0,vipAttempts=0,paid=false,postPurchaseUrl='/live/123457';const preparationSources=[];
+  const status=()=>({ready:true,mode:'test',embeddedReady:true,needsClaim:false,customerName:'Fixture',email:scenario==='card'||vip?'fixture@example.invalid':null,offer:{revision:1,priceCents:5000},membership:vip||paid?{accessible:true,vip:vip&&paid}:null,postPurchaseUrl});
   const stripe=`window.fixtureMounts=0;window.fixtureDestroys=0;window.Stripe=()=>({createEmbeddedCheckoutPage:async({onComplete})=>({mount(node){window.fixtureMounts++;const frame=document.createElement('iframe');frame.title='Fixture secure payment';frame.src='https://checkout.stripe.com/form';node.append(frame);window.fixtureComplete=onComplete;},destroy(){window.fixtureDestroys++;}})});`;
   await context.route('**/*',route=>{
    const url=new URL(route.request().url()),json=body=>route.fulfill({json:body});
@@ -56,6 +56,15 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
     assert.equal(preparations,1,'The ordinary destination prepares exactly one checkout');
     assert.deepEqual(preparationSources,[base+'/webinar/checkout?webinar_session='+sessionId],'Completion never prepares payment in the expired webinar');
     assert.deepEqual(await page.evaluate(()=>[window.fixtureMounts,window.fixtureDestroys]),[1,0]);
+    const urgency=page.getByRole('complementary',{name:'Complete your enrollment'});await urgency.waitFor();
+    assert.equal(await urgency.evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(215, 25, 32)');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Direct checkout fits the mobile viewport without horizontal overflow');
+    await field.fill('fixture draft');await page.clock.fastForward(60000);
+    assert.equal(await field.inputValue(),'fixture draft','The enrollment prompt never expires or replaces an active payment form');
+    assert.deepEqual(await page.evaluate(()=>[window.fixtureMounts,window.fixtureDestroys]),[1,0]);assert.equal(preparations,1);
+    // Keep this confirmed buyer on the local upgrade view to inspect prompt dismissal.
+    postPurchaseUrl=null;paid=true;await page.evaluate(()=>window.fixtureComplete());await urgency.waitFor({state:'detached'});
+    assert.equal(preparations,1,'Confirmed enrollment cannot prepare another subscription');
    }else{
     await page.getByRole('heading',{name:'Your original offer'}).waitFor();
     if(scenario==='email'){
@@ -78,5 +87,5 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    assert.deepEqual(errors,[]);
   }catch(error){throw Error(`${name} ${scenario}: ${error.message}\n${page.url()}\n${await page.locator('body').innerText()}\n${errors.join('\n')}`);}finally{await context.close();}
  }
- console.log(`PASS ${name}: untouched expired offer reaches ordinary checkout on completion; email, cross-origin payment fields and VIP retry stay mounted through expiry/video end; verified payment advances.`);
+ console.log(`PASS ${name}: expired offers reach ordinary checkout; red enrollment prompt fits mobile, keeps payment open and clears after confirmation; email, payment fields and VIP retry survive expiry/video end.`);
 }
