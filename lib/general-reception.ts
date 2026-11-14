@@ -2,6 +2,7 @@ import {receptionContextPrompt,receptionContextVariables} from './reception-prop
 import {propertyReceptionEnabled,propertyReceptionGreeting,propertyReceptionPrompt,propertyReceptionVariables} from './reception-property-context.ts';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {ownerWorkflowIsInert} from './owner-voice-acceptance.ts';
+import {unversionedInertWorkflow} from './inert-workflow-serialization.ts';
 
 // Budget-backed intake with a distinct, explicitly approved owner connection test.
 export const receptionTarget=Object.freeze({accountId:'48dfb798-8c1a-404f-88c0-c396cc067062',ownerUserId:'592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',calledNumber:'+17816093521',agentId:'agent_7801m3qsygdwfv5tggatf7w68y3d'});
@@ -72,6 +73,8 @@ export function verifyReceptionPostcall(raw:string,header:string|null,secret:str
 /** The current provider schema omits parent_subgraph_id for an unparented start.
  * Accept its absence or explicit null without relaxing any executable fields. */
 export function receptionWorkflowIsInert(value:unknown):boolean{
+ const unversioned=unversionedInertWorkflow(value);
+ if(unversioned)return receptionWorkflowIsInert(unversioned);
  const workflow=obj(value),nodes=obj(workflow.nodes),node=obj(nodes.start_node);
  // The same approved start-only workflow now includes joint empty frame
  // metadata. Strip only this observed pair for structural validation; the

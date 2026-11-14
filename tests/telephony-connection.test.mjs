@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {checkTelephonyConnection,saveTelephonyCheck} from '../scripts/check-telephony-connection.mjs';
+import {checkTelephonyConnection,saveTelephonyCheck,sellerTurnStageFailureCode} from '../scripts/check-telephony-connection.mjs';
 
 let requests=[];
 const fetcher=async(url,init)=>{requests.push({url,method:init.method??'GET'});return new Response('secret-provider-payload',{status:403});};
@@ -16,4 +16,6 @@ assert(!JSON.stringify(report).includes('secret-provider-payload'));
 assert.equal(await saveTelephonyCheck(report,{},fetcher),false);
 assert.equal(report.callsPlaced,0);
 assert.equal(report.messagesSent,0);
+assert.equal(sellerTurnStageFailureCode(Error('SELLER_TURNS_INBOUND_SOURCE_CHANGED')),'SELLER_TURNS_INBOUND_SOURCE_CHANGED');
+for(const value of [undefined,null,'private-secret',Error('private-secret'),Error('SELLER_TURNS_FAILED: private-secret'),Error('SELLER_TURNS_FAILED\nprivate-secret'),Error('SELLER_TURNS_token123'),{message:42}])assert.equal(sellerTurnStageFailureCode(value),'SELLER_TURNS_UNCONFIRMED');
 console.log('PASS: telephony diagnostics are read-only and fail closed without leaking credentials or provider bodies.');

@@ -31,7 +31,9 @@ function fixture(options={}){
  const c={id:'11111111-1111-4111-8111-111111111111',enabled:true,callback_template_id:null,account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,agent_id:receptionTarget.agentId,call_profile:'normal',entry_policy:'direct_recorded_v1',branch_id:'agtbrch_insource',version_id:'agtvrsn_insource',reviewed_version_id:'agtvrsn_insource',context_policy:'automatic_offer_v11',context_policy_hash:isolatedBuyerReceptionPolicyHash,context_approval_reference:'Synthetic reviewed source only',stop_tool_id:inStopId,agreement_tool_id:contractId,max_duration_seconds:600,config_hash:'',reviewed_until:'9999-12-31T23:59:59Z'};
  const incoming={agent_id:c.agent_id,branch_id:c.branch_id,version_id:c.reviewed_version_id,main_branch_id:'agtbrch_inmain',phone_numbers:[],conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},turn:structuredClone(turn),agent:{first_message:'{{icash_property_greeting}}',prompt:{prompt:buyerRolePrompt+directRecordedInstructions,max_tokens:150,tool_ids:[inStopId,contractId],tools:[],knowledge_base:[]}}},platform_settings:structuredClone(platform)};
  incoming.platform_settings.guardrails=automaticOfferGuardrails();incoming.platform_settings.guardrails.custom.config.configs=[buyerVoiceGuardrail];
+ if(options.versionedWorkflow)incoming.workflow={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_subgraph_id:null}},subgraphs:{},prevent_subagent_loops:true};
  c.config_hash=inspectRecordedReceptionAgent(c,incoming,branch(incoming),true,tools.get(inStopId),tools.get(contractId)).hash;
+ if(options.versionedWorkflow){incoming.workflow.version=1;incoming.workflow.frames={};incoming.workflow.nodes.start_node.parent_frame_id=null;incoming.conversation_config.agent.prompt.enable_prompt_caching=true;}
  assert(inspectRecordedReceptionAgent(c,incoming,branch(incoming),true,tools.get(inStopId),tools.get(contractId)).safe,'Synthetic incoming source must exercise real validator');
  const review={enabled:true,offerPolicy:'automatic_offer_v9',agentId:outbound.agent_id,branchId:outbound.branch_id,versionId:outbound.version_id,configHash:hash(outbound),fromPhone:'+12125550100',providerAccountSid:sid,stopToolId:outTarget.stopToolId,contractToolId:contractId,toolIds:outbound.conversation_config.agent.prompt.tool_ids,approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:'required-audio-30d-speech-v1',reviewedAt:new Date(now-10000).toISOString(),reviewedUntil:'9999-12-31T23:59:59Z'};
  const source={outbound:{agentId:review.agentId,branchId:review.branchId,versionId:review.versionId,configHash:review.configHash,contextPolicy:review.offerPolicy},inbound:{configId:c.id,agentId:c.agent_id,branchId:c.branch_id,versionId:c.reviewed_version_id,configHash:c.config_hash,contextPolicy:c.context_policy}};
@@ -93,6 +95,18 @@ assert.deepEqual(await stageSellerVoiceTurns({},()=>{throw Error('no reads');},n
  const printed=JSON.stringify(publicSellerTurnStage(result));
  for(const secret of ['SYNTHETIC_DB_SECRET','SYNTHETIC_PROVIDER_SECRET',sid,'PRIVATE_OUTBOUND_PROMPT','fromPhone','reviewedUntil',receptionTarget.calledNumber])assert(!printed.includes(secret));
  assert(f.calls.filter(x=>x.url.startsWith('https://api.elevenlabs.io')&&x.method!=='GET').every(x=>x.url.endsWith('/branches')&&x.method==='POST'));
+}
+{
+ const f=fixture({versionedWorkflow:true}),before=structuredClone({incoming:f.incoming,c:f.c});
+ const result=await stageSellerVoiceTurns(f.env,f.fetcher,now);
+ assert.equal(result.status,'staged');assert.equal(f.creationCount,2);
+ assert.deepEqual({incoming:f.incoming,c:f.c},before,'Provider serialization compatibility never changes the source or its saved approval');
+ assert.equal(f.agents.get(result.inbound.branchId).workflow.prevent_subagent_loops,true);
+}
+for(const mutate of [f=>f.incoming.workflow.prevent_subagent_loops=false,f=>f.incoming.workflow.version=2,f=>f.incoming.workflow.nodes.action={type:'tool'},f=>f.incoming.workflow.extra=null]){
+ const f=fixture({versionedWorkflow:true});mutate(f);
+ await assert.rejects(stageSellerVoiceTurns(f.env,f.fetcher,now),/SELLER_TURNS_INBOUND_SOURCE_CHANGED/);
+ assert.equal(f.creationCount,0);assert.equal(f.markers.size,0,'All source checks precede durable intent or provider writes');
 }
 for(const options of [{createLost:true},{createLostWithoutBranch:true},{claimLost:true}]){
  const f=fixture(options);
