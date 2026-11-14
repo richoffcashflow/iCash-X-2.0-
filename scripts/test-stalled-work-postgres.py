@@ -57,7 +57,26 @@ sql("select fixture_preflight_seed(n,false,interval '20 minutes') from generate_
 before = sql('select md5(jsonb_agg(to_jsonb(p) order by id)::text) from icash_research_private.owner_export_preflights p')
 sql(read('config/preflight-continuation-fairness.sql'))
 assert sql('select enabled from icash_work_private.continuation_policy') == 'f'
-sql(read('config/preflight-continuation-issuance.sql'))
+issuance = read('config/preflight-continuation-issuance.sql')
+sql('create table fixture_migration_ledger(version text primary key,name text not null)')
+before_policy = sql('select to_jsonb(p) from icash_work_private.continuation_policy p')
+before_recorder = sql("select pg_get_functiondef('icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean)'::regprocedure)")
+before_activation = sql("select pg_get_functiondef('icash_work_private.activate_continuation_fairness(text)'::regprocedure)")
+try:
+    sql('begin;'+issuance+"insert into fixture_migration_ledger(version) values('20261114170728');commit;")
+except AssertionError as error:
+    assert 'null value in column "name"' in str(error), 'Expected enclosing ledger failure'
+else:
+    raise AssertionError('Missing migration ledger name unexpectedly committed')
+# ON_ERROR_STOP exits that connection, rolling back its failed outer transaction.
+assert sql('select to_jsonb(p) from icash_work_private.continuation_policy p') == before_policy
+assert sql("select pg_get_functiondef('icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean)'::regprocedure)") == before_recorder
+assert sql("select pg_get_functiondef('icash_work_private.activate_continuation_fairness(text)'::regprocedure)") == before_activation
+assert sql('select count(*) from icash_work_private.continuation_decisions') == '0'
+assert sql("select count(*) from information_schema.columns where table_schema='icash_work_private' and ((table_name='continuation_decisions' and column_name='issue_token_hash') or (table_name='continuation_policy' and column_name='recorder_hash'))") == '0'
+assert sql('select count(*) from fixture_migration_ledger') == '0'
+sql('begin;'+issuance+"insert into fixture_migration_ledger values('20261114170728','preflight_continuation_issuance');commit;")
+assert sql('select count(*) from fixture_migration_ledger') == '1'
 assert sql("select icash_work_private.activate_continuation_fairness(repeat('a',40))") == 't'
 started = time.monotonic()
 with ThreadPoolExecutor(max_workers=9) as pool:
@@ -102,7 +121,7 @@ assert sql('select count(*) from icash_automation_tickets') == before_tickets
 sql('begin;select 1 from icash_operating_budget where id=1 for update;update icash_work_private.continuation_policy set enabled=false;commit;')
 sql('set role service_role;select icash_next_acquisition();')
 assert sql('select count(*) from icash_work_private.continuation_decisions') == '27'
-print('PASS PostgreSQL 17: exact monitor boundary, 36 concurrent service-role reads, 1,006-account fair selection, same-original-ticket multi-step continuation and identical acknowledgment with 9 competing workers, immutable originals, unchanged financial ledgers, ACLs and rollback.')
+print('PASS PostgreSQL 17: exact monitor boundary, 36 concurrent service-role reads, atomic correction and migration-ledger failure rollback, 1,006-account fair selection, same-original-ticket multi-step continuation and identical acknowledgment with 9 competing workers, immutable originals, unchanged financial ledgers, ACLs and rollback.')
 
 reset()
 setup = subprocess.run(['node','--input-type=module','-e',

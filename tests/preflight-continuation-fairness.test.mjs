@@ -31,7 +31,23 @@ try{
  });
  const issuance=read('config/preflight-continuation-issuance.sql');
  const receiptName=readdirSync(new URL('../supabase/migrations/',import.meta.url)).find(n=>n.endsWith('_preflight_continuation_issuance.sql'));
- assert(receiptName);assert.equal(issuance,read('supabase/migrations/'+receiptName));await pg.exec(issuance);
+ assert(receiptName);assert.equal(issuance,read('supabase/migrations/'+receiptName));
+ // The migration runner owns the transaction containing both SQL and its
+ // ledger receipt. A late ledger failure must undo the whole correction.
+ await pg.exec('create table fixture_migration_ledger(version text primary key,name text not null)');
+ const beforePolicy=await v('select to_jsonb(p) from icash_work_private.continuation_policy p');
+ const beforeRecorder=await v("select pg_get_functiondef('icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean)'::regprocedure)");
+ const beforeActivation=await v("select pg_get_functiondef('icash_work_private.activate_continuation_fairness(text)'::regprocedure)");
+ await assert.rejects(pg.exec('begin;'+issuance+"insert into fixture_migration_ledger(version) values('20261114170728');commit;"),/null value.*name/);
+ await pg.exec('rollback');
+ assert.deepEqual(await v('select to_jsonb(p) from icash_work_private.continuation_policy p'),beforePolicy,'Failed enclosing ledger write rolls back disabled policy changes');
+ assert.equal(await v("select pg_get_functiondef('icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean)'::regprocedure)"),beforeRecorder);
+ assert.equal(await v("select pg_get_functiondef('icash_work_private.activate_continuation_fairness(text)'::regprocedure)"),beforeActivation);
+ assert.equal(await v('select count(*) from icash_work_private.continuation_decisions'),0);
+ assert.equal(await v("select count(*) from information_schema.columns where table_schema='icash_work_private' and ((table_name='continuation_decisions' and column_name='issue_token_hash') or (table_name='continuation_policy' and column_name='recorder_hash'))"),0,'Schema does not escape the migration transaction');
+ assert.equal(await v('select count(*) from fixture_migration_ledger'),0);
+ await pg.exec('begin;'+issuance+"insert into fixture_migration_ledger values('20261114170728','preflight_continuation_issuance');commit;");
+ assert.equal(await v('select count(*) from fixture_migration_ledger'),1);
  assert.equal(await v("select icash_work_private.activate_continuation_fairness('bad')"),false);
  assert.equal(await v("select icash_work_private.activate_continuation_fairness(repeat('a',40))"),true);
  await isolated(async()=>{

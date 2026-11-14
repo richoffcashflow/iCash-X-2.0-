@@ -18,7 +18,7 @@ async function readReceipt(path:string,key:string,fetcher:typeof fetch,now:()=>n
  return {url,status:response.status,rawText,raw,checkedAt:new Date(now()).toISOString()};
 }
 export async function recoverTextDeliveryReceipts(db:Database,env:Environment={VERCEL_ENV:process.env.VERCEL_ENV,CONTIGUITY_API_KEY:process.env.CONTIGUITY_API_KEY,CONTIGUITY_WEBHOOK_SECRET:process.env.CONTIGUITY_WEBHOOK_SECRET},fetcher:typeof fetch=fetch,now:()=>number=Date.now){
- const result={checked:0,delivered:0,review:0,held:0,changed:0,errors:0};
+ const result={checked:0,delivered:0,review:0,held:0,changed:0,errors:0,readErrors:0};
  // Receipt reads remain independent of customer Pause and outbound-send flags.
  if(env.VERCEL_ENV!=='production'||!env.CONTIGUITY_API_KEY||!env.CONTIGUITY_WEBHOOK_SECRET)return {...result,status:'configuration_unavailable'};
  const claims=await db<Claim[]>('rpc/icash_claim_text_delivery_rechecks','POST',{},AbortSignal.timeout(6000));
@@ -28,6 +28,9 @@ export async function recoverTextDeliveryReceipts(db:Database,env:Environment={V
  try{lease=await readReceipt('/numbers/leased',env.CONTIGUITY_API_KEY,fetcher,now);}catch{/* Each claim still records an unavailable observation. */}
  const leaseData=lease?.raw as {object?:unknown;data?:{numbers?:unknown}}|null;
  const numbers=leaseData?.object==='response'&&Array.isArray(leaseData.data?.numbers)?leaseData.data.numbers:[];
+ const leaseReadable=lease?.status===200&&leaseData?.object==='response'&&Array.isArray(leaseData.data?.numbers);
+ // Saving a failed observation does not establish recovery-service health.
+ if(!leaseReadable)result.readErrors++;
  const leased=(phone:string)=>numbers.some((value:unknown)=>typeof value==='object'&&value!==null&&
   (value as {number?:{e164?:unknown}}).number?.e164===phone);
  await Promise.all(claims.map(async claim=>{
@@ -36,16 +39,22 @@ export async function recoverTextDeliveryReceipts(db:Database,env:Environment={V
   // A current lease is required by SQL before applying delivery. Its absence
   // must not erase our opportunity to collect an already accepted original's
   // canonical evidence. The same claim, three-message cap and backoff apply.
-  if(!lease||lease.status!==200||!leased(claim.request.sender))receipt.reason='leased_identity_unverified';
+  if(!leaseReadable||!leased(claim.request.sender))receipt.reason='leased_identity_unverified';
   try{
    if(!/^[A-Za-z0-9_-]{1,200}$/.test(claim.request.provider_id))receipt.reason='original_message_identity_invalid';
-   else receipt.message=await readReceipt(`/conversations/history/message/${claim.request.provider_id}?tracking=true`,env.CONTIGUITY_API_KEY!,fetcher,now);
-  }catch{receipt.messageReadError='canonical_read_unavailable';receipt.reason??='canonical_read_unavailable';}
+   else{
+    const message=await readReceipt(`/conversations/history/message/${claim.request.provider_id}?tracking=true`,env.CONTIGUITY_API_KEY!,fetcher,now);
+    receipt.message=message;
+    const value=message.raw as {object?:unknown;data?:unknown}|null;
+    // Missing/gone originals remain message-specific evidence holds.
+    if(![404,410].includes(message.status)&&(message.status!==200||value?.object!=='response'||!value.data||typeof value.data!=='object'||Array.isArray(value.data)))result.readErrors++;
+   }
+  }catch{result.readErrors++;receipt.messageReadError='canonical_read_unavailable';receipt.reason??='canonical_read_unavailable';}
   try{
    const outcome=await db<string>('rpc/icash_finish_text_delivery_recheck','POST',{p_id:claim.id,p_receipt:receipt},AbortSignal.timeout(6000));
    if(outcome==='delivered')result.delivered++;else if(outcome==='needs_review')result.review++;
    else if(outcome==='changed')result.changed++;else result.held++;
   }catch{result.errors++;}
  }));
- return {...result,status:result.errors?'receipt_write_unavailable':'checked'};
+ return {...result,status:result.errors?'receipt_write_unavailable':result.readErrors?'receipt_read_unavailable':'checked'};
 }

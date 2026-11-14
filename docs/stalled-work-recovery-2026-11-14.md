@@ -20,6 +20,16 @@ recovery step. Keep both policies disabled until the additive
 pass exact-head native/full CI and are installed and read back. Do not rewrite or
 reapply the first three successful migrations.
 
+Install only the two pending additive corrections with the supported migration
+runner's atomic SQL-and-ledger transaction. These files deliberately contain no
+top-level `BEGIN` or `COMMIT`: an inner commit could persist schema changes before
+the runner records its migration receipt. Apply `followup_pending_originals`
+first, then `preflight_continuation_issuance`, and verify each receipt and guarded
+definition before continuing. Never run their statements separately in autocommit.
+Native and PGlite tests force a late ledger insert to fail and verify that the
+issuance schema, function and disabled policy all roll back. The earlier three
+already-installed migrations retain their original bytes and ledger history.
+
 The issuance correction preserves the original ticket and records each distinct
 one-use token hash under its fair turn; identical acknowledgments do not advance
 the turn. It also records only the current exact original preflight. The pending

@@ -1,5 +1,4 @@
 -- Correct the disabled first installation. Preserve every original ticket ID.
-begin;
 set local lock_timeout='5s';set local statement_timeout='30s';
 select pg_advisory_xact_lock(726341927);
 do $$begin
@@ -59,4 +58,3 @@ do $$declare d text;needle text:='if not found or p.scheduler_hash';begin
  if (length(d)-length(replace(d,needle,'')))<>length(needle) then raise exception 'Continuation activation boundary changed';end if;
  execute replace(d,needle,'if not found or p.recorder_hash<>md5(pg_get_functiondef(''icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean)''::regprocedure)) or p.scheduler_hash');
 end$$;
-commit;

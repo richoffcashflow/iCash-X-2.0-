@@ -6,6 +6,13 @@ leased-number request failed or omitted that sender. This coupled historical
 evidence collection to current sending readiness and consumed a bounded recovery
 attempt without obtaining the original message evidence.
 
+Failed network, server or malformed canonical reads now report
+`receipt_read_unavailable` even when the failed observation was saved correctly.
+Write failures retain their separate status. A missing/gone original message
+(404/410) or a readable lease list without the original sender remains an ordinary
+evidence hold. Other claimed originals still finish, including when the lease
+read fails; failed lease authority can never establish delivery.
+
 Keep the existing lease lookup and diagnostics, then independently request the
 original message ID with `?tracking=true`. Save both observations in the same
 original attempt. This uses only authenticated GETs and the existing three-message
