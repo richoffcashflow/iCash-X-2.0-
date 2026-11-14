@@ -15,7 +15,7 @@ for(const event of [null,'blur','focusin'])test(`iframe focus is detected once v
   Object.assign(globalThis,{window:outer,document,setInterval:fn=>{intervals.set(++sequence,fn);return sequence;},clearInterval:id=>intervals.delete(id),setTimeout:fn=>{timers.set(++sequence,fn);return sequence;},clearTimeout:id=>timers.delete(id)});
   const hooks={useRef:value=>{const ref={current:value};refs.push(ref);return ref;},useState:value=>[value,()=>{}],useEffect:fn=>effects.push(fn)};
   const module={exports:{}};
-  new Function('require','module','exports',source)(name=>name==='react'?hooks:name==='next/script'?{__esModule:true,default:'Script'}:require(name),module,module.exports);
+  new Function('require','module','exports',source)(name=>name==='react'?hooks:name==='@/lib/stripe-checkout-client'?{}:require(name),module,module.exports);
   module.exports.StripeEmbeddedCheckout({clientSecret:'fixture',publishableKey:'pk_test_fixture',onComplete:()=>{},onInteract:()=>interactions++});
   refs[0].current={contains:node=>node===ownFrame};
   const cleanup=effects[0](),tick=()=>[...intervals.values()].forEach(fn=>fn());

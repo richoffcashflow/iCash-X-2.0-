@@ -7,7 +7,7 @@ import {validGuest} from '@/lib/funding';
 import {webinarCustomerAccount,webinarCustomerPaid} from '@/lib/webinar-account-adapter';
 import {webinarSite} from '@/lib/webinar-site';
 import {db} from '@/lib/stripe-test';
-import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,hasWebinarVideo,webinarReturnPosition,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
+import {publicWebinar,settingsSchema,webinarSchema,visitorTimezone,webinarFromRow,offerDestination,webinarCompletionDestination,hasWebinarVideo,webinarReturnPosition,type WebinarSettings,type WebinarRow} from '@/lib/webinar-policy';
 import {sessionWebinarOffers} from '@/lib/webinar-offer-server';
 import {selectOffer,withinWebinarResumeWindow} from '@/packages/webinar-engine/src/index';
 import {selectRecording,recordingRecheckAt} from '@/lib/webinar-recordings';
@@ -53,8 +53,10 @@ export async function POST(req:Request){try{
  const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id'].includes(k)));
  const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
  const activityRegion=process.env.VERCEL?approximateRegion(req.headers.get('x-vercel-ip-country'),req.headers.get('x-vercel-ip-country-region')):null;
+ // Return routing uses only the latest unsuperseded session. Filter before limiting
+ // so old recording snapshots cannot inflate entry or hide a resumable session.
  // Independent entry reads run together; every access check still finishes before returning a session.
- const [initialHistory,settingsRows,offers,,paid]=await Promise.all([db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.id}&is_preview=eq.${!!i.preview}&select=*&order=created_at.desc&limit=100`),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),i.preview?Promise.resolve([]):db<{session_id:string;created_at:string;kind:string;event_key:string}[]>(`icash_webinar_events?visitor_id=eq.${visitor.id}&kind=in.(pitch_shown,checkout_opened)&select=session_id,created_at,kind,event_key&order=created_at.desc&limit=1000`),
+ const [initialHistory,settingsRows,,paid]=await Promise.all([i.preview?Promise.resolve([]):db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.id}&is_preview=eq.false&superseded_at=is.null&select=*&order=created_at.desc,updated_at.desc&limit=1`),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),
   db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(account?{account_id:account.id}:{}),...(Object.keys(attribution).length?{attribution}:{})}),
   !i.preview&&!ownerWatching&&!target.parentWebinarId?Promise.all([webinarCustomerPaid(guestHash(fundingGuest)),webinarPaid(visitor)]).then(results=>results.some(Boolean)):Promise.resolve(false)
  ]);
@@ -62,7 +64,7 @@ export async function POST(req:Request){try{
  const settings=settingsSchema.parse(settingsRows[0].config);
  const entryNow=new Date();
  const history=initialHistory.filter(h=>h.webinar_id===target.id);
- let journey=webinarReturnJourney(history,offers,timezone,settings.routing.checkoutWindowHours,entryNow);
+ let journey=webinarReturnJourney(history,[],timezone,settings.routing.checkoutWindowHours,entryNow);
  let recordingChanged=false;
  // Every returning viewer gets the current local recording before resume or
  // checkout routing. A different video's playback position must start at zero.
@@ -81,9 +83,11 @@ export async function POST(req:Request){try{
   if(target.parentWebinarId)return Response.json({redirect:'/webinar/upgrade'},{headers:webinarHeaders});
   const priorSessionId=journey.sessionId;
   const previous=history.find(h=>h.id===priorSessionId)!;
-  const lastOpened=offers.find(o=>o.session_id===previous.id&&o.kind==='checkout_opened'&&o.event_key.startsWith('offer:'))?.event_key.slice(6);
-  const offer=selectOffer(await sessionWebinarOffers(previous,previous.max_seconds),previous.max_seconds,Date.now(),lastOpened);
-  if(offer)return Response.json({redirect:offer.action==='checkout'?`${offerDestination(offer)}?webinar_session=${previous.id}`:offerDestination(offer)},{headers:webinarHeaders});
+  const [lastOpened]=await db<{event_key:string}[]>(`icash_webinar_events?visitor_id=eq.${visitor.id}&session_id=eq.${previous.id}&kind=eq.checkout_opened&event_key=like.offer:*&select=event_key&order=created_at.desc&limit=1`);
+  const sessionOffers=await sessionWebinarOffers(previous,previous.max_seconds);
+  const offer=selectOffer(sessionOffers,previous.max_seconds,Date.now(),lastOpened?.event_key.slice(6));
+  const redirect=offer?offer.action==='checkout'?`${offerDestination(offer)}?webinar_session=${previous.id}`:offerDestination(offer):webinarCompletionDestination(previous.config,sessionOffers,previous.id);
+  if(redirect)return Response.json({redirect},{headers:webinarHeaders});
   journey={kind:'advance',sessionId:previous.id};
  }
  const resumeId=journey.kind==='resume'?journey.sessionId:null;
@@ -101,6 +105,6 @@ export async function POST(req:Request){try{
  const returnStart=!i.preview&&!ownerWatching&&!target.parentWebinarId&&!recordingChanged&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:returnStart?{...snapshot,_returnStartSeconds:returnStart}:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  if(target.legacyCampaignId&&!i.preview)await bindLegacyWebinar(visitor.id,target.legacyCampaignId).catch(()=>{});
- const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`).then(rows=>rows.reverse()).catch(()=>[]);
+ const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`,'GET',undefined,AbortSignal.timeout(1500)).then(rows=>rows.reverse()).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,ownerWatching,recordingRecheckAt:i.preview?null:recordingRecheckAt(target,session.config.recordingVersion??'day',timezone,entryNow,settings.routing,location),serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}
