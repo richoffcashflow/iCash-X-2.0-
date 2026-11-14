@@ -2,6 +2,19 @@ import {supportLegacyProofEmail} from './support-legacy-migration.ts';
 import {supportRenewalCancellationRequested,type SupportEvidence} from './support-policy.ts';
 type Turn={role:string;content:string};
 type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[]};
+
+/** A reply to the latest operator's evidence request is a submission claim,
+ * not a receipt, authenticated identity or a completed account change. */
+export function supportProofSubmissionFollowup(messages:Turn[]){
+ const index=messages.findLastIndex(turn=>turn.role==='user');
+ const request=messages[index-1];
+ if(!request||request.role!=='operator'||!request.content.includes(supportLegacyProofEmail)
+  ||!/\b(?:email|forward|send)\b[^.!?]{0,55}\b(?:purchase receipt|checkout (?:email|address)|original checkout address)\b/i.test(request.content)
+  ||/\b(?:not|never|don[’']?t|do not|no need to)\s+(?:email|forward|send)\b/i.test(request.content))return null;
+ const q=messages[index].content.trim();
+ if(!/^(?:(?:done|yes)[,.!\s]+)?I (?:(?:have )?already did(?: that)?|(?:have |already |just )?sent it(?: to (?:your email|you|support))?)[.!\s]*$/i.test(q))return null;
+ return {reply:'You’ve said you sent the requested purchase information. I have not confirmed that the email has been received or matched to the purchase. You do not need to send the same information again. What subject and date did you use for that email? That will help locate it. Your access and any cancellation or refund request remain unresolved; this reply has not changed your email, subscription or access.',status:'open' as const,managementReview:true as const,ai:false as const};
+}
 const suppliedPaymentLead='You’ve supplied the payment date and amount, so you don’t need to repeat them. These details alone do not verify a purchase or ownership. ';
 const paymentMerchantQuestion='What merchant name appears beside that payment on your statement? Share only the merchant name, not card numbers or codes.';
 const suppliedPaymentTail=' This reply does not confirm a cancellation, email correction or restored access. You don’t need to pay again or repeat sign-in attempts.';

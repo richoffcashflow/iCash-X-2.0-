@@ -120,7 +120,7 @@ def run():
     sql("select icash_ingest_text_event_before_operational('"+json.dumps(later_callback)+"'::jsonb,false);")
     assert sql('select count(*) from fixture_opened_gaps;')=='1','Later duplicate callback must retain historical replay fence'
     assert sql('select first_outreach_at is null from icash_meta_leads;')=='t'
-    for n, invalid_source in [(13, None), (14, 'other_source'), (15, 'missing_tracking_query'), (16, 'false_tracking_query')]:
+    for n, invalid_source in [(13, None), (14, 'other_source'), (15, 'missing_tracking_query'), (16, 'false_tracking_query'), (17, 'missing_lease'), (18, 'unleased_sender')]:
         seed(n)
         held_job=json.loads(sql('set role service_role;select icash_claim_text_delivery_rechecks();'))[0]
         invalid_evidence=receipt(held_job)
@@ -130,6 +130,13 @@ def run():
             invalid_evidence['message']['url']=invalid_evidence['message']['url'].replace('?tracking=true','')
         elif invalid_source=='false_tracking_query':
             invalid_evidence['message']['url']=invalid_evidence['message']['url'].replace('?tracking=true','?tracking=false')
+        elif invalid_source=='missing_lease':
+            invalid_evidence['lease']=None
+            invalid_evidence['reason']='leased_identity_unverified'
+        elif invalid_source=='unleased_sender':
+            invalid_evidence['lease']['raw']['data']['numbers']=[]
+            invalid_evidence['lease']['rawText']=json.dumps(invalid_evidence['lease']['raw'])
+            invalid_evidence['reason']='leased_identity_unverified'
         else:
             invalid_evidence['source']=invalid_source
         before_changes=sql('select count(*) from fixture_changes;')

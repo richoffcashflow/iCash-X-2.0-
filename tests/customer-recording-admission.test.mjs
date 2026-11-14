@@ -1,3 +1,4 @@
+import {readRecordingReviews,recordingReviewInPair} from '../lib/recording-review-transition.ts';
 // Synthetic-only dispatch race tests. No provider traffic, credentials, or live state.
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
@@ -19,7 +20,7 @@ async function fixture(changeAt,change=env=>env.ICASH_RECORDED_OUTBOUND_READY='f
   return structuredClone(row);
  };
  const provider={agent:async()=>{event('agent');return agent;},tool:async()=>{event('tool');return invalidTool?{...tool,id:'tool_wrong'}:tool;},dial:async(_from,_to,twiml)=>{event('dial');assert(!twiml.includes('<Record'));assert(twiml.includes('<Redirect method="POST">'));assert(twiml.includes('/recording/connect?id='));assert(!twiml.includes('<Gather'));return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:iso,...receiptPatch};},start:async()=>{throw Error('Never capture before affirmative consent');},register:async()=>{throw Error('Never connect the AI before affirmative consent');}};
- const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:()=>provider,readRecordingReview,recordingService,process:{env}});
+ const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:()=>provider,readRecordingReview,readRecordingReviews,recordingReviewInPair,recordingService,process:{env}});
  if(changeAt==='before')change(env);
  const result=await recordingServer().dispatch({accountId,operationKey,principal:'Synthetic Principal',assistantName:'Alex',firstMessage:'Synthetic greeting',prompt:'Synthetic prompt',strategyKey:'cash_interest'});
  return {result,events};
@@ -78,7 +79,7 @@ async function deadlineFixture(scenario,purpose='callback'){
   return {sid:ca,account_sid:ac,from:row.from_phone,to:row.to_phone,direction:'outbound-api',date_created:new Date().toISOString()};
  }};
  if(scenario==='already_aborted')caller.abort();
- const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:(_env,_fetch,signal)=>{providerSignal=signal;return provider;},readRecordingReview,recordingService,process:{env},AbortSignal:timerApi});
+ const {recordingServer}=await loadService('lib/required-call-recording-server.ts',{db,createRecordingProviders:(_env,_fetch,signal)=>{providerSignal=signal;return provider;},readRecordingReview,readRecordingReviews,recordingReviewInPair,recordingService,process:{env},AbortSignal:timerApi});
  const warn=console.warn;console.warn=(name,payload)=>diagnostics.push({name,payload});
  let result;try{result=await recordingServer(caller.signal,purpose).dispatch({accountId,operationKey,principal:'Synthetic Principal',assistantName:'Alex',firstMessage:'Synthetic greeting',prompt:'Synthetic prompt',strategyKey:'cash_interest'});}finally{console.warn=warn;}
  assert.equal(timers[0].ms,purpose==='dispatch'?45000:12000);assert(timers.slice(1).every(t=>t.ms===8000));

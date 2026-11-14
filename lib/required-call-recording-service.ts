@@ -6,10 +6,11 @@ import {recordingConfidence} from './recording-consent-evidence.ts';
 import {sellerContinuedSpeech,sellerNoticeTwiml,sellerNoticeEndTwiml} from './seller-call-notice.ts';
 import {createHmac,randomBytes} from 'node:crypto';
 import {usdMicros} from './voice-usage-service.ts';
-import {affirmativeSpeech,recordingGateOptOut,audioAvailable,endTwiml,object,privateHeaders,readRecordingReview,recordingAgentMatches,recordingBaseUrl,recordingDisclosure,recordingPolicy,recordingPricing,sha,sid,uuid,verifiedTwilioForm,consentTwiml,type RecordingRow,type RecordingReview} from './required-call-recording.ts';
+import {affirmativeSpeech,recordingGateOptOut,audioAvailable,endTwiml,object,privateHeaders,recordingAgentMatches,recordingBaseUrl,recordingDisclosure,recordingPolicy,recordingPricing,sha,sid,uuid,verifiedTwilioForm,consentTwiml,type RecordingRow,type RecordingReview} from './required-call-recording.ts';
 import {boundedBytes,RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
+import {readRecordingReviews,recordingReviewForRow,recordingReviewInPair} from './recording-review-transition.ts';
 export type RecordingDb=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
-export type RecordingDeps={db:RecordingDb;receiptDb?:RecordingDb;provider:RecordingProviders;now?:()=>number;dispatchAllowed?:()=>boolean};
+export type RecordingDeps={db:RecordingDb;receiptDb?:RecordingDb;provider:RecordingProviders;now?:()=>number;dispatchAllowed?:()=>boolean;dispatchReview?:RecordingReview;reviewUnchanged?:()=>boolean};
 const hangup=()=>new Response('<Response><Hangup/></Response>',{headers:{...privateHeaders,'Content-Type':'text/xml'}});
 const xml=(s:string)=>new Response(s,{headers:{...privateHeaders,'Content-Type':'text/xml'}});
 const eq=encodeURIComponent;
@@ -27,7 +28,8 @@ function finalRecordingPayload(p:Record<string,unknown>){
  const price=typeof p.price==='string'&&/^-?\d+(?:\.\d{1,6})?$/.test(p.price)&&p.price_unit==='USD'?usdMicros(p.price.replace(/^-/,'') ):null;
  return {recordingSid:p.sid,providerStartedAt:new Date(start).toISOString(),endedAt:new Date(start+duration*1000).toISOString(),durationSeconds:duration,...(price===null?{}:{providerRecordingPriceMicros:price})};
 }
-export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=Date.now,dispatchAllowed=()=>true}:RecordingDeps){
+export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=Date.now,dispatchAllowed=()=>true,dispatchReview,reviewUnchanged=()=>true}:RecordingDeps){
+ const primaryReviewJson=env.RECORDED_OUTBOUND_REVIEW_JSON,previousReviewJson=env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON;
  async function endBound(row:RecordingRow){
   if(!row.call_sid)return false;
   if(row.start_claimed_at&&!row.end_requested_at){const requested=await transition(db,row,'stop',{stopTokenHash:row.stop_token_hash}).catch(()=>null);if(requested)Object.assign(row,requested);}
@@ -36,7 +38,11 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
    return ended;
   }catch{return false;}
  }
- async function readReview(){if(env.ICASH_RECORDED_OUTBOUND_READY!=='true')return null;const r=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON,now());if(!r||r.providerAccountSid!==env.TWILIO_ACCOUNT_SID)return null;return r;}
+ async function readReview(row?:RecordingRow){
+  if(env.ICASH_RECORDED_OUTBOUND_READY!=='true'||!reviewUnchanged()||env.RECORDED_OUTBOUND_REVIEW_JSON!==primaryReviewJson||env.RECORDED_OUTBOUND_PREVIOUS_REVIEW_JSON!==previousReviewJson)return null;
+  const r=row?recordingReviewForRow(env,row,now()):dispatchReview!==undefined?recordingReviewInPair(env,dispatchReview,now()):readRecordingReviews(env,now())?.[0];
+  if(!r||r.providerAccountSid!==env.TWILIO_ACCOUNT_SID)return null;return r;
+ }
  async function checkAgent(review:RecordingReview){
   // Fetch the exact reviewed resources together on every attempt. All reads
   // must pass before admission; no cached approval or parallel send is used.
@@ -130,7 +136,7 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     stage='recording_read';
     row=await getRow(db,id);if(!row||row.nonce_hash!==sha(nonce)||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||noticeMode&&row.party!=='seller'||directMode!==(row.entry_policy==='direct_recorded_v1'))return hangup();
     if(row.call_sid&&row.call_sid!==form.get('CallSid'))return hangup();
-    const optOut=recordingGateOptOut(form),review=await readReview();
+    const optOut=recordingGateOptOut(form),review=await readReview(row);
     const reviewMatches=!!review&&row.agent_id===review.agentId&&row.branch_id===review.branchId&&row.version_id===review.versionId&&row.disclosure_version===recordingPolicy.disclosureVersion;
     // These are independent authenticated reads. Serializing them consumes the
     // carrier's short response window before recording/AI startup can begin.
@@ -150,7 +156,7 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     if(optOut){const stopped=await transition(db,row,'contact_opt_out',{nonceHash:sha(nonce),utterance:optOut});if(stopped)row=stopped;await endBound(row);return xml(finishTwiml);}
     const age=now()-Date.parse(String(call.start_time));
     stage='agent_review';if(agentRead.status==='rejected')throw agentRead.reason;
-    const currentReview=await readReview();
+    const currentReview=await readReview(row);
     if(!reviewMatches||!currentReview||JSON.stringify(currentReview)!==JSON.stringify(review)||!Number.isFinite(age)||age<0||age>recordingPolicy.consentWindowSeconds*1000||!agentRead.value){
      diagnostic('review_or_call_window_invalid');
      await transition(db,row,'decline',{reason:'timeout'});await endBound(row);return hangup();

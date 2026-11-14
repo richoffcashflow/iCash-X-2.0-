@@ -12,7 +12,7 @@ type Candidate={screeningId:string;snapshot:unknown};
 type Config={contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string;research_version?:number};
 type Audience=ReturnType<typeof ownerBatchAudience>;
 type Receipt={httpStatus:number;raw:unknown;rawText:string};
-type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];preview:unknown;request:ReturnType<typeof activeOwnerExportRequest>;receipt:Receipt;recovery:unknown;csv:string|null;lease:string;localOnly?:boolean;artifactSha256?:string;recoveryHttpStatus?:number;terminalAt?:string|null};
+type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];preview:unknown;request:ReturnType<typeof activeOwnerExportRequest>;receipt:Receipt;recovery:unknown;csv:string|null;lease:string;localOnly?:boolean;artifactSha256?:string;recoveryHttpStatus?:number;terminalAt?:string|null;atomicRecovery?:boolean;quotaRequestId?:string};
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const invalid=()=>{throw Error('OWNER_EXPORT_RECONCILIATION_REQUIRED');};
@@ -127,15 +127,23 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
    ||saved.receipt.httpStatus!==200||saved.recoveryHttpStatus!==200||!saved.terminalAt
    ||data.export_id!==exportId||data.status!=='completed'||data.record_count!==original.record_count)return invalid();
  }
- if(!csv){
+ if(csv===null){
   // This is always the original ID, never a search/history match or new export.
   let rawText='';
-  const r=await dealMachineRequest(db,'owner_preview',async()=>{
+  const readOriginal=async()=>{
    const response=await transport('https://api.v2.dealmachine.com/v1/exports/'+exportId,{method:'GET',headers:{Authorization:`Bearer ${process.env.DEALMACHINE_API_KEY}`},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
    rawText=(await boundedBody(response,131072)).toString('utf8');
    return new Response(rawText,{status:response.status,headers:response.headers});
-  },{accountId:saved.accountId,operationKey:'owner-export-recovery:'+saved.id});
-  if(await db<boolean>('rpc/icash_record_owner_export_recovery','POST',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})!==true)return invalid();
+  };
+  // SQL has already admitted this exact GET. Its durable request is consumed
+  // even if the response is lost; only a confirmed receipt permits a successor.
+  const r=saved.quotaRequestId
+   ?await finishAdmittedDealMachineRequest(db,saved.quotaRequestId,readOriginal)
+   :await dealMachineRequest(db,'owner_preview',readOriginal,{accountId:saved.accountId,operationKey:'owner-export-recovery:'+saved.id});
+  const recorded=saved.atomicRecovery===true
+   ?await db<boolean>('rpc/icash_record_owner_export_quota_recovery','POST',{p_batch:saved.id,p_lease:saved.lease,p_request:saved.quotaRequestId,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})
+   :await db<boolean>('rpc/icash_record_owner_export_recovery','POST',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}});
+  if(recorded!==true)return invalid();
   recovery=object(r.raw);
   const data=object(recovery.data);
   if(!r.ok||data.export_id!==exportId||data.status!=='completed'||data.record_count!==original.record_count)return {status:'export_receipt_held'};
@@ -162,9 +170,19 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
 /** Maintenance only resumes original GET/download/persistence. Never a POST. */
 export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof fetch=fetch,batchId:string|null=null){
  if(!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(process.env.DEALMACHINE_API_KEY??''))return {status:'provider_not_configured'};
- const saved=await db<SavedExport|null>('rpc/icash_claim_owner_export_recovery','POST',{p_batch:batchId});
+ let saved=await db<SavedExport|null>('rpc/icash_claim_owner_export_recovery','POST',{p_batch:batchId});
+ const continuation=saved===null;
+ if(continuation)saved=await db<SavedExport|null>('rpc/icash_claim_owner_export_quota_recovery','POST',{p_batch:batchId});
  if(!saved)return {status:'export_recovery_idle'};
- try{return await recoverClaimedExport(db,saved,transport);}catch{
+ try{
+  // The RPC origin is part of the contract. A malformed atomic result must
+  // never fall through to a second admission or the ordinary provider path.
+  if(continuation||saved.atomicRecovery!==undefined||saved.quotaRequestId!==undefined){
+   if(saved.atomicRecovery!==true||saved.localOnly!==false||saved.csv!==null
+    ||typeof saved.quotaRequestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.quotaRequestId))return invalid();
+  }
+  return await recoverClaimedExport(db,saved,transport);
+ }catch{
   console.warn('owner_active_export_held',{stage:'original_recovery'});return {status:'export_receipt_held'};
  }
 }
@@ -201,7 +219,10 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  const allAudience=ownerBatchAudience(preview,candidates,c.contact_credit_cap);
  await savePhoneLessOwnerPreviews(db,accountId,batchId,previewRequestId,preview,candidates,allAudience);
  const audience=allAudience.filter(a=>a.ids.length);
- if(!audience.length)return {status:'empty',contacts:0};
+ // An asynchronous list must retain the issued ticket's primary. Otherwise
+ // this ticket completes empty while its sibling-only list has no resumable
+ // ticket. Eligible siblings remain available for ordinary scheduling.
+ if(!audience.some(a=>a.screeningId===primary.screeningId))return {status:'empty',contacts:0};
  const request=activeOwnerExportRequest([...new Set(audience.flatMap(a=>[...a.ids]))],mobileOnly,true);
  const items=audience.map(a=>({screeningId:a.screeningId,snapshot:a.snapshot,ids:[...a.ids]}));
  const preflight=await preflightOwnerExport(db,accountId,items,request,transport);

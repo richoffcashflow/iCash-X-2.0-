@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {maintainRecordings} from '../../lib/required-call-recording-maintenance.ts';
 
 // Existing recording state machine, immutable evidence guard, leases and ledger.
 // The fixture owner's clock override never changes production time or data.
@@ -54,6 +55,48 @@ export async function testRecordingReconcileBackoff(f){
   const [row]=await claim('reconcile');assert(row);assert.equal(row.reconcile_attempts,attempt);return row;
  };
  const evidence=row=>Object.fromEntries(['state','call_sid','recording_sid','conversation_id','dial_claimed_at','start_claimed_at','consent_at','consent_evidence','call_ended_at','end_requested_at','provider_started_at','ended_at','duration_seconds','provider_recording_price_micros','price_is_estimate'].map(k=>[k,row[k]]));
+ // Run the real maintenance handler through the existing leased SQL state
+ // machine. Twilio Recording GET's coarse processing status does not say that
+ // an already-started recording ended. It must not change active call state.
+ const activeCases=[...['processing','in-progress'].flatMap(status=>[false,true].map(stopDuringRead=>({status,stopDuringRead}))),
+  ...['processing','in-progress'].map(status=>({status,stopDuringRead:true,endDuringRead:true})),
+  ...['processing','in-progress'].map(status=>({status,failDuringRead:true})),
+  {status:'processing',mismatchStart:true},{status:'unrecognized'},{status:'in-progress',failedBeforeRead:true}];
+ for(const {status,stopDuringRead=false,endDuringRead=false,failDuringRead=false,mismatchStart=false,failedBeforeRead=false} of activeCases)await scenario(`active maintenance preserves source state: ${JSON.stringify({status,stopDuringRead,endDuringRead,failDuringRead,mismatchStart,failedBeforeRead})}`,async()=>{
+  await pin();await starting();
+  const providerStartedAt=new Date(now).toISOString();
+  assert(await trans('started',{recordingSid:rec,providerStartedAt}));
+  assert(await trans('bind_conversation',{conversationId:'conv_activefixture',toolTokenHash:'a'.repeat(64)}));
+  if(failedBeforeRead)assert(await trans('fail',{reason:'fixture_prior_failure'}));
+  await admin(()=>q('update public.icash_call_recordings set next_reconcile_at=$1,row_version=row_version+1 where operation_key=$2',[new Date(now).toISOString(),operation]));
+  const before=await get(),ledger=await financial(),calls=[];
+  const db=async(path,method,input)=>{
+   if(path==='rpc/icash_claim_call_recording_work')return rpc('icash_claim_call_recording_work',[input.p_kind,input.p_limit,input.p_lease_seconds]);
+   if(path==='rpc/icash_call_credit_available')return true;
+   assert.equal(path,'rpc/icash_finish_call_recording_work');calls.push(input);
+   return rpc('icash_finish_call_recording_work',[input.p_id,input.p_account,input.p_operation,input.p_kind,input.p_lease_token,input.p_outcome,input.p_payload]);
+  };
+  const forbidden=async()=>{throw Error('No new provider work in active-recording fixture');};
+  const provider={getRecording:async id=>{
+   assert.equal(id,rec);
+   if(stopDuringRead)assert(await trans('stop',{stopTokenHash:stop}));
+   if(endDuringRead)assert(await trans('call_ended',{callSid:call,providerAccountSid:ac,status:'completed'}));
+   if(failDuringRead)assert(await trans('fail',{reason:'fixture_concurrent_failure'}));
+   return {sid:rec,account_sid:ac,call_sid:call,status,start_time:mismatchStart?new Date(now+1000).toISOString():providerStartedAt};
+  },dial:forbidden,start:forbidden,end:forbidden,register:forbidden};
+  const held=mismatchStart||status==='unrecognized'||failedBeforeRead;
+  assert.deepEqual(await maintainRecordings(db,provider,{TWILIO_ACCOUNT_SID:ac}),{deleted:0,reconciled:held?0:1,held:held?1:0});
+  const after=await get();assert.equal(after.state,failedBeforeRead||failDuringRead?'failed':stopDuringRead?'stopping':'recording');
+  assert.equal(after.recording_sid,before.recording_sid);assert.equal(after.provider_started_at,before.provider_started_at);
+  if(endDuringRead)assert(after.call_ended_at);else assert.equal(after.call_ended_at,null);
+  assert.equal(after.ended_at,null);assert.equal(after.duration_seconds,null);
+  assert.equal(after.reconcile_lease_token,null);assert.equal(after.reconcile_lease_expires_at,null);
+  assert.equal(calls.length,1);assert.equal(calls[0].p_outcome,'retry');
+  assert.equal(Date.parse(after.next_reconcile_at)-now,60000);
+  if(!stopDuringRead&&!failDuringRead)assert.deepEqual(evidence(after),evidence(before));
+  else if(stopDuringRead)assert(after.end_requested_at);
+  assert.deepEqual(await financial(),ledger,'Pending audio never settles or alters money');
+ });
  for(const kind of ['unknown','ended'])for(const [attempt,seconds] of [[1,60],[3,60],[4,120],[6,120],[7,300],[12,300],[13,900],[10001,900]])await scenario(`${kind} receipt retry attempt ${attempt} waits ${seconds}s without new evidence or billing`,async()=>{
   const row=await prepare(kind,attempt),ledger=await financial();
   const done=await finish(row,'reconcile','retry',{reason:'provider_recording_reconciliation_required'});

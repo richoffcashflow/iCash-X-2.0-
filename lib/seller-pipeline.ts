@@ -2,6 +2,7 @@ import {discoveryFields} from './discovery-pipeline.ts';
 import {qualifySellerProperty} from './seller-qualification.ts';
 import {dealMachineAddress,sellerAddressReceipt,type DealMachineAddress} from './dealmachine-address.ts';
 import {finishAdmittedDealMachineRequest} from './dealmachine-request.ts';
+import {optinCallNowVersion} from './optin-call-now.ts';
 export type SellerDb=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Lookup={id:string;token:string;address:string;assignmentFeeCents:number;sellerCostReserveCents:number;quotaRequestId?:string;demoExpiresAt?:string;noAddressFallback?:boolean};
 /** At most one charged property per claim. A definitive zero-credit no-match can
@@ -10,8 +11,33 @@ export async function processSellerIntake(db:SellerDb,key:string|undefined,trans
  if(!key||!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(key))return {status:'provider_not_configured'};
  // The versioned RPC selects an eligible exact claim and admits quota in one
  // transaction. A missing RPC fails closed; never fall back to separate admission.
- const admitted=await db<Lookup|{status:'rate_limited'|'admission_busy'}|null>(leadId?'rpc/icash_claim_seller_lookup_admitted_for':'rpc/icash_claim_seller_lookup_admitted','POST',leadId?{p_id:leadId}:{});
- if(admitted&&'status' in admitted&&admitted.status==='admission_busy')return {status:'rate_limited'};
+ const admissionDeadline=Date.now()+1000;
+ const admit=()=>db<Lookup|{status:'rate_limited'|'admission_busy'}|null>(leadId?'rpc/icash_claim_seller_lookup_admitted_for':'rpc/icash_claim_seller_lookup_admitted','POST',leadId?{p_id:leadId}:{});
+ let admitted=await admit();
+ let requestExpires=0;
+ if(leadId&&admitted&&'status' in admitted&&admitted.status==='admission_busy'&&Date.now()<admissionDeadline){
+  const query=new URLSearchParams({lead_id:'eq.'+leadId,source:'in.(demo_form,seller_form)',request_version:'eq.'+optinCallNowVersion,request_reference:'eq.'+optinCallNowVersion,
+   select:'lead_id,request_id,phone,requested_at,expires_at,intake:icash_seller_intakes!inner(id,request_id,phone)',
+   'intake.state':'eq.received','intake.claim_token':'is.null','intake.claimed_at':'is.null','intake.canonical_id':'is.null',limit:'1'});
+  type Request={lead_id:string;request_id:string;phone:string;requested_at:string;expires_at:string;intake:{id:string;request_id:string;phone:string}};
+  const [request]=await db<Request[]>('icash_optin_call_requests?'+query);
+  if(request&&request.lead_id===leadId&&request.intake?.id===leadId&&request.intake.request_id===request.request_id&&request.intake.phone===request.phone){
+   const requested=Date.parse(request.requested_at),expires=Date.parse(request.expires_at),current=Date.now();
+   if(Number.isFinite(requested)&&requested<=current&&expires===requested+300000&&expires>current)requestExpires=expires;
+  }
+ }
+ // A NOWAIT quota-lock refusal proves this attempt acquired no new lookup.
+ // Give only this freshly targeted request two short chances to acquire its
+ // original claim, instead of dropping it into the next minute's cron pass.
+ // Null, quota denial, a thrown/unknown result and every admitted claim stop
+ // here: none of those outcomes is permission to retry paid work.
+ for(const delay of [100,250]){
+  if(!leadId||!admitted||!('status' in admitted)||admitted.status!=='admission_busy'||Date.now()+delay>=Math.min(admissionDeadline,requestExpires))break;
+  await new Promise(resolve=>setTimeout(resolve,delay));
+  if(Date.now()>=Math.min(admissionDeadline,requestExpires))break;
+  admitted=await admit();
+ }
+ if(admitted&&'status' in admitted&&admitted.status==='admission_busy')return {status:'admission_busy'};
  if(admitted&&'status' in admitted&&admitted.status!=='rate_limited')throw Error('SELLER_ADMISSION_INVALID');
  const ordinary=!(admitted&&'status' in admitted&&admitted.status==='rate_limited');
  if(!ordinary&&!leadId)return {status:'rate_limited'};

@@ -1,4 +1,5 @@
-import {dealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealmachine-request.ts';
+import {randomUUID} from 'node:crypto';
+import {dealMachineRequest,finishAdmittedDealMachineRequest,DealMachineQuotaError,type ResearchDb} from './dealmachine-request.ts';
 import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
 
 /** Only a durably saved, free preflight may wait on the existing unstarted
@@ -6,7 +7,13 @@ import {OwnerPreviewRateLimitError} from './owner-enrichment-deferral.ts';
 export class OwnerExportPreflightPendingError extends OwnerPreviewRateLimitError {
  constructor(accountId:string,screeningId:string){super(accountId,screeningId);this.name='OwnerExportPreflightPendingError';this.message='OWNER_EXPORT_PREFLIGHT_PENDING';}
 }
-type Claim={status:string;id:string;lease:string;listId:string|number;name:string;ids:string[];mobileOnly:boolean;nextStep?:'create'|'metadata'|'baseline'|'eligible'|null};
+/** Waiting for original free-list deletion grants no expired-list contact
+ * authority. Its dedicated deferral rechecks the exact current source. */
+export class OwnerPreflightCleanupPendingError extends OwnerPreviewRateLimitError {
+ readonly preflightId:string;
+ constructor(accountId:string,screeningId:string,preflightId:string){super(accountId,screeningId);this.name='OwnerPreflightCleanupPendingError';this.message='OWNER_PREFLIGHT_CLEANUP_PENDING';this.preflightId=preflightId;}
+}
+type Claim={status:string;id:string;screeningId?:string;lease:string;listId:string|number;name:string;ids:string[];mobileOnly:boolean;nextStep?:'create'|'metadata'|'baseline'|'eligible'|null};
 type Receipt={httpStatus:number|null;raw:unknown;rawText:string|null};
 const listId=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v)||typeof v==='number'&&Number.isSafeInteger(v)&&v>0;
 const internalId=(id:string)=>{const n=Number(id.slice(4));if(!/^per_[1-9][0-9]{0,15}$/.test(id)||!Number.isSafeInteger(n)||String(n)!==id.slice(4))throw Error('OWNER_PREFLIGHT_ID_INVALID');return n;};
@@ -40,11 +47,42 @@ export async function cleanupOwnerPreflight(db:ResearchDb,transport:typeof fetch
   return {status:'pending'};
  }
 }
+async function cleanupExpiredOwnerPreflight(db:ResearchDb,accountId:string,id:string,transport:typeof fetch){
+ const key=process.env.DEALMACHINE_API_KEY;if(!key)return;
+ const requestId=randomUUID();
+ // Do not replay an admission after an uncertain acknowledgment. An admitted
+ // attempt keeps its original token/lease even when this worker loses it.
+ const c=await db<{status:string;id:string;accountId:string;token:string;listId:string|number;requestId:string}>('rpc/icash_admit_owner_preflight_cleanup','POST',{p_account:accountId,p_id:id,p_request:requestId});
+ if(c?.status!=='admitted')return;
+ if(c.id!==id||c.accountId!==accountId||c.requestId!==requestId||!listId(c.listId)||typeof c.token!=='string')throw Error('OWNER_PREFLIGHT_CLEANUP_CLAIM_INVALID');
+ let receipt:Receipt={httpStatus:null,raw:null,rawText:null};
+ try{
+  await finishAdmittedDealMachineRequest(db,requestId,async()=>{
+   const r=await transport('https://api.v2.dealmachine.com/v1/lists/'+c.listId,{method:'DELETE',headers:{Authorization:'Bearer '+key},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(5000)});
+   receipt={httpStatus:r.status,...await readBody(r,65536)};
+   await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt});
+   return new Response(receipt.rawText,{status:r.status,headers:r.headers});
+  });
+ }catch{
+  await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt}).catch(()=>null);
+ }
+}
 /** A new list is indexed asynchronously even when its status is completed.
  * Creation and counting therefore use separate, bounded worker capabilities.
  * Positive counts only admit the unchanged active/DNC-filtered export. */
 export async function preflightOwnerExport(db:ResearchDb,accountId:string,items:unknown[],request:unknown,transport:typeof fetch=fetch){
- const c=await db<Claim>('rpc/icash_claim_owner_preflight','POST',{p_account:accountId,p_items:items,p_request:request});
+ const claim=()=>db<Claim>('rpc/icash_claim_owner_preflight','POST',{p_account:accountId,p_items:items,p_request:request});
+ let c=await claim();
+ if(c?.status==='cleanup_required'){
+  const original=c;
+  if(typeof original.id!=='string'||typeof original.screeningId!=='string')return {status:'held'};
+  await cleanupExpiredOwnerPreflight(db,accountId,original.id,transport).catch(()=>null);
+  // The receipt RPC can return false or lose its acknowledgment. Only the
+  // ordinary claim can confirm deletion and admit one new immutable generation.
+  c=await claim();
+  if(c?.status==='cleanup_required'&&c.id===original.id)
+   throw new OwnerPreflightCleanupPendingError(accountId,original.screeningId,original.id);
+ }
  if(!c||!['create','check'].includes(c.status))return {status:c?.status??'held'};
  let result='held';
  const step=async(name:string,method:string,path:string,body:unknown)=>{

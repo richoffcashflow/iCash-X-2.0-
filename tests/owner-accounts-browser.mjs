@@ -112,9 +112,9 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   await page.getByRole('button',{name:'Switch account',exact:true}).click();await page.getByRole('heading',{name:'Accounts',exact:true}).waitFor();expired=false;
   await page.getByRole('button',{name:'Open workspace for Another Customer'}).click();await page.getByText('Viewing Another Customer',{exact:true}).waitFor();await page.getByText('$42.00',{exact:true}).waitFor();await page.locator('.property-summary').getByText('456 Second Street',{exact:true}).waitFor();assert.equal(await page.getByText('123 Example Street',{exact:true}).count(),0,'Another customer cannot inherit the previous workspace');
   const instant=page.locator('#property-'+uuid(2));await instant.getByRole('button',{name:'Texts',exact:true}).click();await instant.getByText('What is your offer?',{exact:true}).waitFor();assert(await instant.getByRole('button',{name:'Resume follow-up',exact:true}).isDisabled());
-  await page.getByRole('heading',{name:'Work delayed',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Work needs attention',exact:true}).waitFor();
   await page.getByText('A service issue is blocking work on your account.',{exact:true}).waitFor();
-  assert.equal(await page.locator('.bot-live-status').getAttribute('data-live'),'false','a stalled funded account cannot show a healthy live indicator');
+  assert.equal(await page.locator('.bot-live-status').getAttribute('data-live'),'false','a funded account needing work review cannot show a healthy live indicator');
   await page.getByRole('button',{name:'Back to my workspace',exact:true}).click();await page.waitForURL(base+'/');await page.getByText('$125.00',{exact:true}).waitFor();assert.equal(await page.getByText('Viewing Another Customer',{exact:true}).count(),0);
   const viewWrites=writes.filter(w=>!w.path.includes('/contact/'));assert.deepEqual(viewWrites.map(w=>w.method),['POST','DELETE','POST','DELETE']);assert.deepEqual(viewWrites[0].body,{accountId:id});assert.deepEqual(viewWrites[2].body,{accountId:secondId});assert.deepEqual(writes.filter(w=>w.path.includes('/contact/')).map(w=>w.path),[rootPath()]);
   await page.getByRole('navigation',{name:'Workspace navigation'}).getByRole('link',{name:'Accounts',exact:true}).click();await page.getByText('Example Customer',{exact:true}).waitFor();

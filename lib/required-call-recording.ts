@@ -4,6 +4,7 @@ import {type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
 import {finalAffirmativeSpeech,recordingConsentEvidenceVersion,recordingContactOptOut} from './recording-consent-evidence.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 import {outboundParallelApproval,outboundProApproval,outboundEightyPercentApproval} from './outbound-parallel-approval.ts';
+import {unversionedInertWorkflow} from './inert-workflow-serialization.ts';
 /** Default-off outbound foundation. Spoken-consent977-cent quote approved; activation still requires release review. */
 export const recordingPolicy=Object.freeze({version:'required-audio-30d-speech-v1',disclosureVersion:'required-audio-30d-speech-2026-10-03',retentionDays:30,maxTotalSeconds:600,consentWindowSeconds:45,recordingMicrosPerMinute:2500,storageMicrosPerMinuteMonth:500,speechGatherMicros:20000,recordingAllowanceMicros:31000,minimumHoldCents:977,previousApprovedHoldCents:965});
 export const recordingPricing={version:recordingPolicy.version,retentionDays:30,recordingMicrosPerMinute:2500,storageMicrosPerMinuteMonth:500,recordingAllowanceMicros:31000,speechGatherMicros:20000,estimate:true};
@@ -96,12 +97,8 @@ function recordingEmptyWorkflowDefaultsSnapshot(snapshot:Record<string,unknown>)
   workflow:{...previousWorkflow,nodes:{...nodes,start_node:previousStart}}};
 }
 function recordingEmptyWorkflowVersionSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
- const workflow=object(snapshot.workflow);
- if(workflow.version!==1)return null;
- const observed={edges:{},nodes:{start_node:{type:'start',position:{x:0,y:0},edge_order:[],parent_frame_id:null,parent_subgraph_id:null}},frames:{},version:1,subgraphs:{},prevent_subagent_loops:false};
- if(JSON.stringify(canonical(workflow))!==JSON.stringify(canonical(observed)))return null;
- const previous={...workflow};delete previous.version;
- return {...snapshot,workflow:previous};
+ const previous=unversionedInertWorkflow(snapshot.workflow);
+ return previous?{...snapshot,workflow:previous}:null;
 }
 function recordingStandardGuardrailSnapshot(snapshot:Record<string,unknown>):Record<string,unknown>|null{
  const platform=object(snapshot.platform_settings),guardrails=object(platform.guardrails),custom=object(guardrails.custom),config=object(custom.config),rows=config.configs;

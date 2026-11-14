@@ -12,6 +12,10 @@ import {readRecordingReview,recordingAgentMatches,object,sha,canonical} from '..
 import {automaticOfferReceptionPrompt} from '../lib/seller-agreement-reception.ts';
 import {receptionReviewReport} from './reception-review-report.mjs';
 
+export function sellerTurnStageFailureCode(error){
+ return typeof error?.message==='string'&&/^SELLER_TURNS_[A-Z_]+$/.test(error.message)?error.message:'SELLER_TURNS_UNCONFIRMED';
+}
+
 export async function checkTelephonyConnection(env=process.env,fetcher=fetch,onOutboundAgent,onIncomingAgent){
  const reads=await Promise.allSettled([
   readOwnerForwarding(env,fetcher),
@@ -120,4 +124,13 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  // has its own production/main gate and can only read the original failed call.
  try{const {inspectOwnerStartup}=await import('./inspect-owner-startup-20261113.mjs');console.log('Owner startup inspection: '+await inspectOwnerStartup()+'. No call placed.');}
  catch{console.log('Owner startup inspection: unavailable. No call placed.');}
+ // An explicit exact-release request may stage isolated turn-setting branches.
+ // Ordinary diagnostics/builds never enter this path. The staging function
+ // independently verifies production/main, source reviews and durable intents.
+ if(process.env.ICASH_SELLER_TURN_STAGE_COMMIT&&process.env.ICASH_SELLER_TURN_STAGE_COMMIT===process.env.VERCEL_GIT_COMMIT_SHA){
+  try{
+   const {stageSellerVoiceTurns,publicSellerTurnStage}=await import('./stage-seller-voice-turns.mjs');
+   console.log('Seller voice turn staging:',JSON.stringify(publicSellerTurnStage(await stageSellerVoiceTurns())));
+  }catch(error){console.error('Seller voice turn staging:',sellerTurnStageFailureCode(error));process.exitCode=1;}
+ }
 }

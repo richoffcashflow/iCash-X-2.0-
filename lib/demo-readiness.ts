@@ -1,6 +1,7 @@
 import {ownerInboundTarget} from './owner-inbound-acceptance.ts';
 import {readRecordedOutboundReadiness} from './recorded-outbound-readiness.ts';
-import {readRecordingReview,object} from './required-call-recording.ts';
+import {object} from './required-call-recording.ts';
+import {recordingReviewForConfig} from './recording-review-transition.ts';
 import {boundedBytes} from './required-call-recording-provider.ts';
 import {secondaryCallingReady} from './business-voice-numbers.ts';
 import {primaryBusinessPhone,isAdditionalBusinessPhone} from './business-phone-policy.ts';
@@ -14,7 +15,7 @@ type Rate={enabled:boolean;operation:string;expires_at:string};
 /** Owner-bound setup inspection only. No lead, permission, claim, reservation,
  * provider write, generated speech, text, or envelope. Never used as admission. */
 export async function readDemoReadiness(env:Env,deps:{db:Database;fetcher?:typeof fetch;signal?:AbortSignal;now?:()=>number}):Promise<DemoReadiness>{
- const now=deps.now??Date.now,start=now(),account=ownerInboundTarget.accountId,db=deps.db,review=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON,start);
+ const now=deps.now??Date.now,start=now(),account=ownerInboundTarget.accountId,db=deps.db;
  const signal=deps.signal?AbortSignal.any([deps.signal,AbortSignal.timeout(14000)]):AbortSignal.timeout(14000);
  // Deduplicate identical metadata GETs within this inspection only. Every new
  // inspection and the real dispatcher still performs fresh provider checks.
@@ -58,9 +59,11 @@ export async function readDemoReadiness(env:Env,deps:{db:Database;fetcher?:typeo
    return accounts.length===1&&accounts[0].owner_user_id===ownerInboundTarget.ownerUserId&&accounts[0].bot_paused===false&&wallets.length===1&&Number.isSafeInteger(wallets[0].balance_cents)&&wallets[0].balance_cents>0&&member===true&&channel===true&&stops.length===0;
   }),
   run('agent','AI and cash-offer tools','Current AI configuration and offer/contract tools match the approved setup.','AI, recording, or cash-offer tool setup needs attention.',async()=>{
+   const configs=await voice;if(configs.length!==1)return false;
+   const c=configs[0],review=recordingReviewForConfig(env,c,now());
    if(!review?.offerPolicy||review.fromPhone!==env.CONTIGUITY_FROM||!env.ELEVENLABS_API_KEY||!env.TWILIO_AUTH_TOKEN||review.providerAccountSid!==env.TWILIO_ACCOUNT_SID||['ICASH_LIVE_WORK_READY','ICASH_RECORDED_OUTBOUND_READY','ICASH_RECORDING_RECEIPTS_READY'].some(k=>env[k]!=='true'))return false;
-   const [configs,inspection]=await Promise.all([voice,readRecordedOutboundReadiness(env,{fetcher:readOnlyFetch,signal,now})]);
-   const c=configs[0];return configs.length===1&&!!c&&c.enabled&&Date.parse(c.reviewed_until)>now()&&c.agent_id===review.agentId&&c.agent_config_hash===review.configHash&&c.max_duration_seconds===review.maxTotalSeconds&&Array.isArray(c.required_tool_ids)&&c.required_tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>c.required_tool_ids.includes(id))&&inspection.providerChecksPass;
+   const inspection=await readRecordedOutboundReadiness({...env,RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review)},{fetcher:readOnlyFetch,signal,now});
+   return !!c&&c.enabled&&Date.parse(c.reviewed_until)>now()&&c.agent_id===review.agentId&&c.agent_config_hash===review.configHash&&c.max_duration_seconds===review.maxTotalSeconds&&Array.isArray(c.required_tool_ids)&&c.required_tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>c.required_tool_ids.includes(id))&&inspection.providerChecksPass;
   }),
   run('calling','Calling connection','Configured demo calling lines passed provider checks.','A demo calling line is unavailable or its routing needs attention.',async()=>{
    if(env.CONTIGUITY_FROM!==primaryBusinessPhone||!env.TWILIO_AUTH_TOKEN||!/^AC[a-fA-F0-9]{32}$/.test(env.TWILIO_ACCOUNT_SID??'')||!env.ELEVENLABS_API_KEY)return false;
