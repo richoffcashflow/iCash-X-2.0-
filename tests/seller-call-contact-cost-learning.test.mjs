@@ -5,7 +5,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {sharedLearningDecision} from '../lib/shared-learning.ts';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const migration=read('config/seller-call-contact-cost-learning.sql');
-assert.equal(migration,read('supabase/migrations/20261114180314_seller_call_contact_cost_learning.sql'));
+assert.equal(migration,read('supabase/migrations/20261114182432_seller_call_contact_cost_learning.sql'));
 const extract=(s,n)=>s.match(new RegExp('create (?:or replace )?function public\\.'+n+'\\([\\s\\S]*?(?:\\$\\$|\\$function\\$);','i'))?.[0];
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const db=new PGlite(),q=(s,a=[])=>db.query(s,a),val=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];

@@ -7,7 +7,7 @@ import {installInterestEvidence} from './helpers/interest-evidence-fixture.mjs';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const migration=read('config/seller-interest-cash-offer-statements.sql');
-assert.equal(migration,read('supabase/migrations/20261114180324_seller_interest_cash_offer_statements.sql'));
+assert.equal(migration,read('supabase/migrations/20261114182439_seller_interest_cash_offer_statements.sql'));
 const before=read('tests/fixtures/seller-interest-cash-offer-before.sql');
 const question='Would you be interested in selling your property?';
 const pair=answer=>[{role:'agent',message:question},{role:'user',message:answer}];

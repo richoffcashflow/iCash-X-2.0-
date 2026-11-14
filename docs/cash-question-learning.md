@@ -12,7 +12,7 @@ Direct seller refusals suppress positive labels. A minimal private receipt retai
 
 ## Installation and activation
 
-Install the forward migrations in their generated order: seller contact cost learning, explicit cash-offer statement parser, continuous ranker evidence, then cash-question learning (`20261114180350`). The cash migration verifies exact predecessor function definitions and fails on drift. Its allocation gate starts disabled; original balanced allocation remains available.
+Install the forward migrations in their generated order: seller contact cost learning, explicit cash-offer statement parser, continuous ranker evidence, then cash-question learning (`20261114182940`). The cash migration verifies exact predecessor function definitions and fails on drift. Its allocation gate starts disabled; original balanced allocation remains available.
 
 After the exact commit passes canonical release CI and the existing global evidence-v2/SMS gates are activated for that registered release, the canonical owner can call `icash_activate_cash_question_learning(owner_uuid, release_sha, true)`. The release must complete after this migration was installed; the completion/activation clocks and global gate must agree. An older preinstallation SHA is rejected. The service-only `icash_seller_cash_learning_report()` exposes current evidence and the actual decision. Disabling with the same owner function serializes against assignments and restores the original balanced allocation for new work. Existing assignments and factual interpretation of already-sent messages remain intact.
 

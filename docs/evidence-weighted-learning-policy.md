@@ -31,7 +31,7 @@ funding. No owner identity or message content enters the aggregate response.
 ## Cost scope
 
 Historical seller-call rollups cover only the selected first-call charge.
-`20261114180314_seller_call_contact_cost_learning` replaces these with original
+`20261114182432_seller_call_contact_cost_learning` replaces these with original
 property-bound seller contact receipts in a named 72-hour scope. It counts seller
 text and AI work, recorded/live/queued/browser calls, bound inbound calls, seller
 email and signing invitations, and paid reminder DNC revalidation. Missing or

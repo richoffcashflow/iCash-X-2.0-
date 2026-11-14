@@ -8,7 +8,7 @@ const db=new PGlite(),q=(sql,args=[])=>db.query(sql,args),val=async(sql,args=[])
 try{
  await db.exec(setupSql+costsSetup);
  await db.exec(migration);
- assert.equal(migration,read('supabase/migrations/20261114180350_cash_question_learning.sql'));
+ assert.equal(migration,read('supabase/migrations/20261114182940_cash_question_learning.sql'));
  assert.equal(await val('select icash_seller_cash_learning_active()'),false);
  const now=Date.parse(await val('select now()')),stamp=h=>new Date(now-h*3600000).toISOString(),plus=(at,m)=>new Date(Date.parse(at)+m*60000).toISOString();
  for(let a=1;a<=4;a++)await q("insert into icash_accounts(id,owner_user_id) values($1,$2)",[id(a),a===4?'592171a0-2bb9-484e-8c9a-dd5d2b43b5f7':id(a+10)]);
