@@ -30,13 +30,22 @@ funding. No owner identity or message content enters the aggregate response.
 
 ## Cost scope
 
-Current seller-call rollups cover the selected first-call charge, buyer-search
-rollups cover search charges, and seller-recovery rollups cover the first recovery
-text. Their historical sums remain visible, but `costs_complete` is explicitly
-false for allocation. These domains remain exploratory until full attributed cost
-measurements are implemented. A healthy learning job is not evidence that a
-cost-based winner exists. Reviewed seller SMS and targeting cohorts can qualify
-only through their own complete, original-cost evidence and outcome windows.
+Historical seller-call rollups cover only the selected first-call charge.
+`20261114180314_seller_call_contact_cost_learning` replaces these with original
+property-bound seller contact receipts in a named 72-hour scope. It counts seller
+text and AI work, recorded/live/queued/browser calls, bound inbound calls, seller
+email and signing invitations, and paid reminder DNC revalidation. Missing or
+ambiguous original attribution, dispatch clocks, provider costs or settlement
+evidence prevent completeness; pending trials do not contribute costs to mature
+yield. The same helper supports the prospective cash-question-v6 reader.
+
+This scope measures contact efficiency, not full acquisition economics.
+Once the cohort's mature objective is contracts or closings, the decision remains
+exploratory with `outcome_window_costs_incomplete`; it does not fall back to
+interest. Buyer-search and seller-recovery costs remain explicitly incomplete.
+Legacy seller-call rows without the exact scope cannot inherit completeness.
+A healthy learning job is not evidence that a cost-based winner exists.
+See [seller-call-contact-cost-learning.md](seller-call-contact-cost-learning.md).
 
 ## Prospective assignments and evidence
 
@@ -64,7 +73,11 @@ owner/test exclusion, partial cost refusal, source freshness, safety holds,
 private access, and stable historical assignment identities. A clearly marked
 synthetic complete-cost source exercises 5,000 prospective allocations and the
 comparison cohort; it does not claim that the current partial-cost readers are
-complete. Separate buyer and voice service tests verify pre-spend holds.
+complete. `tests/seller-call-contact-cost-learning.test.mjs` executes the new
+forward migration against synthetic original provider receipts, including
+source coverage, pending cost isolation, real call chronology, no-deal trials,
+SQL/TypeScript scope parity and private execution grants. Separate buyer and
+voice service tests verify pre-spend holds.
 
 Apply `20261104052433_evidence_weighted_learning_policy.sql` before the dependent
 seller-SMS and lifecycle migrations. The final cutover invalidates only derived

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- On November 14, 2026 the owner requested faster continuous split testing and learning throughout outbound acquisition and deal progression. Fix lost source-bound outcomes, rotate bounded training evidence fairly and compare reviewed alternatives using complete, equal-maturity cost windows. Keep prospective assignments and a stable comparison group, distinct interest/contract/closing/proceeds evidence, and automatic safety fallback. Do not force a winner, fabricate positives, infer full deal economics from a shorter contact-cost window or rewrite unreviewed prompts/financial/contact authority. Preserve the current UI and paid-development-test restrictions. See docs/continuous-outcome-learning-2026-11-14.md.
+
 - On November 14, 2026 the owner requested prominent red urgency on the direct webinar payment page, then explicitly chose to keep enrollment open. Use strong truthful enrollment copy on `/webinar/checkout` and its owner preview; do not invent a remaining spot, deadline or scarcity counter. Preserve the existing homepage and in-video checkout. Keep payment recovery on the original session and remove urgency after verified purchase.
 
 - On November 14, 2026 the owner requested a simple Reset owner account button and completion confirmation, without setup checklists in the workspace or Test your bot. This supersedes the earlier visible-check instructions. Retain exact reset receipt validation and silent read-only preparation; Start retries preparation through the same button, and server-side final admission remains authoritative. Reset confirmation does not claim call or contract delivery.
