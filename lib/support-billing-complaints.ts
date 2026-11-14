@@ -7,6 +7,17 @@ export function supportBillingComplaintReply(context:SupportContext):SupportRepl
  const q=context.messages.findLast(m=>m.role==='user')?.content??'';
  const operator=context.messages.findLastIndex(m=>m.role==='operator');
  const users=context.messages.slice(operator+1).filter(m=>m.role==='user');
+ let legacyBilling=false;
+ for(const turn of users){
+  const text=turn.content;
+  const legacy=/\b1\.0\b|\bold iCash X\b/i.test(text);
+  const charge=/\b(?:charg(?:e|ed|es|ing)|billing|deduct(?:ed|ing|ion))\b/i.test(text);
+  const report=/\b(?:still|attempt(?:s|ing|ed)?|tried|trying|charged|deducted|stop|disable)\b/i.test(text);
+  const denied=/\b(?:if|hypothetically|will|would|might|never|not attempting|not charging|not charged|didn[’']?t charge|did not charge)\b/i.test(text);
+  const clarify=/^(?:I (?:have )?already signed up for 2\.0|Accessing 2\.0 is not the issue|It is coming from 1\.0)\b/i.test(text);
+  legacyBilling=(legacy&&charge&&report||legacyBilling&&clarify)&&!denied&&!/\b(?:course|seller|buyer|contract|agreement)\b/i.test(text);
+ }
+ if(legacyBilling)return {reply:'Your 1.0 billing concern needs review separately from 2.0 access. Platform retirement does not establish whether an earlier charge, attempted payment or automatic recharge was stopped. This needs an original-payment billing review; a 2.0 account check cannot verify the old billing record. What date, amount and merchant description appear, and does the entry say completed, pending or failed? Keep details already supplied in this conversation; leave out card numbers and codes. This chat has not stopped billing, issued a refund or changed access. The billing issue remains open.',status:'open',managementReview:true,ai:false};
  const blocked=(s:string)=>/\b(?:cannot|can[’']?t|unable to|won[’']?t let me) (?:sign[ -]?in|log[ -]?in)\b|\b(?:sign[ -]?in|log[ -]?in) (?:is )?blocked\b/i.test(s);
  const unsubscribe=(s:string)=>/\bunsubscribe\b/i.test(s)&&supportRenewalCancellationRequested(s);
  const followup=(s:string)=>/^(?:(?:oh+[, ]+)?ok(?:ay)?[, ]+(?:i(?:[’']m| am) sorry[, ]+)?(?:so[, ]+)?)?(?:so[, ]+)?(?:what (?:do|can|should) i do(?: now)?|do (?:you|i) need (?:any )?(?:info(?:rmation)?|details)(?: from me)?|i don[’']?t have to give you (?:info(?:rmation)?|details)(?: or anything)?)[?!.\s]*$/i.test(s.replace(/[?!,]/g,' ').replace(/\s+/g,' ').trim());

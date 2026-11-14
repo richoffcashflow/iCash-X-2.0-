@@ -220,6 +220,7 @@ async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fet
  if(supportCheckoutReply(context)||supportIdentityReply(context))return fallback;
  if(supportPaidAccessReply(context)||supportVipPurchaseReply(context))return fallback;
  if(supportProductClarification(context.messages)||supportPurchaseHelp(context.messages))return fallback;
+ if(supportBillingComplaintReply(context))return fallback;
  if(supportLegacyMigrationReply(context.messages))return fallback;
  if(currentAccessConversation(context.messages).length>0)return fallback;
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);

@@ -1,5 +1,8 @@
 # Support improvement workflow
 
+Reports of attempted or recorded 1.0 billing stay in original-payment review, including direct clarifications that 2.0 access already works. Retirement and current 2.0 checks do not prove old billing stopped. Fictional account/guest regressions preserve hypothetical, negation, topic and operator boundaries; no model or billing action is used.
+
+
 Blocked sign-in requests to unsubscribe retain the cancellation review instead of card-change troubleshooting. Credit decreases reported during Pause require original usage and pause-time review; aggregate balances cannot establish a charge cause. Frozen-bot and no-more-deals complaints use current activity evidence, new seller hang-up reports receive call-specific review without hiding AI identity, and direct support-phone requests explain the existing conversation workflow. Fictional negative, guest, operator and topic-change boundaries are in `tests/support-current-intent-regressions.test.mjs`. No cancellation, credit return, restart or customer recovery is implied.
 
 Explicit questions about unfinished work and reserved costs receive the work-credit explanation even alongside a stalled-bot complaint. Current available and committed amounts remain account-bound; zero commitments must not become an invented pending-work blockage. Aggregate totals do not identify the outstanding task list or prove ongoing activity. Immediate funding clarifications retain this answer only until an operator finding or topic change. Fictional account/guest, Pause, missing-evidence, billing and negative boundaries are in `tests/support-pending-explanation.test.mjs`. This corrects guidance, not account work or financial state.
