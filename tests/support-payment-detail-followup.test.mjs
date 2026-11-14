@@ -55,3 +55,15 @@ assert.equal(modelCalls,0);
 console.log('PASS relative payment dates and submitted statement descriptions; original evidence, topic/operator/negative boundaries preserved.');
 assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[o('The purchase is matched; use verified recovery.'),automated,u('Today $42.')]}),null,'An older automated question cannot supersede operator findings');
 for(const q of ['It says I am signed in now.','It says the contract is ready.','It says working now.'])assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[merchantRequest,u(q)]}),null,q);
+for(const startingRequest of [automated,request])for(const handedOff of [false,true]){
+ const messages=[u('I paid but no code arrived.'),startingRequest,u('Today $42.')];
+ const next=await replyToSupport({kind:'access',handedOff,allowAI:false,messages,evidence:[]},noModel);
+ const located=await replyToSupport({kind:'access',handedOff,allowAI:false,messages:[...messages,a(next.reply),u('It says Example Software')],evidence:[]},noModel);
+ assert.match(located.reply,/supplied the statement description/,'Follow the real generated merchant question through the next turn');
+ assert.equal(located.status,'open');
+ assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[...messages,o('The purchase was matched; continue verified recovery.'),a(next.reply),u('It says Example Software')]}),null,'Stale generated merchant question cannot supersede operator findings');
+}
+assert.equal(modelCalls,0);
+const produced=supportSubmittedPaymentDetails({kind:'access',messages:[request,u('Today $42.')]});
+assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[request,u('Where is the course?'),a(produced.reply),u('It says Example Software')]}),null,'A stale assistant question after a topic change is not context');
+assert.equal(supportSubmittedPaymentDetails({kind:'access',messages:[a(produced.reply),u('It says Example Software')]}),null,'An isolated older assistant question has no source-bound details');
