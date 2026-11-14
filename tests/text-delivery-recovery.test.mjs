@@ -50,7 +50,12 @@ try{
  let fetches=[],mode='delivered',race=null;
  const fetcher=async(url,options)=>{
   fetches.push(url);assert.equal(options.method,'GET');assert.equal(options.redirect,'error');assert.equal(options.credentials,'omit');assert.equal(options.headers.Authorization,'Token fixture-key');
-  if(url.endsWith('/numbers/leased'))return Response.json({object:'response',data:{numbers:[{number:{e164:mode==='other_org'?'+17205550999':sender},lease_status:'active'}]}});
+  if(url.endsWith('/numbers/leased')){
+   if(mode==='lease_unreachable')throw Error('fixture lease unavailable');
+   if(mode==='lease_forbidden')return Response.json({error:'forbidden'},{status:403});
+   if(mode==='lease_malformed')return new Response('not json');
+   return Response.json({object:'response',data:{numbers:[{number:{e164:mode==='other_org'?'+17205550999':sender},lease_status:'active'}]}});
+  }
   const m=(await q('select * from icash_text_messages where id=$1',[current])).rows[0];
   const o=(await q('select * from icash_operation_spend where operation_key=$1',['text:'+current])).rows[0];
   const stamp=new Date(Date.parse(o.dispatched_at)+10000).toISOString();
@@ -100,11 +105,32 @@ try{
    assert.equal(await one('select last_delivery_at from icash_text_messages where id=$1',[current]),null,scenario+' cannot mutate delivery time');
   }
   assert.deepEqual(await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]),before,'Financial history stays unchanged');
-  assert.equal(fetches.length,scenario==='other_org'?1:2);
-  if(scenario!=='other_org')assert.equal(new URL(fetches[1]).search,'?tracking=true','Collector requests the exact original timeline explicitly');
+  assert.equal(fetches.length,2,'A missing current lease cannot prevent collection of the original message receipt');
+  assert.equal(new URL(fetches[1]).search,'?tracking=true','Collector requests the exact original timeline explicitly');
   const attempt=(await q('select * from icash_text_receipt_private.attempts where message_id=$1',[current])).rows[0];
   assert(attempt.receipt);assert.equal(await one('select icash_finish_text_delivery_recheck($1,$2)',[attempt.id,{changed:true}]),attempt.outcome,'Repeating finish retains original evidence');
   assert.deepEqual(await one('select receipt from icash_text_receipt_private.attempts where id=$1',[attempt.id]),attempt.receipt);
+  if(scenario==='other_org'){
+   assert.equal(attempt.receipt.message.raw.data.id,'text_fixture_'+n);
+   assert.equal(attempt.receipt.reason,'leased_identity_unverified');
+   assert.equal(result.held,1,'Saving exact provider evidence is not permission to bypass the lease verification gate');
+  }
+ }
+ for(const [n,scenario] of [[50,'lease_unreachable'],[51,'lease_forbidden'],[52,'lease_malformed']]){
+  await seed(n);mode=scenario;fetches=[];
+  const before=await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]);
+  const result=await recoverTextDeliveryReceipts(db,env,fetcher);
+  assert.equal(result.checked,1);assert.equal(result.held,1);assert.equal(result.errors,0);
+  assert.equal(fetches.length,2,'Lease lookup failure must not suppress the bounded exact-ID GET');
+  const saved=await one('select receipt from icash_text_receipt_private.attempts where message_id=$1',[current]);
+  assert.equal(saved.reason,'leased_identity_unverified');
+  assert.equal(saved.message.raw.data.id,'text_fixture_'+n);
+  assert.equal(saved.message.raw.data.tracking[0].event,'text.delivery.confirmed');
+  assert.equal(await one('select state from icash_text_messages where id=$1',[current]),'accepted','Unverified identity remains held despite matching terminal evidence');
+  assert.equal(await one('select last_delivery_at from icash_text_messages where id=$1',[current]),null);
+  assert.deepEqual(await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]),before);
+  assert.equal(await one('select attempts from icash_text_receipt_private.schedule where message_id=$1',[current]),1,'No retry-counter reset');
+  assert.equal(await one('select count(*) from fixture_opened_gaps'),0,'Receipt collection cannot create historical follow-up');
  }
  await seed(21);mode='delivered';race=async()=>q("update icash_text_messages set state='needs_review',last_delivery_at=now() where id=$1",[current]);
  assert.equal((await recoverTextDeliveryReceipts(db,env,fetcher)).changed,1,'Late callback wins without being overwritten');

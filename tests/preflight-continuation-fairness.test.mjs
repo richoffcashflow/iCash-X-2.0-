@@ -13,7 +13,7 @@ try{
  const ordinary=[];for(let n=100;n<230;n++)ordinary.push(await seed(n,false,'20 minutes'));
  await isolated(async()=>{const a=await issue();assert.ok(ordinary.some(c=>c.account===a),'Reproduce ordinary aging starving a valid 30-minute list');});
  const migration=read('config/preflight-continuation-fairness.sql');
- assert.equal(migration,read('supabase/migrations/20261114150100_preflight_continuation_fairness.sql'));
+ assert.equal(migration,read('supabase/migrations/20261114165019_preflight_continuation_fairness.sql'));
  const immutable=await v("select jsonb_agg(to_jsonb(p) order by id) from icash_research_private.owner_export_preflights p");
  await pg.exec(migration);
  assert.equal(await v('select enabled from icash_work_private.continuation_policy'),false);

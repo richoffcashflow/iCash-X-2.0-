@@ -33,11 +33,14 @@ export async function recoverTextDeliveryReceipts(db:Database,env:Environment={V
  await Promise.all(claims.map(async claim=>{
   result.checked++;
   const receipt:Record<string,unknown>={source:'contiguity_canonical_get',lease:lease??null};
+  // A current lease is required by SQL before applying delivery. Its absence
+  // must not erase our opportunity to collect an already accepted original's
+  // canonical evidence. The same claim, three-message cap and backoff apply.
+  if(!lease||lease.status!==200||!leased(claim.request.sender))receipt.reason='leased_identity_unverified';
   try{
-   if(!lease||lease.status!==200||!leased(claim.request.sender))receipt.reason='leased_identity_unverified';
-   else if(!/^[A-Za-z0-9_-]{1,200}$/.test(claim.request.provider_id))receipt.reason='original_message_identity_invalid';
+   if(!/^[A-Za-z0-9_-]{1,200}$/.test(claim.request.provider_id))receipt.reason='original_message_identity_invalid';
    else receipt.message=await readReceipt(`/conversations/history/message/${claim.request.provider_id}?tracking=true`,env.CONTIGUITY_API_KEY!,fetcher,now);
-  }catch{receipt.reason='canonical_read_unavailable';}
+  }catch{receipt.messageReadError='canonical_read_unavailable';receipt.reason??='canonical_read_unavailable';}
   try{
    const outcome=await db<string>('rpc/icash_finish_text_delivery_recheck','POST',{p_id:claim.id,p_receipt:receipt},AbortSignal.timeout(6000));
    if(outcome==='delivered')result.delivered++;else if(outcome==='needs_review')result.review++;

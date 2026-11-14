@@ -11,7 +11,7 @@ try{
  await pg.exec('revoke all on function icash_account_work_observations() from public,anon,authenticated;grant execute on function icash_account_work_observations() to service_role;');
  const before=await v('select fixture_work_evidence()');
  assert.equal(await v('select count(*) from icash_account_work_observations()'),0,'Reproduce nine unsettled originals falling through the real production function');
- assert.equal(read('config/stalled-work-boundary.sql'),read('supabase/migrations/20261114150000_stalled_work_boundary.sql'));
+ assert.equal(read('config/stalled-work-boundary.sql'),read('supabase/migrations/20261114164824_stalled_work_boundary.sql'));
  await pg.exec(read('config/stalled-work-boundary.sql'));
  await pg.exec(read('tests/fixtures/stalled-work-boundary-assertions.sql'));
  assert.deepEqual(await v('select fixture_work_evidence()'),before,'Detection cannot mutate operations, money, receipts or controls');

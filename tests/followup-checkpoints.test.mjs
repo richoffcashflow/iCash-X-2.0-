@@ -20,7 +20,7 @@ try{
  await q('insert into icash_work_private.account_followups(account_id,notify_version) values($1,1)',[account]);
  let ticket=await nextTicket();
  const ledger=await v('select jsonb_agg(to_jsonb(o)) from icash_operation_spend o');
- const migration=read('config/followup-step-checkpoints.sql');assert.equal(migration,read('supabase/migrations/20261114150200_followup_step_checkpoints.sql'));
+ const migration=read('config/followup-step-checkpoints.sql');assert.equal(migration,read('supabase/migrations/20261114165219_followup_step_checkpoints.sql'));
  await pg.exec(migration);
  assert.deepEqual(await v('select icash_account_followup_context($1,$2)',[account,ticket]),{notify:true},'Inactive installation is compatible with the deployed handler');
  assert.equal(await v("select icash_claim_followup_step($1,$2,'estimates')",[account,ticket]),null);

@@ -21,4 +21,5 @@ assert.throws(()=>createObservation({...baseline,accounts:[a]},rows,first),/HIST
 assert.throws(()=>createObservation(baseline,[...rows,...rows]),/MEMBERSHIP_MISMATCH/);
 assert.throws(()=>createObservation(baseline,rows,{...first,payload:{...first.payload,counts:{}}}),/HISTORY_CHANGED/);
 const query=renderCohortQuery(baseline);assert(query.includes('begin read only;'));assert(!query.includes('__ICASH_COHORT_IDS__'));assert(!query.includes('where w.balance_cents>0'));
+assert(query.includes("set local statement_timeout='20s';"),'Every rendered production observation has a bounded read timeout');
 console.log('PASS fixed cohort: departed/missing members retained, original output IDs, accepted vs delivered, no funding/resume/alert credit, hash-linked history, missing periods and explicit unknowns.');

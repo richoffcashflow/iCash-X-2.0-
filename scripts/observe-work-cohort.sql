@@ -1,5 +1,6 @@
 -- Read-only fixed-membership observation. Render with work-cohort.mjs; never remove exited members.
 begin read only;
+set local statement_timeout='20s';
 with fixed_members as (select value::uuid id from jsonb_array_elements_text($icash_cohort$__ICASH_COHORT_IDS__$icash_cohort$::jsonb)), cohort as materialized (
  select fixed_members.id,a.created_at,a.bot_paused,a.workspace_ack_version is not null acknowledged,
  w.balance_cents,w.reserved_cents,public.icash_membership_work_allowed(a.id) membership_allowed,

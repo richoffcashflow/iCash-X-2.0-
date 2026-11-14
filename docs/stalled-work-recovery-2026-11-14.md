@@ -3,6 +3,19 @@
 This incident is open. A green build, fresh heartbeat, funding/resume event,
 reconciliation ticket, or accepted message does not establish recovery.
 
+The three reviewed migrations were installed on November 14 at 16:48–16:52 UTC
+and retained in the server ledger as `20261114164824_stalled_work_boundary`,
+`20261114165019_preflight_continuation_fairness`, and
+`20261114165219_followup_step_checkpoints`. Repository filenames match those
+receipts; their SQL bytes are unchanged. Do not reapply them. Detection is active;
+both behavioral policies remained disabled on readback at 16:52 UTC. Exact-main
+web/worker verification and separate activation are still required.
+
+The same incident release also isolates original accepted-message evidence reads
+from current leased-number availability. Existing SQL identity/delivery gates,
+attempt limits, historical follow-up fences and financial holds remain unchanged.
+See `docs/original-text-receipt-evidence-2026-11-14.md`.
+
 ## Current evidence
 
 Read-only production observations on November 14, 2026 at 14:34–14:47 UTC:
