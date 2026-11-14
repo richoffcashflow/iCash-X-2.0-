@@ -15,17 +15,36 @@ Independent review reproduced two pre-activation defects. A valid continuation
 reuses its original ticket, so a ledger keyed only by ticket ID rejected its next
 issuance. Also, a zero-due voice poll can mean a five-minute cooldown, while one
 estimate batch can leave held or additional originals. Neither proves a complete
-recovery step. Keep both policies disabled until the additive
-`preflight-continuation-issuance.sql` and `followup-pending-originals.sql` corrections
-pass exact-head native/full CI and are installed and read back. Do not rewrite or
-reapply the first three successful migrations.
+recovery step. Keep both policies disabled until both additive corrections are
+installed and read back, exact-main web/worker verification succeeds, and their
+separate guarded activation completes. Do not rewrite or reapply successful
+migrations.
 
-Install only the two pending additive corrections with the supported migration
-runner's atomic SQL-and-ledger transaction. These files deliberately contain no
+The reviewed correction head `34926db9a2e754d8d3ef4175c3ed2e5fc7c91e96`
+passed all six canonical CI jobs in run `43623984349`, including native PostgreSQL
+atomic-ledger rollback checks. The first additive correction was then installed
+as `20261114181243_followup_pending_originals`. Its repository filename now matches
+that actual ledger receipt, with SQL SHA-256
+`fd17b23acfadf1c120d1d15cdff5e01f49e31ec6d66a7f13d974b9ce1cc17fed`
+unchanged. Independent readback at 18:21 UTC confirmed its stored and actual
+pending-reader hash `290dd463df7fa763bace9c733ec6e5f6`, disabled follow-up policy,
+null activation/release fields and zero follow-up attempts. Do not reapply it.
+
+The second correction, `20261114170728_preflight_continuation_issuance.sql`,
+remains pending: two installation confirmations expired, and independent readback
+at 18:21 UTC found no migration receipt. The continuation policy remains disabled,
+with zero issued turns and decisions and null activation/release fields. Keep the
+release hold until the remaining installation and guarded readback succeed and
+the latest exact head passes its full release checks. This status update changes
+no SQL bytes, policy, operation, delivery or financial evidence.
+
+Install only the remaining issuance correction with the supported migration
+runner's atomic SQL-and-ledger transaction. Both correction files contain no
 top-level `BEGIN` or `COMMIT`: an inner commit could persist schema changes before
-the runner records its migration receipt. Apply `followup_pending_originals`
-first, then `preflight_continuation_issuance`, and verify each receipt and guarded
-definition before continuing. Never run their statements separately in autocommit.
+the runner records its migration receipt. The required predecessor
+`followup_pending_originals` is now installed; verify that receipt and its guarded
+definition before applying `preflight_continuation_issuance`. Never run its
+statements separately in autocommit.
 Native and PGlite tests force a late ledger insert to fail and verify that the
 issuance schema, function and disabled policy all roll back. The earlier three
 already-installed migrations retain their original bytes and ledger history.

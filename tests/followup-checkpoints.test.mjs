@@ -25,7 +25,7 @@ try{
  const ledger=await v('select jsonb_agg(to_jsonb(o)) from icash_operation_spend o');
  const migration=read('config/followup-step-checkpoints.sql');assert.equal(migration,read('supabase/migrations/20261114165219_followup_step_checkpoints.sql'));
  await pg.exec(migration);
- const pendingMigration=read('config/followup-pending-originals.sql');assert.equal(pendingMigration,read('supabase/migrations/20261114170705_followup_pending_originals.sql'));
+ const pendingMigration=read('config/followup-pending-originals.sql');assert.equal(pendingMigration,read('supabase/migrations/20261114181243_followup_pending_originals.sql'));
  await pg.exec(pendingMigration);
  assert.deepEqual(await v('select icash_account_followup_context($1,$2)',[account,ticket]),{notify:true},'Inactive installation is compatible with the deployed handler');
  assert.equal(await v("select icash_claim_followup_step($1,$2,'estimates')",[account,ticket]),null);
