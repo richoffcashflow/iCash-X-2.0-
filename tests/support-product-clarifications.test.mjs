@@ -53,7 +53,7 @@ try{
   const wrong=[user('I used the wrong email at checkout.')];answer=await replyToSupport({kind,messages:wrong},noAI);
   assert.match(answer.reply,/purchase-ownership check/);assert.doesNotMatch(answer.reply,/enter the newest code|Safari|email or text/);
   wrong.push({role:'operator',content:'Please send the merchant receipt so we can match the purchase before an email correction.'},user('Update correct email?'));
-  answer=await replyToSupport({kind,messages:wrong},noAI);assert.equal(answer.status,'open');assert.match(answer.reply,/earlier proof details/);assert.doesNotMatch(answer.reply,/Email your merchant receipt/);
+  answer=await replyToSupport({kind,messages:wrong},noAI);assert.equal(answer.status,'open');assert.match(answer.reply,/Follow the earlier proof-submission instructions only for details you have not already supplied/);assert.doesNotMatch(answer.reply,/earlier proof details|proof details are already|already sent the purchase proof|Email your merchant receipt/);assert.match(answer.reply,/ownership verified/);assert.match(answer.reply,/haven’t confirmed an email change or restored access/);
   answer=await replyToSupport({kind,messages:[user('So there was a call I just can’t see it because the calling service couldn’t verify against its approved setup?')]},noAI);
   assert.equal(answer.status,'open');assert.match(answer.reply,/not proof that a call reached a seller/);assert.doesNotMatch(answer.reply,/Yes, exactly|we handle/);
   answer=await replyToSupport({kind,messages:[user('How long will it take for the calling service setup to be fixed on the backend?')]},noAI);
