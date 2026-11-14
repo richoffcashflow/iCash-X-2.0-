@@ -3,6 +3,7 @@ import {sellerListingEvidence} from './seller-listing.ts';
 import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {callSellerPriceEvidence} from './call-offer-evidence.ts';
 import {sellerConversionIntent} from './seller-conversion-intent.ts';
+import {sellerCallDisposition} from './seller-response-policy.ts';
 
 const questions={
  ownership:'Are you the owner of this property?',
@@ -34,7 +35,10 @@ function latestQualificationQuestion(message:string):string{
  * Historical conversations must already be bound to this account/deal/contact.
  * An explicit unknown/refusal answers a personal question; do not interrogate. */
 export function sellerOfferQualification(current:unknown,history:unknown[]=[],channel:'voice'|'sms'='voice'):SellerQualification{
- const facts:Partial<Record<Fact,boolean>>={};let listed:boolean|null=null;
+ const facts:Partial<Record<Fact,boolean>>={};let listed:boolean|null=null,priceRequested=false;
+ const currentRows=object(current).transcript;
+ const disposition=Array.isArray(currentRows)?sellerCallDisposition(currentRows):null;
+ if(disposition)return {ready:false,missing:[],stop:true,nextQuestion:'The seller has stopped this discussion or requested review. Honor the request; do not continue qualification.'};
  for(const conversation of [...history,current]){
   // Reconfirm a prior refusal on a new conversation; never carry a past bad
   // time forward as a permanent hold. Current refusals still stop immediately.
@@ -58,6 +62,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[],ch
    const intent=sellerConversionIntent(text);
    if(sellerRequestsPrice(text)||intent==='price'||intent==='identity_price'||intent==='listed_terms'||callSellerPriceEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text})!==null){
     facts.availability??=true;facts.interest??=true;
+    priceRequested=true;
     // An offer question is not an answer to a pending repairs/occupancy question.
     question='';continue;
    }
@@ -82,7 +87,9 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[],ch
  // A source-bound SMS answer is already an active text conversation. Do not
  // ask a phone-availability question as a prerequisite to continuing by text.
  // An actual refusal still wins below; this creates no calling permission.
- const missing=(Object.keys(questions) as Fact[]).filter(key=>facts[key]!==true&&(channel!=='sms'||key!=='availability'));
+ // A price-first seller need not supply a personal motivation. This changes no
+ // property facts, offer calculation, listing rule, acceptance or signing gate.
+ const missing=(Object.keys(questions) as Fact[]).filter(key=>facts[key]!==true&&(channel!=='sms'||key!=='availability')&&(!priceRequested||key!=='situation'));
  if(facts.ownership===false||facts.interest===false||facts.availability===false||listed===true)return {ready:false,missing,stop:true,nextQuestion:listed?'This property is listed with an agent. Do not quote an offer; follow the listing policy and end politely.':'The caller has declined this property discussion. Acknowledge and stop the pitch.'};
  return missing.length?{ready:false,missing,nextQuestion:questions[missing[0]]}:{ready:true};
 }

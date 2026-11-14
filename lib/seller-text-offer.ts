@@ -45,6 +45,13 @@ function priorCallPreference(messages:Message[]){
  return messages.some(m=>m.direction==='outgoing'&&(m.action==='invite_call'||/\b(?:when|what (?:date|day|time)|good time|available).*\b(?:call|talk)\b|\bcan (?:i|we) call\b/i.test(m.body))
   ||m.direction==='incoming'&&/\b(?:text(?:ing)? only|only text|(?:just|rather|prefer(?: to)?) (?:keep )?text(?:ing)?|(?:keep|stay) (?:it |this )?(?:on|over|to|in) text|(?:keep|prefer) texting|(?:just|please) text me|rather not (?:talk|call)|(?:cannot|can't) (?:talk|take calls)|call me|call back|callback|phone call)\b/i.test(m.body));
 }
+/** Exact answers to a delivered budget question can describe condition or say
+ * no estimate is available. They never establish a numeric repair allowance. */
+function repairDescriptionWithoutBudget(body:string){
+ const text=body.replace(/[’‘]/g,"'").trim();
+ return /^(?:(?:i|we) (?:don't|do not) know(?: (?:the )?(?:repair )?(?:budget|cost|estimate))?|(?:i'm |i am |we're |we are )?not sure(?: (?:of|about) (?:the )?(?:repair )?(?:budget|cost|estimate))?|(?:i|we) (?:don't|do not) have (?:a |an )?(?:repair )?(?:budget|estimate)|(?:i|we)(?:'d| would) rather not (?:say|guess|estimate)|no (?:idea|estimate))[.! ]*$/i.test(text)
+  || /^(?:(?:it |the (?:house|property) )?(?:needs? no repairs|does(?:n't| not) need (?:any )?repairs)|no repairs(?: (?:are )?(?:needed|required))?|(?:it |the (?:house|property) )?(?:is in good (?:shape|condition)|needs? (?:a |an |some |new )?(?:roof|paint|updates|work|repairs)))[.! ]*$/i.test(text);
+}
 /** A bare “Sold” is a material ambiguity, not ownership or acceptance. Only a later explicit correction resolves it. */
 function saleStatus(messages:Message[]):'sold'|'unclear'|null{
  let status:'sold'|'unclear'|null=null;
@@ -123,7 +130,20 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
    state.acceptedPriceCents=null;
    if(amounts.length===1&&/\b(?:net|after fees|take home)\b/i.test(source.body))state.pendingAskingPriceCents=amounts[0];
   }
-  if(previous?.action==='repair_budget'&&amounts.length===1&&callOfferEvidence(transcript,{action:'update_repairs',sellerStatement:source.body,repairEstimateCents:amounts[0]})){state.repairEstimateCents=amounts[0];state.conditionPending=false;state.acceptedPriceCents=null;}
+  if(previous?.action==='repair_budget'&&amounts.length<=1){
+   // The amount parser omits a spoken "zero". The shared evidence guard may
+   // accept it only as an exact answer to the delivered total-repair question.
+   const repairBudget=amounts.length===1?amounts[0]:0;
+   if(callOfferEvidence(transcript,{action:'update_repairs',sellerStatement:source.body,repairEstimateCents:repairBudget})){state.repairEstimateCents=repairBudget;state.conditionPending=false;state.acceptedPriceCents=null;state.sellerStatement=source.body;}
+   else if(amounts.length===0&&repairDescriptionWithoutBudget(source.body)){
+    let researchRepairs:number|null=null;try{researchRepairs=runScreeningJob(c.snapshot,now).property.repairs.baselineCents;}catch{}
+    if(researchRepairs!==null&&Number.isSafeInteger(researchRepairs)&&researchRepairs>=0){
+     // Retain research and any prior seller allowance. Do not invent zero,
+     // lower the offer calculation's reserve or clear unrelated fact holds.
+     state.conditionPending=false;state.sellerStatement=source.body;state.acceptedPriceCents=null;
+    }
+   }
+  }
   if(previous?.action==='legal_name'&&intent===null&&!/[?]/.test(source.body)){
    const name=source.body.trim().replace(/^(?:my (?:full |legal |full legal )?name is|I am|I'm)\s+/i,'').replace(/[.!]+$/,'');
    if(/^[\p{L}][\p{L} .’'-]{1,119}$/u.test(name)&&name.split(/\s+/).length>=2&&!/\b(?:unknown|not sure|no|yes|maybe|trust|llc|corporation)\b/i.test(name))closing.legalName=name;

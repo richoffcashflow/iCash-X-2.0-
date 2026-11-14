@@ -12,12 +12,15 @@ import {cancellationCallPrompt} from '../lib/cancellation-notice-policy.ts';
 
 const config={context_policy:buyerSpeakingPolicy,context_policy_hash:speakingBuyerReceptionPolicyHash,context_approval_reference:'synthetic-cadence-regression',agreement_tool_id:'tool_fixture'};
 const seller=receptionContextVariables(config,{status:'matched',address:'45 Fixture Lane',companyName:'Fixture Homes'});
-const original=sellerCallerIdentityPrompt(sellerAgreementDeliveryPrompt(selectedSpeakingRoleInstructions('matched',automaticOfferReceptionPrompt)));
+const original=sellerCallerIdentityPrompt(efficientSellerPrompt(sellerAgreementDeliveryPrompt(selectedSpeakingRoleInstructions('matched',automaticOfferReceptionPrompt))));
 assert.equal(seller.icash_role_instructions,original+'\n'+cadence,'Assembled inbound preserves every original authority and readback instruction');
 assert.match(original,/After verbally_accepted, do not ask that price again/);
 assert.match(original,/give ONE concise readback of exact price, calendar closing date and prepared inspection period/);
 assert.match(original,/sole-owner\/decision-maker answer plus accepted terms needs no separate/);
-assert.match(original,/NEXT STEP: Reuse priorExchanges/);
+assert.match(original,/NEXT STEP: Read priorExchanges and recentSms first/);
+assert.match(original,/SELLER ANSWER-FIRST FLOW/);
+assert(!original.includes('otherwise ask "What is your name?"'));
+assert(!original.includes('why they want to sell, condition'));
 assert(!original.includes('Does that all look right, and should I text the agreement now?'),'inbound runtime replaces the older duplicate recap instruction');
 assert.equal(sellerCallCadencePrompt(seller.icash_role_instructions),seller.icash_role_instructions);
 for(const status of ['buyer','unknown','ambiguous']){
