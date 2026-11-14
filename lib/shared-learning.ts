@@ -4,7 +4,7 @@ import {learningHealthSchema,improvementReviewSchema} from './learning-health.ts
 const count=z.number().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const sharedLearningStatSchema=z.object({
  variant:z.string().min(1).max(100),contributors:count.int(),attempts:count.int(),pending:count.int(),positive:count.int(),opted_out:count.int(),
- contract_trials:count.int(),contracts:count.int(),closing_trials:count.int(),closings:count.int(),cost_cents:count.int(),costs_complete:z.boolean(),updated_at:z.string(),
+ contract_trials:count.int(),contracts:count.int(),closing_trials:count.int(),closings:count.int(),cost_cents:count.int(),costs_complete:z.boolean(),cost_scope:z.literal('seller-contact-72h-v1').nullable().optional(),updated_at:z.string(),
  effective_attempts:count,effective_pending:count,effective_positive:count,effective_opted_out:count,
  effective_contract_trials:count,effective_contracts:count,effective_closing_trials:count,effective_closings:count,effective_cost_cents:count,
 }).refine(s=>s.pending<=s.attempts&&s.positive<=s.attempts-s.pending&&s.opted_out<=s.attempts&&s.contracts<=s.contract_trials&&s.closings<=s.closing_trials
@@ -53,6 +53,7 @@ export function sharedLearningDecision(raw:unknown,choices:readonly string[],req
  if(stats.every(s=>s.effective_closing_trials>=100))decision.objective='closings';
  else if(stats.every(s=>s.effective_contract_trials>=100))decision.objective='contracts';
  if(requireContracts&&decision.objective==='positive')return {...decision,reason:'verified_contracts_required'};
+ if(decision.objective!=='positive'&&stats.some(s=>s.cost_scope==='seller-contact-72h-v1'))return {...decision,reason:'outcome_window_costs_incomplete'};
  if(!stats.every(s=>s.costs_complete&&s.effective_cost_cents>0))return {...decision,reason:'cost_evidence_incomplete'};
  const rows=stats.map(s=>{
   const trials=learningTrials(s,decision.objective),wins=s[`effective_${decision.objective}`],bounds=learningBounds(wins,trials);

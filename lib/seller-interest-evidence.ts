@@ -6,9 +6,16 @@ import {hasHumanCallWords} from './call-contact-evidence.ts';
 // This reviewed opener asks about interest under ordinary deal terms. Keep its
 // exception exact; arbitrary hypothetical questions still do not establish it.
 const reviewedTimingQuestion='would you be open to a cash offer if the price and timing worked for you?';
+// A first-person declaration can include a bounded price question in the same
+// utterance. The question alone is engagement, not selling interest. Anchor the
+// whole turn so conditions, third-party quotations, other properties and later
+// unrelated clauses do not become training positives by substring matching.
+const priceQuestion="(how much cash|what can you offer|what('s| is) your (cash )?offer|how much are you offering)[?]";
+const sellingStatement="((i am|i'm|we are|we're) (interested in|open to) selling|(i|we) (want|would like) to sell)( (my|our|the) (house|home|property))?";
+const cashOfferStatement="(i am|i'm|we are|we're) (interested in|open to) a cash offer( (on|for) (my|our|the) (house|home|property))?";
 export const sellerInterestPatterns={
  affirmative:"^(yes|yeah|yep|sure|interested|i am interested|i'm interested|yes i am|yes,? i am interested|yes,? interested)[.! ,]*$",
- explicit:"^((i am|i'm|we are|we're) (interested in|open to) selling|(i|we) (want|would like) to sell)( (my|our|the) (house|home|property))?[.! ]*$",
+ explicit:`^(${priceQuestion} +)?(${sellingStatement}|${cashOfferStatement})[.! ,]*( +${priceQuestion})?[.! ]*$`,
  question:"(would you (be (interested in|open to)|consider)|are you (interested in|open to)|do you want to) (sell(ing)?|a cash offer)",
  ambiguousQuestion:"\\b(owner|own|hearing|hear|discuss|talk|information|send|permission|not|never|if|unless|maybe|learn|learning)\\b",
 };
