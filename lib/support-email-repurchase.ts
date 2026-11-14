@@ -1,5 +1,8 @@
+import {supportDuplicateCharge,supportRenewalCancellationRequested} from './support-policy.ts';
+
 /** A proposed second purchase is not an access repair or an approved refund. */
 export function supportEmailRepurchaseReply(question:string,latestOperator=''){
+ if(supportDuplicateCharge(question)||supportRenewalCancellationRequested(question))return null;
  // An earlier completed financial or identity finding belongs to its existing
  // workflow; a new reply must not replace it with an unconfirmed outcome.
  if(/\b(?:refund|email correction|checkout email)\s+(?:(?:is|was|has been)\s+)?(?:approved|issued|completed|corrected)\b/i.test(latestOperator))return null;

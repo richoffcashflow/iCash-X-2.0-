@@ -27,6 +27,8 @@ for(const q of [
  'Refund my work credits.',
  'The refund arrived and I want to buy again with a new email.',
  'Access works; no refund. I will not buy again using another email.',
+ 'Cancel my subscription and refund it so I can buy again with another email.',
+ 'I was charged twice. Refund me so I can buy again with another email.',
 ])assert.equal(supportEmailRepurchaseReply(q),null,q);
 for(const kind of ['access','account']){
  const messages=[user('Please refund my purchase so I can buy again using a different email.'),{role:'operator',content:'The purchase is still under ownership review; no refund or email correction is confirmed.'},user('Where do I find the course?')];
@@ -35,4 +37,11 @@ for(const kind of ['access','account']){
  assert.match(r.reply,/course/i);
 }
 for(const finding of ['The refund was issued. Access is still pending.','The checkout email has been corrected; access remains unconfirmed.'])assert.equal(supportEmailRepurchaseReply('Please refund me so I can buy again with a different email.',finding),null);
+for(const kind of ['access','account'])for(const [q,expected] of [
+ ['Cancel my subscription and refund it so I can buy again with another email.',/cancel|renewal/i],
+ ['I was charged twice. Refund me so I can buy again with another email.',/duplicate-charge|two charges/i],
+]){
+ const r=await replyToSupport({kind,messages:[user(q)],evidence:[],allowAI:false},deny);
+ assert.match(r.reply,expected);assert.doesNotMatch(r.reply,/You’re asking for a refund so you can purchase again/);assert.notEqual(r.status,'closed');
+}
 console.log('PASS email repurchase: account/guest, handoff, denied/hypothetical requests, later operator findings and topic changes.');
