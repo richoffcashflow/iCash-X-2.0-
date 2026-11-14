@@ -11,3 +11,6 @@ for(const messages of [[u('How much is the 1.0 migration offer?')],[u('If 1.0 ch
  const r=await replyToSupport({kind:'access',allowAI:false,messages},deny);assert.doesNotMatch(r.reply,/retirement does not establish/i);
 }
 assert.equal(calls,0);console.log('PASS legacy billing versus migration, account/guest, handoff, hypothetical, negation, topic/operator boundaries');
+
+await import('./legacy-billing-actual-shape.test.mjs');
+await import('./legacy-billing-review-probes.test.mjs');

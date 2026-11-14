@@ -1,3 +1,4 @@
+import {hasUnresolvedLegacyBilling} from './support-legacy-billing-context.ts';
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 import {supportDuplicateCharge,supportRenewalCancellationRequested} from './support-policy.ts';
 
@@ -7,18 +8,8 @@ export function supportBillingComplaintReply(context:SupportContext):SupportRepl
  const q=context.messages.findLast(m=>m.role==='user')?.content??'';
  const operator=context.messages.findLastIndex(m=>m.role==='operator');
  const users=context.messages.slice(operator+1).filter(m=>m.role==='user');
- let legacyBilling=false;
- for(const turn of users){
-  const text=turn.content;
-  const legacy=/\b1\.0\b|\bold iCash X\b/i.test(text);
-  const charge=/\b(?:charg(?:e|ed|es|ing)|billing|deduct(?:ed|ing|ion))\b/i.test(text);
-  const report=/\b(?:still|attempt(?:s|ing|ed)?|tried|trying|charged|deducted|stop|disable)\b/i.test(text);
-  const denied=/\b(?:if|hypothetically|will|would|might|never|not attempting|not charging|not charged|didn[’']?t charge|did not charge)\b/i.test(text);
-  const clarify=/^(?:I (?:have )?already signed up for 2\.0|Accessing 2\.0 is not the issue|It is coming from 1\.0)\b/i.test(text);
-  const oldScreen=legacy&&/\b(?:error|screen|message|shows)\b/i.test(text);
-  legacyBilling=(legacy&&charge&&report||legacyBilling&&(clarify||oldScreen))&&!denied&&!/\b(?:course|seller|buyer|contract|agreement)\b/i.test(text);
- }
- if(legacyBilling)return {reply:'Your 1.0 billing concern needs review separately from 2.0 access. Platform retirement does not establish whether an earlier charge, attempted payment or automatic recharge was stopped. This needs an original-payment billing review; a 2.0 account check cannot verify the old billing record. What date, amount and merchant description appear, and does the entry say completed, pending or failed? Keep details already supplied in this conversation; leave out card numbers and codes. This chat has not stopped billing, issued a refund or changed access. The billing issue remains open.',status:'open',managementReview:true,ai:false};
+ const legacyBilling=hasUnresolvedLegacyBilling(context.messages);
+ if(legacyBilling)return {reply:'Your 1.0 billing concern needs review separately from 2.0 access. Platform retirement does not establish whether an earlier charge, attempted payment or automatic recharge was stopped. This needs an original-payment billing review; a 2.0 account check cannot verify the old billing record. Keep any statement details already supplied in this review; do not repeat them. The original billing record, including the entry’s date, amount, merchant description and failed, pending or completed status, still needs verification. Leave out card numbers and codes. This chat has not stopped billing, issued a refund or changed access. The billing issue remains open.',status:'open',managementReview:true,ai:false};
  const blocked=(s:string)=>/\b(?:cannot|can[’']?t|unable to|won[’']?t let me) (?:sign[ -]?in|log[ -]?in)\b|\b(?:sign[ -]?in|log[ -]?in) (?:is )?blocked\b/i.test(s);
  const unsubscribe=(s:string)=>/\bunsubscribe\b/i.test(s)&&supportRenewalCancellationRequested(s);
  const followup=(s:string)=>/^(?:(?:oh+[, ]+)?ok(?:ay)?[, ]+(?:i(?:[’']m| am) sorry[, ]+)?(?:so[, ]+)?)?(?:so[, ]+)?(?:what (?:do|can|should) i do(?: now)?|do (?:you|i) need (?:any )?(?:info(?:rmation)?|details)(?: from me)?|i don[’']?t have to give you (?:info(?:rmation)?|details)(?: or anything)?)[?!.\s]*$/i.test(s.replace(/[?!,]/g,' ').replace(/\s+/g,' ').trim());
@@ -38,3 +29,4 @@ export function supportBillingComplaintReply(context:SupportContext):SupportRepl
  const asked=context.messages.slice(operator+1).some(m=>m.role==='assistant'&&/when did you pause/i.test(m.content));
  return {reply:state+'Pause stops new automated work; already-started work may finish and its costs may be recorded later. That is a possibility, not a verified explanation for the credit decrease you reported. The pause time and original usage entries need to be compared; available credits and commitments alone cannot establish the cause. '+(asked?'Any pause time and usage details you already supplied remain part of this review.':'When did you pause the bot, including your time zone?')+' No credits have been returned or new work started by this chat.',status:'open',managementReview:true,ai:false};
 }
+
