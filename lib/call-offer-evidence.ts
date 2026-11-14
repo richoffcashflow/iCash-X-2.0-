@@ -108,6 +108,9 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>){
  if(/\b(?:not|no idea|don['’]?t know|between|or|under|over|instead|maybe)\b/i.test(latest))return false;
  const amounts=spokenMoneyAmounts(latest),previous=turns.slice(0,index).findLast(t=>t.role==='agent');
  const repairs=/\b(?:repair|rehab|renovat|work|fix|budget)/i.test(latest+' '+String(previous?.message??''));
+ // A bare zero needs a total-budget question, not one repair item or price.
+ const totalRepairBudget=/\b(?:total|overall) (?:repair|rehab|renovation) (?:cost|budget|estimate)\b|\b(?:total|overall) (?:cost|budget|estimate) (?:of|for) (?:the |all )?(?:repairs|rehab|renovation)\b/i.test(String(previous?.message??''));
+ if(input.repairEstimateCents===0&&(totalRepairBudget&&/^zero(?: dollars)?[.! ]*$/i.test(latest)||/^(?:the |my )?(?:total |overall )repair (?:cost|budget|estimate) (?:is|would be) zero(?: dollars)?[.! ]*$/i.test(latest)))return true;
  return repairs&&amounts.length===1&&amounts[0]===input.repairEstimateCents;
 }
 

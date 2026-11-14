@@ -18,6 +18,7 @@ import {createHash} from 'node:crypto';
 import {safeInboundPropertyContext} from './seller-call-context.ts';
 import {sellerCallerIdentityPrompt} from './seller-caller-identity.ts';
 import {sellerAgreementDeliveryPrompt} from './seller-agreement-delivery-prompt.ts';
+import {efficientSellerPrompt} from './seller-conversation-efficiency.ts';
 /** New, separately reviewed policy. Legacy reception remains the default. */
 export const propertyReceptionPolicy='property_intake_v1';
 export const propertyReceptionGreeting='{{icash_property_greeting}}';
@@ -39,6 +40,6 @@ export function receptionContextVariables(config:Record<string,unknown>,value:un
  const context=JSON.parse(result.icash_property_context);
  if(context&&typeof context.address==='string')Object.assign(context,conversationAddressFields(context.address));
  const variables:Record<string,string>={...result,icash_property_context:JSON.stringify(context),...(config.context_policy===buyerSpeakingPolicy?{icash_role_instructions:selectedSpeakingRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerValidatedPolicy?{icash_role_instructions:selectedValidatedRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerAnswerPolicy?{icash_role_instructions:selectedAnswerRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerConversationPolicy?{icash_role_instructions:selectedConversationRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerTurnPolicy?{icash_role_instructions:selectedTurnRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerResponsePolicy?{icash_role_instructions:selectedResponseRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerScenarioPolicy?{icash_role_instructions:selectedScenarioRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:config.context_policy===buyerRolePolicy?{icash_role_instructions:selectedRoleInstructions(context?.status,automaticOfferReceptionPrompt)}:{})};
- if(context?.status==='matched'&&typeof variables.icash_role_instructions==='string')variables.icash_role_instructions=sellerCallCadencePrompt(sellerCallerIdentityPrompt(sellerAgreementDeliveryPrompt(variables.icash_role_instructions)));
+ if(context?.status==='matched'&&typeof variables.icash_role_instructions==='string')variables.icash_role_instructions=sellerCallCadencePrompt(sellerCallerIdentityPrompt(efficientSellerPrompt(sellerAgreementDeliveryPrompt(variables.icash_role_instructions))));
  return variables;
 }

@@ -2,6 +2,7 @@ import {outboundSellerCadencePrompt} from './seller-call-cadence.ts';
 import {instantLeadPrompt} from './meta-instant-leads.ts';
 import {opportunityConversationInstructions} from './outreach-conversation.ts';
 import {efficientSellerPrompt} from './seller-conversation-efficiency.ts';
+import {sellerGreetingName} from './seller-greeting-name.ts';
 import {instantLeadsEnabled} from './meta-instant-lead-service.ts';
 import {cancellationCallPrompt,type CancellationCallContext} from './cancellation-notice-policy.ts';
 import {conversationAddressFields,conversationAddressInstructions} from './conversation-address.ts';
@@ -174,16 +175,17 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  const ceiling=cashOfferPrice;
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
  const agreementToolsEnabled=!intake&&!cancellation&&!!recordedReview.contractToolId&&recordedReview.contractToolId!==sellerContractToolId;
- const [rawSmsContext,priorCalls,request,closing,[purchaseDraft]]=await Promise.all([
+ const [rawSmsContext,priorCalls,request,closing,[purchaseDraft],greetingContacts]=await Promise.all([
   p.party==='seller'&&!cancellation?db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id}):null,
   p.party==='seller'&&!cancellation?db<unknown>('rpc/icash_seller_prior_call_context','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):[],
   !cancellation&&p.party==='seller'&&object(snapshot.snapshot).sellerRequest?db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null,
   !intake&&!cancellation&&!limited&&p.party==='seller'&&recordedReview.contractToolId?loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null,
   agreementToolsEnabled&&p.party==='seller'?db<{terms:Record<string,unknown>}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&stage=eq.draft&select=terms&limit=1`):[],
+  !intake&&!cancellation&&p.party==='seller'?db<unknown>('rpc/icash_manual_contacts','POST',{p_account:accountId,p_screening:p.screening_id}).catch(()=>null):null,
  ]);
  const smsContext=p.party==='seller'&&!cancellation?boundedVoiceSmsContext(rawSmsContext):null;
  const purchaseTerms=purchaseDraft?{inspectionDays:purchaseDraft.terms.inspectionDays??10,closingDate:purchaseDraft.terms.closingDate??'',escrowAgent:purchaseDraft.terms.escrowAgent??''}:null;
- const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined,callbackRequestedNow:!!j.sms_source_message_id};
+ const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined,callbackRequestedNow:!!j.sms_source_message_id,contactName:sellerGreetingName(greetingContacts,p.phone)};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
  if(intake){sellerGreeting=`Hi, this is ${account.assistant_name}, HomeOffer Network's AI assistant calling for ${identity.principal}. ${intake.address?"Thanks for sending the address. Let's check that property together.":"You requested a cash offer. What's the address of the property you'd like to sell?"}`;sellerPrompt=instantLeadPrompt(identity.principal,account.assistant_name)+(intake.address?' The address already submitted is '+JSON.stringify(intake.address)+'. Confirm it rather than asking from the beginning.':'');}

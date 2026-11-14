@@ -82,6 +82,35 @@ assert.equal(await rpc('icash_claim_seller_text_agreement',[c.a,r.j.id]),null,'o
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[c.a])).n,1);
 
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
+// Continue a call's pending repair-budget question by SMS. A plainly stated
+// zero is a seller estimate; it does not erase the larger research allowance.
+const repairAnswer=await seed();
+await q('insert into icash_call_offer_private.offers(deal_id,account_id,state,snapshot) values($1,$2,$3,$4)',[repairAnswer.d,repairAnswer.a,{conditionPending:true,textThreadId:repairAnswer.t},snapshot]);
+r=await run(repairAnswer,'How much?');assert.equal(r.plan.action,'repair_budget');
+for(const body of ['Maybe zero.','Not zero.','Zero or ten thousand.']){
+ const pendingContext={...r.context,offerState:r.plan.state,messages:[...r.context.messages,{id:'budget-question',direction:'outgoing',body:r.plan.body,action:'repair_budget',state:'delivered',providerId:'fixture-budget'},{id:'budget-answer',direction:'incoming',body,state:'received',providerId:null}],sourceId:'budget-answer'};
+ const uncertain=planSellerTextOffer(pendingContext);
+ assert.equal(uncertain.state.repairEstimateCents,undefined,'never fabricate a zero budget from '+body);
+ assert.equal(uncertain.state.conditionPending,true);
+}
+r=await run(repairAnswer,'Zero.');assert.equal(r.plan.action,'cash_offer');assert.equal(r.result.status,'message_delivered');
+assert.equal(r.plan.state.repairEstimateCents,0);assert.equal(r.plan.state.conditionPending,false);
+assert.equal(r.plan.state.quotedPriceCents,9000000,'the research repair allowance still protects the price');
+assert.equal((await one('select state from icash_call_offer_private.offers where deal_id=$1',[repairAnswer.d])).state.repairEstimateCents,0,'actual source-bound SQL save retained the estimate');
+r=await run(repairAnswer,'Yes');assert.equal(r.plan.action,'legal_name','a fresh acceptance of the delivered offer advances to agreement details');
+for(const body of ['No repairs needed.',"I don't know the budget.",'It needs paint.',"I'd rather not guess."]){
+ const described=await seed();
+ await q('insert into icash_call_offer_private.offers(deal_id,account_id,state,snapshot) values($1,$2,$3,$4)',[described.d,described.a,{conditionPending:true,textThreadId:described.t},snapshot]);
+ let progress=await run(described,'How much?');assert.equal(progress.plan.action,'repair_budget');
+ progress=await run(described,body);assert.equal(progress.plan.action,'cash_offer',body);assert.equal(progress.result.status,'message_delivered');
+ const stored=(await one('select state from icash_call_offer_private.offers where deal_id=$1',[described.d])).state;
+ assert.equal(stored.repairEstimateCents,undefined,'do not fabricate a budget: '+body);
+ assert.equal(stored.conditionPending,false);assert.equal(stored.sellerStatement,body);assert.equal(stored.quotedPriceCents,9000000);
+ const missingResearch=structuredClone(progress.context);delete missingResearch.snapshot.raw.data.estimated_repair_cost;
+ assert.equal(planSellerTextOffer(missingResearch).state.conditionPending,true,'no known research allowance means the question is still unresolved');
+ const changed={...progress.context,offerState:{...progress.context.offerState,factsPending:true}};
+ const changedPlan=planSellerTextOffer(changed);assert.equal(changedPlan.kind,'review');assert.equal(changedPlan.reason,'property_facts_changed');assert.equal(changedPlan.state.factsPending,true,'a condition reply cannot erase a separate material-change hold');
+}
 // A rejected delivered price must move negotiation forward through the real
 // SQL save/claim/receipt loop, without turning the next counterprice into payoff.
 const rejected=await seed();await run(rejected,'I need $210k');
