@@ -41,7 +41,7 @@ function fixture(options={}){
  const agents=new Map([[outbound.branch_id,outbound],[incoming.branch_id,incoming]]),markers=new Map(),calls=[];
  let creationCount=0,claimCount=0;
  const response=data=>Response.json(structuredClone(data));
- async function fetcher(url,init){
+ async function handle(url,init){
   const u=new URL(url),method=init.method??'GET',body=init.body?JSON.parse(init.body):undefined;calls.push({url,method,body});
   assert.equal(init.redirect,'error');assert.equal(init.cache,'no-store');
   if(u.hostname==='ofjbbpwugyjfxbhqfguh.supabase.co'){
@@ -79,10 +79,30 @@ function fixture(options={}){
   assert.equal(method,'GET','Never patch, delete or deploy a provider branch');
   return response(agents.get(u.searchParams.get('branch_id')));
  }
+ async function fetcher(url,init){
+  const result=await handle(url,init);
+  // Native fetch reports the canonical response URL, including percent-encoded
+  // PostgREST JSON operators. Response.json() alone leaves this field empty.
+  Object.defineProperty(result,'url',{value:new URL(url).href,configurable:true});
+  return result;
+ }
  return {env,source,review,c,incoming,outbound,tools,agents,markers,calls,fetcher,get creationCount(){return creationCount;}};
 }
 
 assert.deepEqual(await stageSellerVoiceTurns({},()=>{throw Error('no reads');},now),{status:'not_requested'});
+for(const mutate of [
+ r=>Object.defineProperty(r,'redirected',{value:true}),
+ r=>Object.defineProperty(r,'url',{value:r.url.replace('ofjbbpwugyjfxbhqfguh.supabase.co','different.invalid')}),
+ r=>Object.defineProperty(r,'url',{value:r.url.replace('/icash_integration_checks','/different')}),
+ r=>Object.defineProperty(r,'url',{value:r.url+'&different=true'}),
+]){
+ const f=fixture();
+ await assert.rejects(stageSellerVoiceTurns(f.env,async(url,init)=>{
+  const r=await f.fetcher(url,init);if(init.method==='PATCH')mutate(r);return r;
+ },now),/SELLER_TURNS_REQUEST_UNCONFIRMED/);
+ assert.equal(f.creationCount,1);assert.equal(f.markers.size,1);
+ assert(!f.calls.some(x=>x.method==='GET'&&new URL(x.url).searchParams.get('provider')?.endsWith('_inbound')),'A redirected or different save response cannot proceed to inbound staging');
+}
 {
  const f=fixture(),saved=structuredClone({incoming:f.incoming,outbound:f.outbound,c:f.c,review:f.review});
  const result=await stageSellerVoiceTurns(f.env,f.fetcher,now);
