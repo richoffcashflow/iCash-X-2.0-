@@ -1,9 +1,6 @@
 'use client';
-import Script from 'next/script';
 import {useEffect,useRef,useState} from 'react';
-type Checkout={mount:(node:HTMLElement)=>void;destroy:()=>void};
-type StripeClient={createEmbeddedCheckoutPage:(options:{clientSecret:string;onComplete:()=>void})=>Promise<Checkout>};
-declare global{interface Window{Stripe?:(key:string)=>StripeClient}}
+import {loadCheckoutStripe,type EmbeddedCheckout} from '@/lib/stripe-checkout-client';
 export function StripeEmbeddedCheckout({clientSecret,publishableKey,onComplete,onReady,onInteract}:{clientSecret:string;publishableKey:string;onComplete:()=>void;onReady?:()=>void;onInteract?:()=>void}){
  const host=useRef<HTMLDivElement>(null),complete=useRef(onComplete);complete.current=onComplete;
  const mounted=useRef(onReady);mounted.current=onReady;
@@ -24,12 +21,19 @@ export function StripeEmbeddedCheckout({clientSecret,publishableKey,onComplete,o
   return()=>{clearTimeout(timer);clearInterval(poll);window.removeEventListener('blur',focus);document.removeEventListener('focusin',focus);};
  },[watchInteraction,clientSecret]);
  useEffect(()=>{
-  if(!ready||!host.current||!window.Stripe)return;
-  let disposed=false,checkout:Checkout|undefined;setError('');
+  if(!host.current)return;
+  let disposed=false,expired=false,checkout:EmbeddedCheckout|undefined,timer:ReturnType<typeof setTimeout>|undefined;setError('');setReady(false);
   const node=host.current;
-  void window.Stripe(publishableKey).createEmbeddedCheckoutPage({clientSecret,onComplete:()=>{if(!disposed)complete.current();}}).then(instance=>{if(disposed){instance.destroy();return;}checkout=instance;instance.mount(node);mounted.current?.();}).catch(()=>{if(!disposed)setError('The payment form could not load. Your payment has not been retried.');});
-  return()=>{disposed=true;checkout?.destroy();};
- },[ready,clientSecret,publishableKey,attempt]);
- // onLoad also handles a script download already started by the checkout loader.
- return <div className="membership-embedded"><Script src="https://js.stripe.com/endive/stripe.js" strategy="afterInteractive" onReady={()=>{if(window.Stripe)setReady(true);}} onLoad={()=>{if(window.Stripe)setReady(true);else setError('The secure payment connection could not load. Check your connection and reload.');}} onError={()=>setError('The secure payment connection could not load. Check your connection and reload.')}/>{!ready&&!error&&<p role="status">Loading secure payment…</p>}<div ref={host} className="stripe-embedded-host"/>{error&&<p className="stripe-embedded-error" role="alert">{error} {ready&&<button type="button" onClick={()=>setAttempt(n=>n+1)}>Reload payment form</button>}</p>}</div>;
+  void loadCheckoutStripe().then(stripe=>{
+   if(disposed)return;
+   timer=setTimeout(()=>{expired=true;if(!disposed)setError('The payment form could not load. Your payment has not been retried.');},20000);
+   return stripe(publishableKey).createEmbeddedCheckoutPage({clientSecret,onComplete:()=>{if(!disposed&&!expired)complete.current();}}).then(instance=>{
+    clearTimeout(timer);if(disposed||expired){instance.destroy();return;}
+    checkout=instance;instance.mount(node);setReady(true);mounted.current?.();
+   });
+  }).catch(e=>{clearTimeout(timer);if(!disposed)setError(e instanceof Error&&e.message.startsWith('The secure payment connection')?e.message:'The payment form could not load. Your payment has not been retried.');});
+  return()=>{disposed=true;clearTimeout(timer);checkout?.destroy();};
+ },[clientSecret,publishableKey,attempt]);
+ // Recovery remounts this exact client secret; it never creates or retries a payment.
+ return <div className="membership-embedded">{!ready&&!error&&<p role="status">Loading secure payment…</p>}<div ref={host} className="stripe-embedded-host"/>{error&&<p className="stripe-embedded-error" role="alert">{error} <button type="button" onClick={()=>setAttempt(n=>n+1)}>Reload payment form</button></p>}</div>;
 }

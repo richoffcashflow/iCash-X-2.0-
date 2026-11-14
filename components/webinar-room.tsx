@@ -157,6 +157,23 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   };
   timer=setTimeout(()=>void retry(),delays[0]);return()=>{stopped=true;clearTimeout(timer);};
  },[ended,session,track]);
+ // Ordinary checkout does not require an analytics receipt. Keep the normal
+ // server handoff, but don't strand a finished viewer if progress saving stalls.
+ useEffect(()=>{
+  if(!ended||!session||session.preview||session.ownerWatching)return;
+  const handoff=()=>{
+   if(!navigator.onLine||!alive.current||!endedRef.current||purchaseRedirected.current||completionRedirected.current||returnExpired.current)return;
+   if(webinarPurchaseDestination(purchasedRef.current,checkoutEngagedRef.current,upgradeActiveRef.current,!!session.webinar.parentWebinarId)!=='checkout')return;
+   const next=webinarCompletionDestination(session.webinar,offerState.current.offers,session.sessionId,Date.now()+offerState.current.offset);
+   if(!next?.startsWith(webinarSite.checkoutPath+'?'))return;
+   completionRedirected.current=true;
+   // The existing once-only event key makes this safe if the first save wins.
+   webinarBeacon('/api/webinar/event',{sessionId:session.sessionId,seconds:Math.floor(position.current),kind:'completed',key:'once'});
+   navigateWebinar(next);
+  };
+  const timer=setTimeout(handoff,1500);window.addEventListener('online',handoff);
+  return()=>{clearTimeout(timer);window.removeEventListener('online',handoff);};
+ },[ended,session]);
  useEffect(()=>{const id=setInterval(()=>setNow(Date.now()+offset.current),1000);return()=>clearInterval(id);},[]);
  useEffect(()=>{if(endCountdown===null||!session||checkoutEngaged)return;if(endCountdown===0){const offer=selectOffer(offerState.current.offers,session.webinar.durationSeconds,Date.now()+offerState.current.offset,session.webinar.endOfferId);if(offer?.action==='checkout'){setSelectedOfferId(offer.id);setFunding(true);setEndCountdown(null);}else if(offer){completionRedirected.current=true;navigateWebinar(offerDestination(offer));}else setEndCountdown(null);return;}const id=setTimeout(()=>setEndCountdown(n=>n===null?null:n-1),1000);return()=>clearTimeout(id);},[endCountdown,session,checkoutEngaged]);
  function latestMessages(){const log=chatLog.current;if(log)log.scrollTop=log.scrollHeight;followChat.current=true;setUnread(false);}

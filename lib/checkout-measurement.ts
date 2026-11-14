@@ -13,11 +13,12 @@ export async function bindCheckoutMeasurement(req:Request,checkoutId:string,mode
  if(process.env.VERCEL_ENV!=='production'||mode!=='live'||!/^cs_live_[A-Za-z0-9]{1,240}$/.test(checkoutId))return;
  await bindReminderCheckout(req,checkoutId,mode);
  try{
-  if(await legacyAdMeasurementExcluded(req))return;
-  const signal=AbortSignal.timeout(2000),settings=await webinarSettings(signal);if(!settings.meta.enabled||!settings.meta.pixelId)return;
+  const signal=AbortSignal.timeout(2000);
+  if(await legacyAdMeasurementExcluded(req,undefined,signal))return;
+  const settings=await webinarSettings(signal);if(!settings.meta.enabled||!settings.meta.pixelId)return;
   const choice=req.headers.get('x-icash-measurement'),blocked=req.headers.get('sec-gpc')==='1'||choice==='deny';
   const visitor=await webinarVisitor(!blocked&&choice==='automatic',undefined,signal),metadata:Record<string,string>={};
-  if(await legacyAdMeasurementExcluded(req,visitor.id))return;
+  if(await legacyAdMeasurementExcluded(req,visitor.id,signal))return;
   if(!blocked){
    const jar=await cookies(),fbp=jar.get('_fbp')?.value,fbc=jar.get('_fbc')?.value,click=req.headers.get('x-icash-fbclid');
    if(fbp&&/^fb\.\d+\.\d+\.[A-Za-z0-9_-]{1,200}$/.test(fbp))metadata.fbp=fbp;

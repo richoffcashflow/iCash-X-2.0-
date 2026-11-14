@@ -3,7 +3,7 @@ import {newWebinar,publicWebinar,webinarCompletionDestination} from '../lib/webi
 
 // Local, intercepted payment UI only. No Stripe/provider request or real card data.
 export async function verifyWebinarCheckoutWindow(browser,base,options={},name='browser'){
- for(const scenario of ['untouched','email','card','vip']){
+ for(const scenario of ['untouched','completion-timeout','email','card','vip']){
   const context=await browser.newContext({...options,ignoreHTTPSErrors:true});context.setDefaultTimeout(10000);
   const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
   const start=new Date('2026-10-20T05:00:00Z');await page.clock.install({time:start});
@@ -20,6 +20,7 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    if(url.pathname==='/api/webinar/start')return json({sessionId,webinar,progress:100,name:'Fixture',messages:[],preview:false,serverNow:+start});
    // WebKit can omit a background beacon's body from Playwright's request.
    // The completion fetch still must return its real destination for the URL assertion below.
+   if(url.pathname==='/api/webinar/event'&&scenario==='completion-timeout')return route.fulfill({status:503,json:{error:'Progress save unavailable'}});
    if(url.pathname==='/api/webinar/event')return json({saved:true,...(route.request().postDataJSON()?.kind==='completed'?{redirect:webinarCompletionDestination(webinar,webinar.offers,sessionId,+start+31000)}:{})});
    if(url.pathname==='/api/webinar/chat/feed')return json({messages:[],statuses:[]});
    if(url.pathname==='/api/webinar/timers')return json({deadlines:{},offerDeadlines:{},serverNow:+start});
@@ -41,12 +42,13 @@ export async function verifyWebinarCheckoutWindow(browser,base,options={},name='
    if(scenario==='email')await page.getByRole('textbox',{name:'Payment email'}).fill('partially-entered');
    if(scenario==='card')await field.fill('fixture draft');
    if(vip){await page.getByRole('checkbox').check();}
-   if(scenario!=='untouched')await page.getByText('Your checkout stays open while you finish.',{exact:true}).waitFor({state:'attached'});
+   if(!['untouched','completion-timeout'].includes(scenario))await page.getByText('Your checkout stays open while you finish.',{exact:true}).waitFor({state:'attached'});
    await page.clock.fastForward(31000);
-   if(scenario==='untouched'){
+   if(['untouched','completion-timeout'].includes(scenario)){
     await page.getByText('This session’s offers have ended.',{exact:true}).waitFor();
     assert.equal(await page.locator('#webinar-offer').count(),0);assert.equal(preparations,0);
     await page.locator('video').dispatchEvent('ended');
+    if(scenario==='completion-timeout')await page.clock.fastForward(1600);
     await page.waitForURL(base+'/webinar/checkout?webinar_session='+sessionId);
     // The destination intentionally auto-opens payment. Wait for that form and
     // verify the request's source, instead of racing its mount after navigation.
