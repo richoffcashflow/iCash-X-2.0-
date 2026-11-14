@@ -30,6 +30,7 @@ def reset():
 reset()
 sql(read('tests/fixtures/account-work-repair.sql'))
 sql(read('tests/fixtures/stalled-work-boundary.sql'))
+sql('grant usage on schema public to anon,authenticated,service_role;')
 defs = json.loads(read('tests/fixtures/stalled-work-production-20261114.json'))
 sql(defs['observations'])
 sql('revoke all on function icash_account_work_observations() from public,anon,authenticated;grant execute on function icash_account_work_observations() to service_role;')
@@ -81,3 +82,44 @@ sql('begin;select 1 from icash_operating_budget where id=1 for update;update ica
 sql('set role service_role;select icash_next_acquisition();')
 assert sql('select count(*) from icash_work_private.continuation_decisions') == '9'
 print('PASS PostgreSQL 17: exact monitor boundary, 36 concurrent service-role reads, 1,006-account fair selection with 9 competing workers, immutable originals, unchanged financial ledgers, ACLs and rollback.')
+
+reset()
+setup = subprocess.run(['node','--input-type=module','-e',
+    "import {followupCheckpointSetup} from './tests/helpers/followup-checkpoint-fixture.mjs';process.stdout.write(followupCheckpointSetup());"],
+    cwd=ROOT, capture_output=True, text=True, check=True).stdout
+sql(setup)
+sql(read('config/followup-step-checkpoints.sql'))
+account='00000000-0000-4000-8000-000000000001'
+ticket='00000000-0000-4000-8000-000000000002'
+replacement='00000000-0000-4000-8000-000000000003'
+sql(f"""insert into icash_accounts(id,owner_user_id) values('{account}','{account}');
+ insert into icash_automation_tickets(id,account_id,kind,state) values('{ticket}','{account}','account_reconcile','consumed');
+ insert into icash_work_private.account_followups(account_id,ticket_id,lease_until,claimed_version,claimed_notify_version,notify_version)
+ values('{account}','{ticket}',now()+interval '5 minutes',1,1,1);""")
+assert sql("select icash_work_private.activate_followup_steps(repeat('b',40))")=='t'
+claim=f"set role service_role;select icash_claim_followup_step('{account}','{ticket}','voice_receipts');"
+with ThreadPoolExecutor(max_workers=24) as pool:
+    claims=[json.loads(x) for x in pool.map(lambda _: sql(claim),range(24))]
+assert sum(x['status']=='claimed' for x in claims)==1
+assert sum(x['status']=='busy' for x in claims)==23
+attempt=next(x['id'] for x in claims if x['status']=='claimed')
+# Simulate a crashed handler and its normal lease replacement. The old attempt
+# remains pending evidence; a stale worker cannot finish the replacement.
+sql(f"""insert into icash_automation_tickets(id,account_id,kind,state) values('{replacement}','{account}','account_reconcile','consumed');
+ update icash_work_private.account_followups set ticket_id='{replacement}' where account_id='{account}';""")
+assert sql(f"select icash_finish_followup_step('{account}','{ticket}','voice_receipts','{attempt}',true,'{{}}')")=='f'
+second=json.loads(sql(f"set role service_role;select icash_claim_followup_step('{account}','{replacement}','voice_receipts')"))
+assert second['status']=='claimed' and second['id']!=attempt
+finish=f"set role service_role;select icash_finish_followup_step('{account}','{replacement}','voice_receipts','{second['id']}',true,'{{\"held\":0}}')"
+with ThreadPoolExecutor(max_workers=12) as pool:
+    assert set(pool.map(lambda _:sql(finish),range(24)))=={'t'}
+assert sql('select count(*) from icash_work_private.followup_step_attempts where completed')=='1'
+assert sql('select count(*) from icash_work_private.followup_step_attempts where finished_at is null')=='1'
+assert json.loads(sql(f"set role service_role;select icash_claim_followup_step('{account}','{replacement}','voice_receipts')"))['status']=='completed'
+for role in ('anon','authenticated','service_role'):
+    assert sql(f"select has_function_privilege('{role}','icash_work_private.activate_followup_steps(text)','execute')")=='f'
+    assert sql(f"select has_table_privilege('{role}','icash_work_private.followup_step_attempts','update,delete,truncate')")=='f'
+sql('update icash_work_private.followup_step_policy set enabled=false')
+assert sql(f"select icash_claim_followup_step('{account}','{replacement}','customer_updates') is null")=='t'
+assert sql('select count(*) from icash_work_private.followup_step_attempts')=='2'
+print('PASS PostgreSQL 17: 24 competing step claims, crash/replacement, stale-worker refusal, 24 identical finish acknowledgments, original history, private permissions and rollback.')

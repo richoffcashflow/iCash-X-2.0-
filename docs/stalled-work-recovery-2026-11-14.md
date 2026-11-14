@@ -90,6 +90,47 @@ full CI, review, main-push CI and exact web/worker production verification:
    `enabled=false`. Keep its decisions and all financial/provider evidence.
    The one-time activation refuses accidental reactivation after rollback.
 
+## Stage 3: durable independent recovery steps
+
+`config/followup-step-checkpoints.sql` installs inactive per-step recovery history.
+The matching handler records a durable claim and terminal observation for estimates,
+voice receipts, customer updates and attention. Each service gets its own bounded
+deadline. Completed steps survive a lost acknowledgment and replacement ticket;
+only unfinished safe recovery runs again. Receipt polling with outstanding holds
+does not mark its checkpoint complete. Every primary call, message, purchase and
+financial hold remains governed by its original source-bound service.
+
+Native tests must prove competing claim exclusion, process interruption, stale
+worker refusal, identical finish acknowledgments, private permissions and rollback.
+The synthetic end-to-end customer recovery journey crosses the actual handler and
+database checkpoint RPCs; provider fixtures cannot establish live delivery.
+After exact production versions are verified, activate through
+`icash_work_private.activate_followup_steps(<exact main SHA>)`. Observe natural
+recovery step receipts before broader rollout. Roll back by disabling this policy;
+keep every attempt and original operation. Existing receipt triggers still wake a
+new source version, and existing bounded failure cooldowns remain authoritative.
+
+## Fixed cohort observations
+
+The private November 14 baseline freezes membership. `scripts/work-cohort.mjs sql`
+renders `scripts/observe-work-cohort.sql` for exactly those accounts, including
+accounts that later pause, leave membership, run out of funds or disappear. Run it
+read-only through the authorized database connection. `append` accepts the results
+and creates a new exclusive, hash-linked private observation; it refuses a changed
+cohort, a duplicate/older observation or altered prior history. Persist every new
+observation, never replace its predecessor. The collector retains original
+operation/message/provider IDs, source content hashes, work timestamps and outcome
+states without copying message text into the report. Provider evidence stays in
+its original immutable receipt ledgers.
+
+Missing observations, unknown eligibility, unverified answers and proven-preventable
+stall counts remain explicit. `needs_investigation` is not a confirmed preventable
+stall. Calling hours are a channel-specific condition, not an excuse to block
+independent research. Funding, resume, reconciliation, issue receipts and cleared
+alerts are not output. Query and review every cohort member; prioritize those with
+little or no original output. Hourly observations are sampled evidence, not proof
+that no short interruption occurred between observations.
+
 ## Remaining recovery gates
 
 * Reconcile every uncertain operation by its original key and provider evidence.

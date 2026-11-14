@@ -20,6 +20,7 @@ export function continuationSetup(){
   retries.find(x=>x.proname==='icash_owner_enrichment_retry_current').definition,
   live.icash_owner_preflight_due_at,live.icash_next_acquisition,
   `update icash_research_private.owner_export_settings set preflight_enabled=true;
+   grant usage on schema public to anon,authenticated,service_role;
    grant select,insert,update,delete on all tables in schema public to service_role;
    grant usage on schema icash_private,icash_work_private to service_role;
    grant select on all tables in schema icash_private,icash_work_private to service_role;
