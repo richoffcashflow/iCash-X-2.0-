@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import ts from 'typescript';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {readRecordingReview,object,privateHeaders} from '../lib/required-call-recording.ts';
 import {boundedBytes} from '../lib/required-call-recording-provider.ts';
@@ -52,13 +51,16 @@ assert.equal(route.POST,undefined);assert.equal((await route.GET(req('?account=f
 owner={accountId:'foreign',userId:user};assert.equal((await route.GET(req())).status,403);owner={accountId:account,userId:'foreign'};assert.equal((await route.GET(req())).status,403);assert.equal(reads,0);
 owner={accountId:account,userId:user};const response=await route.GET(req());assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/private, no-store/);assert.equal(reads,1);
 
-// Execute the actual client handler to verify duplicate clicks, stale success,
-// cancellation and error recovery without a browser or a provider request.
-const ui=readFileSync('components/demo-readiness.tsx','utf8');
-const handler=ts.transpileModule(ui.slice(ui.indexOf(' async function check()'),ui.indexOf(' useEffect(')),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
-const state={ready:false,busy:false,result:null,error:''},pending={current:null};let resolve,count=0;
-const action=new Function('fetch','pending','onChange','setBusy','setResult','setError','return '+handler)(async(url,options)=>{assert.equal(url,'/api/demo/readiness');assert.equal(options.method,'GET');count++;return new Promise(r=>{resolve=r;});},pending,v=>state.ready=v,v=>state.busy=v,v=>state.result=v,v=>state.error=v);
-let work=action();await action();assert.equal(count,1);assert.equal(state.ready,false);resolve(Response.json(result));await work;assert.equal(state.ready,true);assert.equal(state.busy,false);
-work=action();assert.equal(state.ready,false);assert.equal(state.result,null);resolve(new Response('SYNTHETIC_SECRET_TOKEN',{status:503}));await work;assert.equal(state.ready,false);assert.equal(state.busy,false);assert(!state.error.includes('SYNTHETIC_SECRET_TOKEN'));
-work=action();pending.current.abort();pending.current=null;resolve(Response.json(result));await work;assert.equal(state.ready,false,'A response after navigation must not enable Start');
-console.log('PASS owner pre-call setup: read-only providers and allowlisted database checks, per-stage failures, private owner authentication, no call/send/charge claims, duplicate clicks and canceled responses.');
+// Execute the read-only client check without rendering provider diagnostics.
+const {checkDemoReadiness}=await loadService('components/demo-readiness.tsx',{});
+const originalFetch=globalThis.fetch;let resolve,count=0;
+try{
+ globalThis.fetch=async(url,options)=>{assert.equal(url,'/api/demo/readiness');assert.equal(options.method,'GET');assert.equal(options.cache,'no-store');assert(options.signal);count++;return new Promise(r=>{resolve=r;});};
+ let controller=new AbortController(),work=checkDemoReadiness(controller.signal);resolve(Response.json(result));assert.equal(await work,true);
+ work=checkDemoReadiness(controller.signal);resolve(new Response('SYNTHETIC_SECRET_TOKEN',{status:503}));assert.equal(await work,false);
+ work=checkDemoReadiness(controller.signal);resolve(Response.json({...result,checks:result.checks.slice(1)}));assert.equal(await work,false);
+ work=checkDemoReadiness(controller.signal);resolve(Response.json({...result,checks:result.checks.map((c,i)=>i===0?{...c,status:'blocked'}:c)}));assert.equal(await work,false);
+ work=checkDemoReadiness(controller.signal);controller.abort();resolve(Response.json(result));assert.equal(await work,false,'A response after navigation cannot start a demo');
+ assert.equal(count,5);
+}finally{globalThis.fetch=originalFetch;}
+console.log('PASS owner pre-call setup: read-only providers and allowlisted database checks, per-stage failures, private owner authentication, silent client validation and canceled responses.');

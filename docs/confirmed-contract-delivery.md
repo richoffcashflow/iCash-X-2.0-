@@ -50,3 +50,15 @@ of handset delivery or completed signatures.
 Rollback: forward-replace only these two patched function bodies from their
 captured predecessors after checking for intervening changes. Retain every
 agreement, confirmation, recovery result, operation and provider receipt.
+
+## November 14 recovery snapshot correction
+
+The recovery claim already returns the seller-confirmed terms. Recovery now
+passes that snapshot to the existing signing entry point, which compares it
+with the fresh deal before creating an envelope. Changed price, closing date,
+seller, or inspection terms cannot silently replace the confirmed agreement;
+missing snapshots stop before provider work. Existing envelope reuse, one-use
+claims, uncertain-send handling and receipt reconciliation remain unchanged.
+Eight added offline cases cover changed or missing snapshots using the actual
+signing entry point. This application change needs no database migration or
+provider configuration change; actual handset delivery remains receipt-based.

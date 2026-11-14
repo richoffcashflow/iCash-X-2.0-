@@ -6,7 +6,7 @@ import {botDemoConsentText,botDemoConsentVersion} from '@/lib/bot-demo';
 import {optinCallNowText,optinCallNowVersion} from '@/lib/optin-call-now';
 import {sellerSubmissionStatus,type SellerSubmissionStatus} from '@/lib/seller-submission-status';
 import {DemoPhoneField} from './demo-phone-field';
-import {DemoReadinessPanel} from './demo-readiness';
+import {checkDemoReadiness} from './demo-readiness';
 import {OwnerAccountReset} from './owner-account-reset';
 
 export function BotDemo(){
@@ -15,9 +15,17 @@ export function BotDemo(){
  const [consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [access,setAccess]=useState<'loading'|'ready'|'signin'|'error'>('loading');
  const [privatePhone,setPrivatePhone]=useState<string|null>(null);
- const [setupReady,setSetupReady]=useState(false);
  const [resetBusy,setResetBusy]=useState(false);
  const [progress,setProgress]=useState<SellerSubmissionStatus|null>(null),[round,setRound]=useState(0),[polling,setPolling]=useState(false);
+ const preparation=useRef<{controller:AbortController;result:Promise<boolean>;completedAt:number}|null>(null);
+ const submission=useRef<AbortController|null>(null);
+ useEffect(()=>()=>{submission.current?.abort();submission.current=null;},[]);
+ useEffect(()=>{
+  if(access!=='ready'||step!=='contact')return;
+  const controller=new AbortController(),check={controller,result:checkDemoReadiness(controller.signal),completedAt:0};
+  preparation.current=check;void check.result.then(()=>{check.completedAt=Date.now();});
+  return()=>{controller.abort();if(preparation.current===check)preparation.current=null;};
+ },[access,step]);
  const request=useRef(''),lock=useRef(false),nameInput=useRef<HTMLInputElement>(null),success=useRef<HTMLHeadingElement>(null);
  useEffect(()=>{const c=new AbortController();void fetch('/api/demo/intake',{cache:'no-store',signal:c.signal}).then(async r=>{if(!r.ok)throw Error();const d=await r.json();if(c.signal.aborted)return;const saved=d.ready&&typeof d.privateDemoPhone==='string'?d.privateDemoPhone:null;setPrivatePhone(saved);if(saved)setPhone(value=>value||saved);setAccess(d.ready?'ready':'signin');}).catch(()=>{if(!c.signal.aborted)setAccess('error');});return()=>c.abort();},[]);
  useEffect(()=>{
@@ -34,16 +42,23 @@ export function BotDemo(){
  },[step,round]);
  function changed(){request.current='';setError('');}
  async function submit(e:FormEvent){
-  e.preventDefault();if(lock.current||resetBusy||!consent||access!=='ready'||!setupReady)return;
+  e.preventDefault();if(lock.current||resetBusy||!consent||access!=='ready')return;
+  const controller=new AbortController();submission.current=controller;
   lock.current=true;setBusy(true);setError('');request.current||=crypto.randomUUID();
-  try{const r=await fetch('/api/demo/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:request.current,name,address,phone,consented:consent,consentVersion:botDemoConsentVersion,callNowVersion:optinCallNowVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,honeypot:trap}),signal:AbortSignal.timeout(20000)});
-   const d=await r.json();if(!r.ok)throw Error(d.error||'Please try again.');setProgress(d.progress??sellerSubmissionStatus('received'));setStep('saved');requestAnimationFrame(()=>success.current?.focus());
-  }catch(e){setError(e instanceof Error?e.message:'Please try again.');}finally{lock.current=false;setBusy(false);}
+  try{
+   const prepared=preparation.current;
+   const recent=prepared&&!prepared.controller.signal.aborted&&(!prepared.completedAt||Date.now()-prepared.completedAt<30000);
+   const ready=await(recent?prepared.result:checkDemoReadiness(controller.signal));
+   if(!ready){if(preparation.current===prepared)preparation.current=null;throw Error('Couldn’t start your demo yet. Please try again.');}
+   if(controller.signal.aborted)return;
+   const r=await fetch('/api/demo/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:request.current,name,address,phone,consented:consent,consentVersion:botDemoConsentVersion,callNowVersion:optinCallNowVersion,contactTimezone:Intl.DateTimeFormat().resolvedOptions().timeZone,honeypot:trap}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(20000)])});
+   const d=await r.json();if(controller.signal.aborted)return;if(!r.ok)throw Error(d.error||'Please try again.');setProgress(d.progress??sellerSubmissionStatus('received'));setStep('saved');requestAnimationFrame(()=>success.current?.focus());
+  }catch(e){if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Please try again.');}finally{if(submission.current===controller){submission.current=null;lock.current=false;if(!controller.signal.aborted)setBusy(false);}}
  }
  return <main className="bot-demo">
   <header className="demo-header"><a href="/test-bot" className="demo-brand" aria-label="iCash X home">iCash <span>X</span></a><a href="/" className="demo-workspace">Open workspace <ArrowUpRight size={16}/></a></header>
   <section className="demo-main" aria-label="iCash X property demo">
-   {access==='ready'&&<OwnerAccountReset disabled={busy} onBusyChange={value=>{setResetBusy(value);if(value)setSetupReady(false);}} onReset={()=>{changed();setAddress('');setName('');setPhone(privatePhone??'');setConsent(false);setProgress(null);setStep('address');}}/>}
+   {access==='ready'&&<OwnerAccountReset disabled={busy} onBusyChange={setResetBusy} onReset={()=>{changed();setAddress('');setName('');setPhone(privatePhone??'');setConsent(false);setProgress(null);setStep('address');}}/>}
    <div className="demo-eyebrow"><Sparkles size={15}/> YOUR BOT. IN ACTION.</div>
    {step==='saved'?<div className="demo-success">
     <span className="demo-success-mark"><Check size={26}/></span><div role="status" aria-live="polite"><h1 ref={success} tabIndex={-1}>{progress?.title??'Your property is in.'}</h1><p className="demo-intro">{progress?.message??'Your request is saved.'}</p></div>
@@ -65,8 +80,7 @@ export function BotDemo(){
       <div className="demo-trap" aria-hidden="true"><label>Leave empty<input tabIndex={-1} autoComplete="off" value={trap} onChange={e=>setTrap(e.target.value)}/></label></div>
       <label className="demo-consent"><input type="checkbox" checked={consent} required disabled={busy} onChange={e=>{setConsent(e.target.checked);changed();}}/><span>{optinCallNowText} {botDemoConsentText}</span></label>
       {access==='signin'?<p className="demo-notice"><a href="/">Sign in to your iCash X account</a> in this browser, then refresh this page to start.</p>:access==='error'?<p className="demo-notice">Couldn’t check your account. Refresh this page to retry.</p>:null}
-      {access==='ready'&&<DemoReadinessPanel onChange={setSetupReady}/>}
-      <button className="demo-submit" disabled={busy||resetBusy||!consent||access!=='ready'||!setupReady}>{busy?'Saving your property…':access==='loading'?'Checking your account…':'Start my bot demo'}<ArrowUpRight size={18}/></button>
+      <button className="demo-submit" disabled={busy||resetBusy||!consent||access!=='ready'}>{busy?'Starting your demo…':access==='loading'?'Checking your account…':'Start my bot demo'}<ArrowUpRight size={18}/></button>
       <p className="demo-credit-note">Runs in your workspace using your existing credits.</p>
       {error&&<p className="demo-notice" role="alert">{error}</p>}
      </form>}
