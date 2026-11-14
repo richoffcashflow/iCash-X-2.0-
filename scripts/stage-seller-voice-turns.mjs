@@ -28,7 +28,7 @@ function listBranch(value,id){
 function expectedSnapshot(source){return {...snapshot(source),conversation_config:{...source.conversation_config,turn:sellerVoiceTurnConfig(object(source.conversation_config.turn))}};}
 export function publicSellerTurnStage(result){
  if(result.status!=='staged')return {status:result.status};
- return {status:'staged',release:result.release,activated:false,providerWrites:result.providerWrites,
+ return {status:'staged',release:result.release,verifiedByRelease:result.verifiedByRelease,phoneRoutingVerification:result.phoneRoutingVerification,activated:false,providerWrites:result.providerWrites,
   outbound:{branchId:result.outbound.branchId,versionId:result.outbound.versionId,configHash:result.outbound.configHash},
   inbound:{branchId:result.inbound.branchId,versionId:result.inbound.versionId,configHash:result.inbound.configHash}};
 }
@@ -38,6 +38,9 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
  if(!requested||requested!==env.VERCEL_GIT_COMMIT_SHA)return {status:'not_requested'};
  const target=productionReleaseTarget(env);
  if(target?.host!=='vercel'||target.sha!==requested||!/^[a-f0-9]{40}$/.test(requested))throw Error('SELLER_TURNS_COMMIT_REQUIRED');
+ const resume=env.ICASH_SELLER_TURN_RESUME_RELEASE,resuming=resume!==undefined&&resume!=='';
+ if(resuming&&(!/^[a-f0-9]{40}$/.test(resume)||resume===requested))throw Error('SELLER_TURNS_RESUME_RELEASE_REQUIRED');
+ const release=resuming?resume:requested;
  let source;try{source=JSON.parse(env.ICASH_SELLER_TURN_SOURCE_JSON??'null');}catch{throw Error('SELLER_TURNS_SOURCE_PINS_REQUIRED');}
  const review=readRecordingReview(env.RECORDED_OUTBOUND_REVIEW_JSON,now);
  if(!source||!review||review.agentId!==recordedOutboundTarget.agentId||review.offerPolicy!=='automatic_offer_v9'
@@ -55,6 +58,17 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
  }
  const api=(path,method,body)=>request('https://api.elevenlabs.io'+path,{'xi-api-key':env.ELEVENLABS_API_KEY},method,body);
  const db=(path,method,body)=>request(database+path,{apikey:env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+env.SUPABASE_SECRET_KEY},method,body);
+ async function verifyNoBranchPhones(agentId,branchId){
+  // GetAgent's optional phone_numbers is agent metadata. The filtered v2 list
+  // proves this exact candidate has no assigned phone, without changing routing.
+  const result=object(await api('/v1/convai/v2/phone-numbers?'+new URLSearchParams({page_size:'1000',agent_id:agentId,branch_id:branchId})));
+  if(!Array.isArray(result.phone_numbers))throw Error('SELLER_TURNS_PHONE_LIST_REQUIRED');
+  if(result.phone_numbers.length!==0)throw Error('SELLER_TURNS_CANDIDATE_PHONE_ROUTING_ACTIVE');
+  // The documented has_more default is false when omitted. A malformed value
+  // or any pagination cursor is not proof of a complete empty branch listing.
+  if(result.has_more!==undefined&&result.has_more!==false)throw Error('SELLER_TURNS_PHONE_LIST_INCOMPLETE');
+  if(result.next_cursor!==undefined&&result.next_cursor!==null)throw Error('SELLER_TURNS_PHONE_LIST_CURSOR_PRESENT');
+ }
  const getConfig=()=>db('rpc/icash_get_recorded_reception_config','POST',{p_called_number:receptionTarget.calledNumber});
  const c=await getConfig();
  if(!equal(pins(object(c)),source.inbound)||c.enabled!==true||c.entry_policy!=='direct_recorded_v1'||c.call_profile!=='normal'||c.callback_template_id!=null)throw Error('SELLER_TURNS_INBOUND_SOURCE_CHANGED');
@@ -68,20 +82,30 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
  const toolIds=[...new Set([...review.toolIds,c.stop_tool_id,c.agreement_tool_id])];
  const initialTools=await Promise.all(toolIds.map(id=>api('/v1/convai/tools/'+id)));
  if(!equal(initialTools[toolIds.indexOf(c.stop_tool_id)],inStop)||!equal(initialTools[toolIds.indexOf(c.agreement_tool_id)],inAgreement))throw Error('SELLER_TURNS_SOURCE_TOOLS_CHANGED');
- const binding={release:requested,source,change},bindingHash=sha(JSON.stringify(canonical(binding)));
+ const binding={release,source,change},bindingHash=sha(JSON.stringify(canonical(binding)));
  let providerWrites=0;
- async function stage(direction,parent){
-  const marker=markerPrefix+'_'+requested+'_'+direction,name='icash-seller-turns-'+requested+'-'+direction;
-  const path='/v1/convai/agents/'+parent.agent_id;
+ async function readReceipt(direction,parent){
+  const marker=markerPrefix+'_'+release+'_'+direction,name='icash-seller-turns-'+release+'-'+direction;
   const markerPath='icash_integration_checks?provider=eq.'+marker;
-  let rows=await db(markerPath),receipt;
+  const rows=await db(markerPath);let receipt;
   if(!Array.isArray(rows)||rows.length>1)throw Error('SELLER_TURNS_MARKER_READ_REQUIRED');
-  if(rows.length){receipt=rows[0].result;if(receipt?.bindingHash!==bindingHash||receipt.name!==name||!['creating','candidate'].includes(receipt.state)||!/^[-a-f0-9]{36}$/.test(receipt.nonce??'')||!equal(receipt.source,identity(parent)))throw Error('SELLER_TURNS_MARKER_BINDING_CHANGED');}
+  if(rows.length){receipt=rows[0].result;if(receipt?.bindingHash!==bindingHash||receipt.release!==release||receipt.activated!==false||receipt.name!==name||!['creating','candidate'].includes(receipt.state)||!/^[-a-f0-9]{36}$/.test(receipt.nonce??'')||!equal(receipt.source,identity(parent)))throw Error('SELLER_TURNS_MARKER_BINDING_CHANGED');}
+  if(resuming&&!receipt)throw Error('SELLER_TURNS_RESUME_RECEIPT_REQUIRED');
+  return {marker,name,markerPath,receipt};
+ }
+ // A newer release may only inspect/reconcile both existing original intents.
+ // Prove both bindings before either candidate receipt can be saved.
+ const prior=resuming?await Promise.all([readReceipt('outbound',outbound),readReceipt('inbound',incoming)]):null;
+ async function stage(direction,parent,prepared){
+  const {marker,name,markerPath,receipt:previousReceipt}=prepared??await readReceipt(direction,parent);
+  let receipt=previousReceipt;
+  const path='/v1/convai/agents/'+parent.agent_id;
   const listed=listBranch(await api(path+'/branches?include_archived=true&limit=100'));
   const existing=listed.filter(b=>b.name===name);
   if(existing.length>1||!receipt&&existing.length)throw Error('SELLER_TURNS_UNEXPECTED_BRANCH');
   if(!receipt){
-   receipt={state:'creating',bindingHash,release:requested,name,source:identity(parent),nonce:randomUUID(),activated:false};
+   if(resuming)throw Error('SELLER_TURNS_RESUME_RECEIPT_REQUIRED');
+   receipt={state:'creating',bindingHash,release,name,source:identity(parent),nonce:randomUUID(),activated:false};
    // The unique provider key is the one-use creation claim. A lost response or
    // conflict never reaches POST /branches; reruns inspect the saved intent.
    const saved=await db('icash_integration_checks','POST',{provider:marker,checked_at:new Date(now).toISOString(),result:receipt});
@@ -96,9 +120,17 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
   if(!/^agtbrch_[A-Za-z0-9]+$/.test(id??'')||id===parent.branch_id||id===parent.main_branch_id||existing.length===1&&existing[0].id!==id)throw Error('SELLER_TURNS_CANDIDATE_BINDING_CHANGED');
   const [candidate,afterList,sourceAfter]=await Promise.all([api(path+'?branch_id='+id),api(path+'/branches?include_archived=true&limit=100'),api(path+'?branch_id='+parent.branch_id)]);
   const branch=listBranch(afterList,id);
-  if(branch.agent_id!==parent.agent_id||candidate.agent_id!==parent.agent_id||candidate.branch_id!==id||candidate.main_branch_id!==parent.main_branch_id||!/^agtvrsn_[A-Za-z0-9]+$/.test(candidate.version_id??'')||candidate.version_id===parent.version_id||!Array.isArray(candidate.phone_numbers)||candidate.phone_numbers.length!==0)throw Error('SELLER_TURNS_CANDIDATE_IDENTITY_CHANGED');
+  if(branch.agent_id!==parent.agent_id)throw Error('SELLER_TURNS_CANDIDATE_BRANCH_AGENT_CHANGED');
+  if(candidate.agent_id!==parent.agent_id)throw Error('SELLER_TURNS_CANDIDATE_AGENT_CHANGED');
+  if(candidate.branch_id!==id)throw Error('SELLER_TURNS_CANDIDATE_BRANCH_CHANGED');
+  if(candidate.main_branch_id!==parent.main_branch_id)throw Error('SELLER_TURNS_CANDIDATE_MAIN_BRANCH_CHANGED');
+  if(!/^agtvrsn_[A-Za-z0-9]+$/.test(candidate.version_id??''))throw Error('SELLER_TURNS_CANDIDATE_VERSION_REQUIRED');
+  if(candidate.version_id===parent.version_id)throw Error('SELLER_TURNS_CANDIDATE_VERSION_UNCHANGED');
+  if((direction==='outbound'||Object.hasOwn(candidate,'phone_numbers'))&&!Array.isArray(candidate.phone_numbers))throw Error('SELLER_TURNS_CANDIDATE_PHONE_METADATA_INVALID');
+  if(direction==='outbound'&&candidate.phone_numbers.length!==0)throw Error('SELLER_TURNS_OUTBOUND_CANDIDATE_PHONE_METADATA_ACTIVE');
   if(!equal(identity(sourceAfter),identity(parent))||!equal(snapshot(sourceAfter),snapshot(parent)))throw Error('SELLER_TURNS_SOURCE_MUTATED');
   if(!equal(snapshot(candidate),expectedSnapshot(parent))||!sellerVoiceTurnConfigMatches(object(candidate.conversation_config.turn)))throw Error('SELLER_TURNS_CANDIDATE_CONFIG_CHANGED');
+  await verifyNoBranchPhones(parent.agent_id,id);
   let details;
   if(direction==='outbound'){
    const nextReview={...review,branchId:id,versionId:candidate.version_id,configHash:sha(JSON.stringify(canonical(snapshot(candidate)))),reviewedAt:receipt.candidate?.review?.reviewedAt??new Date(now).toISOString()};
@@ -120,17 +152,18 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
   if(!Array.isArray(saved)||saved.length!==1||!equal(saved[0].result,result))throw Error('SELLER_TURNS_CANDIDATE_SAVE_UNCONFIRMED');
   return details;
  }
- const out=await stage('outbound',outbound),inside=await stage('inbound',incoming);
- const [configAfter,outAfter,inAfter,workspaceAfter,toolsAfter]=await Promise.all([getConfig(),api(outPath+'?branch_id='+review.branchId),api(inPath+'?branch_id='+c.branch_id),api('/v1/convai/settings'),Promise.all(toolIds.map(id=>api('/v1/convai/tools/'+id)))]);
+ const out=await stage('outbound',outbound,prior?.[0]),inside=await stage('inbound',incoming,prior?.[1]);
+ const [configAfter,outAfter,inAfter,workspaceAfter,toolsAfter]=await Promise.all([getConfig(),api(outPath+'?branch_id='+review.branchId),api(inPath+'?branch_id='+c.branch_id),api('/v1/convai/settings'),Promise.all(toolIds.map(id=>api('/v1/convai/tools/'+id))),verifyNoBranchPhones(out.agentId,out.branchId),verifyNoBranchPhones(inside.agentId,inside.branchId)]);
  if(!equal(configAfter,c)||!equal(identity(outAfter),identity(outbound))||!equal(snapshot(outAfter),snapshot(outbound))||!equal(identity(inAfter),identity(incoming))||!equal(snapshot(inAfter),snapshot(incoming))||!equal(workspaceAfter,workspace)||!equal(toolsAfter,initialTools))throw Error('SELLER_TURNS_FINAL_SOURCE_CHANGED');
- const finalMarker=markerPrefix+'_'+requested+'_verified',verified={state:'verified',bindingHash,release:requested,source,outbound:out,inbound:inside,activated:false};
+ const phoneRoutingVerification='branch-phone-list-v1';
+ const finalMarker=markerPrefix+'_'+release+'_verified',verified={state:'verified',bindingHash,release,verifiedByRelease:requested,phoneRoutingVerification,source,outbound:out,inbound:inside,activated:false};
  const previous=await db('icash_integration_checks?provider=eq.'+finalMarker);
  if(!Array.isArray(previous)||previous.length>1||previous.length===1&&!equal(previous[0].result,verified))throw Error('SELLER_TURNS_FINAL_RECEIPT_CHANGED');
  if(!previous.length){
   const saved=await db('icash_integration_checks','POST',{provider:finalMarker,checked_at:new Date(now).toISOString(),result:verified});
   if(!Array.isArray(saved)||saved.length!==1||!equal(saved[0].result,verified))throw Error('SELLER_TURNS_FINAL_RECEIPT_UNCONFIRMED');
  }
- return {status:'staged',release:requested,providerWrites,outbound:out,inbound:inside,activated:false};
+ return {status:'staged',release,verifiedByRelease:requested,phoneRoutingVerification,providerWrites,outbound:out,inbound:inside,activated:false};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
