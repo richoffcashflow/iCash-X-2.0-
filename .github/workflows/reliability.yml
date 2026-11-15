@@ -48,26 +48,6 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-owner-preflight-step-postgres.mjs
-      - name: Verify original expired tickets under concurrent continuation and cleanup
-        env:
-          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
-        run: node scripts/test-owner-expired-ticket-postgres.mjs
-      - name: Verify expired eligible-count refusals under concurrent cleanup and rollback
-        env:
-          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
-        run: node scripts/test-owner-expired-checking-postgres.mjs
-      - name: Verify original retry deadlines under concurrent continuation and migration
-        env:
-          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
-        run: node scripts/test-owner-expired-deadline-postgres.mjs
-      - name: Verify continued originals through actual concurrent acquisition and issuance
-        env:
-          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
-        run: node scripts/test-continued-owner-scheduling-postgres.mjs
-      - name: Verify actual owner wait admission and unranked eligibility under locks
-        env:
-          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
-        run: node scripts/test-owner-wait-admission-postgres.mjs
       - name: Verify rotating training evidence under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
@@ -112,24 +92,6 @@ jobs:
         run: python3 scripts/test-starter-export-dependency-postgres.py
       - name: Verify one-use owner demo research allowance under concurrent transactions
         run: python3 scripts/test-owner-demo-request-postgres.py
-      - name: Verify delayed contact checks survive concurrent cleanup
-        run: python3 scripts/test-preflight-waiting-postgres.py
-      - name: Verify original list indexing, bounded polling and fair concurrent progress
-        run: python3 scripts/test-owner-preflight-indexing-postgres.py
-      - name: Verify due retry ranking skips unrelated receipt dependencies
-        run: python3 scripts/test-preflight-receipt-ranking-postgres.py
-      - name: Verify due contact list priority, competing issuers and late holds
-        run: python3 scripts/test-owner-preflight-priority-postgres.py
-      - name: Verify production stalled-work boundary and fair continuation selection
-        run: python3 scripts/test-stalled-work-postgres.py
-      - name: Verify pending originals cannot become completed checkpoints
-        run: python3 scripts/test-followup-pending-postgres.py
-      - name: Verify fair due-retry progress and bounded generic-plan history lookup
-        run: python3 scripts/test-owner-retry-priority-postgres.py
-      - name: Verify verified contact cohorts retain their original admission window
-        run: python3 scripts/test-owner-preflight-ready-postgres.py
-      - name: Verify indexed acquisition selection preserves active ticket guards
-        run: python3 scripts/test-acquisition-active-ticket-index-postgres.py
       - name: Verify held discovery preserves concurrent independent progress
         run: python3 scripts/test-discovery-hold-postgres.py
       - name: Verify indexed property evidence preserves all original holds
@@ -264,6 +226,19 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Keep owner fixture resets isolated from the preparation fixture below.
+      owner-postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_PASSWORD: isolated-fixture-only
+          POSTGRES_DB: icash_reliability
+        ports:
+          - 55443:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -280,6 +255,50 @@ jobs:
           PREPARATION_NATIVE_TEST: '1'
           PREPARATION_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node --experimental-strip-types tests/operational-preparation-source-fence.test.mjs
+      # Owner continuation fixtures run serially on their separate local service.
+      # Keep the job/test ceilings unchanged while sharing the native CI workload.
+      - name: Verify original expired tickets under concurrent continuation and cleanup
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-owner-expired-ticket-postgres.mjs
+      - name: Verify expired eligible-count refusals under concurrent cleanup and rollback
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-owner-expired-checking-postgres.mjs
+      - name: Verify original retry deadlines under concurrent continuation and migration
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-owner-expired-deadline-postgres.mjs
+      - name: Verify continued originals through actual concurrent acquisition and issuance
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-continued-owner-scheduling-postgres.mjs
+      - name: Verify actual owner wait admission and unranked eligibility under locks
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-owner-wait-admission-postgres.mjs
+      - name: Verify continued original cohorts through the actual owner handler
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-continued-owner-handler-postgres.mjs
+      - name: Verify delayed contact checks survive concurrent cleanup
+        run: python3 scripts/test-preflight-waiting-postgres.py
+      - name: Verify original list indexing, bounded polling and fair concurrent progress
+        run: python3 scripts/test-owner-preflight-indexing-postgres.py
+      - name: Verify due retry ranking skips unrelated receipt dependencies
+        run: python3 scripts/test-preflight-receipt-ranking-postgres.py
+      - name: Verify due contact list priority, competing issuers and late holds
+        run: python3 scripts/test-owner-preflight-priority-postgres.py
+      - name: Verify production stalled-work boundary and fair continuation selection
+        run: python3 scripts/test-stalled-work-postgres.py
+      - name: Verify pending originals cannot become completed checkpoints
+        run: python3 scripts/test-followup-pending-postgres.py
+      - name: Verify fair due-retry progress and bounded generic-plan history lookup
+        run: python3 scripts/test-owner-retry-priority-postgres.py
+      - name: Verify verified contact cohorts retain their original admission window
+        run: python3 scripts/test-owner-preflight-ready-postgres.py
+      - name: Verify indexed acquisition selection preserves active ticket guards
+        run: python3 scripts/test-acquisition-active-ticket-index-postgres.py
   seller-quota-contention:
     # Separate disposable DB: never share schema resets with other native suites.
     runs-on: ubuntu-24.04

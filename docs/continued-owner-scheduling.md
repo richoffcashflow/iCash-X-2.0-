@@ -57,8 +57,9 @@ first installation is not supported by this migration.
 After the composite release checks, apply the reviewed migrations in order:
 `20261115131828_owner_expired_ticket_deadlines.sql`,
 `20261115134000_continued_owner_scheduling.sql`,
-`20261115143000_owner_wait_admission.sql`, then
-`20261115150210_owner_expired_checking_eligibility.sql`. Use the normal migration-ledger
+`20261115143000_owner_wait_admission.sql`,
+`20261115150210_owner_expired_checking_eligibility.sql`, then
+`20261115152657_continued_owner_cohort_handoff.sql`. Use the normal migration-ledger
 transaction for each and verify each receipt before proceeding. Preserve every existing enabled flag, fair-turn counter,
 activation timestamp, release receipt and original journal. Update only the
 changed scheduler/recorder hashes, the existing step scheduler key and headroom
@@ -71,6 +72,13 @@ the expensive CHECKING request proof. It preserves every predicate, the waiting
 branch, and both complete manifests; only their eligibility-wrapper hash entries
 change. See [CHECKING eligibility performance](owner-expired-checking-eligibility.md)
 for the unchanged latency gate and before/after evidence.
+The fifth migration preserves the entire journaled cohort at the actual handler
+boundary and applies the same handoff check to ordinary and continuation
+selection. Its separate `continued_cohort_hashes` records the two read helpers
+and batch selector; existing exact-count manifests keep their shapes. See
+[original cohort handoff](continued-owner-cohort-handoff.md). A historical
+generic-held ticket or an original cohort containing any ticketed sibling stays
+held; a deadline that has passed is never renewed by a child list.
 
 Tests use disposable synthetic sources and the captured actual acquisition,
 property-selection and issued-decision functions. Required evidence includes the
