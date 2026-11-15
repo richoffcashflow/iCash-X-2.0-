@@ -52,7 +52,11 @@ export async function GET(request:Request){
  const ownerExports=recoverOwnerActiveExports(db).catch(()=>({status:'export_recovery_unavailable'}));
  const ownerExportCapacity=recoverOwnerExportCapacity(db).catch(()=>({status:'capacity_recovery_unavailable'}));
  const ownerPreflightCleanup=cleanupOwnerPreflight(db).catch(()=>({status:'cleanup_unavailable'}));
- const ownerTicketContinuation=continueExpiredOwnerPreflightTicket(db).catch(()=>({status:'continuation_unavailable'}));
+ const ownerTicketContinuation=continueExpiredOwnerPreflightTicket(db).catch(()=>({status:'continuation_unavailable'})).then(result=>{
+  const status=['disabled','idle','busy','held','continued','continuation_unavailable'].includes(result.status)?result.status:'continuation_unavailable';
+  console.info('owner_ticket_continuation',{status});
+  return result;
+ });
  const pruning=pruneUsageLoopObservations(db).catch(()=>undefined);
  const result=await maintenanceBatch({
   capacity:async()=>{await capacity;return new Response(null,{status:capacityOk?200:503});},

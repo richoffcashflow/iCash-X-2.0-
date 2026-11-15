@@ -39,6 +39,61 @@ NOWAIT inside a per-candidate subtransaction, so one locked account can be skipp
 without stopping another eligible account. Existing acquisition pacing and
 provider request budgets own subsequent work.
 
+## Deadline ordering correction
+
+The original selector ordered by the free list's creation time. A newer list can
+belong to a ticket whose original retry deadline is earlier. With one repair per
+minute, that order can leave an otherwise eligible ticket unselected until its
+deadline expires. The offline regression reproduces six missed deadlines in a
+twelve-ticket synthetic cohort, even with every maintenance invocation succeeding.
+The same cohort is feasible at the same cadence when ordered by deadline.
+
+`20261115131828_owner_expired_ticket_deadlines.sql` changes only the candidate
+order: first the earlier of the original ticket retry deadline and the original
+list's 24-hour source boundary, then original creation time and stable IDs. It
+retains the eight-candidate contention scan, one successful repair per invocation,
+every eligibility and financial check, original deadlines and provider pacing.
+This improves which eligible source gets the next slot; it cannot guarantee
+completion before expiry when funding, consent, locks or provider capacity block
+the remaining ordinary work.
+
+The ordered migration requires the exact post-checking-overlay function hash
+`dc82846a6166fefbd3fbe782035f0875` and verifies both complete policy manifests and
+their guard triggers. Under the existing administrative advisory lock and shared
+budget lock, it replaces the function and changes only that function's hash in
+the two manifests. Enabled states, original activation release/time, all other
+manifest entries, original rows and journals remain unchanged. The migration
+ledger records the correction; it does not reactivate either policy. It also
+supports a fully staged, still-disabled installation without enabling it.
+
+The existing release controller must verify the current production predecessor,
+exact canonical release and full/native CI before installing the correction in
+its normal schema-plus-ledger transaction. Fresh readback also checks the
+unchanged function owners, execution grants and private-table RLS, which function
+definition hashes do not cover. All 21 other base-manifest functions remain
+unchanged. The budget lock serializes journal effects; a caller already running
+can retain the old ordering for that invocation. A failed ledger write rolls the
+function and both manifest changes back together. Rollback still disables new
+repairs under the shared budget lock and retains all source journals and caps.
+Do not restore an obsolete function alone or extend deadlines to recover an
+expired original.
+
+Each authorized maintenance cycle also records one `owner_ticket_continuation`
+event containing only an allowlisted status. `busy`, `held`, `idle`, `disabled`
+and `continued` remain normal observed outcomes; `continuation_unavailable`
+retains the existing failure health. The log contains no source identifiers or
+receipts. A continuation event does not establish a new list, customer output or
+account recovery.
+
+Native validation includes real lock contention, separate 31-source waiting and
+checking cohorts, and the existing 3,000-source waiting backlog regression. An
+additional 3,000-source checking diagnostic exposed pre-existing proof-query
+cost sensitivity: both the original FIFO selector and the corrected selector
+can exceed the unchanged eight-second test deadline on a cold fixture. Paired
+successful runs were comparable, but they do not establish a universal latency
+bound. This correction adds no index and raises no database or provider timeout;
+that larger checking-backlog limitation remains distinct from deadline ordering.
+
 ## Release order and verification
 
 November 15 06:35 UTC staging checkpoint: the unchanged first migration
