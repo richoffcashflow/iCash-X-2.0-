@@ -31,6 +31,7 @@ try{
   assert.deepEqual(await policy(),beforePolicy);assert.equal(await v("select to_regprocedure('icash_work_private.continued_owner_preflight_source(uuid,uuid,uuid)')"),null);
  }
  await p.exec('begin;'+migration()+'commit;');
+ await p.exec('begin;'+read('config/owner-wait-admission.sql')+'commit;');
  assert.equal(migration(),read('supabase/migrations/20261115134000_continued_owner_scheduling.sql'));
  assert.equal((await policy()).enabled,beforePolicy.enabled);assert.equal((await policy()).issued,beforePolicy.issued);
  assert.equal((await policy()).release_sha,beforePolicy.release_sha);assert.equal((await policy()).activated_at,beforePolicy.activated_at);

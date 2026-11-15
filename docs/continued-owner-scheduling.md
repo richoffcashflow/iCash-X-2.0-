@@ -35,6 +35,11 @@ steps retain their two-request path. Final list, provider-request, funding,
 source and spend admission are unchanged. A cleaned list is never reused.
 Original uncertain paid work is never replayed.
 
+The connected scheduler also needs the [wait-bookkeeping correction](owner-wait-admission.md).
+Its coarse quota-wait check previously ran before selection and deferred an
+otherwise valid two-request live step. The correction consults the unchanged
+exact phase gate before recording a wait; it does not change phase admission.
+
 Recording a fair turn happens after the original ticket becomes issued. The
 existing issue-token hash still provides exactly-once accounting. When no live
 list supplies the source, the recorder repeats the journal proof for that exact
@@ -49,14 +54,23 @@ receipts, changed published predecessor metadata, changed source functions,
 missing budget rows and missing or disabled immutable source guards. A disabled
 first installation is not supported by this migration.
 
-Apply through the normal migration-ledger transaction after the composite
-release checks. Preserve every existing enabled flag, fair-turn counter,
+After the composite release checks, apply the reviewed migrations in order:
+`20261115131828_owner_expired_ticket_deadlines.sql`,
+`20261115134000_continued_owner_scheduling.sql`,
+`20261115143000_owner_wait_admission.sql`, then
+`20261115150210_owner_expired_checking_eligibility.sql`. Use the normal migration-ledger
+transaction for each and verify each receipt before proceeding. Preserve every existing enabled flag, fair-turn counter,
 activation timestamp, release receipt and original journal. Update only the
 changed scheduler/recorder hashes, the existing step scheduler key and headroom
 scheduler hash. A separate `continued_original_hashes` field records the new
 source, cleaned-original deadline and live-list deadline helpers plus the
 property selector. Existing exact-count activation
 manifests retain their shapes; their earlier activations are not replayed.
+The fourth migration moves the existing current-rate/quoted-cap rejection before
+the expensive CHECKING request proof. It preserves every predicate, the waiting
+branch, and both complete manifests; only their eligibility-wrapper hash entries
+change. See [CHECKING eligibility performance](owner-expired-checking-eligibility.md)
+for the unchanged latency gate and before/after evidence.
 
 Tests use disposable synthetic sources and the captured actual acquisition,
 property-selection and issued-decision functions. Required evidence includes the

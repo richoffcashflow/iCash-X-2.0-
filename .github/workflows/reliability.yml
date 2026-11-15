@@ -64,6 +64,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-continued-owner-scheduling-postgres.mjs
+      - name: Verify actual owner wait admission and unranked eligibility under locks
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-owner-wait-admission-postgres.mjs
       - name: Verify rotating training evidence under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg

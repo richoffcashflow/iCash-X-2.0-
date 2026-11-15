@@ -5,6 +5,7 @@ import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
 import {baseSql,stepSql,continuationSql,checkingSql} from '../tests/helpers/owner-expired-checking-fixture.mjs';
 import {rehearseRecoveryStageUpgrade} from '../tests/helpers/owner-recovery-stage-rehearsal.mjs';
+import {rehearseCheckingEligibility} from '../tests/helpers/owner-expired-checking-eligibility-rehearsal.mjs';
 const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE||'pg');
 const database='icash_expired_checking_check',clients=[];
 const connect=async(name,db=database)=>{
@@ -142,6 +143,18 @@ try{
  try{assert.equal((await promptly(()=>admit(worker,cleanupPause))).status,'pending');}finally{await blocker.query('commit');}
  assert.equal((await admit(worker,cleanupPause)).status,'held');assert.equal((await original(admin,cleanupPause)).cleanup_attempts,0);
 
+ // Upgrade the already activated predecessor before testing the current code's
+ // unchanged latency ceiling. Shared native/PGlite rehearsal also checks the
+ // exact truth table, short circuit, ledger rollback and immutable history.
+ const eligibilityHash=await rehearseCheckingEligibility({exec:sql=>admin.query(sql),query:(sql,args)=>admin.query(sql,args)});
+ // A price-cap change that wins the shared budget lock still prevents repair.
+ const lateCap=await seed(admin,11111);
+ await blocker.query('begin');await blocker.query('select 1 from public.icash_operating_budget where id=1 for update');
+ await blocker.query('update public.icash_automation_tickets set prospecting_quote_cents=1 where id=$1',[lateCap.ticket]);
+ try{assert.equal((await promptly(()=>run(worker))).status,'busy');}finally{await blocker.query('commit');}
+ assert.equal((await run(worker)).status,'idle');
+ assert.equal(await value(admin,'select count(*)::int from icash_research_private.expired_checking_proofs where ticket_id=$1',[lateCap.ticket]),0);
+
  // Permanently excluded historical rows cannot consume the bounded eight-row
  // repair scan or hide a later eligible account behind expired-source history.
  await admin.query("set statement_timeout='30s'");
@@ -157,8 +170,8 @@ try{
  assert.equal((await run(worker)).ticketId,later.ticket);
  assert(performance.now()-scanStart<3000,'1000 paused checking sources must not block a later eligible original');
  // These active sources retain valid original denial/baseline proof and fail
- // only at the restrictive quoted cap after that evidence has been checked.
- // This exercises the costly filter before LIMIT, not only cheap Pause joins.
+ // at the restrictive quoted cap. The optimized wrapper rejects that same cap
+ // before rebuilding the evidence; the selector still filters before LIMIT.
  await admin.query("set statement_timeout='30s'");
  try{await admin.query(`do $$declare c jsonb;n integer;begin
   for n in 14000..14999 loop
@@ -168,7 +181,8 @@ try{
  end$$;`);}finally{await admin.query("set statement_timeout='8s'");}
  const afterActive=await seed(admin,15001),activeStart=performance.now();
  assert.equal((await run(worker)).ticketId,afterActive.ticket);
- assert(performance.now()-activeStart<3000,'1000 active late-rejected checking sources must not hide the later eligible ticket');
+ const activeElapsed=performance.now()-activeStart;
+ assert(activeElapsed<3000,`1000 active late-rejected checking sources must not hide the later eligible ticket (${activeElapsed.toFixed(1)}ms; limit3000ms)`);
  assert.equal(await value(admin,'select count(*)::int from icash_research_private.expired_checking_proofs p join public.icash_automation_tickets t on t.id=p.ticket_id where t.prospecting_quote_cents=1'),0);
 
  // Rollback prevents new repairs while durable source/financial fences remain.
@@ -185,5 +199,6 @@ try{
  assert.equal(await record(worker,rollbackSource,rollbackAdmission.token),true);
  assert.equal((await ordinaryClaim(worker,rollbackSource,changedItems,changedRequest)).status,'create');
  assert.equal(await value(admin,'select count(*)::int from public.icash_operation_spend'),0);
+ console.log(`PASS native CHECKING eligibility ${eligibilityHash}: 1000 active cap-rejected sources reached the eligible original in ${activeElapsed.toFixed(1)}ms (unchanged limit 3000ms).`);
  console.log('PASS native expired checking continuation: exact three-migration atomic rollback, one-time activation, 12 repair/cleanup claimants, quota-before-attempt, lock fairness, late Pause, conflicting unknown request, global cleanup, immutable rollback source fence and no paid/provider work.');
 }finally{await Promise.allSettled(clients.map(async c=>{try{await c.query('rollback');}finally{await c.end();}}));}

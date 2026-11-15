@@ -13,12 +13,14 @@ export async function installContinuedSchedulingFixture(db){
  await exec(baseSql);
  await exec(`create table icash_work_private.dispatch_policy(id integer primary key,enabled boolean);
  insert into icash_work_private.dispatch_policy values(1,true);
- create table icash_work_private.acquisition_export_waits(account_id uuid primary key,waiting_since timestamptz,updated_at timestamptz);
+ create table icash_work_private.acquisition_export_waits(account_id uuid primary key references public.icash_discovery_configs(account_id) on delete cascade,
+  waiting_since timestamptz not null,updated_at timestamptz not null default clock_timestamp());
+ alter table icash_work_private.acquisition_export_waits enable row level security;
+ revoke all on icash_work_private.acquisition_export_waits from public,anon,authenticated;
  create table icash_research_private.acquisition_headroom_policy(id integer primary key,enabled boolean not null default true,
   capacity_hash text not null default '',activated_at timestamptz,release_sha text,acquisition_hash text not null default '',resume_hash text not null default '');
  insert into icash_research_private.acquisition_headroom_policy(id,activated_at,release_sha) values(1,now()-interval '1 day',repeat('a',40));
  create function icash_work_private.warm_seller_due(uuid) returns boolean language sql stable as $$select false$$;
- create function icash_work_private.record_export_wait(uuid,timestamptz) returns boolean language sql as $$select false$$;
  create function public.icash_new_user_request_reserve_eligible(uuid) returns boolean language sql stable as $$select false$$;
  create or replace function icash_research_private.request_reserve_state(timestamptz default now()) returns jsonb language sql stable as $$
   select jsonb_build_object('ordinaryRemaining',ordinary,'reserveRemaining',starter,'pacingActive',true,'ordinaryUnpacedRemaining',1000) from public.fixture_cleanup_policy$$;
@@ -41,6 +43,7 @@ export async function installContinuedSchedulingFixture(db){
  // Captured current production definitions must agree with the source-bound
  // manifests. Installing the fixtures cannot bless a mismatched dependency.
  for(const f of captured)await exec(f.definition);
+ for(const f of JSON.parse(read('tests/fixtures/owner-wait-admission-before.json')))await exec(f.definition);
  await exec('begin;'+read('config/owner-expired-ticket-deadlines.sql')+'commit;');
  for(const fn of ['icash_work_private.activate_preflight_step_capacity','icash_research_private.activate_expired_preflight_ticket_continuation','icash_research_private.activate_expired_checking_continuation']){
   assert.equal(await value(db,`select ${fn}(repeat('b',40))`),true);
@@ -57,8 +60,8 @@ export async function installContinuedSchedulingFixture(db){
  grant select,insert,update,delete on all tables in schema public to service_role;
  grant select on all tables in schema icash_private,icash_research_private,icash_work_private to service_role;
  grant insert,update,delete on icash_work_private.acquisition_export_waits to service_role;
- revoke all on function public.icash_next_acquisition(),icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean) from public,anon,authenticated;
- grant execute on function public.icash_next_acquisition(),icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean) to service_role;`);
+ revoke all on function public.icash_next_acquisition(),icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean),icash_work_private.record_export_wait(uuid,timestamptz) from public,anon,authenticated;
+ grant execute on function public.icash_next_acquisition(),icash_work_private.record_continuation_decision(uuid,uuid,uuid,boolean),icash_work_private.record_export_wait(uuid,timestamptz) to service_role;`);
 }
 
 async function moveFixtureSource(db,c,account){

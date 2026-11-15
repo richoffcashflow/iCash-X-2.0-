@@ -40,6 +40,7 @@ try{
  assert.equal(await definition(admin),beforeDefinition);assert.deepEqual(await policies(admin),beforePolicies);
  assert.equal(await value(admin,"select to_regprocedure('icash_work_private.continued_owner_preflight_source(uuid,uuid,uuid)')"),null);
  await admin.query('begin;'+migration+'commit;');assert.deepEqual(await guardHashes(admin),beforeGuards,'Existing final admission and financial guards remain byte-for-byte unchanged');
+ await admin.query('begin;'+read('config/owner-wait-admission.sql')+'commit;');
  const upgraded=await policies(admin);
  for(const key of ['fair','step','headroom'])for(const field of ['enabled','release_sha','activated_at'])assert.equal(upgraded[key][field],beforePolicies[key][field]);
  await worker.query('set role service_role');
