@@ -186,6 +186,10 @@ jobs:
         run: python3 scripts/test-independent-search-continuation-postgres.py
       - name: Verify financial prefilters and free-only widening under concurrent controls
         run: python3 scripts/test-financial-prequalification-postgres.py
+      - name: Verify empty financial markets under concurrent source and customer controls
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-financial-empty-market-postgres.mjs
       - name: Verify one unanswered follow-up under concurrent queues and late controls
         run: python3 scripts/test-unanswered-seller-followups-postgres.py
       - name: Verify one-use phone checks and immutable receipts under concurrent claims
