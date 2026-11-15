@@ -6,6 +6,17 @@ export function supportLeadImportQuestion(text:string){
  return !!match&&!/\b(?:photos?|pictures?|images?|videos?|contracts?|agreements?|receipts?|notes?|phone numbers?|money|funds|funding|credits?|dollars)\b|\$\s*\d/i.test(match);
 }
 
+/** Continue only an outside-property import question, never a different deal topic. */
+export function supportSpecificPropertyQuestion(messages:{role:string;content:string}[]){
+ const continuation=(text:string)=>/^(?:what if (?:this|that|the) (?:property|house) (?:is eligible|qualifies)|how (?:can|do) i tell (?:the|my) bot about (?:this|that|the) property)[?.!\s]*$/i.test(text.trim());
+ const last=messages.findLastIndex(m=>m.role==='user');
+ if(last<0||!continuation(messages[last].content))return false;
+ const prior=messages.slice(0,last),boundary=prior.findLastIndex(m=>m.role==='operator');
+ const users=prior.slice(boundary+1).filter(m=>m.role==='user').slice(-6);
+ while(users.length&&continuation(users.at(-1)!.content))users.pop();
+ return !!users.length&&supportLeadImportQuestion(users.at(-1)!.content.replace(/\bpropperty\b/gi,'property'));
+}
+
 export function supportMissingSellerContactQuestion(text:string){
  if(/\b(?:my|your|checkout|settings|profile|sign[ -]?in) (?:phone|number|contact)\b/i.test(text))return false;
  // Keep the negative attached to the contact noun. "No agreement ... five

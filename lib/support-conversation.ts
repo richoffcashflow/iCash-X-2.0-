@@ -1,4 +1,5 @@
 import {supportReviewScreenReply} from './support-review-screen.ts';
+import {supportSellerCapabilityReply} from './support-seller-capability.ts';
 import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
 import {supportBillingComplaintReply} from './support-billing-complaints.ts';
 import {supportContactPrivacyReply} from './support-contact-privacy.ts';
@@ -56,6 +57,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&supportAcknowledgment(question))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Got it.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
  const reviewScreen=supportReviewScreenReply(context);if(reviewScreen)return reviewScreen;
+ const sellerCapability=supportSellerCapabilityReply(context);if(sellerCapability)return sellerCapability;
  const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
@@ -226,6 +228,7 @@ async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fet
  if(currentAccessConversation(context.messages).length>0)return fallback;
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);
  if(supportReviewScreenReply(context))return fallback;
+ if(supportSellerCapabilityReply(context))return fallback;
  if(context.kind==='account'&&supportWorkflowReply(context.messages,context.evidence??[]))return fallback;
  if(supportInstructionCorrection(context.messages,context.evidence??[]))return fallback;
  if(supportSimpleProductAnswer(context.messages.filter(m=>m.role==='user').at(-1)?.content??''))return fallback;
