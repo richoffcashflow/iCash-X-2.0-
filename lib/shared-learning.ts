@@ -2,13 +2,17 @@ import {z} from 'zod';
 import {learningHealthSchema,improvementReviewSchema} from './learning-health.ts';
 
 const count=z.number().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const outcomeWindowCosts=z.object({cost_cents:count.int(),effective_cost_cents:count,effective_opted_out:count,costs_complete:z.boolean()});
+const outcomeCosts=z.object({scope:z.literal('property-outcome-costs-v1'),contracts:outcomeWindowCosts,closings:outcomeWindowCosts});
 export const sharedLearningStatSchema=z.object({
  variant:z.string().min(1).max(100),contributors:count.int(),attempts:count.int(),pending:count.int(),positive:count.int(),opted_out:count.int(),
  contract_trials:count.int(),contracts:count.int(),closing_trials:count.int(),closings:count.int(),cost_cents:count.int(),costs_complete:z.boolean(),cost_scope:z.literal('seller-contact-72h-v1').nullable().optional(),updated_at:z.string(),
  effective_attempts:count,effective_pending:count,effective_positive:count,effective_opted_out:count,
  effective_contract_trials:count,effective_contracts:count,effective_closing_trials:count,effective_closings:count,effective_cost_cents:count,
+ outcome_costs:outcomeCosts.nullable().optional(),
 }).refine(s=>s.pending<=s.attempts&&s.positive<=s.attempts-s.pending&&s.opted_out<=s.attempts&&s.contracts<=s.contract_trials&&s.closings<=s.closing_trials
- &&s.effective_pending<=s.effective_attempts&&s.effective_positive<=s.effective_attempts-s.effective_pending&&s.effective_opted_out<=s.effective_attempts&&s.effective_contracts<=s.effective_contract_trials&&s.effective_closings<=s.effective_closing_trials);
+ &&s.effective_pending<=s.effective_attempts&&s.effective_positive<=s.effective_attempts-s.effective_pending&&s.effective_opted_out<=s.effective_attempts&&s.effective_contracts<=s.effective_contract_trials&&s.effective_closings<=s.effective_closing_trials
+ &&(!s.outcome_costs||(s.outcome_costs.contracts.effective_opted_out<=s.effective_contract_trials&&s.outcome_costs.closings.effective_opted_out<=s.effective_closing_trials)));
 export type SharedLearningStat=z.infer<typeof sharedLearningStatSchema>;
 export function sharedLearningStats(raw:unknown):SharedLearningStat[]{
  const parsed=z.array(sharedLearningStatSchema).max(100).safeParse(raw);
@@ -43,7 +47,7 @@ export type LearningDecision={policyVersion:'evidence-v2';status:'explore'|'shar
 export function sharedLearningDecision(raw:unknown,choices:readonly string[],requireContracts=false):LearningDecision{
  const decision:LearningDecision={policyVersion:'evidence-v2',status:'explore',winner:null,objective:'positive',reason:'insufficient_evidence',allowedChoices:[...choices]};
  if(choices.length<1||choices.length>20||new Set(choices).size!==choices.length||choices.some(c=>!c||c.length>100))return {...decision,reason:'invalid_choices',allowedChoices:[]};
- const all=sharedLearningStats(raw),stats=all.filter(s=>choices.includes(s.variant));
+ const all=sharedLearningStats(raw);let stats=all.filter(s=>choices.includes(s.variant));
  if(!all.length)return decision;
  const unsafe=new Set(stats.filter(s=>s.effective_attempts>=20&&s.effective_opted_out>=3&&s.effective_opted_out/s.effective_attempts>0.05).map(s=>s.variant));
  decision.allowedChoices=choices.filter(c=>!unsafe.has(c));
@@ -53,7 +57,11 @@ export function sharedLearningDecision(raw:unknown,choices:readonly string[],req
  if(stats.every(s=>s.effective_closing_trials>=100))decision.objective='closings';
  else if(stats.every(s=>s.effective_contract_trials>=100))decision.objective='contracts';
  if(requireContracts&&decision.objective==='positive')return {...decision,reason:'verified_contracts_required'};
- if(decision.objective!=='positive'&&stats.some(s=>s.cost_scope==='seller-contact-72h-v1'))return {...decision,reason:'outcome_window_costs_incomplete'};
+ if(decision.objective!=='positive'&&stats.some(s=>s.cost_scope==='seller-contact-72h-v1')){
+  const objective=decision.objective;
+  if(!stats.every(s=>s.cost_scope==='seller-contact-72h-v1'&&s.outcome_costs?.[objective].costs_complete))return {...decision,reason:'outcome_window_costs_incomplete'};
+  stats=stats.map(s=>({...s,...s.outcome_costs![objective]}));
+ }
  if(!stats.every(s=>s.costs_complete&&s.effective_cost_cents>0))return {...decision,reason:'cost_evidence_incomplete'};
  const rows=stats.map(s=>{
   const trials=learningTrials(s,decision.objective),wins=s[`effective_${decision.objective}`],bounds=learningBounds(wins,trials);

@@ -206,6 +206,10 @@ jobs:
         run: python3 scripts/test-seller-contact-refresh-postgres.py
       - name: Verify isolated refresh cost holds under concurrent claims and late controls
         run: python3 scripts/test-seller-contact-refresh-isolation-postgres.py
+      - name: Verify prospective title cost ownership under concurrent qualification
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-outcome-title-attribution-postgres.mjs
       - name: Verify one busy historical receipt cannot block independent acquisition
         run: python3 scripts/test-acquisition-settlement-isolation-postgres.py
       - name: Verify bounded acquisition aging across shared export waits
