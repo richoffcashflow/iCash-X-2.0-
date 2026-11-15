@@ -1,3 +1,4 @@
+import {supportRunControlsReply} from './support-run-controls.ts';
 import {supportReviewScreenReply} from './support-review-screen.ts';
 import {supportSellerCapabilityReply} from './support-seller-capability.ts';
 import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
@@ -56,6 +57,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  if(/\b(?:that worked|it worked|working now|fixed now|all fixed|i(?:’|')?m in(?=[.!]|$|\s+now\b)|got in(?=[.!]|$|\s+now\b)|problem solved)\b/i.test(question)&&!/(?:not|isn.t|didn.t|still|but)\b/i.test(question)&&!/[?]|\b(?:how|what|where|when|why|which|also|another|more questions|next question)\b/i.test(question))return result('Glad that worked.','resolved');
  if(previous&&!previous.includes('?')&&!supportAcceptedBotCheck(context.messages)&&supportAcknowledgment(question))return result(/thanks|thank you/i.test(question)?'You’re welcome.':'Got it.',earlierSupportProblem(context)||context.handedOff?'open':'resolved');
  if(/^(?:nvm|never ?mind|forget it)[.! ]*$/i.test(question.trim()))return result('Understood. If you want to pick this up later, you can reply in this conversation.','open');
+ const runControls=supportRunControlsReply(context);if(runControls)return runControls;
  const reviewScreen=supportReviewScreenReply(context);if(reviewScreen)return reviewScreen;
  const sellerCapability=supportSellerCapabilityReply(context);if(sellerCapability)return sellerCapability;
  const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
@@ -227,6 +229,7 @@ async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fet
  if(supportLegacyMigrationReply(context.messages))return fallback;
  if(currentAccessConversation(context.messages).length>0)return fallback;
  const relevantEvidence=supportReplyEvidence(context.messages,context.evidence??[]);
+ if(supportRunControlsReply(context))return fallback;
  if(supportReviewScreenReply(context))return fallback;
  if(supportSellerCapabilityReply(context))return fallback;
  if(context.kind==='account'&&supportWorkflowReply(context.messages,context.evidence??[]))return fallback;

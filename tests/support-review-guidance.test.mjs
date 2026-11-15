@@ -45,3 +45,18 @@ for(const boundary of [{role:'operator',content:'The earlier work is complete. T
  assert.doesNotMatch(r.reply,/work is delayed or missing/);assert.equal(r.status,'open');
 }
 console.log('Passed review follow-up product guidance and topic boundaries.');
+
+// Fictional setup questions after an unresolved handoff answer the current control question.
+const oldRunEnv={...process.env};
+Object.assign(process.env,{ICASH_SUPPORT_AI_ENABLED:"true",OPENAI_API_KEY:"fictional",ICASH_SUPPORT_AI_MODEL:"fictional"});
+let runModelCalls=0;
+try{
+for(const kind of ['account','access'])for(const handedOff of [false,true])for(const q of ['How do I get my bot to run?','How can I get the bot to start?','How do I turn on my bot?']){
+ const r=await replyToSupport({kind,handedOff,allowAI:true,messages:[...history,{role:'operator',content:'The subscription and separate work credits were explained; recovery is unconfirmed.'},user(q)]},async()=>{runModelCalls++;throw new Error('Model calls forbidden for control guidance');});
+ assert.match(r.reply,/Add money to start/);assert.match(r.reply,/Run bot/);assert.match(r.reply,/not.*(?:proof|guarantee)/i);assert.equal(r.status,'open');
+ assert.doesNotMatch(r.reply,/will start|have started|fixed|resolved/i);
+}
+assert.equal(runModelCalls,0);
+}finally{for(const k of Object.keys(process.env))if(!(k in oldRunEnv))delete process.env[k];Object.assign(process.env,oldRunEnv);}
+const {supportRunControlsReply}=await import('../lib/support-run-controls.ts');
+for(const q of ['My bot will not run.','How do I get my bot to run? I paid twice.','How do I get my bot to run a report?','Do not turn on my bot.','Where is the course?','It worked.','How do I turn on my bot voice?','How do I cancel?'])assert.equal(supportRunControlsReply({kind:'account',messages:[...history,user('How do I get my bot to run?'),{role:'operator',content:'Keep the payment review open.'},user(q)]}),null,q);
