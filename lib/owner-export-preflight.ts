@@ -41,17 +41,25 @@ export async function cleanupOwnerPreflight(db:ResearchDb,transport:typeof fetch
  const c=await db<{id:string;token:string;listId:string|number;accountId:string}|null>('rpc/icash_claim_owner_preflight_cleanup','POST',{p_id:id});
  if(!c)return {status:'idle'};if(!listId(c.listId))return {status:'held'};
  let receipt:Receipt={httpStatus:null,raw:null,rawText:null};
+ let persistence:'unknown'|'confirmed'|'held'|'unavailable'='unknown';
+ const recordCleanup=async()=>{
+  try{
+   const saved=await saveOriginal<boolean>(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt});
+   persistence=saved===true?'confirmed':saved===false?'held':'unavailable';
+  }catch(error){persistence='unavailable';throw error;}
+ };
+ const outcome=(confirmed:string)=>({status:persistence==='confirmed'?confirmed:persistence==='held'?'held':'cleanup_unavailable'});
  try{
   await dealMachineRequest(db,'owner_preview',async()=>{
    const r=await transport('https://api.v2.dealmachine.com/v1/lists/'+c.listId,{method:'DELETE',headers:{Authorization:'Bearer '+key},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(5000)});
    receipt={httpStatus:r.status,...await readBody(r,65536)};
-   await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt});
+   await recordCleanup();
    return new Response(receipt.rawText,{status:r.status,headers:r.headers});
   },{accountId:c.accountId,operationKey:'owner-preflight-cleanup:'+c.id});
-  return {status:'checked'};
+  return outcome('checked');
  }catch{
-  await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt}).catch(()=>null);
-  return {status:'pending'};
+  await recordCleanup().catch(()=>null);
+  return outcome('pending');
  }
 }
 type CleanupAttempt={status:'admitted';receiptPersistence:'confirmed'|'unconfirmed'|'unavailable'|'unknown';terminalReceipt:boolean}|{status:'quota_wait'|'pending'|'held'};

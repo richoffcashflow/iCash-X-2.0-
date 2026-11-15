@@ -22,6 +22,22 @@ after a later claim fails. Other recovery services retain their existing
 classification. Exact release
 verification remains required before reporting this change live.
 
+The adjacent original-export and free-list-cleanup services had the same
+failure-reporting gap: failed receipt, artifact or contact saves appeared as
+ordinary holds, and four failed identical cleanup saves appeared as pending.
+Their exact persistence boundaries now report unavailable separately. An explicit
+SQL false remains a domain hold; successful later cleanup acknowledgment restores
+the existing checked/pending outcome. A later false acknowledgment remains held,
+including after a committed write's response was lost. Provider errors and source mismatches remain reconciliation
+holds. The application does not add a read, download, deletion or save retry.
+Actual-service/maintenance cases cover ordinary and atomic original receipts,
+local-artifact-only recovery, each persistence boundary, unchanged source
+evidence, bounded cleanup acknowledgments and independent lanes. The same
+unavailable original-export result also reaches the inline automation route as
+an infrastructure failure, retaining its existing 503/backoff and original held
+ticket without authorizing another export. Generic quota-admission and optional
+request-metric error handling remain outside this patch.
+
 ## November 13 seller conversion follow-through
 
 The [seller interaction review](seller-conversion-followthrough-2026-11-13.md)

@@ -4,6 +4,8 @@ import {activeOwnerColumns,activeOwnerExportRequest,parseOwnerExportCsv,allocate
 import {ownerBatchAudience} from '../lib/owner-batch.ts';
 import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '../lib/owner-enrichment-deferral.ts';
 import {OwnerExportPreflightPendingError} from '../lib/owner-export-preflight.ts';
+import {ProspectingBudgetError} from '../lib/voice-budget-failure.ts';
+import {loadService} from './helpers/simulated-journey-services.mjs';
 const now=new Date().toISOString(),account='00000000-0000-4000-8000-000000000001';
 const owner=id=>({dm_person_id:id,contact_type:'owner',availability:{phones:3}});
 const snapshot=id=>({propertyId:id,propertyType:'house',fetchedAt:now,sellerCostReserveCents:100000,raw:{data:{dm_property_id:id,full_address:'Fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}});
@@ -308,5 +310,32 @@ try{
  };
  await assert.rejects(enrichActiveOwners(boundDb,account,candidates[0],config,250000,async()=>assert.fail('Pending original cannot fetch a fresh preview')),OwnerExportPreflightPendingError);
  assert.equal(originalClaims,1);assert.equal(previews+paid+gets+downloads,0);
+ // Inline recovery after the original admitted export must retain shared
+ // infrastructure failure all the way through the actual automation route.
+ for(const stage of ['rpc/icash_record_owner_export_recovery','rpc/icash_record_owner_export_artifact','rpc/icash_save_owner_active_export'])for(const ack of ['throw','null','false']){
+  reset();let consumed=false;const finishes=[],logs=[],token=account.repeat(2);
+  const failDb=async(path,...args)=>{
+   if(path===stage){if(ack==='throw')throw Error('private save failure');return ack==='false'?false:null;}
+   return db(path,...args);
+  };
+  const routeDb=async(path,_method,p)=>{
+   if(path==='rpc/icash_consume_automation'){if(consumed)return null;consumed=true;return {id:'original-ticket',accountId:account,kind:'contacts',screeningId:candidates[0].screeningId};}
+   if(path==='rpc/icash_finish_owner_enrichment'){finishes.push(p);return true;}
+   assert.fail('Unexpected route mutation '+path);
+  };
+  const route=await loadService('app/api/internal/automation/route.ts',{
+   db:routeDb,NextResponse:{json:Response.json},OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExportPreflightPendingError,ProspectingBudgetError,
+   automationWorkReady:()=>true,newLiveWorkKinds:new Set(),console:{error:(...args)=>logs.push(args)},
+   enrichForAccount:()=>enrichActiveOwners(failDb,account,candidates[0],config,250000,transport),
+  });
+  const request=()=>new Request('https://fixture.invalid/api/internal/automation',{method:'POST',headers:{authorization:'Bearer '+token}});
+  const response=await route.POST(request());
+  assert.equal(response.status,ack==='false'?200:503);assert.equal(response.headers.get('x-icash-automation-outcome'),null);
+  assert.equal(finishes.length,1);assert.equal(finishes[0].p_success,false);assert.equal(paid,1);assert.equal(gets,1);
+  assert.equal(downloads,stage==='rpc/icash_record_owner_export_recovery'?0:1);
+  if(ack!=='false')assert.equal(logs[0][1].reason,'OWNER_EXPORT_RECOVERY_UNAVAILABLE');
+  assert.doesNotMatch(JSON.stringify(logs),/private save failure/);
+  assert.equal((await route.POST(request())).status,401);assert.equal(paid,1);assert.equal(gets,1,'Consumed capability never replays the original provider work');
+ }
 }finally{console.warn=originalWarn;if(originalKey===undefined)delete process.env.DEALMACHINE_API_KEY;else process.env.DEALMACHINE_API_KEY=originalKey;}
 console.log('Owner active export: exact text IDs, partial/shared owners, raw credits, DNC/activity checks, bounded CSV, one POST, quota/concurrency holds and original-only recovery passed. Offline only.');

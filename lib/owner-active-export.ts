@@ -16,6 +16,15 @@ type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const invalid=()=>{throw Error('OWNER_EXPORT_RECONCILIATION_REQUIRED');};
+class OwnerExportPersistenceUnavailable extends Error{}
+// Only original evidence writes use this boundary. Provider/receipt validation
+// failures and explicit SQL refusals retain their existing reconciliation hold.
+async function saveRecoveryEvidence(db:ResearchDb,path:string,payload:unknown){
+ let saved:unknown;
+ try{saved=await db(path,'POST',payload);}catch{throw new OwnerExportPersistenceUnavailable();}
+ if(typeof saved!=='boolean')throw new OwnerExportPersistenceUnavailable();
+ return saved;
+}
 export const activeOwnerColumns=['internal_person_id','person_full_name','person_address_full','phone_1','is_phone_1_dnc','people_phone_1_type_id','phone_2','is_phone_2_dnc','people_phone_2_type_id','phone_3','is_phone_3_dnc','people_phone_3_type_id','email_address_1','email_address_2','email_address_3','has_active_phone_number'];
 export const ownerUsageColumns=[1,2,3].flatMap(i=>[`phone_${i}_usage_2_months_id`,`phone_${i}_usage_12_months_id`]);
 
@@ -141,8 +150,8 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
    ?await finishAdmittedDealMachineRequest(db,saved.quotaRequestId,readOriginal)
    :await dealMachineRequest(db,'owner_preview',readOriginal,{accountId:saved.accountId,operationKey:'owner-export-recovery:'+saved.id});
   const recorded=saved.atomicRecovery===true
-   ?await db<boolean>('rpc/icash_record_owner_export_quota_recovery','POST',{p_batch:saved.id,p_lease:saved.lease,p_request:saved.quotaRequestId,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})
-   :await db<boolean>('rpc/icash_record_owner_export_recovery','POST',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}});
+   ?await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_quota_recovery',{p_batch:saved.id,p_lease:saved.lease,p_request:saved.quotaRequestId,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})
+   :await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_recovery',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}});
   if(recorded!==true)return invalid();
   recovery=object(r.raw);
   const data=object(recovery.data);
@@ -150,7 +159,7 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
   const files=data.download_urls;if(!Array.isArray(files)||files.length!==1)return invalid();
   csv=await downloadOriginal(object(files[0]).url,transport);
   // Save even a malformed CSV privately before interpreting or settling it.
-  if(await db<boolean>('rpc/icash_record_owner_export_artifact','POST',{p_batch:saved.id,p_lease:saved.lease,p_csv:csv})!==true)return invalid();
+  if(await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_artifact',{p_batch:saved.id,p_lease:saved.lease,p_csv:csv})!==true)return invalid();
  }
  const preview=object(saved.preview);
  if(!Array.isArray(preview.data))return invalid();
@@ -164,7 +173,7 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
   return {...item,propertyId,...parsed,ids:bound};
  });
  const results=allocateActiveOwnerExport(saved,csv,audience);
- if(await db<boolean>('rpc/icash_save_owner_active_export','POST',{p_batch:saved.id,p_lease:saved.lease,p_results:results,p_rows:parseOwnerExportCsv(csv)})!==true)return invalid();
+ if(await saveRecoveryEvidence(db,'rpc/icash_save_owner_active_export',{p_batch:saved.id,p_lease:saved.lease,p_results:results,p_rows:parseOwnerExportCsv(csv)})!==true)return invalid();
  return {status:'contacts_saved',batchProperties:results.length};
 }
 /** Maintenance only resumes original GET/download/persistence. Never a POST. */
@@ -182,7 +191,8 @@ export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof f
     ||typeof saved.quotaRequestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.quotaRequestId))return invalid();
   }
   return await recoverClaimedExport(db,saved,transport);
- }catch{
+ }catch(error){
+  if(error instanceof OwnerExportPersistenceUnavailable)return {status:'export_recovery_unavailable'};
   console.warn('owner_active_export_held',{stage:'original_recovery'});return {status:'export_receipt_held'};
  }
 }
@@ -290,6 +300,10 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
   return new Response(rawText,{status:r.status,headers:r.headers});
  });
  const recovered=await recoverOwnerActiveExports(db,transport,batchId);
+ // The same recovery runs inline after a new export. Preserve infrastructure
+ // failure there too, so the automation route retains its normal failed-worker
+ // response instead of treating unavailable persistence as ordinary held work.
+ if(recovered.status==='export_recovery_unavailable')throw Error('OWNER_EXPORT_RECOVERY_UNAVAILABLE');
  // A saved error without an export ID cannot enter original-ID recovery. It
  // remains an unresolved purchase, never ordinary idle work or a retry signal.
  const result=recovered.status==='export_recovery_idle'?{status:'export_receipt_held'}:recovered;
