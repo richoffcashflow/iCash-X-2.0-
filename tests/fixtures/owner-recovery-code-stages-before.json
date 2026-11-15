@@ -1,0 +1,13 @@
+{
+  "observedAt": "2026-11-15T06:35:49.94589Z",
+  "description": "Read-only production constraint and aggregate stage counts; all test row identities and receipts are synthetic.",
+  "definition": "CHECK ((code_stage = ANY (ARRAY['owner_preview_pre_provider_local_rate_limit_v1'::text, 'owner_preview_confirmed_early_cleanup_v1'::text, 'owner_preview_local_record_rejection_v1'::text])))",
+  "md5": "2fa5e4892ed35117f5520875b250bbe2",
+  "validated": true,
+  "noInherit": false,
+  "rowsByStage": {
+    "owner_preview_pre_provider_local_rate_limit_v1": 32,
+    "owner_preview_confirmed_early_cleanup_v1": 50,
+    "owner_preview_local_record_rejection_v1": 4
+  }
+}

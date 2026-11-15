@@ -9,7 +9,14 @@ export async function recoverOwnerExportCapacity(db:ResearchDb,transport:typeof 
  if(automatic)return automatic;
  const claim=await db<{reviewId:string;requestId:string}|null>('rpc/icash_claim_export_capacity_review','POST',{});
  if(!claim)return {status:'capacity_review_idle'};
- let received=false,status='capacity_review_held';
+ let received=false,status='capacity_review_held',persistenceUnavailable=false;
+ const recordReceipt=async(receipt:unknown)=>{
+  try{
+   const result=await db<string>('rpc/icash_record_export_capacity_review','POST',{p_review:claim.reviewId,p_receipt:receipt});
+   if(!['capacity_verified','held'].includes(result))persistenceUnavailable=true;
+   return result;
+  }catch(error){persistenceUnavailable=true;throw error;}
+ };
  try{
   await finishAdmittedDealMachineRequest(db,claim.requestId,async()=>{
    const response=await transport('https://api.v2.dealmachine.com/v1/exports?limit=100&offset=0',{
@@ -21,13 +28,13 @@ export async function recoverOwnerExportCapacity(db:ResearchDb,transport:typeof 
    const rawText=Buffer.concat(chunks).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
    const number=(name:string)=>{const value=response.headers.get(name);return value!==null&&/^\d{1,10}$/.test(value)?Number(value):null;};
    received=true;
-   const result=await db<string>('rpc/icash_record_export_capacity_review','POST',{p_review:claim.reviewId,p_receipt:{httpStatus:response.status,raw,rawText,
-    headers:{minuteRemaining:number('X-RateLimit-Remaining'),dayRemaining:number('X-RateLimit-Day-Remaining')}}});
+   const result=await recordReceipt({httpStatus:response.status,raw,rawText,
+    headers:{minuteRemaining:number('X-RateLimit-Remaining'),dayRemaining:number('X-RateLimit-Day-Remaining')}});
    if(result==='capacity_verified')status='capacity_verified';
    return new Response(rawText,{status:response.status,headers:response.headers});
   });
  }catch{
-  if(!received)await db('rpc/icash_record_export_capacity_review','POST',{p_review:claim.reviewId,p_receipt:{httpStatus:null,raw:null,rawText:'',outcome:'read_unavailable'}}).catch(()=>null);
+  if(!received)await recordReceipt({httpStatus:null,raw:null,rawText:'',outcome:'read_unavailable'}).catch(()=>null);
  }
- return {status};
+ return {status:persistenceUnavailable?'capacity_recovery_unavailable':status};
 }

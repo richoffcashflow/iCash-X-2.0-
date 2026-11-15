@@ -1,5 +1,5 @@
 import {supportLegacyQuestion,supportLegacyStatus} from './support-legacy-migration.ts';
-import {supportLeadImportPolicy,supportLeadImportQuestion,supportMissingSellerContactQuestion} from './support-lead-policy.ts';
+import {supportLeadImportPolicy,supportLeadImportQuestion,supportMissingSellerContactQuestion,supportSpecificPropertyQuestion} from './support-lead-policy.ts';
 import {cashOfferPolicy} from './cash-offer-math.ts';
 import {supportRoleQuestion} from './support-product-guide.ts';
 type Turn={role:string;content:string};
@@ -80,6 +80,7 @@ export function supportProductClarification(messages:Turn[]){
  // matching incidental words such as "send contracts to title" in a recap.
  if(supportRoleQuestion(q))return null;
  if(creditExhaustionQuestion(messages))return {reply:'New paid work cannot start with an empty credit balance, including another call or text to a seller already in a conversation. An earlier payment does not prepay unlimited follow-up. A call or task already started has its own saved status; that does not guarantee the next reply or call can start. Run/Pause and the other work checks still apply. This explains the general rule; your current balance and a particular seller conversation need their own recorded checks.',answered:false};
+ if(supportSpecificPropertyQuestion(messages))return {reply:'Customer accounts cannot add or submit an outside property to the bot. A property’s eligibility alone does not guarantee the bot will find that particular property. The bot researches eligible opportunities automatically; this chat has not added the property or confirmed that it will appear in Your leads.',answered:false};
  // A hypothetical unanswered text is a display question, not proof of a stall.
  // Actual missing history, payment issues and delivery faults need investigation.
  if(/\bif\b/i.test(q)&&/\b(?:seller|owner)\b/i.test(q)&&/\b(?:(?:does not|doesn[’']?t) text(?: the (?:ai|bot))? back|(?:has not|hasn[’']?t) replied|does not reply|doesn[’']?t reply)\b/i.test(q)&&/\bconversation\b/i.test(q)&&/\b(?:blank|empty)\b/i.test(q)&&!/\b(?:payment|charge|billing|refund|cancel|sign[ -]?in|log[ -]?in|code|checkout|missing|disappeared|failed|error|broken|not loading|not working|not sending)\b/i.test(q))return {reply:'No seller reply means no incoming answer is recorded; saved outgoing texts can still appear in the conversation. Open the property under Your leads and review Texts, including the selected contact and message status. A saved outgoing text does not prove delivery or seller interest. If the view is completely blank despite saved messages, that needs a separate check; I haven’t confirmed a display fault or a fix.',answered:false};

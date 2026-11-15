@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 const suites = [
  'seller-intake-start', 'seller-voice-turn-policy', 'stage-seller-voice-turns', 'recording-review-transition', 'seller-call-offer-delivery-replay', 'seller-timing-answer', 'seller-ownership-answer',
  'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
- 'support-current-intent-regressions', 'support-sale-workflow-boundaries',
+ 'support-specific-property', 'support-seller-capability', 'support-empty-review', 'support-current-intent-regressions', 'support-sale-workflow-boundaries',
  'support-contact-privacy',
  'automatic-outreach-bottlenecks',
  'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
@@ -64,7 +64,7 @@ const suites = [
  'seller-submission-status', 'seller-meta', 'seller-meta-database',
  'optin-call-now-route', 'optin-call-now-database',
  'seller-agreement-identity', 'seller-agreement-evidence', 'live-agreement-history', 'live-agreement-route',
- 'seller-payoff', 'offer-loop-route', 'seller-phone-flow',
+ 'seller-payoff', 'seller-payoff-recovery', 'seller-payoff-save-database', 'seller-agreement-calculated-authority', 'offer-loop-route', 'seller-phone-flow',
  'seller-agreement-delivery-status', 'seller-agreement-delivery-preflight',
  'contract-delivery-readiness-database', 'confirmed-contract-delivery',
  'seller-scenario-fine-tuning', 'buyer-intent-context',

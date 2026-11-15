@@ -18,6 +18,7 @@ import {drainResearchExclusions} from '@/lib/research-exclusions';
 import {recoverOwnerActiveExports} from '@/lib/owner-active-export';
 import {recoverOwnerExportCapacity} from '@/lib/owner-export-capacity-recovery';
 import {cleanupOwnerPreflight} from '@/lib/owner-export-preflight';
+import {continueExpiredOwnerPreflightTicket} from '@/lib/owner-expired-preflight-ticket-continuation';
 import {db} from '@/lib/stripe-test';
 import {pruneUsageLoopObservations} from '@/lib/usage-loop-tracking';
 import {GET as outbound} from '@/app/api/billing/outbound/route';
@@ -51,6 +52,11 @@ export async function GET(request:Request){
  const ownerExports=recoverOwnerActiveExports(db).catch(()=>({status:'export_recovery_unavailable'}));
  const ownerExportCapacity=recoverOwnerExportCapacity(db).catch(()=>({status:'capacity_recovery_unavailable'}));
  const ownerPreflightCleanup=cleanupOwnerPreflight(db).catch(()=>({status:'cleanup_unavailable'}));
+ const ownerTicketContinuation=continueExpiredOwnerPreflightTicket(db).catch(()=>({status:'continuation_unavailable'})).then(result=>{
+  const status=['disabled','idle','busy','held','continued','continuation_unavailable'].includes(result.status)?result.status:'continuation_unavailable';
+  console.info('owner_ticket_continuation',{status});
+  return result;
+ });
  const pruning=pruneUsageLoopObservations(db).catch(()=>undefined);
  const result=await maintenanceBatch({
   capacity:async()=>{await capacity;return new Response(null,{status:capacityOk?200:503});},
@@ -59,6 +65,7 @@ export async function GET(request:Request){
   ownerExports:async()=>{const result=await ownerExports;return Response.json(result,{status:result.status==='export_recovery_unavailable'?503:200});},
   ownerExportCapacity:async()=>{const result=await ownerExportCapacity;return Response.json(result,{status:result.status==='capacity_recovery_unavailable'?503:200});},
   ownerPreflightCleanup:async()=>{const result=await ownerPreflightCleanup;return Response.json(result,{status:result.status==='cleanup_unavailable'?503:200});},
+  ownerTicketContinuation:async()=>{const result=await ownerTicketContinuation;return Response.json(result,{status:result.status==='continuation_unavailable'?503:200});},
   senderVolume:async()=>{const result=await retryVolumeDeferredText();return Response.json(result,{status:['messaging_configuration_required','business_number_verification_required','inbound_invitation_not_ready'].includes(result.status)?503:200});},
   textReceipts:async()=>{const result=await recoverTextDeliveryReceipts(db);return Response.json(result,{status:result.errors===0&&['idle','checked'].includes(result.status)?200:503});},
   supportCustomerEmail:async()=>{const result=await processSupportCustomerNotifications({db});return Response.json(result,{status:result.failed===0?200:503});},
@@ -69,5 +76,5 @@ export async function GET(request:Request){
  });
  const monitored=await refreshReliability(db,result.ok);
  await pruning;
- return Response.json({...result,monitored,capacity:await capacity,inventory:await inventory,researchExclusions:await researchExclusions,ownerExports:await ownerExports,ownerExportCapacity:await ownerExportCapacity,ownerPreflightCleanup:await ownerPreflightCleanup},{status:result.ok&&monitored?200:503,headers});
+ return Response.json({...result,monitored,capacity:await capacity,inventory:await inventory,researchExclusions:await researchExclusions,ownerExports:await ownerExports,ownerExportCapacity:await ownerExportCapacity,ownerPreflightCleanup:await ownerPreflightCleanup,ownerTicketContinuation:await ownerTicketContinuation},{status:result.ok&&monitored?200:503,headers});
 }

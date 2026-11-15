@@ -3,7 +3,7 @@ import {calculateAutomaticCallOffer,type CallOfferContext} from './automatic-cal
 import {runScreeningJob} from './screening-job.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 import {signingReadiness} from './signing-policy.ts';
-import {sha} from './required-call-recording.ts';
+import {canonical,sha} from './required-call-recording.ts';
 import {sellerAgreementEvidence,sellerAgreementConfirmationHold} from './seller-agreement-evidence.ts';
 import {sellerAgreementIdentityEvidence,sellerAgreementIdentityHold} from './seller-agreement-identity.ts';
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
@@ -53,12 +53,19 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  const offerContext=await d.db<CallOfferContext|null>('rpc/icash_call_offer_context','POST',{p_hash:hash,p_conversation:i.conversationId});
  const callOffer=offerContext?calculateAutomaticCallOffer(offerContext,offerContext.offerState??{},(d.now??Date.now)()):null;
  const acceptedCallOffer=callOffer?.quoteAllowed&&'contractAllowed' in callOffer&&callOffer.contractAllowed===true&&'status' in callOffer&&['verbally_accepted','pending_agreement'].includes(callOffer.status)&&callOffer.priceCents===i.confirmation.agreedPriceCents;
- if(((!result.offerAuthorized||result.financialCheck.status!=='eligible')&&!acceptedCallOffer)||!result.preliminarySellerCeilingCents)throw Error('updated_property_review_required');
+ // A missing provider repair estimate can be completed by the existing,
+ // source-bound seller repair calculation. Reuse only its exact accepted
+ // price, never a caller-supplied budget or an older prepared agreement.
+ const currentAcceptedCalculation=acceptedCallOffer&&callOffer&&'status' in callOffer&&callOffer.status==='verbally_accepted'&&!existing&&!offerContext?.pendingAgreement
+  &&offerContext?.accountId===scope.accountId&&offerContext.dealId===scope.dealId&&offerContext.screeningId===scope.screeningId&&offerContext.phone===scope.phone
+  &&JSON.stringify(canonical(offerContext.snapshot))===JSON.stringify(canonical(screening.snapshot));
+ const ceilingCents=result.preliminarySellerCeilingCents??(currentAcceptedCalculation?callOffer!.priceCents:null);
+ if(((!result.offerAuthorized||result.financialCheck.status!=='eligible')&&!acceptedCallOffer)||!ceilingCents)throw Error('updated_property_review_required');
  const current=dealTermsSchema.parse(deal.terms);
  const history=await d.history(i.conversationId);
  const identityHold=sellerAgreementIdentityHold(sellerAgreementIdentityEvidence(history,i.confirmation.sellerLegalName));
  if(identityHold)return identityHold;
- const terms=confirmedSellerTerms(current,i.confirmation,{address:result.property.address,principal:identity.principal,legalDescription:result.property.legalDescription??'',ceilingCents:result.preliminarySellerCeilingCents,now:(d.now??Date.now)(),supportedRenegotiation:!!acceptedCallOffer&&!existing});
+ const terms=confirmedSellerTerms(current,i.confirmation,{address:result.property.address,principal:identity.principal,legalDescription:result.property.legalDescription??'',ceilingCents,now:(d.now??Date.now)(),supportedRenegotiation:!!acceptedCallOffer&&!existing});
  const signers=[{name:terms.seller,phone:scope.phone}];
  signingReadiness('purchase',terms,signers,identity.principal,'draft',(d.now??Date.now)());
  if(existing){

@@ -1,0 +1,12 @@
+[
+  {
+    "signature": "public.icash_enrichment_before_provider_quota(p_account uuid)",
+    "hash": "84dd60f566dfc6fc61a88231505d085c",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_enrichment_before_provider_quota(p_account uuid)\n RETURNS uuid\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select public.icash_enrichment_before_prospecting_budget(p_account) from public.icash_discovery_configs c\n join public.icash_operation_rates r on r.id=c.contact_rate_id where c.account_id=p_account\n  and not public.icash_research_waiting_on_outreach(p_account)\n  and public.icash_prospecting_available(p_account)>=public.icash_research_admission_quote(p_account,'owner_enrichment',r.charge_cents);\n$function$\n"
+  },
+  {
+    "signature": "icash_work_private.record_export_wait(p_account uuid, p_due timestamp with time zone)",
+    "hash": "96f6087abd08fd4d233b5f14ee1d8cb9",
+    "definition": "CREATE OR REPLACE FUNCTION icash_work_private.record_export_wait(p_account uuid, p_due timestamp with time zone)\n RETURNS boolean\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin\n -- Called only for an already locked member of the original five-row scan.\n -- Preserve existing eligibility and require a real, funded contact candidate.\n if p_due is null or p_due>now() or not exists(\n  select 1 from public.icash_discovery_configs c where c.account_id=p_account and c.next_run_at=p_due\n   and c.contacts_enabled and c.contact_rate_id is not null)\n  or coalesce(public.icash_owner_active_export_capacity(p_account),'unavailable') not in ('export_busy','quota_wait') then return false;end if;\n if public.icash_enrichment_before_provider_quota(p_account) is null then return false;end if;\n insert into icash_work_private.acquisition_export_waits(account_id,waiting_since)\n  values(p_account,p_due)\n on conflict(account_id) do update set updated_at=clock_timestamp();\n -- The saved original due time supplies aging; polling keeps its old cooldown.\n update public.icash_discovery_configs set next_run_at=now()+interval '60 seconds' where account_id=p_account;\n return true;\nend $function$\n"
+  }
+]

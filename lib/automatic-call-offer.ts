@@ -11,7 +11,7 @@ import {runScreeningJob} from './screening-job.ts';
 import {cashOfferCalculation} from './cash-offer-math.ts';
 import {roundedSellerPrice} from './property-price.ts';
 import {sellerCallFinancialGate} from './equity-screen.ts';
-import {sellerPayoffPosition,type SellerPayoffReport,type SellerPayoffUpdate} from './seller-payoff.ts';
+import {sellerPayoffPosition,type SellerPayoffReport,type SellerPayoffUpdate,type SellerPayoffRecovery} from './seller-payoff.ts';
 import {canonical,object,sha} from './required-call-recording.ts';
 import {sellerOfferQualification,sellerQualificationHold,type SellerQualification} from './seller-offer-qualification.ts';
 
@@ -23,7 +23,7 @@ export const automaticOfferInput=z.discriminatedUnion('action',[
  z.object({action:z.literal('update_repairs'),conversationId,sellerStatement:z.string().trim().min(3).max(1000),repairEstimateCents:cents.nullish().transform(v=>v??undefined)}).strict(),
  z.object({action:z.literal('report_change'),conversationId,sellerStatement:z.string().trim().min(1).max(1000)}).strict(),
 ]);
-export type AutomaticOfferState={proposedPriceCents?:number;listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;snapshotHash?:string};
+export type AutomaticOfferState={proposedPriceCents?:number;listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;acceptanceEvidenceQuoteRevision?:string;snapshotHash?:string};
 export type CallOfferContext={party:'seller'|'buyer'|'unknown';contextPolicy?:string;sellerContractSigned?:boolean;viewingSlots?:unknown;accountId?:string;dealId?:string;screeningId?:string;phone?:string;address?:string;snapshot?:unknown;terms?:unknown;pendingAgreement?:{priceCents:number;closingDate:string}|null;buyer?:{propertyImages?:unknown;latitude?:unknown;longitude?:unknown;sellerPhotos?:unknown;arvCents?:number|null;repairsCents?:number|null;askingPriceCents:number;purchasePriceCents?:number;assignmentFeeCents?:number;closingDate?:string|null;address:string;depositCents?:number|null;viewingSlots?:unknown;reserved?:boolean;titleSelectionStatus?:'not_selected'|'selected'|'needs_confirmation'};offerState?:AutomaticOfferState|null;offerVersion?:number};
 export const blockedOffer=(reason:string,instruction:string)=>({quoteAllowed:false as const,priceCents:null,reason,instruction});
 export const currentCallUnavailableOffer=()=>({...blockedOffer('current_call_required','Current deal details could not be confirmed. Retry get_offer at most once for a technical failure; never keep retrying or guess a price. No agreement, payment, viewing or callback is authorized or scheduled. Say: "I cannot confirm the current deal details. They need team review; no callback has been scheduled." Do not agree when the caller assumes someone will reach out. Do not promise that the team will review, call, text, send or arrange anything. Answer briefly without generic closing questions.'),contractAllowed:false,sent:false,callbackScheduled:false,viewingFollowupRequired:false});
@@ -139,7 +139,7 @@ const financial=sellerCallFinancialGate(base.property.financialScreening,{seller
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>)=>Promise<boolean>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifyRoutineTimingAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>,continuity?:{previousQuoteRevision:string})=>Promise<boolean>;recoverPayoffFacts?:(input:Record<string,unknown>,mortgageCents:number,priceCents:number)=>Promise<SellerPayoffRecovery|null>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifyRoutineTimingAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);
  // The context RPC independently checks the exact capability, bound conversation,
@@ -155,11 +155,30 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
  const qualification=context.pendingAgreement||state.acceptedPriceCents?{ready:true as const}:d.verifyQualification?await d.verifyQualification(i,context):sellerOfferQualification(null);
  if(qualification&&!qualification.ready&&(i.action==='get_offer'||i.action==='accept_offer'))return sellerQualificationHold(qualification);
- if(i.action==='accept_offer'&&!await d.verifyInput(i))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
+ const originalRevision=state.quoteRevision;
+ let recoveredPayoff=false;
+ if(state.acceptanceEvidenceQuoteRevision&&(state.payoffReport?.otherDebtCents!==0||state.factsPending||state.payoffPending||state.conditionPending||state.agreementRevisionRequired))delete state.acceptanceEvidenceQuoteRevision;
+ if(['get_offer','accept_offer'].includes(i.action)&&!context.pendingAgreement&&!state.agreementRevisionRequired&&!state.factsPending&&!state.payoffPending&&!state.conditionPending&&state.snapshotHash===snapshotHash&&state.payoffReport?.mortgageCents!==undefined&&(state.payoffReport.otherDebtCents===undefined||state.payoffReport.otherDebtCents===0&&state.acceptanceEvidenceQuoteRevision)){
+  const recovery=await d.recoverPayoffFacts?.(i,state.payoffReport.mortgageCents,state.quotedPriceCents??0);
+  if(recovery){
+   recoveredPayoff=state.payoffReport.otherDebtCents===undefined;
+   state.payoffReport={...state.payoffReport,...recovery.report};
+   const previousQuoteRevision=state.acceptanceEvidenceQuoteRevision;
+   const accepted=recovery.acceptedAfterReport&&await d.verifyInput({action:'accept_offer',conversationId:i.conversationId,priceCents:state.quotedPriceCents,quoteRevision:originalRevision},previousQuoteRevision?{previousQuoteRevision}:undefined);
+   if(accepted&&originalRevision)state.acceptanceEvidenceQuoteRevision=previousQuoteRevision??originalRevision;
+   else delete state.acceptanceEvidenceQuoteRevision;
+  }else if(state.acceptanceEvidenceQuoteRevision){
+   // Incomplete or later changed debt evidence cannot reuse the prior alias.
+   delete state.acceptanceEvidenceQuoteRevision;state.payoffPending=true;state.factsPending=true;state.acceptanceConditional=true;
+  }
+ }else if(state.snapshotHash!==snapshotHash)delete state.acceptanceEvidenceQuoteRevision;
+ const continuity=state.acceptanceEvidenceQuoteRevision?{previousQuoteRevision:state.acceptanceEvidenceQuoteRevision}:undefined;
+ if(i.action==='accept_offer'&&!await d.verifyInput(i,continuity))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
  if(i.action==='update_repairs'||i.action==='report_change'){
   const actual=await d.resolveStatement?.(i);if(actual)i.sellerStatement=actual;
   if(context.pendingAgreement)state.agreementRevisionRequired=true;
-  const acceptedBeforeUpdate=state.acceptedPriceCents;
+  const acceptedBeforeUpdate=state.acceptedPriceCents,continuityBeforeUpdate=state.acceptanceEvidenceQuoteRevision;
+  delete state.acceptanceEvidenceQuoteRevision;
   const verified=await d.verifyInput(i);state.sellerStatement=verified?i.sellerStatement:'Statement confirmation required';state.acceptedPriceCents=null;
   if(i.action==='report_change'){
    const sellerPrice=verified?await d.verifySellerPrice?.(i):null;
@@ -174,7 +193,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
     // Keep the answer without creating a new changed-facts hold. Every saved
     // hold and pending agreement revision remains. An initial co-owner answer
     // or ordinary timing answer changes no price, so retain saved acceptance.
-    state.acceptedPriceCents=acceptedBeforeUpdate;
+    state.acceptedPriceCents=acceptedBeforeUpdate;state.acceptanceEvidenceQuoteRevision=continuityBeforeUpdate;
    }
    else {
    const update=await d.verifyPayoffFacts?.(i);
@@ -202,6 +221,19 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  const offer=calculateAutomaticCallOffer(context,state,now);
  const contractBlocked=!offer.quoteAllowed||('contractAllowed' in offer&&offer.contractAllowed===false);
  const revision=sha(JSON.stringify(canonical({snapshotHash,payoffReport:state.payoffReport??null,repairs:state.repairEstimateCents??null,conditionPending:!!state.conditionPending,factsPending:!!state.factsPending,payoffPending:!!state.payoffPending,contractBlocked,priceCents:offer.priceCents})));
+ if(!recoveredPayoff&&revision!==originalRevision)delete state.acceptanceEvidenceQuoteRevision;
+ if(i.action==='accept_offer'&&recoveredPayoff&&state.acceptanceEvidenceQuoteRevision&&offer.quoteAllowed&&'contractAllowed' in offer&&offer.contractAllowed===true&&offer.priceCents===i.priceCents&&i.quoteRevision===originalRevision&&context.offerState?.quotedPriceCents===i.priceCents){
+  // The database requires acceptance of an already saved revision. First save
+  // the missing, source-bound debt answer through its ordinary optimistic lock,
+  // then reread/revalidate in the same normal acceptance path. Never accept and
+  // change a revision in one write or continue after a lost save/race.
+  state.contractBlocked=false;state.snapshotHash=snapshotHash;state.quotedPriceCents=offer.priceCents;state.quoteRevision=revision;
+  if(await d.db<boolean>('rpc/icash_save_call_offer','POST',{p_hash:hash,p_conversation:i.conversationId,p_expected_version:context.offerVersion??0,p_expected_snapshot:context.snapshot,p_state:state,p_action:'get_offer'})!==true)return blockedOffer('quote_changed','The property record changed while I checked. Let me get the current calculation.');
+  const refreshed=await readContext();
+  if(!refreshed||sha(JSON.stringify(canonical(refreshed.snapshot)))!==snapshotHash||sha(JSON.stringify(canonical(refreshed.offerState)))!==sha(JSON.stringify(canonical(state))))return blockedOffer('quote_changed','The property record changed while I checked. Let me get the current calculation.');
+  context=refreshed;i.quoteRevision=revision;
+  if(!await d.verifyInput(i,continuity))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
+ }
  if(i.action==='accept_offer'){
   if(!offer.quoteAllowed||offer.party!=='seller'||i.priceCents!==offer.priceCents||i.quoteRevision!==revision||state.quoteRevision!==revision||state.quotedPriceCents!==i.priceCents)return blockedOffer('quote_changed','The saved quote changed. Let me confirm the current amount before we agree to it.');
   state.acceptedPriceCents=i.priceCents;
@@ -213,5 +245,5 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(saved!==true)return blockedOffer('quote_changed','The property record changed while I checked. Let me get the current calculation.');
  // Recording condition/listing/debt answers must not reveal a premature price.
  if(offer.quoteAllowed&&qualification&&!qualification.ready)return {...sellerQualificationHold(qualification),factsSaved:true};
- return {...offer,quoteRevision:revision,...(i.action==='accept_offer'?(contractBlocked?{status:'conditional_accepted',...(state.payoffReport?{instruction:offer.instruction}:conditionalInstruction(i.priceCents,!!state.payoffStatement,true))}:{status:'verbally_accepted',instruction:'Verbal acceptance saved at this exact price. Continue closing date, legal name, owners, inspection preference and prepared terms, then confirm_and_send. This is not a signature.'}):{})};
+ return {...offer,quoteRevision:revision,...(state.acceptanceEvidenceQuoteRevision?{acceptanceEvidenceQuoteRevision:state.acceptanceEvidenceQuoteRevision}:{}),...(i.action==='accept_offer'?(contractBlocked?{status:'conditional_accepted',...(state.payoffReport?{instruction:offer.instruction}:conditionalInstruction(i.priceCents,!!state.payoffStatement,true))}:{status:'verbally_accepted',instruction:'Verbal acceptance saved at this exact price. Continue closing date, legal name, owners, inspection preference and prepared terms, then confirm_and_send. This is not a signature.'}):{})};
 }

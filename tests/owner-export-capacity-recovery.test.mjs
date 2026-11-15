@@ -24,6 +24,6 @@ assert.doesNotMatch(JSON.stringify(await good.run()),/private|secret|fixture/);a
 const quota=fixture({claim:false});assert.equal((await quota.run()).status,'capacity_review_idle');assert.equal(quota.requests.length,0);
 for(const overrides of [{VERCEL_ENV:'preview'},{VERCEL_ENV:undefined},{DEALMACHINE_API_KEY:''}]){const f=fixture();assert.equal((await f.run(overrides)).status,'not_requested');assert.equal(f.requests.length,0);}
 for(const opts of [{timeout:true},{response:new Response('x'.repeat(1048577))},{response:Response.json({error:{message:'private'}},{status:500}),result:'held'},{response:new Response('not json'),result:'held'},{lostSave:true}]){
- const f=fixture(opts);assert.equal((await f.run()).status,'capacity_review_held');assert.equal(f.requests.length,1);assert.equal(f.saved.length,1);await f.run();assert.equal(f.requests.length,1);
+ const f=fixture(opts);assert.equal((await f.run()).status,opts.lostSave?'capacity_recovery_unavailable':'capacity_review_held');assert.equal(f.requests.length,1);assert.equal(f.saved.length,1);await f.run();assert.equal(f.requests.length,1);
 }
 console.log('PASS capacity recovery: one admitted free GET, production-only, no export/download, bounded private receipt, quota wait and no replay after uncertainty.');

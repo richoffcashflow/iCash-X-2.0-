@@ -6,7 +6,7 @@ import {ownerBatchAudience,savePhoneLessOwnerPreviews} from './owner-batch.ts';
 import {previewAudience} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from './owner-enrichment-deferral.ts';
-import {preflightOwnerExport,OwnerExportPreflightPendingError} from './owner-export-preflight.ts';
+import {preflightOwnerExport,cleanupExpiredCheckingOwnerPreflight,OwnerExportPreflightPendingError,OwnerCheckingCleanupPendingError} from './owner-export-preflight.ts';
 
 type Candidate={screeningId:string;snapshot:unknown};
 type Config={contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string;research_version?:number};
@@ -16,6 +16,15 @@ type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const invalid=()=>{throw Error('OWNER_EXPORT_RECONCILIATION_REQUIRED');};
+class OwnerExportPersistenceUnavailable extends Error{}
+// Only original evidence writes use this boundary. Provider/receipt validation
+// failures and explicit SQL refusals retain their existing reconciliation hold.
+async function saveRecoveryEvidence(db:ResearchDb,path:string,payload:unknown){
+ let saved:unknown;
+ try{saved=await db(path,'POST',payload);}catch{throw new OwnerExportPersistenceUnavailable();}
+ if(typeof saved!=='boolean')throw new OwnerExportPersistenceUnavailable();
+ return saved;
+}
 export const activeOwnerColumns=['internal_person_id','person_full_name','person_address_full','phone_1','is_phone_1_dnc','people_phone_1_type_id','phone_2','is_phone_2_dnc','people_phone_2_type_id','phone_3','is_phone_3_dnc','people_phone_3_type_id','email_address_1','email_address_2','email_address_3','has_active_phone_number'];
 export const ownerUsageColumns=[1,2,3].flatMap(i=>[`phone_${i}_usage_2_months_id`,`phone_${i}_usage_12_months_id`]);
 
@@ -141,8 +150,8 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
    ?await finishAdmittedDealMachineRequest(db,saved.quotaRequestId,readOriginal)
    :await dealMachineRequest(db,'owner_preview',readOriginal,{accountId:saved.accountId,operationKey:'owner-export-recovery:'+saved.id});
   const recorded=saved.atomicRecovery===true
-   ?await db<boolean>('rpc/icash_record_owner_export_quota_recovery','POST',{p_batch:saved.id,p_lease:saved.lease,p_request:saved.quotaRequestId,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})
-   :await db<boolean>('rpc/icash_record_owner_export_recovery','POST',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}});
+   ?await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_quota_recovery',{p_batch:saved.id,p_lease:saved.lease,p_request:saved.quotaRequestId,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})
+   :await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_recovery',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}});
   if(recorded!==true)return invalid();
   recovery=object(r.raw);
   const data=object(recovery.data);
@@ -150,7 +159,7 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
   const files=data.download_urls;if(!Array.isArray(files)||files.length!==1)return invalid();
   csv=await downloadOriginal(object(files[0]).url,transport);
   // Save even a malformed CSV privately before interpreting or settling it.
-  if(await db<boolean>('rpc/icash_record_owner_export_artifact','POST',{p_batch:saved.id,p_lease:saved.lease,p_csv:csv})!==true)return invalid();
+  if(await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_artifact',{p_batch:saved.id,p_lease:saved.lease,p_csv:csv})!==true)return invalid();
  }
  const preview=object(saved.preview);
  if(!Array.isArray(preview.data))return invalid();
@@ -164,7 +173,7 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
   return {...item,propertyId,...parsed,ids:bound};
  });
  const results=allocateActiveOwnerExport(saved,csv,audience);
- if(await db<boolean>('rpc/icash_save_owner_active_export','POST',{p_batch:saved.id,p_lease:saved.lease,p_results:results,p_rows:parseOwnerExportCsv(csv)})!==true)return invalid();
+ if(await saveRecoveryEvidence(db,'rpc/icash_save_owner_active_export',{p_batch:saved.id,p_lease:saved.lease,p_results:results,p_rows:parseOwnerExportCsv(csv)})!==true)return invalid();
  return {status:'contacts_saved',batchProperties:results.length};
 }
 /** Maintenance only resumes original GET/download/persistence. Never a POST. */
@@ -182,7 +191,8 @@ export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof f
     ||typeof saved.quotaRequestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.quotaRequestId))return invalid();
   }
   return await recoverClaimedExport(db,saved,transport);
- }catch{
+ }catch(error){
+  if(error instanceof OwnerExportPersistenceUnavailable)return {status:'export_recovery_unavailable'};
   console.warn('owner_active_export_held',{stage:'original_recovery'});return {status:'export_receipt_held'};
  }
 }
@@ -190,8 +200,11 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  if(![c.contact_credit_cap,c.property_credit_micros,quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||c.contact_credit_cap>25||BigInt(c.contact_credit_cap)*BigInt(c.property_credit_micros)>BigInt(quotedDataCostMicros))throw Error('CONTACT_RATE_REQUIRED');
  const capacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{p_account:accountId});
  if(capacity==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
- if(capacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
- if(capacity!=='ready')return {status:'held'};
+ // Two ordinary tokens can finish an exact existing baseline+eligible phase.
+ // This exception never grants a fresh preview, a new list or a paid request.
+ const continuationOnly=capacity==='quota_wait'&&await db<boolean>('rpc/icash_owner_preflight_step_capacity','POST',{p_account:accountId,p_screening:primary.screeningId})===true;
+ if(capacity==='quota_wait'&&!continuationOnly)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(capacity!=='ready'&&!continuationOnly)return {status:'held'};
  let candidates=c.research_version===1||c.research_version===2?await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary.screeningId}):[primary];
  if(!candidates.length||candidates.length>5||!candidates.some(x=>x.screeningId===primary.screeningId)||candidates.some(x=>runScreeningJob(x.snapshot).financialCheck.status!=='eligible'))return {status:'held'};
  const pools=await db<Record<string,string>>('rpc/icash_owner_targeting_pools','POST',{p_account:accountId,p_screenings:candidates.map(x=>x.screeningId)});
@@ -201,14 +214,53 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  // Resume the exact saved free check before fetching its owner preview again.
  // Positive checks still take a fresh property preview and the original final
  // purchase admission below; this only removes reads while the list is pending.
- const pending=await db<{items:unknown[];request:unknown}|null>('rpc/icash_pending_owner_preflight','POST',{
+ const continued=await db<{status:string;items?:unknown[];request?:unknown;preflightId?:string;cleanupRequired?:boolean}|null>('rpc/icash_continued_owner_preflight','POST',{
+  p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
+ if(!continued||!['none','held','bound'].includes(continued.status))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+ if(continued.status==='held')return {status:'held'};
+ if(continued.status==='bound'&&(!Array.isArray(continued.items)||!continued.items.length||!continued.request||typeof continued.request!=='object'))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+ if(continued.cleanupRequired!==undefined&&typeof continued.cleanupRequired!=='boolean')throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+ const checkingCleanup=continued.cleanupRequired===true;
+ let checkingReceiptPersistence:'confirmed'|'unconfirmed'|'unavailable'|'unknown'='unknown';
+ let checkingTerminalReceipt=false;
+ if(checkingCleanup){
+  if(continued.status!=='bound'||typeof continued.preflightId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(continued.preflightId))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+  // This source has an expired baseline and a proven local eligible-count
+  // refusal. Never resume that count or fetch a replacement owner audience.
+  // An uncertain admission acknowledgment is not permission to repeat DELETE.
+  const cleanup=await cleanupExpiredCheckingOwnerPreflight(db,accountId,continued.preflightId,transport);
+  if(cleanup.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  if(cleanup.status==='pending')throw new OwnerCheckingCleanupPendingError(accountId,primary.screeningId,continued.preflightId);
+  if(cleanup.status!=='admitted')throw Error('OWNER_CHECKING_CLEANUP_HELD');
+  checkingReceiptPersistence=cleanup.receiptPersistence;
+  checkingTerminalReceipt=cleanup.terminalReceipt;
+ }
+ const pending=continued.status==='bound'?{items:continued.items!,request:continued.request}:await db<{items:unknown[];request:unknown}|null>('rpc/icash_pending_owner_preflight','POST',{
   p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
  if(pending){
-  const resumed=await preflightOwnerExport(db,accountId,pending.items,pending.request,transport);
+  let resumed:{status:string};
+  try{resumed=await preflightOwnerExport(db,accountId,pending.items,pending.request,transport);}
+  catch(error){if(checkingCleanup)throw Error('OWNER_CHECKING_CLEANUP_CLAIM_UNAVAILABLE');throw error;}
   if(resumed.status==='empty')return {status:'empty',contacts:0};
   if(resumed.status==='pending')throw new OwnerExportPreflightPendingError(accountId,primary.screeningId);
   if(resumed.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  // Only a canonical cleanup receipt can make the ordinary source claim
+  // create a fresh list. A held/disabled result retains the original retry
+  // deadline and cap; it cannot fall through to new previews or paid work.
+  if(checkingCleanup&&!['empty','ready'].includes(resumed.status))throw Error(checkingReceiptPersistence==='confirmed'?'OWNER_CHECKING_CONTINUATION_HELD':checkingReceiptPersistence==='unavailable'?'OWNER_CHECKING_CLEANUP_RECEIPT_UNAVAILABLE':checkingTerminalReceipt?'OWNER_CHECKING_CLEANUP_RECEIPT_UNCONFIRMED':'OWNER_CHECKING_CLEANUP_UNCONFIRMED');
   if(!['disabled','ready'].includes(resumed.status))return {status:'held'};
+ }
+ // A lost/changed two-token source must not fall through to fresh work.
+ if(continuationOnly&&!pending)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(pending){
+  // The original check can consume baseline, eligible and cleanup requests
+  // even when this handler began with ordinary three-token capacity. Recheck
+  // before its next preview/purchase phase; the saved result resumes normally.
+  // This read is not a reservation: final atomic admission remains authoritative.
+  const freshCapacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{p_account:accountId});
+  if(freshCapacity==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
+  if(freshCapacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  if(freshCapacity!=='ready')return {status:'held'};
  }
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
  let preview:unknown,previewRequestId='';
@@ -248,6 +300,10 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
   return new Response(rawText,{status:r.status,headers:r.headers});
  });
  const recovered=await recoverOwnerActiveExports(db,transport,batchId);
+ // The same recovery runs inline after a new export. Preserve infrastructure
+ // failure there too, so the automation route retains its normal failed-worker
+ // response instead of treating unavailable persistence as ordinary held work.
+ if(recovered.status==='export_recovery_unavailable')throw Error('OWNER_EXPORT_RECOVERY_UNAVAILABLE');
  // A saved error without an export ID cannot enter original-ID recovery. It
  // remains an unresolved purchase, never ordinary idle work or a retry signal.
  const result=recovered.status==='export_recovery_idle'?{status:'export_receipt_held'}:recovered;

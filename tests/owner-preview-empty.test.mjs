@@ -96,6 +96,7 @@ try{
   }
   const db=async(path,method,p)=>{
    if(path==='rpc/icash_owner_active_export_capacity')return 'ready';
+   if(path==='rpc/icash_continued_owner_preflight')return {status:'none'};
    if(path==='rpc/icash_pending_owner_preflight')return null;
    if(path==='rpc/icash_owner_targeting_pools')return Object.fromEntries(p.p_screenings.map(id=>[id,'active']));
    if(path==='rpc/icash_owner_batch_candidates'){
