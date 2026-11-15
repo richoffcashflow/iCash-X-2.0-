@@ -9,7 +9,7 @@ select pg_advisory_xact_lock(726341927);
 select 1 from public.icash_operating_budget where id=1 for update;
 
 do $patch$
-declare d text;actual record;new_hash text;
+declare d text;actual record;new_hash text;continuation_before jsonb;step_before jsonb;headroom_before jsonb;
  needle text:='perform 1 from public.icash_operating_budget where id=1 and enabled for update;';
 begin
  if not exists(select 1 from public.icash_operating_budget where id=1) then
@@ -44,6 +44,14 @@ begin
    and acquisition_hash=md5(actual.definition)) then
   raise exception 'Acquisition budget yield activated manifest changed';
  end if;
+ -- Capture under the same row locks so ordinary concurrent issuance cannot
+ -- obscure proof that this migration preserves every non-target policy field.
+ select to_jsonb(p)-'scheduler_hash' into continuation_before
+  from icash_work_private.continuation_policy p where id=1;
+ select to_jsonb(p) #- array['function_hashes','public.icash_next_acquisition()'] into step_before
+  from icash_work_private.preflight_step_policy p where id=1;
+ select to_jsonb(p)-'acquisition_hash' into headroom_before
+  from icash_research_private.acquisition_headroom_policy p where id=1;
  d:=actual.definition;
  if (length(d)-length(replace(d,needle,'')))<>length(needle) then
   raise exception 'Acquisition budget yield lock source changed';
@@ -54,4 +62,12 @@ begin
  update icash_work_private.preflight_step_policy set function_hashes=jsonb_set(function_hashes,
   array['public.icash_next_acquisition()'],to_jsonb(new_hash)) where id=1;
  update icash_research_private.acquisition_headroom_policy set acquisition_hash=new_hash where id=1;
+ if (select to_jsonb(p)-'scheduler_hash' from icash_work_private.continuation_policy p where id=1)
+   is distinct from continuation_before
+  or (select to_jsonb(p) #- array['function_hashes','public.icash_next_acquisition()']
+   from icash_work_private.preflight_step_policy p where id=1) is distinct from step_before
+  or (select to_jsonb(p)-'acquisition_hash' from icash_research_private.acquisition_headroom_policy p where id=1)
+   is distinct from headroom_before then
+  raise exception 'Acquisition budget yield policy preservation failed';
+ end if;
 end $patch$;

@@ -22,6 +22,12 @@ try{
   'grant execute on function public.icash_next_acquisition() to authenticated',
   'alter function public.icash_next_acquisition() security definer',
   "create or replace function public.icash_next_acquisition() returns jsonb language sql as $$select null::jsonb$$",
+  ...[
+   ['icash_work_private.continuation_policy','new.issued:=new.issued+1'],
+   ['icash_work_private.preflight_step_policy',"new.function_hashes:=new.function_hashes||jsonb_build_object('unrelated',repeat('0',32))"],
+   ['icash_research_private.acquisition_headroom_policy',"new.release_sha:=repeat('c',40)"],
+  ].map(([table,change])=>`create function public.fixture_policy_drift() returns trigger language plpgsql as $$begin ${change};return new;end$$;
+   create trigger fixture_policy_drift before update on ${table} for each row execute function public.fixture_policy_drift();`),
  ];
  for(const mutation of rejected){
   await p.exec('begin');await p.exec(mutation);

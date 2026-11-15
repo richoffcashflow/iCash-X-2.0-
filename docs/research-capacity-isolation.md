@@ -56,6 +56,9 @@ The migrations reject unknown predecessor definitions and do not edit historical
 migrations. The second migration updates only the acquisition function hash in
 the existing continuation, preflight-step and headroom manifests. Preserve all
 enabled flags, release receipts, activation times, counters and other hash keys.
+The budget migration snapshots all non-target policy fields under its existing
+row locks and verifies their exact equality after the three hash updates. Any
+unexpected trigger or policy-field change rolls back the migration.
 Verify installed function hashes and unchanged security metadata before enrolling
 the release. There are no provider, environment or customer-configuration changes.
 
