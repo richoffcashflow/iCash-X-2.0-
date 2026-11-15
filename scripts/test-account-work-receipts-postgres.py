@@ -97,12 +97,15 @@ try:
       from icash_owner_contacts where result->'allocation'->>'method'='active-export-used-order-v1';
      analyze;""")
     assert sql('select count(*) from icash_research_private.owner_exports') == '2000'
+    assert sql("set role service_role;select count(*) from icash_owner_contacts c join lateral icash_reliability_private.owner_work_output_v2(c.account_id,c.screening_id,now()) proof on true where c.result->'allocation'->>'method'='active-export-used-order-v1' and proof.batch_id=c.screening_id and proof.completed_at>proof.source_recorded_at") == '2000'
     started = time.monotonic()
-    assert sql('set role service_role;select count(*) from icash_reliability_private.account_work_observations_v2()') == '401'
-    assert time.monotonic()-started < 8, '401-account comparison reader exceeded 8-second native budget'
+    assert sql("set role service_role;select count(*),count(*) filter(where evidence->'enrichment'->>'batchId' is not null) from icash_reliability_private.account_work_observations_v2()") == '401|400'
+    elapsed = time.monotonic()-started
+    assert elapsed < 8, '401-account comparison reader exceeded 8-second native budget'
     # Parameterized generic-plan readers also preserve the late-settlement gap.
     assert sql("set role service_role;set plan_cache_mode=force_generic_plan;prepare receipt_read(uuid) as select last_completed_output_at<now()-interval '23 hours' and last_attempted_outreach_at<now()-interval '23 hours' from icash_reliability_private.account_work_receipts_v2($1,now());execute receipt_read(md5('progress-account-1')::uuid)") == 't'
     print('PASS PostgreSQL17 receipt progress v2: 36 concurrent readers, 401 accounts/80000 cost-only plus 40000 source-bound operations including 2000 canonical active exports, original source regressions, private permissions, unchanged public/financial state and install rollback. Inactive only; no paid providers.')
+    print(f'Full private comparison reader elapsed: {elapsed:.3f}s (8s budget); 2000 canonical proofs and 400 selected active-export outputs verified.')
 finally:
     # Only the database created above by this run; shared fixtures are untouched.
     sql(f'drop database {DATABASE}', 'icash_reliability')
