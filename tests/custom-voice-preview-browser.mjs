@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {makeWorkspaceFixture,fixtureAccount} from './fixtures/workspace-volume.mjs';
+import {installUnavailableLayoutFeed} from './workspace-layout-browser.mjs';
 const audio=readFileSync(new URL('./fixtures/custom-voice-preview.mp3',import.meta.url));
 
 export async function verifyCustomVoicePreview(browser,base,options,name){
  const context=await browser.newContext({...options,ignoreHTTPSErrors:true}),page=await context.newPage();
+ // Reuse the unavailable same-origin GET feed fixture: repeated navigation can
+ // make WebKit report a page error for an abandoned intercepted network read.
+ await context.addInitScript(installUnavailableLayoutFeed);
  page.setDefaultTimeout(15000);
- const errors=[],writes=[];let vip=true,saved=false,posts=0,reads=0,pending=0;
+ const errors=[],writes=[],unexpectedFeedRequests=[];let vip=true,saved=false,posts=0,reads=0,pending=0;
  page.on('pageerror',e=>errors.push(e.message));
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url()),p=url.pathname;
@@ -22,7 +26,7 @@ export async function verifyCustomVoicePreview(browser,base,options,name){
   if(p==='/api/account/custom-voice')return route.fulfill({json:{vip,state:'ready',enabled:false}});
   if(p==='/api/account/walkthrough')return route.fulfill({json:{tour:{state:'completed',step:3},course:null}});
   if(p==='/api/work/activity')return route.fulfill({json:makeWorkspaceFixture({count:0})});
-  if(p==='/api/work/events')return route.continue();
+  if(p==='/api/work/events'){unexpectedFeedRequests.push(p);return route.fulfill({status:500,json:{error:'Feed fixture was bypassed'}});}
   if(p==='/api/funding/status')return route.fulfill({json:{enabled:true,mode:'live',paidCents:0,needsClaim:false,packs:[]}});
   if(p==='/api/billing/membership')return route.fulfill({json:{membership:{state:'active',accessible:true,vip,priceCents:10000,paidThrough:'2027-11-16T05:00:00Z',cancelAtPeriodEnd:false}}});
   if(p==='/api/work/progress')return route.fulfill({json:{progress:null}});
@@ -49,7 +53,8 @@ export async function verifyCustomVoicePreview(browser,base,options,name){
   pending=1;await open();await dialog.getByRole('button',{name:'Play my cloned voice'}).click();await dialog.getByRole('status').filter({hasText:'Preparing your saved'}).waitFor();
   assert(await dialog.getByRole('button',{name:'Preparing your voice'}).isDisabled());await player.waitFor();assert.equal(posts,1,'A concurrent preparation polls read-only status');
   vip=false;await open();assert.equal(await dialog.getByRole('button',{name:'Play my cloned voice'}).count(),0);
-  assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
+  await page.waitForFunction(()=>window.__layoutUnavailableFeedReads>0);
+  assert.deepEqual(unexpectedFeedRequests,[]);assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
   console.log(`PASS ${name}: free clone preview at $0, audio playback/replay, cached reopen, concurrent preparation, VIP visibility, mobile fit and unchanged live voice.`);
  }finally{await context.close();}
 }
