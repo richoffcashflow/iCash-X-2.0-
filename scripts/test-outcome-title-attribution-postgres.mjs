@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
+import {assertDisposablePostgresTarget} from '../tests/helpers/disposable-postgres-target.mjs';
 const require=createRequire(import.meta.url),{Client}=require(process.env.ICASH_PG_MODULE||'pg');
 const cfg={host:'127.0.0.1',port:55443,user:'postgres',password:'isolated-fixture-only',database:'icash_reliability',connectionTimeoutMillis:5000};
 const clients=[],id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -10,12 +11,11 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const value=async(c,sql,args=[])=>Object.values((await c.query(sql,args)).rows[0]??{})[0];
 const connect=async name=>{
  const c=new Client({...cfg,application_name:'outcome-title-'+name});clients.push(c);await c.connect();
+ await assertDisposablePostgresTarget(c);
  await c.query("set statement_timeout='10s';set lock_timeout='8s';set timezone='UTC';");return c;
 };
 try{
  const admin=await connect('admin');
- assert.deepEqual((await admin.query('select current_database() db,current_user username,host(inet_server_addr()) host,inet_server_port() port')).rows[0],
-  {db:'icash_reliability',username:'postgres',host:'127.0.0.1',port:55443},'Only the fixed disposable local target may be reset');
  await admin.query('drop schema if exists icash_learning_private cascade;drop schema public cascade;create schema public;');
  await admin.query(`do $$begin
   if not exists(select 1 from pg_roles where rolname='anon') then create role anon;end if;

@@ -5,6 +5,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {createRequire} from 'node:module';
 import {setupSql,costsSetup,migration as cashMigration} from './helpers/cash-question-learning-fixture.mjs';
 import {sharedLearningDecision,sharedLearningStats} from '../lib/shared-learning.ts';
+import {assertDisposablePostgresTarget} from './helpers/disposable-postgres-target.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const composition="begin;\nset local lock_timeout='5s';\nset local statement_timeout='60s';\nselect pg_advisory_xact_lock(726341927);\nselect 1 from public.icash_operating_budget where id=1 for update;\n"+['outcome-title-cost-attribution','outcome-cost-sources','outcome-window-cost-collector','outcome-window-cost-learning'].map(n=>read('config/'+n+'.sql')).join('\n')+'\ncommit;\n';
 assert.equal(read('supabase/migrations/20261115064518_customer_results_outcome_costs.sql'),composition,'The generated migration is the ordered atomic composition of the tested configs');
@@ -15,6 +16,7 @@ let db;
 if(native){
  const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE||'pg');
  const c=new Client({host:'127.0.0.1',port:55443,user:'postgres',password:'isolated-fixture-only',database:'icash_reliability',connectionTimeoutMillis:5000});await c.connect();
+ try{await assertDisposablePostgresTarget(c);}catch(error){await c.end();throw error;}
  db={query:(s,a=[])=>c.query(s,a),exec:s=>c.query(s),close:()=>c.end()};
  await db.exec("set statement_timeout='45s';set lock_timeout='5s';set jit=off;");
  await db.exec('drop schema if exists public cascade;create schema public;'+['icash_learning_private','icash_learning_policy_private','icash_recorded_reception_private','icash_seller_agreement_private','icash_reception_private','icash_reliability_private','icash_contact_refresh_private','icash_seller_recovery_private','icash_research_private'].map(s=>'drop schema if exists '+s+' cascade;').join(''));

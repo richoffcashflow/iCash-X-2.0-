@@ -3,14 +3,14 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
+import {assertDisposablePostgresTarget} from '../tests/helpers/disposable-postgres-target.mjs';
 const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE||'pg');
 const cfg={host:'127.0.0.1',port:55443,user:'postgres',password:'isolated-fixture-only',database:'icash_reliability',connectionTimeoutMillis:5000};
 const c=new Client({...cfg,application_name:'outcome-cost-scale'});await c.connect();
 const account='00000000-0000-4000-8000-000000000003';
 const value=async(sql,args=[])=>Object.values((await c.query(sql,args)).rows[0]??{})[0];
 try{
- assert.deepEqual((await c.query('select current_database() db,current_user username,host(inet_server_addr()) host,inet_server_port() port')).rows[0],
-  {db:'icash_reliability',username:'postgres',host:'127.0.0.1',port:55443},'Only the fixed disposable local target may be reset');
+ await assertDisposablePostgresTarget(c);
  // Bootstrap the real integration and its full source graph through the native
  // scenario suite, which owns only this same fixed local database.
  process.env.ICASH_OUTCOME_NATIVE='1';

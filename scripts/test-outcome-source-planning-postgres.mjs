@@ -3,12 +3,12 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
+import {assertDisposablePostgresTarget} from '../tests/helpers/disposable-postgres-target.mjs';
 const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE||'pg');
 const c=new Client({host:'127.0.0.1',port:55443,user:'postgres',password:'isolated-fixture-only',database:'icash_reliability',connectionTimeoutMillis:5000});await c.connect();
 const account='00000000-0000-4000-8000-000000000003',revision='00000000-0000-4000-8000-000000000099';
 try{
- assert.deepEqual((await c.query('select current_database() db,current_user username,host(inet_server_addr()) host,inet_server_port() port')).rows[0],
-  {db:'icash_reliability',username:'postgres',host:'127.0.0.1',port:55443},'Only the fixed disposable local target may be reset');
+ await assertDisposablePostgresTarget(c);
  await import('./test-outcome-cost-scale-postgres.mjs');
  assert(!process.exitCode,'The native source and collector fixture must pass before planner measurements');
  await c.query("set statement_timeout='20s';set track_functions='all';set jit=off;");
