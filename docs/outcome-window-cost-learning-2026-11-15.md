@@ -120,3 +120,8 @@ The unchanged source query was independently compared byte-for-byte, and native
 rowsets matched in both directions, including account isolation and null input.
 No paid provider work was used for validation. Exact-release activation and
 ordinary fresh learning receipts are still required.
+
+Migration `20261115070544_outcome_title_reference_indexes` adds leading deal and
+screening foreign-key indexes on both private title-attribution tables. The four
+indexes were independently reviewed and installed under bounded locks without
+changing recorded data, access rules or the disabled learning gate.
