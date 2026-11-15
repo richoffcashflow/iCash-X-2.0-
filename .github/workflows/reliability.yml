@@ -277,6 +277,14 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-owner-wait-admission-postgres.mjs
+      - name: Verify research ignores irrelevant global voice capacity
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-research-capacity-isolation-postgres.mjs
+      - name: Verify acquisition yields budget contention to independent recovery
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-acquisition-budget-yield-postgres.mjs
       - name: Verify continued original cohorts through the actual owner handler
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
