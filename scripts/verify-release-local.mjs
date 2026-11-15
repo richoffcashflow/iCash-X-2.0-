@@ -22,7 +22,7 @@ const suites = [
  'http-response-lifecycle', 'database-response-cleanup', 'deferred-text-recovery', 'external-reliability-monitor',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
  'maintenance-failure-health', 'maintenance-recovery-accounting', 'journey-lane-concurrency', 'recorded-reception-maintenance-health',
- 'scheduler-reliability', 'workflow-stall-isolation', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database', 'unanswered-seller-followups',
+ 'scheduler-reliability', 'workflow-stall-isolation', 'research-capacity-isolation', 'acquisition-budget-yield', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database', 'unanswered-seller-followups',
  'dealmachine-list-quality', 'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',

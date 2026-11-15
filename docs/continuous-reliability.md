@@ -1,5 +1,18 @@
 # Continuous reliability
 
+## November 15 reviewed undialed original
+
+One original call handler has positive recording-bound runtime evidence that it
+failed while acquiring the mandatory dial claim, corroborated by the exact
+deployed source and complete immutable never-claimed history. The
+[reviewed recovery](reviewed-undialed-recording.md) adds an inactive per-original
+proof and finalizer around the existing zero-cost ledger. It preserves historical
+quarantines and tickets, rejects current contrary evidence under fail-fast locks,
+and never retries a provider request. Native PostgreSQL tests cover real credit
+settlement, concurrent finalizers, late claims/receipts and atomic rollback.
+This is a local verified implementation; exact release and private activation
+remain required. One operation does not resolve the separate pending backlog.
+
 ## November 15 export-capacity persistence health
 
 An offline replay through the actual export-capacity services and maintenance
