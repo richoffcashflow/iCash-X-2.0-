@@ -18,6 +18,12 @@ try{
  await pg.exec('begin;'+migration+'commit;');
  assert.equal(await capacity(c),false);assert.equal(await due(c),null,'Disabled install preserves original selection');
  assert.equal((await claim(c)).status,'pending');assert.equal(await issue(),null);
+ await isolated(async()=>{
+  await pg.exec(`create or replace function icash_research_private.owner_preflight_cohort(p_account uuid,p_primary uuid) returns jsonb language plpgsql stable set search_path='' as $$begin raise exception 'DISABLED_SOURCE_READ';end$$;
+   create or replace function icash_research_private.owner_preflight_list_known(p_id uuid,p_complete boolean default false) returns boolean language plpgsql stable set search_path='' as $$begin raise exception 'DISABLED_LIST_READ';end$$;`);
+  assert.equal(await v('select icash_work_private.owner_preflight_two_step_current($1)',[c.preflight]),false,'Disabled policy stops before source/cohort reads even with two tokens');
+  assert.equal(await capacity(c),false,'The deployed read RPC also avoids disabled source work at two tokens');
+ });
  assert.equal(await v("select icash_work_private.activate_preflight_step_capacity('invalid')"),false);
  await isolated(async()=>{
   await pg.exec("update icash_work_private.preflight_step_policy set function_hashes='{}'");
@@ -30,6 +36,10 @@ try{
  assert.equal(await v("select icash_work_private.activate_preflight_step_capacity(repeat('b',40))"),true);
  assert.equal(await v("select icash_work_private.activate_preflight_step_capacity(repeat('b',40))"),false);
  assert.equal(await capacity(c),true);assert(await due(c));
+ await isolated(async()=>{
+  await pg.exec(`create or replace function icash_research_private.owner_preflight_cohort(p_account uuid,p_primary uuid) returns jsonb language plpgsql stable set search_path='' as $$begin raise exception 'ENABLED_SOURCE_READ';end$$;`);
+  await assert.rejects(capacity(c),/ENABLED_SOURCE_READ/,'Enabled policy still performs the original source checks');
+ });
  assert.equal(await v('select icash_enrichment_candidate($1)',[c.account]),c.screening);
  assert.equal(await v('select icash_enrichment_candidate($1)',[ordinary.account]),null,'New owner work still requires three requests');
  const before=await v('select to_jsonb(p) from icash_research_private.owner_export_preflights p where id=$1',[c.preflight]);

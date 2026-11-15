@@ -28,8 +28,12 @@ alter table icash_work_private.preflight_step_policy enable row level security;
 revoke all on icash_work_private.preflight_step_policy from public,anon,authenticated,service_role;
 
 create function icash_work_private.owner_preflight_two_step_current(p_id uuid) returns boolean
-language sql stable security invoker set search_path='' as $$
- select exists(select 1 from icash_research_private.owner_export_preflights p
+language plpgsql stable security invoker set search_path='' as $$
+begin
+ -- A disabled overlay must stop before any original-source reads. SQL AND
+ -- expression ordering does not guarantee this when ordinary capacity is two.
+ if not exists(select 1 from icash_work_private.preflight_step_policy where id=1 and enabled) then return false;end if;
+ return exists(select 1 from icash_research_private.owner_export_preflights p
   join public.icash_accounts a on a.id=p.account_id and not a.bot_paused
   join public.icash_wallets w on w.account_id=p.account_id and w.balance_cents>w.reserved_cents
   where p.id=p_id and p.state='waiting' and p.checked_at is null
@@ -44,8 +48,8 @@ language sql stable security invoker set search_path='' as $$
    and icash_research_private.owner_preflight_list_known(p.id,true)
    and not exists(select 1 from jsonb_array_elements(p.items) item
     where public.icash_owner_enrichment_retry_current(p.account_id,(item->>'screeningId')::uuid) is distinct from true)
-   and p.items=icash_research_private.owner_preflight_cohort(p.account_id,(p.items->0->>'screeningId')::uuid))
-  and exists(select 1 from icash_work_private.preflight_step_policy where id=1 and enabled);
+   and p.items=icash_research_private.owner_preflight_cohort(p.account_id,(p.items->0->>'screeningId')::uuid));
+end;
 $$;
 
 -- No starter allowance: the accountless capacity check uses only the existing

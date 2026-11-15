@@ -35,6 +35,19 @@ receipts and 189 had matching final batches; the remaining previews cannot be
 individually attributed from those metrics alone. They are not all proven
 redundant reads. These observations do not establish account recovery.
 
+A November 15 06:08 UTC original request sequence showed a separate phase
+boundary: a handler began with ordinary capacity, then completed baseline,
+eligible count and list cleanup. It spent another free owner-preview request
+before its paid export was refused locally for quota. The service now rechecks
+normal three-token capacity after every resumed preflight, including handlers
+that began at the ordinary threshold. A saved positive result waits for its
+normal next phase without repeating counts or cleanup. This is a read-only
+prefilter, not a quota reservation; a later concurrent request can still make
+final atomic admission refuse, and no refused or uncertain purchase is replayed.
+The offline service regression reproduces the original wasted preview, confirms
+the original implementation fails, and covers later normal progress, changed
+capacity, unavailable capacity reads and final-admission contention.
+
 Offline tests execute captured production claim, due, cohort, capacity and
 scheduler definitions. They reproduce the two-token wait, verify exact-source
 progress, original IDs/TTL/receipts, account controls, ordinary fairness,

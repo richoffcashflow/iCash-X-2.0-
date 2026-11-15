@@ -153,6 +153,58 @@ try{
   if(!denySecond)assert.deepEqual(providerCounts[1].filters,[{filter_id:'has_active_phone_number',value:true},{filter_id:'has_non_dnc_phone',value:true}]);
   assert.equal(previews+paid,0,'Completed or partially refused original count phase never grants fresh provider work');
  }
+ // Production boundary: ordinary capacity was sufficient before the original
+ // baseline + eligible + cleanup. One more paced token becomes available, but
+ // it can fund only a preview, leaving the paid final admission locally refused.
+ // Preserve that ready source without spending another preview or creating a
+ // paid claim, then continue normally once the same quota permits the phase.
+ reset();let phaseTokens=3,positive=false,cleanupClaimed=false,phaseClaims=0,phaseAdmissions=0;
+ const phaseRequests=[];
+ const depletedDb=async(path,method,p)=>{
+  if(path==='rpc/icash_owner_active_export_capacity')return phaseTokens>=3?'ready':'quota_wait';
+  if(path==='rpc/icash_pending_owner_preflight')return {items:pendingItems,request:pendingRequest};
+  if(path==='rpc/icash_claim_owner_preflight'){
+   phaseClaims++;assert.deepEqual(p.p_items,pendingItems);assert.deepEqual(p.p_request,pendingRequest);
+   return positive?{status:'ready'}:{status:'check',id:'original-preflight',lease:'original-phase',listId:'original-list',ids,mobileOnly:false,nextStep:null};
+  }
+  if(path==='rpc/icash_take_dealmachine_request'){if(phaseTokens===0)return false;phaseTokens--;return true;}
+  if(path==='rpc/icash_record_owner_preflight'){assert.equal(p.p_id,'original-preflight');assert.equal(p.p_lease,'original-phase');positive=p.p_step==='eligible';return positive?'ready':'checking';}
+  if(path==='rpc/icash_claim_owner_preflight_cleanup'){
+   assert.equal(cleanupClaimed,false);cleanupClaimed=true;return {id:'original-preflight',token:'original-cleanup',listId:'original-list',accountId:account};
+  }
+  if(path==='rpc/icash_record_owner_preflight_cleanup'){assert.equal(p.p_id,'original-preflight');assert.equal(p.p_token,'original-cleanup');phaseTokens++;return true;}
+  if(path==='rpc/icash_admit_owner_active_export'){phaseAdmissions++;if(phaseTokens===0)return 'quota_wait';phaseTokens--;}
+  return db(path,method,p);
+ };
+ const depletedTransport=async(url,opts)=>{
+  if(String(url).endsWith('/people/search/count')){phaseRequests.push('count');return Response.json({total_people:ids.length,total_results:ids.length,total_properties:3});}
+  if(String(url).endsWith('/lists/original-list')){assert.equal(opts.method,'DELETE');phaseRequests.push('cleanup');return Response.json({data:{deleted:true}});}
+  return transport(url,opts);
+ };
+ await assert.rejects(enrichActiveOwners(depletedDb,account,candidates[0],config,250000,depletedTransport),OwnerPreviewRateLimitError);
+ assert.deepEqual(phaseRequests,['count','count','cleanup']);assert.equal(positive,true);
+ assert.equal(previews+paid+gets+downloads,0);assert.equal(phaseAdmissions,0);assert.equal(claimed,false);assert.equal(saved,null);
+ phaseTokens=3;
+ assert.equal((await enrichActiveOwners(depletedDb,account,candidates[0],config,250000,depletedTransport)).status,'contacts_saved');
+ assert.deepEqual(phaseRequests,['count','count','cleanup'],'Normal resumed source never repeats its recorded counts or cleanup');
+ assert.equal(phaseClaims,3);assert.equal(phaseAdmissions,1);assert.equal(previews,1);assert.equal(paid,1);
+ // Fresh checks are fail-closed and are only a prefilter. A competing worker
+ // can still take quota after the read; final admission must remain decisive.
+ for(const late of ['export_busy','held','unavailable','final_quota']){
+  reset();preflightStatus='ready';let capacityReads=0,admissions=0;
+  const lateDb=async(path,method,p)=>{
+   if(path==='rpc/icash_owner_active_export_capacity'){
+    capacityReads++;if(capacityReads===1||late==='final_quota')return 'ready';
+    if(late==='unavailable')throw Error('capacity unavailable');return late;
+   }
+   if(path==='rpc/icash_admit_owner_active_export'){admissions++;return 'quota_wait';}
+   return resumeDb(path,method,p);
+  };
+  if(late==='held')assert.equal((await enrichActiveOwners(lateDb,account,candidates[0],config,250000,transport)).status,'held');
+  else await assert.rejects(enrichActiveOwners(lateDb,account,candidates[0],config,250000,transport),late==='unavailable'?/capacity unavailable/:OwnerPreviewRateLimitError);
+  assert.equal(capacityReads,2);assert.equal(previews,late==='final_quota'?1:0);assert.equal(admissions,late==='final_quota'?1:0);
+  assert.equal(paid+gets+downloads,0);assert.equal(claimed,false);assert.equal(saved,null);
+ }
  reset();await assert.rejects(enrichActiveOwners(async(path,...args)=>{if(path==='rpc/icash_pending_owner_preflight')throw Error('database unavailable');return db(path,...args);},account,candidates[0],config,250000,transport),/database unavailable/);
  assert.equal(previews+paid+downloads+gets,0,'A failed saved-check read is not permission to spend another request');
  for(const status of ['empty','held']){reset();preflightStatus=status;assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,status);assert.equal(paid,0);assert.equal(claimed,false,'No wallet admission before preflight');}

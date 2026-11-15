@@ -9,7 +9,7 @@ import {callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPrice
 import {sellerListingEvidence} from '../lib/seller-listing.ts';
 import {sellerRoutineOwnershipAnswer} from '../lib/seller-ownership-answer.ts';
 import {sellerRoutineTimingAnswer} from '../lib/seller-timing-answer.ts';
-import {sellerPayoffEvidence} from '../lib/seller-payoff.ts';
+import {sellerPayoffEvidence,sellerPayoffRecovery} from '../lib/seller-payoff.ts';
 import {sellerAgreementInput} from '../lib/seller-agreement-flow.ts';
 import {sellerAgreementAction,sellerAgreementFailure} from '../lib/seller-agreement-service.ts';
 import {object,sha} from '../lib/required-call-recording.ts';
@@ -37,7 +37,7 @@ const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  instantCallAddress,dispatchTextMessage:()=>assert.fail('Unexpected intake text'),dispatchLiveVoice:()=>assert.fail('Unexpected intake call'),
  liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>assert.fail('The live tool history must work even when a provider GET is stale')}),
- callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,sellerRoutineOwnershipAnswer,sellerRoutineTimingAnswer,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
+ callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerPayoffRecovery,sellerListingEvidence,sellerRoutineOwnershipAnswer,sellerRoutineTimingAnswer,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
  sendForSignatures:async i=>{sends++;assert.equal(i.signers[0].phone,scope.phone);assert.equal(terms.priceCents,expectedPrice);assert.equal(terms.earnestCents,null);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms,recipients:[i.signers[0],{name:'Fixture buyer'}]}];return {id:'envelope',testMode:false};},
  textPendingContract:async(account,id,phone)=>{texts++;assert.deepEqual([account,id,phone],['account','envelope',scope.phone]);return {sent:true,status:'accepted'};},refreshSigning:async()=>({status:'awaiting_counterparty'}),
 });
@@ -124,3 +124,39 @@ assert.equal((await post({action:'confirm_and_send',confirmation:observedConfirm
 assert.equal(sends,1);assert.equal(texts,2);assert.equal(context.offerState.acceptedPriceCents,6800000);
 assert.equal(terms.seller,'Hank Hill');assert.equal(terms.priceCents,6800000);assert.equal(terms.closingDate,observedConfirmation.closingDate);
 console.log('PASS observed natural date and text request through real route, unchanged accepted quote receipts, actual name/ownership answers and one agreement; no provider traffic.');
+
+// November 14 failure: the model saved the $20K mortgage but skipped the
+// report_change for the explicit no-other-debt answer. Keep original tool
+// receipts so the new financial revision cannot erase genuine acceptance.
+for(const skipAcceptance of [false,true]){
+ context.offerState={};context.offerVersion=0;claim=undefined;envelopes=[];sends=0;texts=0;
+ terms={address,buyer:'Fixture buyer',state:'TX'};savedActions.length=0;expectedPrice=8500000;
+ snapshot.raw.data.estimated_value=177000;snapshot.raw.data.estimated_repair_cost=28875;snapshot.raw.data.num_total_active_liens=1;
+ entries=[];
+ const conditional=await post({action:'get_offer'});assert.equal(conditional.contractAllowed,false);
+ entries=[observedReceipt(conditional),{role:'agent',message:'We can offer $85,000 cash, subject to confirming the payoff. What is the current mortgage payoff balance?'},{role:'user',message:'Yeah, so the mortgage payoff is 20K.'}];
+ const mortgage=await post({action:'report_change',sellerStatement:'Yeah, so the mortgage payoff is 20K.'});
+ assert.equal(mortgage.contractAllowed,false);assert.deepEqual(JSON.parse(JSON.stringify(context.offerState.payoffReport)),{mortgageCents:2000000});
+ entries.push(observedReceipt(mortgage),{role:'agent',message:'One moment. Thanks for that. Are there any other loans, liens, unpaid taxes, or HOA balances besides that mortgage?'},{role:'user',message:'No.'},
+  {role:'agent',message:'We can offer $85,000 cash, as is, subject to confirming the payoff. Since you have no other debts, does that offer work?'},{role:'user',message:'Yes.'});
+ if(!skipAcceptance){
+  const before=savedActions.length;
+  const acceptedMissingDebt=await post({action:'accept_offer',priceCents:8500000,quoteRevision:mortgage.quoteRevision});
+  assert.equal(acceptedMissingDebt.status,'verbally_accepted');assert.equal(acceptedMissingDebt.contractAllowed,true);
+  assert.deepEqual(savedActions.slice(before),['get_offer','accept_offer'],'the actual save RPC requires the new revision to be saved before accepting it');
+  assert.notEqual(acceptedMissingDebt.quoteRevision,mortgage.quoteRevision);
+  entries.push(observedReceipt(acceptedMissingDebt));
+ }
+ entries.push({role:'agent',message:'What is your full legal name?'},{role:'user',message:'Jane Seller.'},{role:'agent',message:'Are you the only owner and decision maker?'},{role:'user',message:'Yes, just me.'},
+  {role:'agent',message:'The purchase price is $85,000 cash, closing 30 days from today, and you are okay with inspection access. May I text the agreement?'},{role:'user',message:'Yes.'});
+ const failedCallConfirmation={...confirmation,agreedPriceCents:8500000};
+ const actualMissingTerms=await post({action:'confirm_and_send',confirmation:failedCallConfirmation});
+ assert.equal(actualMissingTerms.reason,'terms_confirmation_required');assert.equal(sends,0);assert.equal(texts,0);
+ assert.match(actualMissingTerms.nextQuestion,/10-day inspection period/);assert.match(actualMissingTerms.nextQuestion,/may I text/);
+ assert.deepEqual(JSON.parse(JSON.stringify(context.offerState.payoffReport)),{mortgageCents:2000000,otherDebtCents:0});
+ entries.push({role:'agent',message:actualMissingTerms.nextQuestion},{role:'user',message:'Yes, please text the agreement.'});
+ assert.equal((await post({action:'confirm_and_send',confirmation:failedCallConfirmation})).sent,true);
+ assert.equal((await post({action:'confirm_and_send',confirmation:failedCallConfirmation})).sent,true);
+ assert.equal(sends,1);assert.equal(terms.priceCents,8500000);assert.equal(snapshot.raw.data.num_total_active_liens,1);
+}
+console.log('PASS omitted debt-report and omitted acceptance replay through real route, original/new quote receipts, specific missing terms, and exactly one simulated agreement.');

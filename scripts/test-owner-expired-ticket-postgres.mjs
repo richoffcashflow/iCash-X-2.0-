@@ -78,6 +78,20 @@ try{
  const last=await seed(admin,10201),start=performance.now();
  assert.equal((await run(worker)).ticketId,last.ticket);
  assert(performance.now()-start<3000,'2000 blocked original sources must fit the bounded collection window');
+ // Active sources also reach the expensive original-source proof before the
+ // final restrictive quote rejects them. Cheap Pause filtering alone does not
+ // demonstrate bounded progress past this near-eligible backlog.
+ await admin.query("set statement_timeout='30s'");
+ try{await admin.query(`do $$declare c jsonb;n integer;begin
+  for n in 14000..14999 loop
+   c:=public.fixture_expired_ticket_seed(n);
+   update public.icash_automation_tickets set prospecting_quote_cents=1 where id=(c->>'ticket')::uuid;
+  end loop;
+ end$$;`);}finally{await admin.query("set statement_timeout='8s'");}
+ const afterActive=await seed(admin,15001),activeStart=performance.now();
+ assert.equal((await run(worker)).ticketId,afterActive.ticket);
+ assert(performance.now()-activeStart<3000,'1000 active late-rejected original sources must not hide the later eligible ticket');
+ assert.equal(await value(admin,'select count(*)::int from icash_research_private.expired_preflight_ticket_continuations c join public.icash_automation_tickets t on t.id=c.ticket_id where t.prospecting_quote_cents=1'),0);
  // Policy rollback serializes before any new repair and retains all journals.
  const disabled=await seed(admin,10202),count=await value(admin,'select count(*)::int from icash_research_private.expired_preflight_ticket_continuations');
  await admin.query("begin;select 1 from icash_operating_budget where id=1 for update;update icash_research_private.expired_preflight_ticket_policy set enabled=false where id=1;commit;");

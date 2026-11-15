@@ -6,7 +6,7 @@ import {ownerBatchAudience,savePhoneLessOwnerPreviews} from './owner-batch.ts';
 import {previewAudience} from './owner-enrichment.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from './owner-enrichment-deferral.ts';
-import {preflightOwnerExport,OwnerExportPreflightPendingError} from './owner-export-preflight.ts';
+import {preflightOwnerExport,cleanupExpiredCheckingOwnerPreflight,OwnerExportPreflightPendingError,OwnerCheckingCleanupPendingError} from './owner-export-preflight.ts';
 
 type Candidate={screeningId:string;snapshot:unknown};
 type Config={contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string;research_version?:number};
@@ -204,24 +204,49 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  // Resume the exact saved free check before fetching its owner preview again.
  // Positive checks still take a fresh property preview and the original final
  // purchase admission below; this only removes reads while the list is pending.
- const continued=await db<{status:string;items?:unknown[];request?:unknown}|null>('rpc/icash_continued_owner_preflight','POST',{
+ const continued=await db<{status:string;items?:unknown[];request?:unknown;preflightId?:string;cleanupRequired?:boolean}|null>('rpc/icash_continued_owner_preflight','POST',{
   p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
  if(!continued||!['none','held','bound'].includes(continued.status))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
  if(continued.status==='held')return {status:'held'};
  if(continued.status==='bound'&&(!Array.isArray(continued.items)||!continued.items.length||!continued.request||typeof continued.request!=='object'))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+ if(continued.cleanupRequired!==undefined&&typeof continued.cleanupRequired!=='boolean')throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+ const checkingCleanup=continued.cleanupRequired===true;
+ let checkingReceiptPersistence:'confirmed'|'unconfirmed'|'unavailable'|'unknown'='unknown';
+ let checkingTerminalReceipt=false;
+ if(checkingCleanup){
+  if(continued.status!=='bound'||typeof continued.preflightId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(continued.preflightId))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+  // This source has an expired baseline and a proven local eligible-count
+  // refusal. Never resume that count or fetch a replacement owner audience.
+  // An uncertain admission acknowledgment is not permission to repeat DELETE.
+  const cleanup=await cleanupExpiredCheckingOwnerPreflight(db,accountId,continued.preflightId,transport);
+  if(cleanup.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  if(cleanup.status==='pending')throw new OwnerCheckingCleanupPendingError(accountId,primary.screeningId,continued.preflightId);
+  if(cleanup.status!=='admitted')throw Error('OWNER_CHECKING_CLEANUP_HELD');
+  checkingReceiptPersistence=cleanup.receiptPersistence;
+  checkingTerminalReceipt=cleanup.terminalReceipt;
+ }
  const pending=continued.status==='bound'?{items:continued.items!,request:continued.request}:await db<{items:unknown[];request:unknown}|null>('rpc/icash_pending_owner_preflight','POST',{
   p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
  if(pending){
-  const resumed=await preflightOwnerExport(db,accountId,pending.items,pending.request,transport);
+  let resumed:{status:string};
+  try{resumed=await preflightOwnerExport(db,accountId,pending.items,pending.request,transport);}
+  catch(error){if(checkingCleanup)throw Error('OWNER_CHECKING_CLEANUP_CLAIM_UNAVAILABLE');throw error;}
   if(resumed.status==='empty')return {status:'empty',contacts:0};
   if(resumed.status==='pending')throw new OwnerExportPreflightPendingError(accountId,primary.screeningId);
   if(resumed.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  // Only a canonical cleanup receipt can make the ordinary source claim
+  // create a fresh list. A held/disabled result retains the original retry
+  // deadline and cap; it cannot fall through to new previews or paid work.
+  if(checkingCleanup&&!['empty','ready'].includes(resumed.status))throw Error(checkingReceiptPersistence==='confirmed'?'OWNER_CHECKING_CONTINUATION_HELD':checkingReceiptPersistence==='unavailable'?'OWNER_CHECKING_CLEANUP_RECEIPT_UNAVAILABLE':checkingTerminalReceipt?'OWNER_CHECKING_CLEANUP_RECEIPT_UNCONFIRMED':'OWNER_CHECKING_CLEANUP_UNCONFIRMED');
   if(!['disabled','ready'].includes(resumed.status))return {status:'held'};
  }
- if(continuationOnly){
-  // A lost/changed source must not fall through to a fresh provider preview.
-  // Once counts finish, the next phase still needs ordinary three-token capacity.
-  if(!pending)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ // A lost/changed two-token source must not fall through to fresh work.
+ if(continuationOnly&&!pending)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(pending){
+  // The original check can consume baseline, eligible and cleanup requests
+  // even when this handler began with ordinary three-token capacity. Recheck
+  // before its next preview/purchase phase; the saved result resumes normally.
+  // This read is not a reservation: final atomic admission remains authoritative.
   const freshCapacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{p_account:accountId});
   if(freshCapacity==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
   if(freshCapacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);

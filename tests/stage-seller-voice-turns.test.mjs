@@ -27,6 +27,10 @@ function fixture(options={}){
   [contractId,{id:contractId,tool_config:structuredClone(automaticOfferToolConfig)}],
   [inStopId,{id:inStopId,tool_config:{type:'webhook',name:'icash_stop_reception_recording',api_schema:{url:recordedReceptionUrl+'/stop',method:'POST',request_headers:{Authorization:{variable_name:'secret__icash_reception_stop_token'}},request_body_schema:{type:'object',required:['recordingId'],properties:{recordingId:{type:'string',dynamic_variable:'icash_reception_recording_id'}}}}}}],
  ]);
+ for(const tool of tools.values()){
+  tool.access_info={is_creator:true,role:'admin'};tool.response_mocks=[];
+  if(!options.omitUsageStats)tool.usage_stats={avg_latency_secs:1.25,total_calls:10};
+ }
  const outbound={agent_id:outTarget.agentId,branch_id:'agtbrch_outsource',version_id:'agtvrsn_outsource',main_branch_id:'agtbrch_outmain',phone_numbers:[],conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},turn:structuredClone(turn),agent:{first_message:'fixture',prompt:{prompt:'PRIVATE_OUTBOUND_PROMPT',max_tokens:150,tool_ids:[outTarget.callbackToolId,outTarget.handoffToolId,outTarget.stopToolId,contractId]}}},platform_settings:{...structuredClone(platform),guardrails:automaticOfferGuardrails()}};
  const c={id:'11111111-1111-4111-8111-111111111111',enabled:true,callback_template_id:null,account_id:receptionTarget.accountId,owner_user_id:receptionTarget.ownerUserId,called_number:receptionTarget.calledNumber,agent_id:receptionTarget.agentId,call_profile:'normal',entry_policy:'direct_recorded_v1',branch_id:'agtbrch_insource',version_id:'agtvrsn_insource',reviewed_version_id:'agtvrsn_insource',context_policy:'automatic_offer_v11',context_policy_hash:isolatedBuyerReceptionPolicyHash,context_approval_reference:'Synthetic reviewed source only',stop_tool_id:inStopId,agreement_tool_id:contractId,max_duration_seconds:600,config_hash:'',reviewed_until:'9999-12-31T23:59:59Z'};
  const incoming={agent_id:c.agent_id,branch_id:c.branch_id,version_id:c.reviewed_version_id,main_branch_id:'agtbrch_inmain',phone_numbers:[],conversation_config:{asr:{user_input_audio_format:'ulaw_8000'},tts:{agent_output_audio_format:'ulaw_8000'},conversation:{max_duration_seconds:600},turn:structuredClone(turn),agent:{first_message:'{{icash_property_greeting}}',prompt:{prompt:buyerRolePrompt+directRecordedInstructions,max_tokens:150,tool_ids:[inStopId,contractId],tools:[],knowledge_base:[]}}},platform_settings:structuredClone(platform)};
@@ -39,14 +43,14 @@ function fixture(options={}){
  const review={enabled:true,offerPolicy:'automatic_offer_v9',agentId:outbound.agent_id,branchId:outbound.branch_id,versionId:outbound.version_id,configHash:hash(outbound),fromPhone:'+12125550100',providerAccountSid:sid,stopToolId:outTarget.stopToolId,contractToolId:contractId,toolIds:outbound.conversation_config.agent.prompt.tool_ids,approvedHoldCents:977,retentionDays:30,maxTotalSeconds:600,policyVersion:'required-audio-30d-speech-v1',reviewedAt:new Date(now-10000).toISOString(),reviewedUntil:'9999-12-31T23:59:59Z'};
  const source={outbound:{agentId:review.agentId,branchId:review.branchId,versionId:review.versionId,configHash:review.configHash,contextPolicy:review.offerPolicy},inbound:{configId:c.id,agentId:c.agent_id,branchId:c.branch_id,versionId:c.reviewed_version_id,configHash:c.config_hash,contextPolicy:c.context_policy}};
  const env={VERCEL:'1',VERCEL_ENV:'production',VERCEL_GIT_COMMIT_SHA:commit,VERCEL_GIT_COMMIT_REF:'main',VERCEL_GIT_REPO_OWNER:'richoffcashflow',VERCEL_GIT_REPO_SLUG:'iCash-X-2.0-',VERCEL_GIT_PROVIDER:'github',ICASH_SELLER_TURN_STAGE_COMMIT:commit,ICASH_SELLER_TURN_SOURCE_JSON:JSON.stringify(source),RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify(review),TWILIO_ACCOUNT_SID:sid,SUPABASE_URL:'https://ofjbbpwugyjfxbhqfguh.supabase.co',SUPABASE_SECRET_KEY:'SYNTHETIC_DB_SECRET',ELEVENLABS_API_KEY:'SYNTHETIC_PROVIDER_SECRET'};
- const agents=new Map([[outbound.branch_id,outbound],[incoming.branch_id,incoming]]),markers=new Map(),calls=[],routingReads=new Map();
- let creationCount=0,claimCount=0;
+ const agents=new Map([[outbound.branch_id,outbound],[incoming.branch_id,incoming]]),markers=new Map(),calls=[],routingReads=new Map(),toolReads=new Map();
+ let creationCount=0,claimCount=0,configReads=0;
  const response=data=>Response.json(structuredClone(data));
  async function handle(url,init){
   const u=new URL(url),method=init.method??'GET',body=init.body?JSON.parse(init.body):undefined;calls.push({url,method,body});
   assert.equal(init.redirect,'error');assert.equal(init.cache,'no-store');
   if(u.hostname==='ofjbbpwugyjfxbhqfguh.supabase.co'){
-   if(u.pathname.endsWith('/rpc/icash_get_recorded_reception_config'))return response(c);
+   if(u.pathname.endsWith('/rpc/icash_get_recorded_reception_config')){configReads++;const current=structuredClone(c);if(configReads%2===0)options.mutateFinalConfig?.(current);return response(current);}
    assert(u.pathname.endsWith('/icash_integration_checks'),'No active database config writes');
    const marker=u.searchParams.get('provider')?.slice(3);
    if(method==='GET')return response(markers.has(marker)?[markers.get(marker)]:[]);
@@ -67,8 +71,11 @@ function fixture(options={}){
    const read=(routingReads.get(branchId)??0)+1;routingReads.set(branchId,read);
    return response(options.routeResponse?options.routeResponse({agentId,branchId,read}):{phone_numbers:[],has_more:false,next_cursor:null});
   }
-  if(u.pathname==='/v1/convai/settings')return response({webhooks:{post_call_webhook_id:null}});
-  if(u.pathname.startsWith('/v1/convai/tools/'))return response(tools.get(u.pathname.split('/').at(-1)));
+  if(u.pathname==='/v1/convai/settings'){const workspace={webhooks:{post_call_webhook_id:null}};if(configReads%2===0)options.mutateFinalWorkspace?.(workspace);return response(workspace);}
+  if(u.pathname.startsWith('/v1/convai/tools/')){
+   const toolId=u.pathname.split('/').at(-1),tool=structuredClone(tools.get(toolId)),read=(toolReads.get(toolId)??0)+1;toolReads.set(toolId,read);
+   options.mutateToolRead?.(tool,{toolId,read,final:configReads%2===0});return response(tool);
+  }
   const id=u.pathname.split('/')[4];
   if(u.pathname.endsWith('/branches')){
    if(method==='GET')return response({results:[...agents.values()].filter(a=>a.agent_id===id).map(a=>{const b=branch(a);if(a.branch_id.startsWith('agtbrch_candidate'))options.mutateCandidateBranch?.(b);return b;}),meta:{total:[...agents.values()].filter(a=>a.agent_id===id).length}});
@@ -89,6 +96,7 @@ function fixture(options={}){
   assert.equal(method,'GET','Never patch, delete or deploy a provider branch');
   const agent=structuredClone(agents.get(u.searchParams.get('branch_id')));
   if(agent?.branch_id.startsWith('agtbrch_candidate'))options.mutateCandidateRead?.(agent);
+  else if(configReads%2===0)options.mutateFinalSource?.(agent);
   return response(agent);
  }
  async function fetcher(url,init){
@@ -98,7 +106,7 @@ function fixture(options={}){
   Object.defineProperty(result,'url',{value:new URL(url).href,configurable:true});
   return result;
  }
- return {env,source,review,c,incoming,outbound,tools,agents,markers,calls,routingReads,fetcher,get creationCount(){return creationCount;}};
+ return {options,env,source,review,c,incoming,outbound,tools,agents,markers,calls,routingReads,fetcher,get creationCount(){return creationCount;}};
 }
 
 assert.deepEqual(await stageSellerVoiceTurns({},()=>{throw Error('no reads');},now),{status:'not_requested'});
@@ -260,5 +268,65 @@ for(const options of [{claimLost:true},{createLostWithoutBranch:true}]){
 }
 for(const mutate of [f=>f.env.VERCEL_ENV='preview',f=>f.env.ICASH_SELLER_TURN_SOURCE_JSON='{}',f=>f.env.SUPABASE_URL='https://other.supabase.co',f=>f.c.config_hash='a'.repeat(64),f=>f.outbound.conversation_config.agent.prompt.prompt+=' drift',f=>f.tools.get(f.c.stop_tool_id).tool_config.api_schema.url='https://untrusted.invalid']){
  const f=fixture();mutate(f);await assert.rejects(stageSellerVoiceTurns(f.env,f.fetcher,now),undefined,String(mutate));assert.equal(f.creationCount,0);assert.equal(f.markers.size,0);
+}
+for(const onlyFinal of [true,false]){
+ const f=fixture({mutateToolRead:(tool,{read,final})=>{if(!onlyFinal||final)tool.usage_stats={avg_latency_secs:1+read/10,total_calls:10+read};}}),before=structuredClone([...f.tools]);
+ assert.equal((await stageSellerVoiceTurns(f.env,f.fetcher,now)).status,'staged','Normal tool usage must not look like a changed definition');
+ assert.deepEqual([...f.tools],before,'Telemetry comparison never rewrites provider evidence');
+}
+{
+ const f=await unfinishedPair(),before=f.calls.length;
+ f.options.mutateToolRead=(tool,{read})=>{tool.usage_stats={avg_latency_secs:read/10,total_calls:read};};
+ const result=await stageSellerVoiceTurns(f.env,f.fetcher,now+1000);
+ assert.equal(result.status,'staged');assert.equal(result.providerWrites,0);assert.equal(f.creationCount,2);
+ assertResumeHasNoCreates(f.calls.slice(before));
+}
+for(const options of [
+ {omitUsageStats:true},
+ {mutateToolRead:(tool,{final})=>{if(final)delete tool.usage_stats.total_calls;}},
+ {mutateToolRead:tool=>{delete tool.usage_stats.total_calls;}},
+]){const f=fixture(options);assert.equal((await stageSellerVoiceTurns(f.env,f.fetcher,now)).status,'staged');}
+for(const omitUsageStats of [false,true]){
+ const f=fixture({omitUsageStats,mutateToolRead:(tool,{final})=>{if(final){if(omitUsageStats)tool.usage_stats={avg_latency_secs:0,total_calls:0};else delete tool.usage_stats;}}});
+ await assert.rejects(stageSellerVoiceTurns(f.env,f.fetcher,now),/SELLER_TURNS_FINAL_TOOL_DEFINITIONS_CHANGED/);
+ assert(![...f.markers.values()].some(x=>x.result.state==='verified'),'Missing telemetry never silently equals a present wrapper');
+}
+for(const onlyFinal of [false,true])for(const stats of [
+ null,{},[],false,'invalid',{avg_latency_secs:null},{avg_latency_secs:'1'},{avg_latency_secs:-1},{avg_latency_secs:Infinity},
+ {avg_latency_secs:1,total_calls:null},{avg_latency_secs:1,total_calls:'1'},{avg_latency_secs:1,total_calls:-1},
+ {avg_latency_secs:1,total_calls:1.5},{avg_latency_secs:1,total_calls:Number.MAX_SAFE_INTEGER+1},
+ {avg_latency_secs:1,total_calls:1,unknown:0},
+]){
+ const f=fixture({mutateToolRead:(tool,{final})=>{if(!onlyFinal||final)tool.usage_stats=structuredClone(stats);}});
+ await assert.rejects(stageSellerVoiceTurns(f.env,f.fetcher,now),/SELLER_TURNS_TOOL_USAGE_STATS_INVALID/);
+ assert(![...f.markers.values()].some(x=>x.result.state==='verified'));
+ if(!onlyFinal){assert.equal(f.creationCount,0);assert.equal(f.markers.size,0);}
+}
+for(const change of [
+ tool=>{tool.id='tool_other';},tool=>{tool.tool_config.description='changed';},
+ tool=>{tool.tool_config.api_schema.url='https://untrusted.invalid';},
+ tool=>{tool.tool_config.api_schema.request_headers.Authorization={variable_name:'secret__other'};},
+ tool=>{tool.response_mocks=[{mock_result:'unreviewed',parameter_conditions:[]}];},
+ tool=>{tool.access_info.role='reader';},tool=>{tool.unknown=null;},tool=>{tool.tool_config.unknown=false;},
+]){
+ const f=fixture({mutateToolRead:(tool,{final})=>{if(final){tool.usage_stats.total_calls++;change(tool);}}});
+ await assert.rejects(stageSellerVoiceTurns(f.env,f.fetcher,now),/SELLER_TURNS_FINAL_TOOL_DEFINITIONS_CHANGED/);
+ assert(![...f.markers.values()].some(x=>x.result.state==='verified'),'Telemetry changes never mask definition, access, mocks or unknown-field drift');
+}
+{
+ const f=fixture({mutateToolRead:(tool,{read})=>{if(tool.tool_config.name==='icash_stop_reception_recording'&&read===2)tool.access_info.role='reader';}});
+ await assert.rejects(stageSellerVoiceTurns(f.env,f.fetcher,now),/SELLER_TURNS_SOURCE_TOOLS_CHANGED/);
+ assert.equal(f.creationCount,0);assert.equal(f.markers.size,0);
+}
+for(const [options,code] of [
+ [{mutateFinalConfig:config=>{config.enabled=false;}},'DATABASE_CONFIG'],
+ [{mutateFinalSource:agent=>{if(agent.agent_id===outTarget.agentId)agent.version_id='agtvrsn_other';}},'OUTBOUND_IDENTITY'],
+ [{mutateFinalSource:agent=>{if(agent.agent_id===outTarget.agentId)agent.conversation_config.turn.turn_timeout++;}},'OUTBOUND_CONFIG'],
+ [{mutateFinalSource:agent=>{if(agent.agent_id===receptionTarget.agentId)agent.version_id='agtvrsn_other';}},'INBOUND_IDENTITY'],
+ [{mutateFinalSource:agent=>{if(agent.agent_id===receptionTarget.agentId)agent.conversation_config.turn.turn_timeout++;}},'INBOUND_CONFIG'],
+ [{mutateFinalWorkspace:workspace=>{workspace.webhooks.post_call_webhook_id='hook_changed';}},'WORKSPACE'],
+]){
+ const f=fixture(options);await assert.rejects(stageSellerVoiceTurns(f.env,f.fetcher,now),new RegExp('SELLER_TURNS_FINAL_'+code+'_CHANGED'));
+ assert(![...f.markers.values()].some(x=>x.result.state==='verified'),'Each original final source guard remains enforced');
 }
 console.log('PASS exact-commit seller turn staging: actual inbound/outbound validators, two isolated branches, fresh branch routing proofs, unchanged sources/tools/authority, bound newer-release resume without provider writes, unknown-write GET-only recovery, drift rejection, no activation or paid calls, sanitized output.');
