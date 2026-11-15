@@ -61,6 +61,7 @@
 
 .call-next-step{padding:12px;background:#f7f7f7;border-radius:10px;margin-bottom:14px;font-size:13px}.call-next-step p{margin:5px 0 0;line-height:1.5}
 
+.webinar-upgrade-intro{width:min(100%,560px);margin:32px auto 0;text-align:center}.webinar-upgrade-intro h1{font-size:clamp(28px,5vw,36px);line-height:1.15;letter-spacing:-1px;margin:0 0 14px;color:#313131}.webinar-upgrade-intro p{font-size:15px;line-height:1.7;color:#666;margin:0}
 .webinar-upgrade-card{width:min(100%,560px);margin:32px auto 60px;padding:clamp(22px,5vw,42px);border:1px solid #e6e6e6;border-radius:22px;background:#fff;box-sizing:border-box;box-shadow:0 18px 60px #00000006}.webinar-vip-upsell{min-width:0}.webinar-vip-upsell h2{font-size:clamp(24px,5vw,34px);line-height:1.12;letter-spacing:-1px;margin:18px 0}.webinar-vip-skip{display:block;width:100%;border:0;background:transparent;padding:16px 8px;min-height:44px;font:inherit;font-size:13px;color:#525252;cursor:pointer;text-decoration:underline;text-underline-offset:4px}.webinar-vip-skip:disabled{opacity:.5;cursor:wait}.webinar-vip-upsell .membership-consent{align-items:flex-start}.webinar-vip-upsell .account-access{margin:16px 0}.webinar-vip-upsell .purchase-receipt{font-size:12px}.webinar-vip-upsell .setup-primary{white-space:normal;text-align:center}
 
 /* Calls sit beside texts in the same contact's conversation. */
