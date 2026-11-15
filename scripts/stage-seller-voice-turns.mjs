@@ -17,6 +17,18 @@ const pins=c=>({configId:c.id,agentId:c.agent_id,branchId:c.branch_id,versionId:
 const reviewPins=r=>({agentId:r.agentId,branchId:r.branchId,versionId:r.versionId,configHash:r.configHash,contextPolicy:r.offerPolicy});
 const change={turn_eagerness:'normal',turn_timeout:10,soft_timeout_config:{timeout_seconds:-1}};
 const markerPrefix='seller_voice_turns_20261114';
+function toolDefinition(value){
+ const tool=object(value);
+ if(!Object.hasOwn(tool,'usage_stats'))return value;
+ const stats=object(tool.usage_stats);
+ // Official ToolUsageStatsResponseModel: numeric latency is required;
+ // integer total_calls is optional with default 0. These are observations,
+ // not the executable definition. Keep presence and every other field exact.
+ if(!Object.hasOwn(stats,'avg_latency_secs')||Object.keys(stats).some(key=>!['avg_latency_secs','total_calls'].includes(key))
+  ||typeof stats.avg_latency_secs!=='number'||!Number.isFinite(stats.avg_latency_secs)||stats.avg_latency_secs<0
+  ||Object.hasOwn(stats,'total_calls')&&(!Number.isSafeInteger(stats.total_calls)||stats.total_calls<0))throw Error('SELLER_TURNS_TOOL_USAGE_STATS_INVALID');
+ return {...tool,usage_stats:{}};
+}
 function listBranch(value,id){
  const rows=value.results,meta=object(value.meta);
  if(!Array.isArray(rows)||rows.length>=100||value.next_cursor||meta.total!==undefined&&meta.total!==rows.length)throw Error('SELLER_TURNS_COMPLETE_BRANCH_LIST_REQUIRED');
@@ -81,7 +93,8 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
  // Keep immutable provider tool definitions and every non-turn setting exact.
  const toolIds=[...new Set([...review.toolIds,c.stop_tool_id,c.agreement_tool_id])];
  const initialTools=await Promise.all(toolIds.map(id=>api('/v1/convai/tools/'+id)));
- if(!equal(initialTools[toolIds.indexOf(c.stop_tool_id)],inStop)||!equal(initialTools[toolIds.indexOf(c.agreement_tool_id)],inAgreement))throw Error('SELLER_TURNS_SOURCE_TOOLS_CHANGED');
+ const initialDefinitions=initialTools.map(toolDefinition);
+ if(!equal(initialDefinitions[toolIds.indexOf(c.stop_tool_id)],toolDefinition(inStop))||!equal(initialDefinitions[toolIds.indexOf(c.agreement_tool_id)],toolDefinition(inAgreement)))throw Error('SELLER_TURNS_SOURCE_TOOLS_CHANGED');
  const binding={release,source,change},bindingHash=sha(JSON.stringify(canonical(binding)));
  let providerWrites=0;
  async function readReceipt(direction,parent){
@@ -154,7 +167,13 @@ export async function stageSellerVoiceTurns(env=process.env,fetcher=fetch,now=Da
  }
  const out=await stage('outbound',outbound,prior?.[0]),inside=await stage('inbound',incoming,prior?.[1]);
  const [configAfter,outAfter,inAfter,workspaceAfter,toolsAfter]=await Promise.all([getConfig(),api(outPath+'?branch_id='+review.branchId),api(inPath+'?branch_id='+c.branch_id),api('/v1/convai/settings'),Promise.all(toolIds.map(id=>api('/v1/convai/tools/'+id))),verifyNoBranchPhones(out.agentId,out.branchId),verifyNoBranchPhones(inside.agentId,inside.branchId)]);
- if(!equal(configAfter,c)||!equal(identity(outAfter),identity(outbound))||!equal(snapshot(outAfter),snapshot(outbound))||!equal(identity(inAfter),identity(incoming))||!equal(snapshot(inAfter),snapshot(incoming))||!equal(workspaceAfter,workspace)||!equal(toolsAfter,initialTools))throw Error('SELLER_TURNS_FINAL_SOURCE_CHANGED');
+ if(!equal(configAfter,c))throw Error('SELLER_TURNS_FINAL_DATABASE_CONFIG_CHANGED');
+ if(!equal(identity(outAfter),identity(outbound)))throw Error('SELLER_TURNS_FINAL_OUTBOUND_IDENTITY_CHANGED');
+ if(!equal(snapshot(outAfter),snapshot(outbound)))throw Error('SELLER_TURNS_FINAL_OUTBOUND_CONFIG_CHANGED');
+ if(!equal(identity(inAfter),identity(incoming)))throw Error('SELLER_TURNS_FINAL_INBOUND_IDENTITY_CHANGED');
+ if(!equal(snapshot(inAfter),snapshot(incoming)))throw Error('SELLER_TURNS_FINAL_INBOUND_CONFIG_CHANGED');
+ if(!equal(workspaceAfter,workspace))throw Error('SELLER_TURNS_FINAL_WORKSPACE_CHANGED');
+ if(!equal(toolsAfter.map(toolDefinition),initialDefinitions))throw Error('SELLER_TURNS_FINAL_TOOL_DEFINITIONS_CHANGED');
  const phoneRoutingVerification='branch-phone-list-v1';
  const finalMarker=markerPrefix+'_'+release+'_verified',verified={state:'verified',bindingHash,release,verifiedByRelease:requested,phoneRoutingVerification,source,outbound:out,inbound:inside,activated:false};
  const previous=await db('icash_integration_checks?provider=eq.'+finalMarker);
