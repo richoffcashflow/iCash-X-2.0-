@@ -168,6 +168,13 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   if(progress.status==='budget_reached')return answer(explanation+' The latest check instead says available credits do not cover the next task. A quoted label alone is not a reason to pay again.',true);
   return answer(explanation+' '+(progress.status==='paced'?'The latest recorded status also shows that waiting state.':'The latest recorded status is different from the quoted label. Refresh the workspace once to see its current status.')+' Saved calls, texts and research results are the evidence of completed work; the label does not resolve the earlier problem.');
  }
+ if(/^(?:so[, ]+)?(?:(?:i(?:[’']m| am)|am i) (?:just )?waiting (?:on|for) (?:you|the bot|my bot) to find (?:a|any) deals?)[.!?\s]*$/i.test(q.trim())){
+  const intro='The bot is designed to research eligible properties automatically, but a Run setting is not proof that a task is working or a guarantee of a deal. There is no guaranteed deal-arrival time.';
+  if(context.kind!=='account')return answer(intro+' I cannot verify your account’s current work from this guest conversation.');
+  const paused=context.evidence?.some(e=>e.key==='work'&&e.code==='paused');
+  const blocked=context.evidence?.some(e=>e.key==='readiness'&&e.status!=='ok'||e.key==='outreach'&&(e.outreach?.progress?.health?.status==='blocked'||e.outreach?.progress?.status==='settling'));
+  return answer(intro+(paused?' Your bot is paused; this chat has not changed that setting.':blocked?' Your recorded work or readiness check needs review, so waiting alone is not a verified fix.':' These checks do not confirm current progress.')+' Review actual property activity for recorded results; no restart or recovery is confirmed.',!!blocked);
+ }
  if(context.kind!=='account')return null;
  const o=context.evidence?.find(e=>e.key==='outreach'&&e.status!=='unknown')?.outreach;
  const work=context.evidence?.find(e=>e.key==='work');
