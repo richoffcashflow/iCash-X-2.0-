@@ -56,7 +56,8 @@ The native PostgreSQL17 CI runner creates only its dedicated
 `icash_receipt_progress_v2` database on the isolated loopback fixture service. It
 checks 36 concurrent readers, generic plans, and 401 accounts with 80,000 settled
 cost-only operations plus 10,000 historical rows in each of research, owner,
-call and text sources (40,000 additional source-bound operations), within an
+call and text sources (40,000 additional source-bound operations, including 2,000
+exact-bound canonical active-export histories and 8,000 legacy owner results), within an
 8-second query budget. Native CI, full CI/build and
 independent review must pass for the exact proposed head. Local PGlite is not
 native PostgreSQL or production performance evidence.

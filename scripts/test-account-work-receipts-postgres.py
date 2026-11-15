@@ -77,13 +77,32 @@ try:
       jsonb_build_object('fetchedAt',now()-interval '2 days','contacts','[]'::jsonb,'requestedPersonIds',jsonb_build_array('per_fixture'),
        'providerCredits',jsonb_build_object('used',0,'people',0,'properties',0,'deduplicated',0),'creditsUsed',0,'peopleCredits',0,'outreachAuthorized',false),
       now()-interval '24 hours' from fixture_history;
+     update icash_owner_contacts c set result=jsonb_build_object('propertyId','fixture_property',
+      'contacts',jsonb_build_array(jsonb_build_object('personId','per_fixture','likelyOwner',true,'ownershipVerified',false,'outreachAuthorized',false,
+       'phones',jsonb_build_array(jsonb_build_object('number','2025550100','doNotCall',false,'permission','unverified','activity','active','activityBasis','provider_export_filter')))),
+      'requestedPersonIds',jsonb_build_array('per_fixture'),'outreachAuthorized',false,'creditsUsed',1,'peopleCredits',1,'providerCredits',jsonb_build_object('used',1,'people',1),
+      'allocation',jsonb_build_object('method','active-export-used-order-v1','batchId',h.receipt_id,'sharedContacts',0),
+      'activityEvidence',jsonb_build_object('contract','owner-active-export-v1','exportId','fixture_export_'||h.receipt_id,'artifactSha256',repeat('a',64)))
+      from fixture_history h where c.screening_id=h.receipt_id and h.n%5=0;
+     insert into icash_research_private.owner_batches
+      select c.screening_id,c.account_id,'complete',now()-interval '49 hours',jsonb_build_object('export_id',c.result->'activityEvidence'->>'exportId','credits',c.result->'providerCredits'),
+       jsonb_build_array(jsonb_build_object('screeningId',c.screening_id,'ids',c.result->'requestedPersonIds','snapshot',jsonb_build_object('propertyId','fixture_property'))),
+       jsonb_build_array(jsonb_build_object('screeningId',c.screening_id,'result',c.result))
+      from icash_owner_contacts c where c.result->'allocation'->>'method'='active-export-used-order-v1';
+     insert into icash_research_private.owner_batch_items
+      select screening_id,screening_id,operation_key from icash_owner_contacts where result->'allocation'->>'method'='active-export-used-order-v1';
+     insert into icash_research_private.owner_exports
+      select screening_id,now()-interval '24 hours'+interval '1 second','synthetic csv',repeat('a',64),
+       jsonb_build_object('raw',jsonb_build_object('export_id',result->'activityEvidence'->>'exportId','credits',result->'providerCredits'))
+      from icash_owner_contacts where result->'allocation'->>'method'='active-export-used-order-v1';
      analyze;""")
+    assert sql('select count(*) from icash_research_private.owner_exports') == '2000'
     started = time.monotonic()
     assert sql('set role service_role;select count(*) from icash_reliability_private.account_work_observations_v2()') == '401'
     assert time.monotonic()-started < 8, '401-account comparison reader exceeded 8-second native budget'
     # Parameterized generic-plan readers also preserve the late-settlement gap.
     assert sql("set role service_role;set plan_cache_mode=force_generic_plan;prepare receipt_read(uuid) as select last_completed_output_at<now()-interval '23 hours' and last_attempted_outreach_at<now()-interval '23 hours' from icash_reliability_private.account_work_receipts_v2($1,now());execute receipt_read(md5('progress-account-1')::uuid)") == 't'
-    print('PASS PostgreSQL17 receipt progress v2: 36 concurrent readers, 401 accounts/80000 cost-only plus 40000 source-bound operations, original source regressions, private permissions, unchanged public/financial state and install rollback. Inactive only; no paid providers.')
+    print('PASS PostgreSQL17 receipt progress v2: 36 concurrent readers, 401 accounts/80000 cost-only plus 40000 source-bound operations including 2000 canonical active exports, original source regressions, private permissions, unchanged public/financial state and install rollback. Inactive only; no paid providers.')
 finally:
     # Only the database created above by this run; shared fixtures are untouched.
     sql(f'drop database {DATABASE}', 'icash_reliability')
