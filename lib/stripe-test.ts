@@ -17,9 +17,10 @@ export async function db<T>(path:string,method="GET",body?:unknown,signal?:Abort
  if(!response.ok){
   try{throw await voiceReservationFailure(path,response.status,response);}
   finally{
-   // Most failures are deliberately not parsed. Release their transport before
-   // returning so repeated upstream errors cannot accumulate open responses.
-   try{await response.body?.cancel();}catch{/* Preserve the original admission failure. */}
+   // Most failures are deliberately not parsed. Start releasing the response,
+   // but a stalled transport cleanup must not delay the known failure or the
+   // caller's durable recovery. Cleanup never retries the original request.
+   try{void response.body?.cancel().catch(()=>undefined);}catch{/* Preserve the original admission failure. */}
   }
  }
  const payload=await response.text();

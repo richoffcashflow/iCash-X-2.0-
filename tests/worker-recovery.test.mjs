@@ -53,6 +53,32 @@ const used=[];const rpc=async()=>({token:tokens[tickets++]});
 const transport=async(_url,opts)=>{used.push(opts.headers.Authorization);throw Error('ambiguous timeout');};
 await assert.rejects(automationTick(rpc,transport));await assert.rejects(automationTick(rpc,transport));
 assert.equal(used.length,2);assert.notEqual(used[0],used[1]);
+// Native Response cleanup may never settle after the server already returned
+// its authoritative status. It must not retain the slot or change that status.
+for(const [status,held,expected] of [[200,false,true],[503,true,true],[503,false,false],[401,false,false]]){
+ let cancels=0,claims=0,dispatches=0,outcome;
+ const response=new Response(new ReadableStream({cancel(){cancels++;return new Promise(()=>{});}}),
+  {status,headers:held?{'X-iCash-Automation-Outcome':'job-held'}:{}});
+ const work=automationTick(async()=>{claims++;return {token:tokens[0]};},async()=>{dispatches++;return response;},'research')
+  .then(value=>{outcome={value};},error=>{outcome={error};});
+ await flush();assert(outcome,'Known HTTP outcome cannot await a nonsettling body cancellation');
+ await work;assert.equal(cancels,1);assert.equal(claims,1);assert.equal(dispatches,1);
+ if(expected)assert.deepEqual(outcome,{value:true});
+ else assert.deepEqual(workerFailureDetails(outcome.error),{code:'AUTOMATION_HELD',operation:'automation_dispatch',httpStatus:status});
+}
+// Detached cleanup still handles rejected promises, even after the ticket's
+// known outcome has returned. Neither cleanup rejection permits a replay.
+const unhandled=[],onUnhandled=error=>unhandled.push(error);process.on('unhandledRejection',onUnhandled);
+try{
+ for(const late of [false,true]){
+  let rejectCleanup,cancels=0;
+  const response=new Response(new ReadableStream({cancel(){cancels++;return late?new Promise((_resolve,reject)=>{rejectCleanup=reject;}):Promise.reject(Error('private cleanup failure'));}}));
+  assert.equal(await automationTick(async()=>({token:tokens[0]}),async()=>response),true);
+  if(late)rejectCleanup(Error('private late cleanup failure'));
+  await flush();await flush();assert.equal(cancels,1);
+ }
+ assert.deepEqual(unhandled,[]);
+}finally{process.off('unhandledRejection',onUnhandled);}
 // Idle polling stays within 15 seconds and pure screening within one minute.
 let idleTime=0;const idleCalls=[];const idle=createScheduler({automationConcurrency:1,now:()=>idleTime,screening:async()=>{idleCalls.push(idleTime);return false;},automation:async()=>false});
 assert.equal(await step(idle),5000);idleTime=15000;assert.equal(await step(idle),10000);
