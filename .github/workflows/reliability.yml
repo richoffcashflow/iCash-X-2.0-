@@ -44,6 +44,18 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-owner-preflight-cleanup-postgres.mjs
+      - name: Verify exact preflight phase capacity under concurrent claims
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-owner-preflight-step-postgres.mjs
+      - name: Verify original expired tickets under concurrent continuation and cleanup
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-owner-expired-ticket-postgres.mjs
+      - name: Verify expired eligible-count refusals under concurrent cleanup and rollback
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-owner-expired-checking-postgres.mjs
       - name: Verify rotating training evidence under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg

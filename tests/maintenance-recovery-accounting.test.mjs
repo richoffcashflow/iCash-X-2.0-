@@ -5,16 +5,16 @@ import {maintenanceBatch} from '../lib/maintenance-batch.ts';
 const normal={
  inventory:{pages:[{status:'not_due'}]},researchExclusions:{status:'not_due'},
  ownerExports:{status:'export_recovery_idle'},ownerExportCapacity:{status:'capacity_review_idle'},
- ownerPreflightCleanup:{status:'idle'},
+ ownerPreflightCleanup:{status:'idle'},ownerTicketContinuation:{status:'disabled'},
 };
 const legitimateWaits={
  inventory:{pages:[{status:'rate_limited'}]},researchExclusions:{status:'pending'},
  ownerExports:{status:'export_receipt_held'},ownerExportCapacity:{status:'capacity_review_held'},
- ownerPreflightCleanup:{status:'pending'},
+ ownerPreflightCleanup:{status:'pending'},ownerTicketContinuation:{status:'busy'},
 };
 const silentFailures={inventory:{pages:[{status:'metadata_unavailable'}]}};
 const services={inventory:'refreshInventoryGeographyBatch',researchExclusions:'drainResearchExclusions',
- ownerExports:'recoverOwnerActiveExports',ownerExportCapacity:'recoverOwnerExportCapacity',ownerPreflightCleanup:'cleanupOwnerPreflight'};
+ ownerExports:'recoverOwnerActiveExports',ownerExportCapacity:'recoverOwnerExportCapacity',ownerPreflightCleanup:'cleanupOwnerPreflight',ownerTicketContinuation:'continueExpiredOwnerPreflightTicket'};
 const senderCases={
  sender_config:'messaging_configuration_required',sender_verification:'business_number_verification_required',sender_invitation:'inbound_invitation_not_ready',
  sender_hold:'message_held',sender_unknown:'message_delivery_needs_review',sender_disabled:'live_work_not_ready',

@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '../lib/owner-enrichment-deferral.ts';
 import {enrichActiveOwners} from '../lib/owner-active-export.ts';
-import {OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError} from '../lib/owner-export-preflight.ts';
+import {OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError,OwnerCheckingCleanupPendingError} from '../lib/owner-export-preflight.ts';
 import {ProspectingBudgetError} from '../lib/voice-budget-failure.ts';
 import * as admission from '../lib/live-work-admission.ts';
 
@@ -15,14 +15,14 @@ const screening='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const base={id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',accountId:account,screeningId:screening,kind:'contacts'};
 let failure,ticket,consumed,deferralResult,deferralThrows,calls,durable,afterDeferral,logs;
 function reset(){failure=new OwnerPreviewRateLimitError(account,screening);ticket={...base};consumed=false;deferralResult=true;deferralThrows=false;calls=[];durable={token,state:'consumed',outcome:null};afterDeferral=null;logs=[];}
-const mocks={...admission,OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError,ProspectingBudgetError,
+const mocks={...admission,OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError,OwnerCheckingCleanupPendingError,ProspectingBudgetError,
  console:{info:(...args)=>logs.push(args),error:(...args)=>logs.push(args)},
  NextResponse:{json:(body,options={})=>({body,status:options.status??200,headers:options.headers})},
  enrichForAccount:async()=>{throw failure;},discoverForAccount:async()=>{throw failure;},
  db:async(path,method,body)=>{
   calls.push({path,method,body});
   if(path==='rpc/icash_consume_automation'){if(consumed)return null;consumed=true;return ticket;}
-  if(['rpc/icash_defer_owner_enrichment','rpc/icash_defer_owner_preflight','rpc/icash_defer_owner_preflight_cleanup'].includes(path)){afterDeferral?.();if(deferralThrows)throw Error('Unknown database outcome');return deferralResult;}
+  if(['rpc/icash_defer_owner_enrichment','rpc/icash_defer_owner_preflight','rpc/icash_defer_owner_preflight_cleanup','rpc/icash_defer_expired_checking_cleanup'].includes(path)){afterDeferral?.();if(deferralThrows)throw Error('Unknown database outcome');return deferralResult;}
   if(path==='rpc/icash_finish_owner_enrichment'){
    assert.equal(method,'POST');assert.equal(body.p_id,base.id);assert.equal(body.p_account,account);assert.equal(body.p_screening,ticket.screeningId);
    if(body.p_token===durable.token&&durable.state==='consumed'){durable={...durable,state:body.p_success?'complete':'held',outcome:body.p_outcome};return true;}return false;
@@ -43,6 +43,7 @@ assert(!calls.some(c=>c.path==='rpc/icash_finish_automation'),'The durable defer
 assert.equal(calls.length,2,'No settlement, provider or alert calls are part of a limiter deferral');
 reset();failure=new OwnerExportPreflightPendingError(account,screening);response=await POST(request());assert.equal(response.status,200);assert.equal(response.body.status,'owner_export_preflight_pending');assert.equal(calls[1].path,'rpc/icash_defer_owner_preflight','Free list indexing waits require independent durable proof');
 reset();failure=new OwnerPreflightCleanupPendingError(account,screening,'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');response=await POST(request());assert.equal(response.status,200);assert.equal(response.body.status,'owner_preflight_cleanup_pending');assert.equal(calls[1].path,'rpc/icash_defer_owner_preflight_cleanup');assert.equal(calls[1].body.p_preflight,failure.preflightId);assert.equal(calls.length,2,'Expired cleanup wait uses exact original proof with no fresh-list authority or completion');
+reset();failure=new OwnerCheckingCleanupPendingError(account,screening,'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');response=await POST(request());assert.equal(response.status,200);assert.equal(response.body.status,'owner_checking_cleanup_pending');assert.equal(calls[1].path,'rpc/icash_defer_expired_checking_cleanup');assert.equal(calls[1].body.p_preflight,failure.preflightId);assert.equal(calls.length,2,'Checking cleanup lock wait requires its own current source and no-admission witness');assert.deepEqual(logs,[['automation_waiting',{kind:'contacts',reason:'OWNER_CHECKING_CLEANUP_PENDING'}]]);
 
 // The actual export service proves the local slot rejection before any provider
 // transport; the actual route retains the original scoped deferral and outcome.
@@ -56,10 +57,16 @@ assert.equal(calls.length,2);assert.equal(calls[1].path,'rpc/icash_defer_owner_e
 assert.deepEqual(logs,[['automation_waiting',{kind:'contacts',reason:'OWNER_EXPORT_CAPACITY_BUSY'}]],'Only the fixed operator reason is exposed');
 assert.equal((await POST(request())).status,401,'No repeated capability or provider attempt');
 
-for(const ErrorType of [OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError])for(const value of [false,null,undefined,'true',{},[]]){
+for(const ErrorType of [OwnerPreviewRateLimitError,OwnerExportCapacityBusyError,OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError,OwnerCheckingCleanupPendingError])for(const value of [false,null,undefined,'true',{},[]]){
  reset();failure=new ErrorType(account,screening);deferralResult=value;response=await POST(request());assert.equal(response.status,503);assert.equal(response.body.status,'held_for_reconciliation');assert.equal(durable.outcome,'held_for_reconciliation');assert(!calls.some(c=>c.path==='rpc/icash_finish_automation'),'Deferral fallback never finishes by ticket ID alone');
  assert.equal(response.headers['X-iCash-Automation-Outcome'],'job-held','The exact current token was durably held, so independent jobs can continue');
- assert.deepEqual(logs.at(-1),['automation_held',{kind:'contacts',reason:ErrorType===OwnerExportPreflightPendingError?'OWNER_PREFLIGHT_DEFERRAL_HELD':'OWNER_PREVIEW_DEFERRAL_HELD'}],'Acknowledged deferral fallback remains visible without exposing account/source/capability data');
+ assert.deepEqual(logs.at(-1),['automation_held',{kind:'contacts',reason:ErrorType===OwnerCheckingCleanupPendingError?'OWNER_CHECKING_CLEANUP_DEFERRAL_HELD':ErrorType===OwnerExportPreflightPendingError?'OWNER_PREFLIGHT_DEFERRAL_HELD':'OWNER_PREVIEW_DEFERRAL_HELD'}],'Acknowledged deferral fallback remains visible without exposing account/source/capability data');
+}
+for(const code of ['OWNER_CHECKING_CLEANUP_HELD','OWNER_CHECKING_CLEANUP_UNCONFIRMED','OWNER_CHECKING_CONTINUATION_HELD','OWNER_CHECKING_CLEANUP_ADMISSION_UNAVAILABLE','OWNER_CHECKING_CLEANUP_ADMISSION_INVALID','OWNER_CHECKING_CLEANUP_CLAIM_UNAVAILABLE','OWNER_CHECKING_CLEANUP_RECEIPT_UNAVAILABLE','OWNER_CHECKING_CLEANUP_RECEIPT_UNCONFIRMED']){
+ reset();failure=Error(code);response=await POST(request());assert.equal(response.status,503);assert.equal(durable.outcome,'held_for_reconciliation');
+ assert(!calls.some(c=>c.path.includes('defer_')),'Unknown, malformed and held cleanup states never grant quota retries');
+ assert.deepEqual(logs,[['automation_held',{kind:'contacts',reason:code}]]);
+ assert.equal(response.headers['X-iCash-Automation-Outcome'],['OWNER_CHECKING_CLEANUP_HELD','OWNER_CHECKING_CLEANUP_UNCONFIRMED','OWNER_CHECKING_CONTINUATION_HELD'].includes(code)?'job-held':undefined,'Database/malformed failures preserve infrastructure backoff; isolated source failure does not stall independent accounts');
 }
 reset();deferralThrows=true;response=await POST(request());assert.equal(response.status,503);assert.equal(calls.filter(c=>c.path==='rpc/icash_defer_owner_enrichment').length,1,'Never retry an uncertain atomic deferral');
 for(const result of [false,undefined,'unknown']){

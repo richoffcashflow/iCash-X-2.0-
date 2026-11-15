@@ -13,9 +13,16 @@ export class OwnerPreflightCleanupPendingError extends OwnerPreviewRateLimitErro
  readonly preflightId:string;
  constructor(accountId:string,screeningId:string,preflightId:string){super(accountId,screeningId);this.name='OwnerPreflightCleanupPendingError';this.message='OWNER_PREFLIGHT_CLEANUP_PENDING';this.preflightId=preflightId;}
 }
+/** A definite lock wait before this exact checking-source cleanup admission.
+ * Its own deferral RPC must recheck that no DELETE was admitted meanwhile. */
+export class OwnerCheckingCleanupPendingError extends OwnerPreviewRateLimitError {
+ readonly preflightId:string;
+ constructor(accountId:string,screeningId:string,preflightId:string){super(accountId,screeningId);this.name='OwnerCheckingCleanupPendingError';this.message='OWNER_CHECKING_CLEANUP_PENDING';this.preflightId=preflightId;}
+}
 type Claim={status:string;id:string;screeningId?:string;lease:string;listId:string|number;name:string;ids:string[];mobileOnly:boolean;nextStep?:'create'|'metadata'|'baseline'|'eligible'|null};
 type Receipt={httpStatus:number|null;raw:unknown;rawText:string|null};
 const listId=(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v)||typeof v==='number'&&Number.isSafeInteger(v)&&v>0;
+const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const internalId=(id:string)=>{const n=Number(id.slice(4));if(!/^per_[1-9][0-9]{0,15}$/.test(id)||!Number.isSafeInteger(n)||String(n)!==id.slice(4))throw Error('OWNER_PREFLIGHT_ID_INVALID');return n;};
 async function readBody(response:Response,max=1048576){
  if(!response.body)throw Error('OWNER_PREFLIGHT_BODY_MISSING');
@@ -47,25 +54,47 @@ export async function cleanupOwnerPreflight(db:ResearchDb,transport:typeof fetch
   return {status:'pending'};
  }
 }
-async function cleanupExpiredOwnerPreflight(db:ResearchDb,accountId:string,id:string,transport:typeof fetch){
- const key=process.env.DEALMACHINE_API_KEY;if(!key)return;
+type CleanupAttempt={status:'admitted';receiptPersistence:'confirmed'|'unconfirmed'|'unavailable'|'unknown';terminalReceipt:boolean}|{status:'quota_wait'|'pending'|'held'};
+async function cleanupExpiredOwnerPreflight(db:ResearchDb,accountId:string,id:string,transport:typeof fetch,checking=false):Promise<CleanupAttempt>{
+ const key=process.env.DEALMACHINE_API_KEY;if(!key){if(checking)throw Error('OWNER_CHECKING_CLEANUP_ADMISSION_UNAVAILABLE');return {status:'held'};}
+ if(checking&&(!uuid(accountId)||!uuid(id)))throw Error('OWNER_CHECKING_CLEANUP_ADMISSION_INVALID');
  const requestId=randomUUID();
  // Do not replay an admission after an uncertain acknowledgment. An admitted
  // attempt keeps its original token/lease even when this worker loses it.
- const c=await db<{status:string;id:string;accountId:string;token:string;listId:string|number;requestId:string}>('rpc/icash_admit_owner_preflight_cleanup','POST',{p_account:accountId,p_id:id,p_request:requestId});
- if(c?.status!=='admitted')return;
- if(c.id!==id||c.accountId!==accountId||c.requestId!==requestId||!listId(c.listId)||typeof c.token!=='string')throw Error('OWNER_PREFLIGHT_CLEANUP_CLAIM_INVALID');
+ let c:{status:string;id:string;accountId:string;token:string;listId:string|number;requestId:string};
+ try{c=await db(checking?'rpc/icash_admit_expired_checking_cleanup':'rpc/icash_admit_owner_preflight_cleanup','POST',{p_account:accountId,p_id:id,p_request:requestId});}
+ catch(error){if(checking)throw Error('OWNER_CHECKING_CLEANUP_ADMISSION_UNAVAILABLE');throw error;}
+ if(c?.status!=='admitted'){
+  if(c?.status==='quota_wait')return {status:'quota_wait'};
+  if(c?.status==='pending'||c?.status==='busy')return {status:'pending'};
+  if(!checking||c?.status==='held'||c?.status==='disabled')return {status:'held'};
+  throw Error('OWNER_CHECKING_CLEANUP_ADMISSION_INVALID');
+ }
+ if(c.id!==id||c.accountId!==accountId||c.requestId!==requestId||!listId(c.listId)||typeof c.token!=='string'||(checking&&!uuid(c.token)))throw Error(checking?'OWNER_CHECKING_CLEANUP_ADMISSION_INVALID':'OWNER_PREFLIGHT_CLEANUP_CLAIM_INVALID');
  let receipt:Receipt={httpStatus:null,raw:null,rawText:null};
+ let receiptPersistence:Extract<CleanupAttempt,{status:'admitted'}>['receiptPersistence']='unknown';
+ const saveCleanup=async()=>{
+  try{const saved=await saveOriginal<boolean>(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt});receiptPersistence=saved===true?'confirmed':'unconfirmed';}
+  catch(error){receiptPersistence='unavailable';throw error;}
+ };
  try{
   await finishAdmittedDealMachineRequest(db,requestId,async()=>{
    const r=await transport('https://api.v2.dealmachine.com/v1/lists/'+c.listId,{method:'DELETE',headers:{Authorization:'Bearer '+key},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(5000)});
    receipt={httpStatus:r.status,...await readBody(r,65536)};
-   await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt});
+   await saveCleanup();
    return new Response(receipt.rawText,{status:r.status,headers:r.headers});
   });
  }catch{
-  await saveOriginal(db,'rpc/icash_record_owner_preflight_cleanup',{p_id:c.id,p_token:c.token,p_receipt:receipt}).catch(()=>null);
+  await saveCleanup().catch(()=>null);
  }
+ let terminalReceipt=false;
+ try{const raw=JSON.parse(receipt.rawText??'');terminalReceipt=receipt.httpStatus===404||receipt.httpStatus===200&&raw?.data?.deleted===true;}catch{/* Unknown/nonterminal provider receipt stays distinct from a database acknowledgment failure. */}
+ return {status:'admitted',receiptPersistence,terminalReceipt};
+}
+/** The private checking-source journal authorizes only this atomic cleanup
+ * admission. The ordinary claim still has to prove deletion before renewal. */
+export async function cleanupExpiredCheckingOwnerPreflight(db:ResearchDb,accountId:string,id:string,transport:typeof fetch=fetch){
+ return cleanupExpiredOwnerPreflight(db,accountId,id,transport,true);
 }
 /** A new list is indexed asynchronously even when its status is completed.
  * Creation and counting therefore use separate, bounded worker capabilities.
