@@ -190,8 +190,11 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  if(![c.contact_credit_cap,c.property_credit_micros,quotedDataCostMicros].every(n=>Number.isSafeInteger(n)&&n>0)||c.contact_credit_cap>25||BigInt(c.contact_credit_cap)*BigInt(c.property_credit_micros)>BigInt(quotedDataCostMicros))throw Error('CONTACT_RATE_REQUIRED');
  const capacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{p_account:accountId});
  if(capacity==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
- if(capacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
- if(capacity!=='ready')return {status:'held'};
+ // Two ordinary tokens can finish an exact existing baseline+eligible phase.
+ // This exception never grants a fresh preview, a new list or a paid request.
+ const continuationOnly=capacity==='quota_wait'&&await db<boolean>('rpc/icash_owner_preflight_step_capacity','POST',{p_account:accountId,p_screening:primary.screeningId})===true;
+ if(capacity==='quota_wait'&&!continuationOnly)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+ if(capacity!=='ready'&&!continuationOnly)return {status:'held'};
  let candidates=c.research_version===1||c.research_version===2?await db<Candidate[]>('rpc/icash_owner_batch_candidates','POST',{p_account:accountId,p_screening:primary.screeningId}):[primary];
  if(!candidates.length||candidates.length>5||!candidates.some(x=>x.screeningId===primary.screeningId)||candidates.some(x=>runScreeningJob(x.snapshot).financialCheck.status!=='eligible'))return {status:'held'};
  const pools=await db<Record<string,string>>('rpc/icash_owner_targeting_pools','POST',{p_account:accountId,p_screenings:candidates.map(x=>x.screeningId)});
@@ -201,7 +204,12 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  // Resume the exact saved free check before fetching its owner preview again.
  // Positive checks still take a fresh property preview and the original final
  // purchase admission below; this only removes reads while the list is pending.
- const pending=await db<{items:unknown[];request:unknown}|null>('rpc/icash_pending_owner_preflight','POST',{
+ const continued=await db<{status:string;items?:unknown[];request?:unknown}|null>('rpc/icash_continued_owner_preflight','POST',{
+  p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
+ if(!continued||!['none','held','bound'].includes(continued.status))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+ if(continued.status==='held')return {status:'held'};
+ if(continued.status==='bound'&&(!Array.isArray(continued.items)||!continued.items.length||!continued.request||typeof continued.request!=='object'))throw Error('OWNER_CONTINUATION_SOURCE_UNAVAILABLE');
+ const pending=continued.status==='bound'?{items:continued.items!,request:continued.request}:await db<{items:unknown[];request:unknown}|null>('rpc/icash_pending_owner_preflight','POST',{
   p_account:accountId,p_primary:primary.screeningId,p_candidates:candidates,p_mobile:mobileOnly});
  if(pending){
   const resumed=await preflightOwnerExport(db,accountId,pending.items,pending.request,transport);
@@ -209,6 +217,15 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
   if(resumed.status==='pending')throw new OwnerExportPreflightPendingError(accountId,primary.screeningId);
   if(resumed.status==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
   if(!['disabled','ready'].includes(resumed.status))return {status:'held'};
+ }
+ if(continuationOnly){
+  // A lost/changed source must not fall through to a fresh provider preview.
+  // Once counts finish, the next phase still needs ordinary three-token capacity.
+  if(!pending)throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  const freshCapacity=await db<string>('rpc/icash_owner_active_export_capacity','POST',{p_account:accountId});
+  if(freshCapacity==='export_busy')throw new OwnerExportCapacityBusyError(accountId,primary.screeningId);
+  if(freshCapacity==='quota_wait')throw new OwnerPreviewRateLimitError(accountId,primary.screeningId);
+  if(freshCapacity!=='ready')return {status:'held'};
  }
  const batchId=randomUUID(),key=process.env.DEALMACHINE_API_KEY;
  let preview:unknown,previewRequestId='';

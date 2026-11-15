@@ -60,6 +60,8 @@ let previews=0,capacity='ready',preflightStatus='disabled',paid=0,downloads=0,ge
 const config={contact_rate_id:'rate',contact_credit_cap:25,property_credit_micros:10000,data_rights_until:'2099-01-01',research_version:2};
 const db=async(path,method,p)=>{
  if(path==='rpc/icash_owner_active_export_capacity'){assert.deepEqual(p,{p_account:account});return capacity;}
+ if(path==='rpc/icash_owner_preflight_step_capacity')return false;
+ if(path==='rpc/icash_continued_owner_preflight')return {status:'none'};
  if(path==='rpc/icash_pending_owner_preflight'){assert.deepEqual(p,{p_account:account,p_primary:candidates[0].screeningId,p_candidates:candidates,p_mobile:false});return null;}
  if(path==='rpc/icash_record_empty_owner_preview'){assert.deepEqual(p.p_items,candidates);assert.deepEqual(p.p_preview,preview);assert.match(p.p_request,/^[0-9a-f-]{36}$/);return true;}
  if(path==='rpc/icash_claim_owner_preflight')return {status:preflightStatus};
@@ -106,6 +108,7 @@ try{
  const pendingRequest=activeOwnerExportRequest(ids,false,true);
  let pendingReads=0;
  const resumeDb=async(path,method,p)=>{
+  if(path==='rpc/icash_continued_owner_preflight')return {status:'none'};
   if(path==='rpc/icash_pending_owner_preflight'){pendingReads++;return {items:pendingItems,request:pendingRequest};}
   if(path==='rpc/icash_claim_owner_preflight'){assert.deepEqual(p.p_items,pendingItems);assert.deepEqual(p.p_request,pendingRequest);}
   return db(path,method,p);
@@ -119,6 +122,37 @@ try{
  reset();preflightStatus='ready';
  assert.equal((await enrichActiveOwners(resumeDb,account,candidates[0],config,250000,transport)).status,'contacts_saved');
  assert.equal(previews,1,'A positive resumed check still refreshes owner identity before final admission');assert.equal(paid,1);assert.equal(pendingReads,5);
+ for(const status of ['pending','ready']){
+  reset();capacity='quota_wait';preflightStatus=status;
+  const stageDb=async(path,...args)=>path==='rpc/icash_owner_preflight_step_capacity'?true:resumeDb(path,...args);
+  await assert.rejects(enrichActiveOwners(stageDb,account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);
+  assert.equal(previews+paid,0,'Two-token continuation cannot grant the next fresh preview or paid export');
+ }
+ reset();capacity='quota_wait';preflightStatus='ready';
+ await assert.rejects(enrichActiveOwners(async(path,...args)=>path==='rpc/icash_owner_preflight_step_capacity'?true:db(path,...args),account,candidates[0],config,250000,transport),OwnerPreviewRateLimitError);
+ assert.equal(previews+paid,0,'Changed/lost pending source cannot fall through to new work');
+ for(const denySecond of [false,true]){
+  reset();capacity='quota_wait';const providerCounts=[],savedSteps=[];let admissions=0;
+  const phaseDb=async(path,method,p)=>{
+   if(path==='rpc/icash_owner_preflight_step_capacity')return true;
+   if(path==='rpc/icash_pending_owner_preflight')return {items:pendingItems,request:pendingRequest};
+   if(path==='rpc/icash_claim_owner_preflight')return {status:'check',id:'original-preflight',lease:'original-phase',listId:'original-list',ids,mobileOnly:false,nextStep:null};
+   if(path==='rpc/icash_take_dealmachine_request'){admissions++;return !denySecond||admissions===1;}
+   if(path==='rpc/icash_record_owner_preflight'){assert.equal(p.p_id,'original-preflight');assert.equal(p.p_lease,'original-phase');savedSteps.push(p.p_step);return p.p_step==='baseline'?'checking':'ready';}
+   if(path==='rpc/icash_defer_owner_preflight_quota'){assert.equal(p.p_step,'eligible');return true;}
+   if(path==='rpc/icash_claim_owner_preflight_cleanup')return null;
+   return db(path,method,p);
+  };
+  await assert.rejects(enrichActiveOwners(phaseDb,account,candidates[0],config,250000,async(url,opts)=>{
+   assert.equal(url,'https://api.v2.dealmachine.com/v1/people/search/count');
+   const body=JSON.parse(opts.body);assert.deepEqual(body.include_lists,{people_list_ids:['original-list']});providerCounts.push(body);
+   return Response.json({total_people:ids.length,total_results:ids.length,total_properties:3});
+  }),OwnerPreviewRateLimitError);
+  assert.deepEqual(savedSteps,denySecond?['baseline']:['baseline','eligible']);
+  assert.equal(providerCounts.length,denySecond?1:2);
+  if(!denySecond)assert.deepEqual(providerCounts[1].filters,[{filter_id:'has_active_phone_number',value:true},{filter_id:'has_non_dnc_phone',value:true}]);
+  assert.equal(previews+paid,0,'Completed or partially refused original count phase never grants fresh provider work');
+ }
  reset();await assert.rejects(enrichActiveOwners(async(path,...args)=>{if(path==='rpc/icash_pending_owner_preflight')throw Error('database unavailable');return db(path,...args);},account,candidates[0],config,250000,transport),/database unavailable/);
  assert.equal(previews+paid+downloads+gets,0,'A failed saved-check read is not permission to spend another request');
  for(const status of ['empty','held']){reset();preflightStatus=status;assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,status);assert.equal(paid,0);assert.equal(claimed,false,'No wallet admission before preflight');}
@@ -188,6 +222,7 @@ try{
   const siblingCandidates=candidates.slice(1),siblingPreview={...preview,data:preview.data.slice(1),totals:{submitted:2,found:2,not_found:0}};
   const siblingDb=async(path,method,p)=>{
    if(path==='rpc/icash_owner_batch_candidates'){assert.equal(p.p_screening,siblingCandidates[0].screeningId);return siblingCandidates;}
+   if(path==='rpc/icash_continued_owner_preflight')return {status:'none'};
    if(path==='rpc/icash_pending_owner_preflight'){assert.equal(p.p_primary,siblingCandidates[0].screeningId);assert.deepEqual(p.p_candidates,siblingCandidates);return null;}
    if(path==='rpc/icash_claim_owner_preflight'){
     preflightClaims++;assert.deepEqual(p.p_items.map(x=>x.screeningId),siblingCandidates.map(x=>x.screeningId));return {status:'pending'};
@@ -202,5 +237,24 @@ try{
   assert.equal(paid+gets+downloads,0);assert.equal(claimed,false);assert.equal(saved,null);
   preview.data=originalPreview.data;preview.totals=originalPreview.totals;
  }
+ // A continued original list is resolved before ANY fresh preview. Missing or
+ // uncertain acknowledgments never fall through or repeat the repair.
+ for(const response of [{status:'held'},null,{status:'bound'}]){
+  reset();const continuedDb=async(path,method,p)=>path==='rpc/icash_continued_owner_preflight'?response:db(path,method,p);
+  const noTransport=async()=>assert.fail('No provider work before continued-source proof');
+  if(response?.status==='held')assert.equal((await enrichActiveOwners(continuedDb,account,candidates[0],config,250000,noTransport)).status,'held');
+  else await assert.rejects(enrichActiveOwners(continuedDb,account,candidates[0],config,250000,noTransport),/CONTINUATION_SOURCE_UNAVAILABLE/);
+  assert.equal(previews+paid+gets+downloads,0);
+ }
+ reset();let originalClaims=0;
+ const originalItems=[{screeningId:candidates[0].screeningId,snapshot:candidates[0].snapshot,ids:['per_1']}],originalRequest=activeOwnerExportRequest(['per_1']);
+ const boundDb=async(path,method,p)=>{
+  if(path==='rpc/icash_continued_owner_preflight')return {status:'bound',items:originalItems,request:originalRequest};
+  if(path==='rpc/icash_pending_owner_preflight')assert.fail('Bound original must not be replaced by another pending source');
+  if(path==='rpc/icash_claim_owner_preflight'){originalClaims++;assert.deepEqual(p.p_items,originalItems);assert.deepEqual(p.p_request,originalRequest);return {status:'pending'};}
+  return db(path,method,p);
+ };
+ await assert.rejects(enrichActiveOwners(boundDb,account,candidates[0],config,250000,async()=>assert.fail('Pending original cannot fetch a fresh preview')),OwnerExportPreflightPendingError);
+ assert.equal(originalClaims,1);assert.equal(previews+paid+gets+downloads,0);
 }finally{console.warn=originalWarn;if(originalKey===undefined)delete process.env.DEALMACHINE_API_KEY;else process.env.DEALMACHINE_API_KEY=originalKey;}
 console.log('Owner active export: exact text IDs, partial/shared owners, raw credits, DNC/activity checks, bounded CSV, one POST, quota/concurrency holds and original-only recovery passed. Offline only.');
