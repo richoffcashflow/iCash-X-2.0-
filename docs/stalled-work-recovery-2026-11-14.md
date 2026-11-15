@@ -216,6 +216,36 @@ operation/message/provider IDs, source content hashes, work timestamps and outco
 states without copying message text into the report. Provider evidence stays in
 its original immutable receipt ledgers.
 
+The November 15 collector optimization preserves the schema-2 query evidence and
+classification. A non-executing production plan showed two full voice-job history
+scans per cohort account. The collector now materializes only fixed-cohort voice
+jobs in the exact union of the original creation/update/dispatching windows, then
+groups the two original projections once. Recording selection still requires the
+same account, job, operation and null-safe provider-call identity, with the same
+creation-time/ID ordering. Missing accounts retain their original evidence; absent
+voice counts remain null and absent receipt arrays remain empty. There is no
+database migration, public-observer replacement, timeout increase or change to
+outreach, admission, charges, policy activation or the inactive PR753 comparison.
+
+`tests/work-cohort-query.test.mjs` executes the captured predecessor and optimized
+queries against the same synthetic 363-member snapshot, including 12,000 old voice
+jobs, recent and outside-cohort jobs, both inclusive time boundaries, dispatching
+jobs, missing accounts and contradictory recording identities. Complete evidence
+rows and observation hashes must match. Its executed plans require the original
+726 voice-history scans to become one. This verifies query equivalence and bounded
+scan shape; it does not establish production latency or customer recovery. The
+original 20-second read bound and append-only missing-observation history remain.
+
+Read-only production verification at `2026-11-15T19:42:53.546002Z` evaluated all
+363 members and every original evidence field within the unchanged 20-second
+bound. The compact verification returned in 12.4 seconds including transport,
+with 184 research receipts, 2,057 call receipts and 8,673 text receipts. It hashes
+the full evidence rather than pruning its expensive projections. An earlier full
+row transfer ended with `Transport closed`; therefore this check establishes
+bounded database evaluation, not successful full-observation delivery or a new
+observation in the historical chain. Do not fill the collection gap from this
+compact check or infer customer recovery from it.
+
 Missing observations, unknown eligibility, unverified answers and proven-preventable
 stall counts remain explicit. `needs_investigation` is not a confirmed preventable
 stall. Calling hours are a channel-specific condition, not an excuse to block
