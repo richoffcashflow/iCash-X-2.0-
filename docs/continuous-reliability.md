@@ -1,5 +1,27 @@
 # Continuous reliability
 
+## November 15 export-capacity persistence health
+
+An offline replay through the actual export-capacity services and maintenance
+route reproduced a healthy maintenance response after every receipt save and
+finalizer acknowledgment failed. Those database failures were indistinguishable
+from a legitimate held original source. Automatic and manual capacity recovery
+now return the existing unavailable status for failed or malformed receipt
+acknowledgments, automatic finalization failures and later probe-claim exceptions.
+Maintenance records degraded
+health after its independent lanes finish. A canonical verified finalizer still
+confirms earlier writes whose acknowledgments were lost; explicit rejected/held
+receipts, quota waits and provider failures with saved evidence remain holds.
+
+The change does not add provider requests or database retries, change SQL,
+activate policies, release unknown operations or repair customer work by itself.
+Actual-route regressions cover both recovery services, concurrent probe saves,
+ordinary holds, lost acknowledgments, no manual fallback, original request
+counts and independent maintenance progress. Already-admitted probes finish
+after a later claim fails. Other recovery services retain their existing
+classification. Exact release
+verification remains required before reporting this change live.
+
 ## November 13 seller conversion follow-through
 
 The [seller interaction review](seller-conversion-followthrough-2026-11-13.md)
