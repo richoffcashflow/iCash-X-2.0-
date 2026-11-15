@@ -26,6 +26,9 @@ try{
  const contact={status:'instant_lead',principal:'Fixture Buyer',assistantName:'Alex'};
  const unknown=receptionContextVariables({context_policy:buyerSpeakingPolicy},contact);
  assert(unknown.icash_property_greeting.includes("What's the address"));
+ assert(!unknown.icash_property_greeting.includes("AI assistant"));
+ assert.match(unknown.icash_role_instructions,/SELLER HARD STOP:/);
+ assert.match(unknown.icash_role_instructions,/icash_stop_reception_recording/);
  const returning=receptionContextVariables({context_policy:buyerSpeakingPolicy},{...contact,addressProvided:true});
  assert(returning.icash_property_greeting.includes('same property'));
  assert(!returning.icash_property_greeting.includes("What's the address"));

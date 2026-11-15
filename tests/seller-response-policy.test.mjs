@@ -2,15 +2,17 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
-import {sellerResponseDisposition,sellerCallDisposition,sellerResponsePatterns} from '../lib/seller-response-policy.ts';
+import {sellerResponseDisposition,sellerCallDisposition,sellerResponsePatterns,sellerHardStopPatterns} from '../lib/seller-response-policy.ts';
 import {sellerCallAnswerPatterns} from '../lib/seller-call-answer.ts';
 import {isContactOptOut} from '../lib/contact-intent.ts';
 import {validateTextAnalysis} from '../lib/text-ai-policy.ts';
 import {liveConversationResult} from '../lib/deal-conversation.ts';
 import {replyToInstantLeadText} from '../lib/meta-instant-text.ts';
+import {sellerHardStopCases} from './fixtures/seller-hard-stop-cases.mjs';
 const fixtures=[
+ ...sellerHardStopCases,
  ['STOP. Who are you?','opt_out'],['Please stop! What is your name?','opt_out'],['You said "STOP. Who are you?"',null],['Do not say stop. Who are you?',null],
- ['Yes. Never mind','declined'],['Nevermind!','declined'],['Forget it.','declined'],['Go away','declined'],['Go to hell','declined'],['Never mind the paint, I want to sell.',null],['I did not say never mind',null],['You said "forget it" yesterday',null],
+ ['Yes. Never mind','declined'],['Nevermind!','declined'],['Forget it.','declined'],['Go away','opt_out'],['Go to hell','opt_out'],['Never mind the paint, I want to sell.',null],['I did not say never mind',null],['You said "forget it" yesterday',null],
  ['It is not up for sale.','declined'],["I don't own the property.",'declined'],["I'm not the owner",'declined'],
  ['You said "I am not the owner", but I own it.',null],['I did not say I do not own the property',null],
  ['Please remove this number from your mailing and contact list. Thanks, and goodbye.','opt_out'],
@@ -20,7 +22,7 @@ const fixtures=[
  ['No',null],['Naw',null],['Sold',null],
 
  ['This is not a scam, but I am tired of these texts','review'],
- ['Stop asking me cause I will not fucking sale shit','opt_out'],['I am tired of these texts. Stop.','opt_out'],['I have told yall NO','declined'],["I've told you no",'declined'],['I have already told you no','declined'],['I will not sell','declined'],["I won't sell unless you offer $250,000",'review'],['I am tired of these texts','review'],
+ ['Stop asking me cause I will not fucking sale shit','opt_out'],['I am tired of these texts. Stop.','opt_out'],['I have told yall NO','opt_out'],["I've told you no",'opt_out'],['I have already told you no','opt_out'],['I will not sell','declined'],["I won't sell unless you offer $250,000",'review'],['I am tired of these texts','review'],
  ['I would sell for $250,000',null],['No, but I would consider $250,000',null],['What price can you offer?',null],['Can you stop by tomorrow?',null],["Don't stop asking me about the house",null],['You said "stop asking me" yesterday',null],['I did not say I have told you no',null],['Meet me at the bus stop.',null],
 
  ['Stop text me','opt_out'],['Stop contact me','opt_out'],['Stop call me','opt_out'],['Stop message me','opt_out'],['Stop email me','opt_out'],['Please stop text','opt_out'],
@@ -64,7 +66,13 @@ try{
  assert.equal(withdrawal,readFileSync(new URL('../supabase/migrations/20261113163659_seller_soft_withdrawal.sql',import.meta.url),'utf8'));
  assert.equal((await pg.query("select icash_seller_response_disposition('Yes. Never mind') d")).rows[0].d,null,'reproduce soft withdrawal gap');
  await pg.exec(withdrawal);
- for(const pattern of Object.values(sellerCallAnswerPatterns))assert((answerSql+priceSql+unmarkedSql).includes(pattern.replaceAll('\\b','\\y')),'context SQL/TS pattern parity');
+ const hardStop=readFileSync(new URL('../config/seller-hard-stop-policy.sql',import.meta.url),'utf8');
+ assert.equal(hardStop,readFileSync(new URL('../supabase/migrations/20261115213627_seller_hard_stop_policy.sql',import.meta.url),'utf8'));
+ assert.equal((await pg.query("select icash_seller_response_disposition('Fuck off. Who is this?') d")).rows[0].d,null,'reproduce hostile reply gap');
+ await pg.exec(hardStop);
+ const hardStopDefinition=(await pg.query("select pg_get_functiondef('icash_seller_hard_stop(text)'::regprocedure) d")).rows[0].d;
+ for(const pattern of Object.values(sellerHardStopPatterns))assert(hardStopDefinition.includes(pattern.replaceAll('\\b','\\y')),'hard-stop SQL/TS pattern parity');
+ for(const pattern of Object.values(sellerCallAnswerPatterns))assert((answerSql+priceSql+unmarkedSql+hardStop).includes(pattern.replaceAll('\\b','\\y')),'context SQL/TS pattern parity');
  const runtimeSql=(await pg.query("select string_agg(pg_get_functiondef(p.oid),E'\\n') definitions from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('icash_seller_direct_response_match','icash_seller_response_disposition','icash_seller_call_disposition')")).rows[0].definitions;
  for(const pattern of Object.values(sellerResponsePatterns))assert(runtimeSql.includes(pattern.replaceAll('\\b','\\y')),'installed SQL contains the exact mirrored regex');
  for(const [body,expected] of fixtures){
@@ -78,6 +86,13 @@ try{
  }
  const spanishMachine='No se ha grabado nada. Grabe su mensaje después de la señal. Cuelgue cuando haya finalizado.';
  const callCases=[
+  ...['Hell no!','Hell nah.','Fuck no!','Absolutely not!','No fucking way.','Hell no. Who is this?'].flatMap(answer=>[
+   [[{role:'agent',message:'Would you consider selling for cash?'},{role:'user',message:answer}],'opt_out'],
+   [[{role:'agent',message:'Would you be interested in selling for all cash?'},{role:'user',message:answer}],'opt_out'],
+   [[{role:'agent',message:'Do you own this property?'},{role:'user',message:answer}],'declined'],
+   [[{role:'agent',message:'Does the roof need repairs?'},{role:'user',message:answer}],null],
+   [[{role:'agent',message:'Would you consider selling for $120,000?'},{role:'user',message:answer}],null],
+  ]),
   ...['Would you consider selling for 120000?','Would you consider selling for 120,000?','Would you consider selling for one hundred twenty thousand?','Would you consider selling your property for a hundred and twenty thousand?','Would you consider a cash offer of 120000?','Would you consider a cash offer of one hundred twenty thousand?','Are you interested in selling for two fifty?','Would you consider selling for 120000 if we cover closing costs?'].map(question=>[[{role:'agent',message:question},{role:'user',message:'No.'}],null]),
   ...['Would you consider selling 120 Oak Road?','Would you consider a cash offer for 120 Oak Road?','Would you consider selling for cash?'].map(question=>[[{role:'agent',message:question},{role:'user',message:'No.'}],'declined']),
   ...['Would you consider selling for $120,000?','Would you be open to a $120,000 cash offer?','Are you interested in selling for 120k?','Would you consider selling for 120,000 dollars?','Would you consider selling for one hundred twenty thousand dollars?'].map(question=>[[{role:'agent',message:question},{role:'user',message:'No.'}],null]),

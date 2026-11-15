@@ -120,10 +120,20 @@ await q('rollback');
 for(const pattern of Object.values(sellerConversionPatterns))assert(sql.includes(pattern.replaceAll('\\b','\\y')),'regex parity');
 for(const body of ['Do you have a name?','Hello! Hope all is well! Who are you and what amount do you have in mind?','Are you looking to purchase?']){
  const c=await seed({qualified:false});const r=await run(c,body);
- assert.equal(r.plan.action,'answer_buyer_question');assert.match(r.plan.body,/Fixture Buyer/);assert.match(r.plan.body,/Are you the owner/);
+ assert.equal(r.plan.action,'answer_buyer_question');assert.match(r.plan.body,/Fixture Buyer/);assert.match(r.plan.body,/Are you the owner/);assert.match(r.plan.body,/with cash purchases/);assert(!r.plan.body.includes('AI assistant'));
  assert(!r.plan.state.acceptedPriceCents);assert(r.plan.body.length<=160);assert.equal(r.result.status,'message_delivered');
  assert.equal(await rpc('icash_seller_conversion_source',[randomUUID(),r.source.id]),false);
 }
+// Direct AI questions remain honest in an established deterministic offer lane,
+// even though they are not ordinary identity/purchase intent classifications.
+for(const body of ['Are you AI?','Are you a bot?']){
+ const c=await seed();await run(c,'What amount do you have in mind?');
+ const answer=await run(c,body);assert.match(answer.plan.body,/AI assistant for Fixture Buyer/);assert(answer.plan.body.length<=160);
+}
+const realPerson=await seed(),priorIdentity=await run(realPerson,'What amount do you have in mind?');
+const humanQuestion={...priorIdentity.context.messages.at(-1),id:'fixture-human-question',body:'Is this a real person?'};
+const humanAnswer=planSellerTextOffer({...priorIdentity.context,sourceId:humanQuestion.id,messages:[...priorIdentity.context.messages,humanQuestion]});
+assert.match(humanAnswer.body,/AI assistant for Fixture Buyer/,'Planner never turns a direct human-identity question into a misleading buyer answer');
 const listed=await seed({qualified:false});let r=await run(listed,'Terms as listed');
 assert.equal(r.plan.action,'clarify_listing_terms');assert(!r.plan.state.acceptedPriceCents);
 r=await run(listed,"I'm selling it myself");assert.equal(r.plan.action,'qualify_ownership','listing reply does not invent ownership');

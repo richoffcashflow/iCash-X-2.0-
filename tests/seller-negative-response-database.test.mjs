@@ -1,12 +1,16 @@
 // Disposable PostgreSQL, stored-source fixtures only. No network/provider calls.
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
+import {runSellerTerminalReceiptTests} from './helpers/seller-terminal-receipt-fixture.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const fn=(path,name)=>{const s=read(path),start=s.indexOf(`create function public.${name}(`);assert(start>=0,name);return s.slice(start,s.indexOf('$$;',start)+3);};
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('NETWORK BLOCKED: local seller response fixtures only');};
-const pg=await PGlite.create(),q=(s,p=[])=>pg.query(s,p),one=async(s,p=[])=>(await q(s,p)).rows[0];
+const emitNative=process.argv.includes('--emit-terminal-native'),nativeSql=[];
+const literal=v=>v===null?'null':typeof v==='boolean'?String(v):typeof v==='number'?String(v):"'"+(typeof v==='object'?JSON.stringify(v):String(v)).replaceAll("'","''")+"'";
+const pg=await PGlite.create(),rawExec=pg.exec.bind(pg);pg.exec=async s=>{if(emitNative)nativeSql.push(s+"\n;");return rawExec(s);};
+const q=(s,p=[])=>{if(emitNative)nativeSql.push(s.replace(/\$(\d+)/g,(_,n)=>literal(p[Number(n)-1]))+';');return pg.query(s,p);},one=async(s,p=[])=>(await q(s,p)).rows[0];
 const isolated=async f=>{await pg.exec('begin');try{await f();}finally{await pg.exec('rollback');}};
 try{
  await pg.exec(`
@@ -64,6 +68,9 @@ try{
  await pg.exec(read('config/seller-source-dispositions.sql'));
  await pg.exec('begin;'+read('config/seller-call-answer-context.sql')+read('config/seller-call-automated-greetings.sql')+read('config/seller-specific-price-answers.sql')+read('config/seller-unmarked-price-answers.sql')+'commit;');
 
+ await pg.exec(read('config/seller-soft-withdrawal.sql'));
+ await pg.exec(read('config/seller-hard-stop-policy.sql'));
+
  await pg.exec(fn('config/manual-deal-email.sql','icash_record_deal_email_reply'));
  await pg.exec('create trigger fixture_meta_observe_text after insert or update of state,provider_id on icash_text_messages for each row execute function icash_meta_observe_text()');
  const a=randomUUID(),b=randomUUID(),screen=randomUUID(),otherScreen=randomUUID(),deal=randomUUID(),otherDeal=randomUUID(),thread=randomUUID(),otherThread=randomUUID(),permission=randomUUID(),otherPermission=randomUUID(),lead=randomUUID();
@@ -86,7 +93,7 @@ try{
  await q('insert into icash_seller_email_openers values($1,$2)',[mail,a]);
  const sms=async(body,opts={})=>{const id=randomUUID();await q("insert into icash_text_messages(id,account_id,thread_id,direction,state,body,event_id) values($1,$2,$3,'incoming','received',$4,$5)",[id,opts.account??a,opts.thread??thread,body,randomUUID()]);return id;};
  const allowed=async op=>(await one('select icash_seller_response_operation_allowed($1,$2) allowed',[a,op])).allowed;
- const stopped=async()=>{
+ const stopped=async(permanent=false)=>{
   assert.equal((await one('select manual from icash_property_controls where account_id=$1',[a])).manual,true);
   assert.equal((await one('select count(*) n from icash_property_controls where account_id=$1',[b])).n,0,'soft pause is tenant scoped');
   assert.equal((await one('select paused from icash_text_threads where id=$1',[thread])).paused,true);
@@ -100,16 +107,44 @@ try{
   assert.equal((await one('select state from icash_live_callbacks where id=$1',[callback])).state,'canceled');
   assert.equal((await one('select state from icash_deal_emails where id=$1',[mail])).state,'needs_review');
   for(const op of ['voice:'+reservedJob,'text:'+outgoing,'sms-ai:'+ai,'deal-email:'+mail])assert.equal(await allowed(op),false,op);
-  assert.equal(await allowed('text:'+manualText),true,'existing manual reply checks stay downstream');
+  assert.equal(await allowed('text:'+manualText),!permanent,'manual replies retain checks and cannot bypass a permanent stop');
   assert.equal((await one('select icash_claim_operation($1) claimed',['voice:'+reservedJob])).claimed,false);
   assert.equal((await one('select n from fixture_claims')).n,0,'blocked before prior spend claim');
   assert.equal((await one("select icash_transition_call_recording($1,$2,$3,'consent_pending','claim_dial','{}') result",[randomUUID(),a,'voice:'+reservedJob])).result,null,'last provider dial is blocked after spend claim');
   assert.deepEqual((await one("select icash_transition_call_recording($1,$2,$3,'recording','reconcile','{}') result",[randomUUID(),a,'voice:'+reservedJob])).result,{reconciled:true});
   assert.equal((await one('select stage from icash_deal_files where id=$1',[deal])).stage,'draft','no invented legal cancellation');
  };
- for(const text of ['Wrong phone number','Yes, I do not for sale','I have told yall NO','I am tired of these texts','not super interested','This sounds like a scam','not a scam?'])await isolated(async()=>{await sms(text);await stopped();assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0);});
+ if(!emitNative){
+ for(const text of ['Wrong phone number','Yes, I do not for sale','I am tired of these texts','not super interested','This sounds like a scam','not a scam?'])await isolated(async()=>{await sms(text);await stopped();assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0);});
  for(const text of ['The roof is terrible and the house needs repairs','not a scam, happy to proceed',"I never said not interested, I want to sell",'You wrote STOP in your message'])await isolated(async()=>{await sms(text);assert.equal((await one('select count(*) n from icash_property_controls')).n,0,text);assert.equal((await one("select icash_text_signal($1,'seller') signal",[text])).signal,null,text);});
  for(const body of ['Please remove this number from your mailing and contact list. Thanks, and goodbye.',"Don’t send me any message again",'Stop asking me cause I will not fucking sale shit','I am tired of these texts. Stop.','STOP','Stop text me','Stop contact me','Stop call me','Stop message me'])await isolated(async()=>{await sms(body);assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1);assert.equal((await one('select count(*) n from icash_email_suppressions')).n,2,'exact shared phone opt-out propagates to its bound emails');assert.equal((await one('select revoked_at is not null revoked from icash_contact_permissions where id=$1',[permission])).revoked,true);assert.equal(await allowed('text:'+manualText),false,'manual sends never bypass permanent suppression');});
+ // Actual persisted sources, including a question after the stop, must cancel
+ // queued work and deny the final send. A false model opt-out flag never wins.
+ const hardStops=['I have told yall NO','Absolutely not interested','I am on the DNC list. Who is this?','I will sue you. What company is this?','Fuck off. How much would you pay?'];
+ for(const source of ['sms','call','inbound_call'])for(const body of hardStops)await isolated(async()=>{
+  if(source==='sms')await sms(body);
+  else {
+   const transcript=[{role:'agent',message:'Would you consider an all-cash sale?'},{role:'user',message:body}];
+   if(source==='call')await q('select icash_save_live_result($1,$2)',[call,{transcript,optedOut:false}]);
+   else await q('insert into icash_seller_agreement_private.call_history values($1,$2,$3,$4,now(),$5)',[randomUUID(),a,screen,hash,JSON.stringify(transcript)]);
+  }
+  await stopped(true);
+  assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1,source+' '+body);
+  assert.equal((await one('select count(*) n from icash_email_suppressions')).n,2,'phone-bound emails are also suppressed');
+  assert.equal((await one('select revoked_at is not null revoked from icash_contact_permissions where id=$1',[permission])).revoked,true);
+ });
+ for(const body of hardStops)await isolated(async()=>{
+  await q("update icash_deal_emails set state='accepted',provider_id=$2 where id=$1",[mail,randomUUID()]);
+  await q("insert into icash_deal_emails(id,account_id,deal_id,direction,contact_key,recipient,body_text,state,provider_id,reply_to_id) values($1,$2,$3,'incoming',$4,$5,$6,'received',$7,$8)",[randomUUID(),a,deal,'seller-lead:'+lead,email,body,randomUUID(),mail]);
+  assert.equal((await one('select count(*) n from icash_text_suppressions')).n,1,'email hard-stop reaches only verified bound phone');
+  assert.equal(await allowed('text:'+manualText),false);
+  assert.equal(await allowed('voice:'+reservedJob),false);
+  assert.equal((await one('select state from icash_text_ai_jobs where id=$1',[ai])).state,'superseded');
+ });
+ for(const body of ['My attorney will review the contract','The roof is fucking terrible','I did not say fuck off','My tenant said "fuck off". I want to sell.'])await isolated(async()=>{
+  await sms(body);assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0,body);
+  assert.equal((await one('select count(*) n from icash_property_controls')).n,0,body);
+ });
  await isolated(async()=>{await sms('not interested',{account:b,thread});assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'mismatched source tenant ignored');});
  await isolated(async()=>{await q("update icash_deal_files set terms='{\"practice\":true}' where id=$1",[deal]);await sms('STOP');assert.equal((await one('select count(*) n from icash_text_suppressions')).n,0,'practice source is excluded');});
  for(const source of ['call','inbound_call'])for(const [question,answer] of [['Would you consider selling?','Not super interested'],['Is this the owner of 12 Fixture Lane?','No.'],['Are you the owner of 12 Fixture Lane?','No, sir.'],['Would you be open to a cash offer?','Nope.']])await isolated(async()=>{
@@ -203,6 +238,9 @@ try{
   await q('insert into icash_sms_seller_openings values($1,$2,$3,null,null)',[a,thread,question]);await sms('No');
   assert.equal((await one('select count(*) n from icash_property_controls')).n,0,'An undelivered question cannot explain no');
  });
+ }
+ await runSellerTerminalReceiptTests({pg,q,one,isolated,a,b,screen,deal,thread,phone,hash,call,outgoing,manualText,ai,reservedJob,mail,allowed,emit:emitNative?()=>writeFileSync(1,JSON.stringify({sql:nativeSql.join('\n'),ids:{a,b,screen,deal,thread,phone,hash,call,outgoing,manualText,ai,reservedJob,mail}})):null});
+ if(emitNative)process.exit(0);
  await pg.exec('set role anon');await assert.rejects(()=>q('select icash_apply_seller_response($1,$2)',['sms',randomUUID()]),/permission denied/);await pg.exec('reset role');
  assert.equal(read('config/seller-negative-response-holds.sql'),read('supabase/migrations/20261019183500_seller_negative_response_holds.sql'));
  console.log('Seller negative-response SQL fixtures passed: source binding, all channels, queued/final admission, permanent opt-out, tenant isolation and uncertain-provider preservation. No network or production access.');

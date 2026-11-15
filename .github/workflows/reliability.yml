@@ -248,6 +248,8 @@ jobs:
           node-version: '24'
       - run: npm install --global pnpm@11.25.0
       - run: pnpm install --frozen-lockfile
+      - name: Verify seller stop, source result and final-send races
+        run: python3 scripts/test-seller-terminal-receipt-postgres.py
       - name: Install fixed local database driver outside the project
         run: npm install --prefix "$RUNNER_TEMP/outreach-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
       - name: Verify source-bound preparation and original locks

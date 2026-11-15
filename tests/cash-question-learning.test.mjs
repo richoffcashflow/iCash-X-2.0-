@@ -9,6 +9,11 @@ try{
  await db.exec(setupSql+costsSetup);
  await db.exec(migration);
  assert.equal(migration,read('supabase/migrations/20261114182940_cash_question_learning.sql'));
+ const identityMigration=read('config/seller-assistant-identity.sql');
+ const identityHelper=identityMigration.match(/create function public\.icash_seller_cash_assistant_reply\([\s\S]*?end \$\$;/)[0];
+ const identityObserver=identityMigration.match(/do \$learning\$[\s\S]*?end \$learning\$;/)[0];
+ await db.exec(identityHelper+identityObserver);
+
  assert.equal(await val('select icash_seller_cash_learning_active()'),false);
  const now=Date.parse(await val('select now()')),stamp=h=>new Date(now-h*3600000).toISOString(),plus=(at,m)=>new Date(Date.parse(at)+m*60000).toISOString();
  for(let a=1;a<=4;a++)await q("insert into icash_accounts(id,owner_user_id) values($1,$2)",[id(a),a===4?'592171a0-2bb9-484e-8c9a-dd5d2b43b5f7':id(a+10)]);
@@ -62,6 +67,15 @@ try{
  await q("insert into icash_text_ai_jobs(id,account_id,thread_id,message_id,outgoing_id,state,analysis,created_at) values($1,$2,$3,$4,$5,'complete','{\"dialogueAction\":\"cash_identity_v6\"}',$6)",[id(806),id(1),identity.thread,id(804),id(805),plus(identity.at,5)]);
  await incoming(identity,807,10);
  assert.equal(await val('select icash_seller_sms_interest_at($1,$2,$3,now())',[id(1),identity.thread,identity.at]),plus(identity.at,10));
+ // Both exact approved identity bodies retain their original received/delivery
+ // evidence. A wording migration must not erase old attribution or reward an
+ // edited/unbound question.
+ await q("update icash_text_messages set body=icash_seller_cash_assistant_reply('Who is this?',$2) where id=$1",[id(805),identity.address]);
+ assert.equal(await val('select icash_seller_sms_interest_at($1,$2,$3,now())',[id(1),identity.thread,identity.at]),plus(identity.at,10),'New assistant wording asks the same cash-sale question');
+ await q("update icash_text_messages set body=body||' Changed.' where id=$1",[id(805)]);
+ assert.equal(await val('select icash_seller_sms_interest_at($1,$2,$3,now())',[id(1),identity.thread,identity.at]),null,'Unreviewed identity wording cannot teach');
+ await q("update icash_text_messages set body=icash_seller_cash_assistant_reply('Who is this?',$2) where id=$1",[id(805),identity.address]);
+
  await q("update icash_text_events set payload=jsonb_set(payload,'{timestamp}',to_jsonb($1::numeric)) where id='fixture:804'",[Date.parse(plus(identity.at,-10))/1000]);
  assert.equal(await val('select icash_seller_sms_interest_at($1,$2,$3,now())',[id(1),identity.thread,identity.at]),null,'Delayed old identity question cannot establish this sequence');
  await q("update icash_text_events set payload=jsonb_set(payload,'{timestamp}',to_jsonb($1::numeric)) where id='fixture:804'",[Date.parse(plus(identity.at,5))/1000]);

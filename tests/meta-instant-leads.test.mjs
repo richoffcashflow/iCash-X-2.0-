@@ -23,7 +23,7 @@ assert.equal(parseMetaLead(receipt,notice,source,now).phone,'+12145550123');
 assert.throws(()=>parseMetaLead(receipt,notice,{...source,test_lead_names:['  fixture   seller ']},now),/META_TEST_LEAD/);
 assert.equal(parseMetaLead(receipt,notice,{...source,test_lead_names:['Another Seller']},now).name,'Fixture Seller');
 for(const name of ['Sam','A'.repeat(100),'李先生',null]){
- const text=instantLeadInitialText(name);assert(smsLength(text).fits);assert(!text.includes('https://'));assert(text.includes('street, city and state'));assert.doesNotMatch(text,/STOP to opt out/i);
+ const text=instantLeadInitialText(name);assert(smsLength(text).fits);assert(!text.includes('https://'));assert(text.includes('street, city and state'));assert.doesNotMatch(text,/STOP to opt out/i);assert.match(text,/HomeOffer Network assistant here/);assert.doesNotMatch(text,/\bAI\b/);
 }
 assert.equal(parseMetaLead(receipt,notice,source,now).callNow,true);
 assert.equal(parseMetaLead(receipt,notice,source,now+6*60000).callNow,false);
