@@ -1,10 +1,12 @@
 import {object} from './required-call-recording.ts';
-import {spokenMoneyAmounts} from './call-offer-evidence.ts';
+import {callOfferEvidence,spokenMoneyAmounts} from './call-offer-evidence.ts';
 
 /** Seller statements support a proposed contract, never verified title or proceeds. */
 export type SellerPayoffReport={mortgageCents?:number;otherDebtCents?:number;coveredShortfallCents?:number;coverageDeclined?:boolean};
 export type SellerPayoffUpdate=Partial<SellerPayoffReport>;
+export type SellerPayoffRecovery={report:SellerPayoffReport;acceptedAfterReport:boolean};
 const validCents=(n:unknown):n is number=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0&&n<=100000000000;
+const completeNegative=(text:string)=>/^(?:(?:um|uh|well)[,.\s]+)*(?:no|nope|none)(?:[,. ]+(?:no|none|not any|there (?:are not|aren't|is not|isn't) any|nothing else))*[.! ]*$/i.test(text.replace(/[’]/g,"'"));
 export function sellerPayoffPosition(report:SellerPayoffReport|undefined,priceCents:number){
  if(!report||!validCents(report.mortgageCents))return null;
  if(!validCents(report.otherDebtCents))return {complete:false as const,mortgageCents:report.mortgageCents};
@@ -13,6 +15,39 @@ export function sellerPayoffPosition(report:SellerPayoffReport|undefined,priceCe
  const shortfallCents=Math.max(0,totalDebtCents-priceCents);
  return {complete:true as const,mortgageCents:report.mortgageCents,otherDebtCents:report.otherDebtCents,totalDebtCents,shortfallCents,
   canProceed:shortfallCents===0||!report.coverageDeclined&&validCents(report.coveredShortfallCents)&&report.coveredShortfallCents>=shortfallCents};
+}
+
+/** Recover only a missed zero-other-debt answer beside the already saved
+ * mortgage. The final actual question supplies its meaning; later uncertain or
+ * changed debt answers invalidate recovery. This does not verify title. */
+export function sellerPayoffRecovery(value:unknown,mortgageCents:number,priceCents:number):SellerPayoffRecovery|null{
+ if(!validCents(mortgageCents)||!validCents(priceCents)||priceCents<1)return null;
+ const rows=object(value).transcript;if(!Array.isArray(rows)||rows.length>500)return null;
+ const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
+ const lastQuestion=(text:string)=>(text.match(/[^.!?;\n]+[.!?;]?/g)??[]).map(s=>s.trim()).filter(Boolean).at(-1)??'';
+ const debt=/\b(?:mortgages?|payoff|loans?|heloc|debts?|liens?|tax(?:es)?|hoa|owe|owed|judgments?|balances?|financial obligations?)\b/i;
+ let candidate=-1;
+ for(let n=0;n<turns.length;n++){
+  if(turns[n].role!=='user')continue;
+  const text=String(turns[n].message).trim(),question=lastQuestion(String(turns.slice(0,n).findLast(t=>t.role==='agent')?.message??''));
+  // A later debt correction/unknown cannot be ignored because the model also
+  // skipped its report_change. A price question mentioning a conditional
+  // payoff in an earlier sentence is not itself a debt question.
+  const offerQuestion=/\b(?:does|will|would) (?:that|this|the) (?:cash )?(?:offer|price) (?:work|fit)\b.*\?$/i.test(question);
+  if(debt.test(text)||debt.test(question)&&!offerQuestion||/\b(?:not sure|do not know|don['’]?t know|maybe|might|could be|possibly)\b/i.test(text))candidate=-1;
+  const inventory=/^(?:are there|do you have) (?:any )?(?:other|additional) (.+?)(?: besides (?:that|the|your) mortgage)?\?$/i.exec(question)?.[1]??'';
+  if(!['loan','lien','tax','hoa'].every(word=>new RegExp('\\b'+word,'i').test(inventory))||inventory.replace(/\b(?:loans?|liens?|(?:unpaid )?taxes|hoa (?:debts?|balances?)|and|or)\b|[ ,]/gi,'')!=='')continue;
+  if(!completeNegative(text))continue;
+  const answer=extractPayoff(text,question);if(answer?.otherDebtCents!==0)continue;
+  const prior=turns.slice(0,n).findLastIndex(t=>t.role==='user');if(prior<0)continue;
+  const priorQuestion=lastQuestion(String(turns.slice(0,prior).findLast(t=>t.role==='agent')?.message??''));
+  if(!priorQuestion.endsWith('?')||!/\b(?:mortgage|payoff|loan|owe)\b/i.test(priorQuestion)||/\b(?:other|additional|besides|apart from|repairs?|price|offer)\b/i.test(priorQuestion))continue;
+  const mortgage=extractPayoff(String(turns[prior].message),priorQuestion);
+  if(mortgage?.mortgageCents!==mortgageCents)continue;
+  candidate=n;
+ }
+ if(candidate<0)return null;
+ return {report:{mortgageCents,otherDebtCents:0},acceptedAfterReport:callOfferEvidence({transcript:turns.slice(candidate+1)},{action:'accept_offer',priceCents})};
 }
 
 /** Extract the latest caller answer, bound to its real question, with a missed
@@ -50,10 +85,10 @@ function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
  const inventory=/^(?:is there|are there|do you have|does (?:the|this|your) (?:property|house|home) have) (?:any )?(.+?)(?: on (?:the|this|your) (?:property|house|home))?(?: that (?:need|needs) to be paid(?: off)?(?: at closing)?)?\?$/i.exec(question)?.[1]??'';
  const wholeDebtQuestion=/\b(?:mortgages?|loans?)\b/i.test(inventory)&&/\bliens?\b/i.test(inventory)&&/\btaxes\b/i.test(inventory)&&/\bhoa (?:debts?|balances?)\b/i.test(inventory)
   &&inventory.replace(/\b(?:mortgages?|loans?|liens?|(?:unpaid )?taxes|hoa (?:debts?|balances?)|and|or)\b|[ ,]/gi,'')==='';
- const completeNo=/^(?:(?:um|uh|well)[,.\s]+)*(?:no|nope|none)(?:[,. ]+(?:no|none|not any|there (?:are not|aren't|is not|isn't) any))*[.! ]*$/i.test(latest.replace(/[’]/g,"'"));
+ const completeNo=completeNegative(latest);
  if(wholeDebtQuestion&&completeNo)return {mortgageCents:0,otherDebtCents:0};
  const amounts=spokenMoneyAmounts(latest);
- const uncertain=/\b(between|not sure|don['’]?t know|no idea|more than|less than|at least|at most|under|over|or maybe)\b/i.test(latest);
+ const uncertain=/\b(between|not sure|don['’]?t know|no idea|more than|less than|at least|at most|under|over|maybe|might|could|think|possibly|probably)\b/i.test(latest);
  const coverageQuestion=/\b(cover|bring|pay)\b/i.test(previous)&&/\b(difference|shortfall|out of pocket|closing)\b/i.test(previous);
  if(coverageQuestion){
   const asked=spokenMoneyAmounts(previous);
@@ -69,7 +104,7 @@ function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
  const additionalDebt=/\b(?:unpaid|outstanding|still owe)\b|\b(?:there (?:is|are)|i (?:also )?(?:have|owe))\s+(?:(?:a|an|some|another|back|additional|other)\s+)*(?:debts?|liens?|loans?|taxes|mortgages?|hoa|balances?)\b|\b(?:but|except|however|although)\b[^.!?]{0,100}\b(?:debts?|liens?|loans?|taxes|mortgages?|hoa|balances?)\b/i.test(latest);
  if(onlyDebt&&!uncertain&&!amounts.length&&!additionalDebt&&!/\b(not the only|isn['’]?t the only)\b/i.test(latest))return {otherDebtCents:0};
  if(otherQuestion){
-  if(/^(?:no|nope|none)(?:[,.!]|$|\s+(?:that|there|nothing))/i.test(latest)&&!amounts.length&&!additionalDebt&&!uncertain)return {otherDebtCents:0};
+  if(completeNo&&!amounts.length&&!additionalDebt&&!uncertain)return {otherDebtCents:0};
   if(!uncertain&&amounts.length===1&&!/\b(not|repairs?|asking|offer)\b/i.test(latest)&&!(/\b(mortgage|payoff)\b/i.test(latest)&&! /\b(other|additional|second)\b/i.test(latest)))return {otherDebtCents:amounts[0]};
   return null;
  }
