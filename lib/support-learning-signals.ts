@@ -38,6 +38,11 @@ export function supportCustomerConfirmedResolution(text:string){
 }
 export function supportPaymentAccessConcern(text:string){
  if(/\b(?:what if|hypothetically|if i (?:am|were)|how (?:do|can) i avoid)\b/i.test(text))return false;
+ // A claimed VIP purchase with unavailable benefits is unresolved even when
+ // phrased as "nothing is showing". This is a review signal, not payment proof.
+ const vipPurchase=/\b(?:paid|purchased|bought|charged)\b.{0,60}\bvip\b/i.test(text)
+  &&!/\b(?:not|never|didn[’']?t|did not)\s+(?:paid|pay|purchased|purchase|bought|buy|charged)\b/i.test(text);
+ if(vipPurchase&&/\b(?:nothing (?:is )?showing|not (?:showing|active|available|recognized)|missing|locked|blocked)\b/i.test(text)&&!supportCustomerConfirmedResolution(text))return true;
  return /\b(?:charged twice|double charged|duplicate charge|(?:dont|don[’']t|do not) recognize (?:this |the |a )?charge|paid.{0,60}(?:locked|no access|cant|can[’']t|cannot|missing)|(?:account|access) (?:is |still |is still )?(?:locked|blocked|unavailable)|(?:credits?|payment).{0,30}(?:missing|not (?:received|showing|added))|(?:cant|can[’']t|cannot).{0,30}(?:log|sign) in)\b/i.test(text);
 }
 export function supportDisputeLanguage(text:string){
