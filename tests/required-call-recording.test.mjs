@@ -84,7 +84,7 @@ for(const policy of ['direct_recorded_v1','spoken_v1']){
  row.call_context.prompt='Earlier saved context: leave one short voicemail message.';
  await voicemailWire.register(row,600,token);
  const data=voicemailBodies.at(-1).conversation_initiation_client_data,prompt=data.conversation_config_override.agent.prompt.prompt;
- if(row.party==='seller'){assert(prompt.startsWith('CALL ANSWER PRIORITY:'));assert.match(prompt,/Never give your name to a mailbox/);assert.match(prompt,/request human review merely because nobody answered/);}
+ if(row.party==='seller'){assert(prompt.startsWith('SELLER HARD STOP:'));assert.match(prompt,/CALL ANSWER PRIORITY:/);assert.match(prompt,/Do not answer more questions/);assert.match(prompt,/hostile cursing directed at us/);assert.match(prompt,/Never give your name to a mailbox/);assert.match(prompt,/request human review merely because nobody answered/);}
  assert(prompt.indexOf('VOICEMAIL CUTOFF:')>prompt.indexOf('Earlier saved context'));
  assert.match(prompt,/SELLER CONVERSATION RECOVERY:/);assert.match(prompt,/one short clearer attempt/);
  assert.match(prompt,/OUTBOUND DIRECTION: You placed this call/);assert.match(prompt,/Never require qualification before honoring a request to end/);assert.match(prompt,/business phone menu, call-screening assistant/);assert.match(prompt,/Never repeat silence checks/);

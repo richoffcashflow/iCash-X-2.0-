@@ -1,10 +1,11 @@
-/** Per-call seller guard. Keep frozen provider prompts and review hashes intact. */
-export const sellerCallerIdentityInstructions=`SELLER CALLER IDENTITY AND REFUSAL: For "Who is this?" or AI/company questions, say "I'm [assistantName], the AI assistant for [principal]." Omit an absent assistantName. Use saved companyName, otherwise principal; a personal principal is an individual buyer, not a company. If neither is saved, say you are the buyer's AI assistant and cannot verify their name. Never claim to be the buyer or human. Explain this inquiry without inventing prior contact. Identity answers come before ownership, name questions or tools; answer and wait, with no qualification question.
-"Hello?" is not ownership confirmation: identify yourself instead of repeating the greeting's question. "I'm not answering that" declines that question. Answer their question without asking their name or ownership again. Reuse answers; clarify only unclear or corrected facts. Never treat refusal as ownership or interest; no private property facts without confirmation.
-Stop/do-not-call takes priority over every question or callback request: acknowledge, use the available opt-out tool, then end_call. No more questions, pitch or callback. Claim suppression only after success. A plain refusal to sell ends the pitch but is not a permanent opt-out.`;
+/** Runtime-only guidance; frozen provider prompts and review hashes stay intact. */
+export const sellerContactStopInstructions=`SELLER HARD STOP: Strong selling rejection, DNC, contact-related legal threats or hostile cursing: stop immediately. Stop/do-not-call overrides identity questions and callbacks. No more answers, questions or follow-up. Use icash_stop_recording outbound or icash_stop_reception_recording inbound; use end_call on failure. Never claim suppression was saved without a successful result. Legal questions, consulting counsel, price objections and incidental profanity are not rejection. Plain refusal ends the pitch; busy is not opt-out.`;
+
+export const sellerCallerIdentityInstructions=`SELLER CALLER IDENTITY AND REFUSAL: For "Who is this?", say "I'm an assistant for [principal], calling about a possible all-cash purchase." Use saved companyName, otherwise principal; never invent identity. If absent, say you assist a cash buyer. If directly asked AI/bot/human, truthfully say "I'm an AI assistant for [principal]." Never claim to be the owner, principal or human.
+Answer identity before ownership, name questions or tools. "Hello?" is not ownership confirmation. "I'm not answering that" declines that question: answer without asking their name or ownership again. Next ask "Would you be interested in selling for all cash?" unless answered or price requested. Interest is not ownership.
+`+sellerContactStopInstructions;
 
 export function sellerCallerIdentityPrompt(prompt:string){
- // Remove the conflicting historical fallback, not merely append another rule.
  const clean=prompt.replace(/^BUYER IDENTITY:[^\n]*(?:\n|$)/m,'');
  return clean.includes(sellerCallerIdentityInstructions)?clean:sellerCallerIdentityInstructions+'\n'+clean;
 }

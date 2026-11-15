@@ -4,7 +4,7 @@ import {sellerCallCadenceInstructions as cadence,sellerCallCadencePrompt,outboun
 import {receptionContextVariables} from '../lib/reception-property-context.ts';
 import {automaticOfferReceptionPrompt,speakingBuyerReceptionPolicyHash} from '../lib/seller-agreement-reception.ts';
 import {buyerSpeakingPolicy,selectedSpeakingRoleInstructions,buyerSpeakingEntryInstructions} from '../lib/buyer-speaking-policy.ts';
-import {sellerCallerIdentityPrompt} from '../lib/seller-caller-identity.ts';
+import {sellerCallerIdentityPrompt,sellerContactStopInstructions} from '../lib/seller-caller-identity.ts';
 import {sellerAgreementDeliveryPrompt} from '../lib/seller-agreement-delivery-prompt.ts';
 import {instantLeadPrompt} from '../lib/meta-instant-leads.ts';
 import {limitedSellerPrompt} from '../lib/seller-limited-contact.ts';
@@ -35,7 +35,7 @@ try{
  process.env.META_INSTANT_LEADS_ENABLED='true';process.env.VERCEL_ENV='production';
  for(const addressProvided of [false,true]){
   const vars=receptionContextVariables(config,{status:'instant_lead',principal:'Fixture Buyer',assistantName:'Alex',addressProvided});
-  assert.equal(vars.icash_role_instructions,instantLeadPrompt('Fixture Buyer','Alex')+'\n'+cadence);
+  assert.equal(vars.icash_role_instructions,sellerContactStopInstructions+'\n'+instantLeadPrompt('Fixture Buyer','Alex')+'\n'+cadence);
   assert.equal(sellerCallCadencePrompt(vars.icash_role_instructions),vars.icash_role_instructions);
  }
 }finally{

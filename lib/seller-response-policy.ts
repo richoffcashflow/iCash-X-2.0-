@@ -1,7 +1,7 @@
 import {sellerCallAnswerDisposition,sellerCallAnswerPatterns} from './seller-call-answer.ts';
 import {isAutomatedCallMenu} from './automated-call-menu.ts';
 /** Source-word policy, not sentiment scoring. A soft refusal pauses automation;
- * only an actual stop-contact request establishes permanent suppression.
+ * explicit stops and the owner's strong-rejection policy establish suppression.
  * Keep the SQL implementation and parity fixtures in sync. */
 export type SellerResponseDisposition='opt_out'|'declined'|'review'|null;
 export const sellerResponsePatterns={
@@ -15,18 +15,33 @@ export const sellerResponsePatterns={
 const normalize=(body:string)=>body.toLowerCase().replace(/[’‘]/g,"'").replace(/[“”]/g,'"').replace(/\s+/g,' ').trim();
 export const sellerStandaloneStopPattern="(?:^|[.!?;] +)(?:please )?stop[.!;](?: +|$)";
 export const sellerWithdrawalPattern="(?:^|[.!?;] +)(?:(?:ok(?:ay)?|yes)[, ]+)?(?:never mind|nevermind|forget it|go away|go to hell)(?: please)?[.! ,]*$";
-function directMatch(body:string,pattern:string){
+/** Direct hostility/contact objections only. Profanity about repairs, a price
+ * objection, or ordinary lawyer/title questions are not contact withdrawal. */
+export const sellerHardStopPatterns={
+ stop:String.raw`^(?:please )?(?:stop|stopall|unsubscribe|opt out|dnc)(?:[.!?,;]+(?: |$)| +(?=(?:who|what|why|how|your offer)\b))|\b(?:stop|quit) sending (?:me |us )?(?:any |more |any more )?(?:fucking |damn )?(?:texts?|messages?|emails?)\b`,
+ hostile:String.raw`\b(?:fuck (?:you|off)|go fuck yourself|shut (?:the (?:fuck|hell) )?up|go (?:the fuck )?away|go to hell|(?:stop|quit) (?:fucking|damn) (?:calling|texting|contacting|bothering|harassing)(?: me| us)?|(?:are you|you are|you're|youre|you) (?:a |an )?(?:fucking |goddamn )(?:idiot|moron)|(?:you are|you're|youre|you) (?:a |an )?(?:fucking |goddamn )?(?:asshole|assholes|bastard|bastards|motherfucker|motherfuckers|piece of shit))\b`,
+ legal:String.raw`\b(?:(?:i|we) (?:will|'ll|am going to|are going to|am gonna|are gonna) (?:sue you|sue your (?:company|business)|take legal action against you|report (?:you|your (?:company|business)) to (?:the )?(?:police|fcc|ftc|attorney general))|(?:i'm|we're|im|were) (?:going to|gonna) (?:sue you|report (?:you|your (?:company|business)) to (?:the )?(?:police|fcc|ftc|attorney general))|(?:i'll|we'll) (?:sue you|report (?:you|your (?:company|business)) to (?:the )?(?:police|fcc|ftc|attorney general))|(?:i|we) (?:have )?(?:already )?reported (?:you|your (?:company|business)) to (?:the )?(?:police|fcc|ftc|attorney general)|this is harassment|(?:this|your) (?:call|text|contact|calling|texting) (?:is|constitutes) (?:illegal|harassment)|(?:you are|you're|youre) (?:harassing me|violating (?:the )?(?:do not call|dnc|tcpa))|(?:my|our) (?:lawyer|attorney) (?:will|is going to) (?:sue you|contact you about (?:these|your) (?:calls|texts)))\b`,
+ dnc:String.raw`\b(?:(?:i am|i'm|im|we are|we're|were|my (?:phone )?number is|this (?:phone )?number is) (?:already )?on (?:the |your |a |the national |the federal )?(?:dnc|do[ -]not[ -]call)(?: (?:list|registry))?|(?:put|place|add) (?:me|us|my (?:phone )?number|this (?:phone )?number) (?:on|in) (?:the |your |a )?(?:do[ -]not[ -]call|dnc)(?: (?:list|registry))?)\b`,
+ strong:String.raw`\b(?:(?:i|we)(?:'ve)? (?:(?:have|already) ){0,2}told (?:you|yall|y'all|you all) no|(?:i|we) (?:will never|would never|am never going to|are never going to) sell|(?:i'm|we're|im|were) never (?:going to sell|selling)|(?:absolutely|definitely|completely) not interested(?: in selling)?|not (?:at all|remotely|even slightly|fucking) interested(?: in selling)?|not interested (?:at all|whatsoever)|(?:i|we) have (?:absolutely )?(?:zero|no) interest in selling|(?:zero|no) fucking interest(?: in selling)?)\b(?! in (?!selling\b))(?![^.!?;]*(?:\b(?:unless|if|until|when|price|offer|amount|(?:for|at) (?:that|this|[0-9]))\b|\$))`,
+};
+export const sellerHardStopNonRequestPattern=String.raw`(?:\b(?:won't|wont|will not|wouldn't|wouldnt|would not|can't|cannot) (?:say|tell|use|repeat)\b[^.!?;]{0,100}|\b(?:my|our|the|a) (?:seller|buyer|lawyer|attorney|tenant|agent|friend) (?:said|says|wrote|asked)\b[^.!?;]{0,100}|\b(?:what does|what do you mean by|meaning of|definition of) ["']?)$`;
+function directMatch(body:string,pattern:string,unquotedOnly=false){
  for(const match of body.matchAll(new RegExp(pattern,'g'))){
+  // Hard-stop phrases inside a reported quotation remain reported, even when
+  // ASR punctuation splits the quotation into multiple sentences.
+  if(unquotedOnly&&(body.slice(0,match.index).match(/"/g)?.length??0)%2===1)continue;
   const sentence=body.slice(0,match.index).split(/[.!?;]|\bbut\b/).at(-1)??'';
   // A reported quote stays in its reporting clause; a fresh demand after a comma does not.
   const quoted=(sentence.match(/"/g)?.length??0)%2===1;
   const prefix=quoted?sentence:sentence.split(',').at(-1)??'';
+  if(unquotedOnly&&new RegExp(sellerHardStopNonRequestPattern).test(sentence))continue;
   if(!new RegExp(sellerResponsePatterns.nonRequest).test(prefix)&&!new RegExp(sellerResponsePatterns.negatedIntroduction).test(sentence))return true;
  }
  return false;
 }
 export function sellerResponseDisposition(source:string):SellerResponseDisposition{
  const body=normalize(source);
+ if(Object.values(sellerHardStopPatterns).some(pattern=>directMatch(body,pattern,true)))return 'opt_out';
  if(directMatch(body,sellerResponsePatterns.optOut)||directMatch(body,sellerStandaloneStopPattern))return 'opt_out';
  if(directMatch(body,sellerWithdrawalPattern))return 'declined';
  // Exclude only the channel preference, never a separate refusal in the same message.

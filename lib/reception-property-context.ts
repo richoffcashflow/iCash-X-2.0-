@@ -16,7 +16,7 @@ import {sellerAgreementReceptionEnabled,sellerAgreementPrompt,sellerAgreementRec
 import {buyerRolePolicy,selectedRoleInstructions} from './buyer-role-policy.ts';
 import {createHash} from 'node:crypto';
 import {safeInboundPropertyContext} from './seller-call-context.ts';
-import {sellerCallerIdentityPrompt} from './seller-caller-identity.ts';
+import {sellerCallerIdentityPrompt,sellerContactStopInstructions} from './seller-caller-identity.ts';
 import {sellerAgreementDeliveryPrompt} from './seller-agreement-delivery-prompt.ts';
 import {efficientSellerPrompt} from './seller-conversation-efficiency.ts';
 /** New, separately reviewed policy. Legacy reception remains the default. */
@@ -35,7 +35,7 @@ export function propertyReceptionVariables(value:unknown){
 export function receptionContextPrompt(config:Record<string,unknown>){return sellerAgreementReceptionEnabled(config)?sellerAgreementPrompt(config):sellerOfferReceptionEnabled(config)?sellerOfferReceptionPrompt:buyerReceptionEnabled(config)?buyerReceptionPrompt:propertyReceptionPrompt;}
 export function receptionContextVariables(config:Record<string,unknown>,value:unknown){
  const intake=object(value);
- if(instantLeadsEnabled(process.env)&&config.context_policy===buyerSpeakingPolicy&&intake.status==='instant_lead'&&typeof intake.principal==='string'&&typeof intake.assistantName==='string')return {icash_property_greeting:`Thanks for calling HomeOffer Network. I'm ${intake.assistantName}, the AI assistant for ${intake.principal}. ${intake.addressProvided===true?"Are you calling about the same property from your cash offer request?":"What's the address of the property you'd like a cash offer on?"}`,icash_property_context:JSON.stringify(intake),icash_role_instructions:sellerCallCadencePrompt(instantLeadPrompt(intake.principal,intake.assistantName))};
+ if(instantLeadsEnabled(process.env)&&config.context_policy===buyerSpeakingPolicy&&intake.status==='instant_lead'&&typeof intake.principal==='string'&&typeof intake.assistantName==='string')return {icash_property_greeting:`Thanks for calling HomeOffer Network. I'm ${intake.assistantName}, an assistant for ${intake.principal}. ${intake.addressProvided===true?"Are you calling about the same property from your cash offer request?":"What's the address of the property you'd like a cash offer on?"}`,icash_property_context:JSON.stringify(intake),icash_role_instructions:sellerContactStopInstructions+'\n'+sellerCallCadencePrompt(instantLeadPrompt(intake.principal,intake.assistantName))};
  const result=sellerAgreementReceptionEnabled(config)?sellerAgreementReceptionVariables(value):sellerOfferReceptionEnabled(config)?sellerOfferReceptionVariables(value):buyerReceptionEnabled(config)?buyerReceptionVariables(value):propertyReceptionVariables(value);
  const context=JSON.parse(result.icash_property_context);
  if(context&&typeof context.address==='string')Object.assign(context,conversationAddressFields(context.address));

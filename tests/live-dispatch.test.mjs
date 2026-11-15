@@ -160,7 +160,7 @@ assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');a
 // A submitted phone and address can dial without a name; ownership still comes first.
 jobState='issued';snapshot.sellerRequest={id:'fixture-lead',phone:permission.phone,ownerName:null};
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
-assert.equal(outboundBody.firstMessage,'Is this the owner of Fixture only?');assert.match(outboundBody.prompt,/Do not demand a name before answering/);assert.match(outboundBody.prompt,/SELLER CALLER IDENTITY AND REFUSAL/);assert(!outboundBody.prompt.includes('BUYER IDENTITY:'));assert.match(outboundBody.prompt,/Identity answers come before ownership/);assert.match(outboundBody.prompt, /"request":\{"submittedAt"/);
+assert.equal(outboundBody.firstMessage,'Is this the owner of Fixture only?');assert.match(outboundBody.prompt,/Do not demand a name before answering/);assert.match(outboundBody.prompt,/SELLER CALLER IDENTITY AND REFUSAL/);assert(!outboundBody.prompt.includes('BUYER IDENTITY:'));assert.match(outboundBody.prompt,/Answer identity before ownership/);assert.match(outboundBody.prompt, /"request":\{"submittedAt"/);
 delete snapshot.sellerRequest;
 // Saved contact names are scoped to the dialed number and remain a question.
 jobState='issued';greetingContacts=[{phone:permission.phone,name:'SONYA RUSSELL',blocked:false}];

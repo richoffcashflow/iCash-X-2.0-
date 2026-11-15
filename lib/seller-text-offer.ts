@@ -176,12 +176,14 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  const qualification=sellerOfferQualification(transcript,c.history??[],'sms');
  // Answer the seller's actual question before resuming the missing fact. A
  // listing reference does not establish agent representation or accept its terms.
+ const directAiQuestion=/^(?:are you|is this) (?:a |an )?(?:human|real person|bot|ai|robot|automated (?:bot|assistant))[?! .]*$/i.test(source.body.trim());
  if(c.conversionEnabled&&(qualification.ready||!qualification.stop)){
   if(intent==='listed_terms')return ask('clarify_listing_terms','Is the property listed with an agent, or are you selling it yourself?');
-  if(intent==='identity'||intent==='identity_price'||intent==='buying'){
+  if(intent==='identity'||intent==='identity_price'||intent==='buying'||directAiQuestion){
    const principal=c.principal.trim();
    if(!principal||principal.length>80||/[\r\n]/.test(principal))return review('buyer_identity_required','Verify the saved buyer identity before answering.');
-   const intro=intent==='buying'?`I assist ${principal} with potential cash purchases.`:`I'm the AI assistant for ${principal}.`;
+   const askedAboutAi=directAiQuestion||/\b(?:ai|bot|robot|automated|human|real person)\b/i.test(source.body);
+   const intro=askedAboutAi?`I'm an AI assistant for ${principal}.`:`I assist ${principal} with cash purchases.`;
    if(!qualification.ready){
     const body=intro+(intent==='identity_price'?' Price depends on the property details.':'')+' '+qualification.nextQuestion;
     if(body.length>160)return review('buyer_identity_copy_required','The full saved buyer identity and answer must fit the reviewed text rate.');

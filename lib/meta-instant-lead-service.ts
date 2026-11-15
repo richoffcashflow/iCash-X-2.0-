@@ -29,7 +29,7 @@ export async function queueInstantAddressLink(d:Deps,lead:InstantLead,purpose:'i
  if(!identity?.principal)return {status:'principal_required'};
  const intro=reply??'HomeOffer Network: Confirm the full address here: ';
  let body=purpose==='initial'?instantLeadInitialText(lead.lead.name):intro+instantAddressLink(token);
- if(!smsLength(body).fits)body='HomeOffer Network AI: Enter the full address: '+instantAddressLink(token);
+ if(!smsLength(body).fits)body='HomeOffer Network assistant: Enter the full address: '+instantAddressLink(token);
  if(!smsLength(body).fits)return {status:'message_format_required'};
  const id=await d.db<string|null>('rpc/icash_meta_queue_message','POST',{p_lead:lead.lead_id,p_purpose:purpose,p_key:key,p_body:body});
  if(!id)return {status:'message_held'};

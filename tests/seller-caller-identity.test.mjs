@@ -16,15 +16,19 @@ for(const frozen of [legacyAutomaticOfferReceptionPrompt,streamingAutomaticOffer
  assert(!runtime.includes('BUYER IDENTITY:'));
  assert(!runtime.includes('say "I\'m a cash buyer"'));
  assert.equal(sellerCallerIdentityPrompt(runtime),runtime,'idempotent runtime wrapper');
- assert.match(runtime,/Identity answers come before ownership, name questions or tools/);
+ assert.match(runtime,/Answer identity before ownership, name questions or tools/);
  assert.match(runtime,/Use saved companyName, otherwise principal/);
- assert.match(runtime,/Omit an absent assistantName/);
  assert.match(runtime,/"Hello\?" is not ownership confirmation/);
  assert.match(runtime,/"I'm not answering that" declines that question/);
  assert.match(runtime,/without asking their name or ownership again/);
- assert.match(runtime,/Stop\/do-not-call takes priority/);
- assert.match(runtime,/Claim suppression only after success/);
- assert.match(runtime,/A plain refusal to sell ends the pitch but is not a permanent opt-out/);
+ assert.match(runtime,/Stop\/do-not-call overrides/);
+ assert.match(runtime,/Never claim suppression was saved without a successful result/);
+ assert.match(runtime,/Plain refusal ends the pitch; busy is not opt-out/);
+ assert.match(runtime,/If directly asked AI\/bot\/human, truthfully say/);
+ assert.match(runtime,/Never claim to be the owner, principal or human/);
+ assert.match(runtime,/Would you be interested in selling for all cash/);
+ assert.match(runtime,/No more answers, questions or follow-up/);
+ assert.match(runtime,/icash_stop_recording outbound or icash_stop_reception_recording inbound/);
 }
 const config={context_policy:buyerSpeakingPolicy,context_policy_hash:speakingBuyerReceptionPolicyHash,context_approval_reference:'synthetic-identity-regression',agreement_tool_id:'tool_fixture'};
 for(const companyName of ['Fixture Homes','',null]){
