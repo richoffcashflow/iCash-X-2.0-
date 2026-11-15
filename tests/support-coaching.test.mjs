@@ -37,3 +37,37 @@ const page=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');asser
 const work=readFileSync(new URL('../lib/work-account.ts',import.meta.url),'utf8');assert.match(work,/rpc\/icash_vip_features_active/);
 const diagnostic=readFileSync(new URL('../lib/support-diagnostics.ts',import.meta.url),'utf8');assert.match(diagnostic,/typeof active!=='boolean'/);
 console.log('Coaching boundary, technical/mixed requests, VIP/unknown entitlement, open issues and shared prompt passed.');
+
+// Fictional replays: plural deal requests must retain the same coaching boundary
+// as singular requests, without losing independent technical/account questions.
+process.env.ICASH_SUPPORT_AI_ENABLED='true';process.env.OPENAI_API_KEY='fixture';process.env.ICASH_SUPPORT_AI_MODEL='fixture';
+let pluralCalls=0;const noPluralModel=async()=>{pluralCalls++;throw Error('Offline coaching boundary');};
+for(const kind of ['account','access']){
+ for(const question of ['Could you evaluate these deals?','Please analyze my investments','Can you review these offers?','Do not review old offers, but evaluate these deals instead']){
+  assert.equal(classifySupportCoaching(question).kind,'coaching',question);
+  for(const active of [true,false]){
+   const answer=await replyToSupport({kind,messages:[user(question)],evidence:vip(active)},noPluralModel);
+   assert.match(answer.reply,/Ask AI Bot/);assert.equal(answer.status,'open');assert.equal(answer.ai,false);
+   assert.equal(answer.reply.includes(supportVipUpgradeUrl),kind==='access'||!active);
+   if(kind==='access')assert.match(answer.reply,/If you already have VIP/,'Guests cannot establish membership from account evidence');
+   assert.doesNotMatch(answer.reply,/What are you trying to do|confirmed.*fix|guarantee|\$/i);
+  }
+ }
+ const held=await replyToSupport({kind,handedOff:true,messages:[user('My sign-in still fails'),{role:'operator',content:'Purchase ownership still needs review; access is not restored.'},user('Could you evaluate these deals?')],evidence:vip(true)},noPluralModel);
+ assert.match(held.reply,/Ask AI Bot/);assert.equal(held.status,'open');assert.doesNotMatch(held.reply,/restored|resolved|fixed|confirmed.*purchase/i);
+ const changed=await replyToSupport({kind,allowAI:false,messages:[user('Could you evaluate these deals?'),{role:'assistant',content:'Use Ask AI Bot.'},{role:'operator',content:'The earlier payment remains under review.'},user('I was charged twice')],evidence:vip(false)},noPluralModel);
+ assert.doesNotMatch(changed.reply,/Ask AI Bot|upgrade=vip/);assert.notEqual(changed.status,'resolved');
+}
+for(const question of ['Where can I view my deals?','How do I review my offers in the app?','How do I review offers sent by my bot?','Can you review the deals displayed on my leads?','Ask AI cannot analyze these deals','The feature will not evaluate my deals','Do not evaluate my deals. Where can I view them?','Please don’t review these offers; my payment is missing']){
+ assert.equal(classifySupportCoaching(question).kind,'support',question);
+ assert.doesNotMatch(supportConversationFallback(context(question,vip(false))).reply,/upgrade=vip/,question);
+}
+for(const kind of ['account','access']){
+ const mixed=classifySupportCoaching('I was charged twice. Could you evaluate these deals?');
+ assert.equal(mixed.kind,'mixed');assert.equal(mixed.technicalQuestion,'I was charged twice.');
+ const answer=await replyToSupport({kind,allowAI:false,messages:[user('I was charged twice. Could you evaluate these deals?')],evidence:vip(true)},noPluralModel);
+ assert.match(answer.reply,/Ask AI Bot/);assert.match(answer.reply,/charg|billing|payment/i);assert.equal(answer.status,'open');
+}
+assert.equal(pluralCalls,0,'Plural coaching referrals and deterministic boundaries need no model call');
+for(const key of ['ICASH_SUPPORT_AI_ENABLED','OPENAI_API_KEY','ICASH_SUPPORT_AI_MODEL'])delete process.env[key];
+console.log('Plural coaching requests, guest entitlement, unresolved operator findings, payment, negation and topic boundaries passed offline.');
