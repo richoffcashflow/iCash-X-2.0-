@@ -1,0 +1,30 @@
+# Private seller progress observations
+
+The existing owner outreach route accepts `GET /api/admin/outreach?measure=conversion&days=7` (also 1 or 30 days). It returns aggregates from `icash_seller_conversion_report` without calling providers, drafting messages, changing queues or granting offer/call authority. The verified platform owner is required; the server supplies the actor. Customer filters, owner inclusion and pagination are rejected for this measure. There is no customer UI.
+
+This is **four independent recent source samples, not a funnel conversion rate**. Each raw source is capped at its newest 2,000 rows before joins, with one extra sentinel. `truncated` and `complete` describe those raw bounds, not outcome certainty. Owner, test-only/unfunded accounts, practice properties and source-binding failures are then excluded; consequently an eligible sample can be smaller than 2,000 even while truncated. Accounts must have a live paid funding record. These are current observations of recent records, not a reconstructed historical state or a complete historical backlog.
+
+| Observation | Evidence and limits |
+| --- | --- |
+| Incoming texts | Received seller message bound to the same account, thread and deal, with a provider/event reference. Restricted/automated responses remain separate. `sourceTimeUnknown` identifies absent or unbound provider event time. |
+| Currently accepted / delivered | An automatic reply must be bound to that exact incoming source by an AI job or existing deterministic reply/opening table. `currentlyAccepted` requires its current state to be accepted/delivered plus provider ID; later failed/cancelled messages no longer count. Delivered additionally requires delivery state/time. Neither means seller interest. |
+| Dispatch latency | Provider inbound event time to recorded dispatch time, among currently accepted replies. It is not provider acceptance latency or delivery latency. Missing/invalid event time or missing dispatch timestamp is explicitly unknown; no creation-time fallback becomes a latency sample. |
+| Current reply observations | Only the latest received source per account/thread can count. `currentWithoutBoundAutomaticReply` does not mean nobody answered: `laterCustomerReplies` separately records a subsequent accepted/delivered customer-authored message, without claiming causal binding. Those continuations are excluded from missing AI job, unsubmitted and due-progress observations. Customer controls shown here cover account/thread settings; these counts do not evaluate all property, handoff, suppression or dispatch controls and do not establish eligibility to send. |
+| Calls | A provider-recorded outbound seller attempt is separate from a completed conversation and a canonical human response. Account, screening, operation, contact and provider conversation ID must match. Missing/incomplete or mismatched conversations remain unknown. A human refusal is still a human response, not a qualified seller. |
+| Quotes and acceptance | Recent immutable offer events must bind to the exact SMS source, outbound conversation or recorded inbound session. Counts use distinct deals whose current ledger matches the sampled event state. A recorded quote/acceptance is not evidence of delivery. SMS quote delivery requires the matching policy/revision/amount and actual delivered outgoing text. Voice quote delivery remains unknown. Current offer authority is deliberately null. |
+| Signed purchase | Canonical non-test provider evidence with matching envelope, terms hash and ordered signed recipients. This observes any verified purchase envelope on the sampled deal; it does not prove that the current quoted/accepted terms were signed. `acceptedWithoutVerifiedPurchaseOnDeal` is a deal-level missing-evidence observation, not an acceptance-to-signature rate. |
+| Callbacks | Recently created callbacks bound to a completed human seller conversation. Due `pending_dispatch_review` is review work, not permission to call. Historical callbacks created outside the window are excluded. |
+
+Four recent-time indexes support the bounded source reads. Event source UUIDs are parsed with a guard before equality joins to primary keys. The function is stable, uses an empty search path and an eight-second timeout. SECURITY DEFINER is necessary for the private offer/inbound evidence schemas, which the service role cannot select directly. Execute is revoked from PUBLIC, anon and authenticated and granted only to service_role; the owner actor guard adds the existing route-level boundary. The output contains no account IDs, phone numbers, message bodies or provider payloads.
+
+Offline validation: `node --experimental-strip-types tests/seller-conversion-report.test.mjs` executes the actual SQL with saved canonical helper definitions and synthetic records. It covers exclusions, source provenance, unknown latency, delivery/acceptance/signature separation, mixed ready/accepted replies, stale progress, human continuation, truncation and execution in a read-only transaction. `tests/seller-conversion-route.test.mjs` verifies route authentication, immutable actor, input/response validation and private cache headers. Native mode (`ICASH_NATIVE_CONVERSION=1`, with the disposable local Postgres wrapper and module path) additionally loads 120,000 historical rows and more than 2,000 recent rows per source and checks all four recent index paths with `EXPLAIN ANALYZE`. It never uses production credentials or a provider.
+
+## Verification receipt
+
+Migration `20261115063436_customer_results_seller_conversion_report` was installed
+on November 15, 2026. The private seven-day production aggregate returned
+successfully; its call sample was explicitly truncated. Actual report SQL, new
+and existing route tests passed. Native PostgreSQL tested 120,000 historical
+rows plus more than 2,000 recent rows per source in 3.1 seconds, with all four
+recent-source indexes used. These are read-only observations and offline checks,
+not evidence of additional seller responses or completed deals.

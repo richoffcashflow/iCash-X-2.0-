@@ -204,6 +204,8 @@ jobs:
         run: python3 scripts/test-unanswered-seller-followups-postgres.py
       - name: Verify one-use phone checks and immutable receipts under concurrent claims
         run: python3 scripts/test-seller-contact-refresh-postgres.py
+      - name: Verify isolated refresh cost holds under concurrent claims and late controls
+        run: python3 scripts/test-seller-contact-refresh-isolation-postgres.py
       - name: Verify one busy historical receipt cannot block independent acquisition
         run: python3 scripts/test-acquisition-settlement-isolation-postgres.py
       - name: Verify bounded acquisition aging across shared export waits
