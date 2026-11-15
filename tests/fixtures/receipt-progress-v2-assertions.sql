@@ -98,6 +98,9 @@ begin
   or exists(select 1 from icash_reliability_private.account_work_receipts_v2(account,now()+interval '1 hour')) then raise exception 'Invented historical or future snapshot';end if;
  update icash_research_private.owner_exports set completed_at=now();
  if (select last_completed_output_at from icash_reliability_private.account_work_receipts_v2(account,now())) is distinct from now() then raise exception 'Exact observation finalization boundary lost';end if;
+ update public.icash_owner_contacts c set result=jsonb_set(c.result,'{allocation,batchId}',to_jsonb(repeat('-',36))) where screening_id=screening;
+ if (select last_completed_output_at from icash_reliability_private.account_work_receipts_v2(account,now())) is not null then raise exception 'Malformed canonical identity accepted';end if;
+ update public.icash_owner_contacts c set result=c.result||jsonb_build_object('allocation',jsonb_build_object('method','active-export-used-order-v1','batchId',batch,'sharedContacts',0)) where screening_id=screening;
  update icash_research_private.owner_exports set artifact_sha256=repeat('b',64);
  if (select last_completed_output_at from icash_reliability_private.account_work_receipts_v2(account,now())) is not null then raise exception 'Wrong canonical artifact accepted';end if;
 

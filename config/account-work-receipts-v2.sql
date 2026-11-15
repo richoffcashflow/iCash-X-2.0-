@@ -29,8 +29,10 @@ begin
  started:=public.icash_dealmachine_owner_source_started_at(p_account,p_screening);
  if started is null or not isfinite(started) or started>c.created_at then return;end if;
  if c.result->'allocation'->>'method'='active-export-used-order-v1' then
+  -- The canonical helper above already matched this exact text to a real batch
+  -- UUID. Cast only after that proof, keeping the export primary-key lookup.
   select e.id,e.completed_at into source_batch,finalized from icash_research_private.owner_exports e
-   where e.id::text=c.result->'allocation'->>'batchId';
+   where e.id=(c.result->'allocation'->>'batchId')::uuid;
   if not found or finalized is null or not isfinite(finalized) or finalized>p_at then return;end if;
  end if;
  return query select c.created_at,greatest(c.created_at,finalized),finalized,started,source_batch;
