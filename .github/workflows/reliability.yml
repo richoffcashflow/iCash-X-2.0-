@@ -110,6 +110,8 @@ jobs:
         run: python3 scripts/test-owner-preflight-priority-postgres.py
       - name: Verify production stalled-work boundary and fair continuation selection
         run: python3 scripts/test-stalled-work-postgres.py
+      - name: Verify inactive receipt progress preserves original outputs and attempt timing
+        run: python3 scripts/test-account-work-receipts-postgres.py
       - name: Verify pending originals cannot become completed checkpoints
         run: python3 scripts/test-followup-pending-postgres.py
       - name: Verify fair due-retry progress and bounded generic-plan history lookup
