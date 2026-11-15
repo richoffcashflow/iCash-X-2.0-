@@ -69,8 +69,18 @@ end$$;
 create trigger continued_owner_preflight_creation before insert on icash_research_private.owner_export_preflights
  for each row execute function icash_research_private.guard_continued_owner_preflight_creation();
 revoke all on function icash_research_private.guard_continued_owner_preflight_creation() from public,anon,authenticated,service_role;
+-- Keep the existing DDL lock order and pin the installed family immediately
+-- before replacement. This lock shares the enclosing schema/ledger transaction.
+lock table public.icash_owner_enrichment_recoveries in access exclusive mode;
+do $constraint$ begin
+ if not exists(select 1 from pg_constraint where conrelid='public.icash_owner_enrichment_recoveries'::regclass
+  and conname='icash_owner_enrichment_recoveries_code_stage_check' and contype='c' and convalidated and not connoinherit
+  and md5(pg_get_constraintdef(oid))='2fa5e4892ed35117f5520875b250bbe2') then
+  raise exception 'Original recovery stage constraint changed';
+ end if;
+end $constraint$;
 alter table public.icash_owner_enrichment_recoveries drop constraint icash_owner_enrichment_recoveries_code_stage_check,
- add check(code_stage in ('owner_preview_pre_provider_local_rate_limit_v1','owner_preview_confirmed_early_cleanup_v1','owner_preview_expired_known_list_v1'));
+ add check(code_stage in ('owner_preview_pre_provider_local_rate_limit_v1','owner_preview_confirmed_early_cleanup_v1','owner_preview_local_record_rejection_v1','owner_preview_expired_known_list_v1'));
 
 create index owner_expired_ticket_waiting on icash_research_private.owner_export_preflights(created_at,id) where state='waiting' and checked_at is null;
 

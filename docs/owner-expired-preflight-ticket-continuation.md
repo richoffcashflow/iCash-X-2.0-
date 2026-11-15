@@ -41,6 +41,31 @@ provider request budgets own subsequent work.
 
 ## Release order and verification
 
+November 15 06:35 UTC staging checkpoint: the unchanged first migration
+`20261115000614_owner_preflight_step_capacity.sql` is installed **disabled** under
+production ledger version `20261115063438`; its SHA-256 is
+`978e90303616e9fed5dfc18e69c920a66e0910d9d0654c85f941a7b8f10075af`.
+The second migration failed with `23514` because its replacement stage constraint
+omitted the previously installed `owner_preview_local_record_rejection_v1`
+family. Its entire transaction rolled back; no second-stage objects or ledger
+receipt were installed. All original rows remain unchanged.
+
+The corrected second migration pins and locks the exact validated predecessor
+constraint (`pg_get_constraintdef` MD5 `2fa5e4892ed35117f5520875b250bbe2`) and
+retains all three old stages while adding only the expired-known-list stage.
+The fixture preserves the observed 32 local-refusal, 50 early-cleanup and four
+local-recorder-rejection rows using synthetic identities and receipts. Offline
+and native rehearsals reproduce the old failure, verify immutable original
+history, then resume the corrected second and third stages in separate
+schema-plus-ledger transactions, including failed ledger writes.
+
+After the corrected exact head passes fresh full/native CI and review, the
+existing controller must resume at `20261115000635`, then `20261115002841`.
+**Do not reinstall or edit stage one, delete old recovery rows, bypass the
+constraint, or activate a partial installation.** Verify the actual first-stage
+ledger receipt and unchanged disabled policy before resuming. This checkpoint
+does not establish a live application deployment or account recovery.
+
 1. Run the full exact-head checks, including the isolated native PostgreSQL job
    `test-owner-expired-ticket-postgres.mjs`. PGlite proves schema and behavior but
    does not prove real multi-session locks. The native runner is hard-bound to a

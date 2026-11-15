@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
 import {baseSql,stepSql,continuationSql,checkingSql} from '../tests/helpers/owner-expired-checking-fixture.mjs';
+import {rehearseRecoveryStageUpgrade} from '../tests/helpers/owner-recovery-stage-rehearsal.mjs';
 const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE||'pg');
 const database='icash_expired_checking_check',clients=[];
 const connect=async(name,db=database)=>{
@@ -44,7 +45,30 @@ try{
  for(const relation of ['icash_work_private.preflight_step_policy','icash_research_private.expired_preflight_ticket_policy','icash_research_private.expired_checking_policy'])assert.equal(await value(admin,'select to_regclass($1)',[relation]),null);
  assert.equal(await value(admin,"select pg_get_functiondef('public.icash_claim_owner_preflight(uuid,jsonb,jsonb)'::regprocedure)"),originalClaim);
  assert.equal(await value(admin,"select pg_get_constraintdef(oid) from pg_constraint where conrelid='public.icash_owner_enrichment_recoveries'::regclass and conname='icash_owner_enrichment_recoveries_code_stage_check'"),oldConstraint);
- await admin.query('begin;'+stepSql+continuationSql+checkingSql+'commit;');
+ // Also reproduce the real separate migration transactions: stage one is
+ // already committed disabled, old stage two fails on historical rows, and
+ // corrected stage two/three resume without replaying the first migration.
+ await rehearseRecoveryStageUpgrade({exec:sql=>admin.query(sql),query:(sql,args)=>admin.query(sql,args)},{stepSql,continuationSql,checkingSql},{beforeStageTwo:async()=>{
+  // A live preflight writer can subsequently read its recovery approval. The
+  // migration must wait on its original preflight DDL lock before taking the
+  // recovery-table lock, rather than creating a reverse-order deadlock.
+  await blocker.query('begin;lock table icash_research_private.owner_export_preflights in row exclusive mode');
+  await worker.query('begin');
+  const started=performance.now(),install=worker.query(continuationSql).then(()=>({ok:true}),error=>({ok:false,error}));
+  try{
+   let waiting=false;
+   while(performance.now()-started<1500){
+    waiting=await value(admin,"select exists(select 1 from pg_locks l join pg_stat_activity a on a.pid=l.pid where a.application_name='expired-checking-worker' and not l.granted and l.relation='icash_research_private.owner_export_preflights'::regclass)");
+    if(waiting)break;await new Promise(resolve=>setTimeout(resolve,20));
+   }
+   assert.equal(waiting,true,'Migration waits on the preflight relation before recovery history');
+   await blocker.query("set local statement_timeout='1s'");
+   assert.equal(await value(blocker,'select count(*)::int from public.icash_owner_enrichment_recoveries'),86,'Original writer can read recovery history while migration waits');
+  }finally{await blocker.query('rollback');}
+  const installed=await install;await worker.query('rollback');
+  assert.equal(installed.ok,true,installed.error?.code+' '+installed.error?.message);
+  assert(performance.now()-started<6000,'Contended staging remains inside its bounded lock window');
+ }});
  assert.equal(await value(admin,"select pg_get_functiondef('icash_research_private.owner_preflight_cleanup_current(uuid,uuid)'::regprocedure)"),originalCleanup,'Active waiting cleanup authority is unchanged');
  const pending=await seed(admin,11101),before=await original(admin,pending);
  assert.equal((await run(worker)).status,'disabled');

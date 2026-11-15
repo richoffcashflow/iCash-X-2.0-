@@ -4,8 +4,10 @@ const deferral=read('config/owner-enrichment-deferral.sql');
 const capGuards=deferral.slice(deferral.indexOf('create function public.icash_guard_owner_enrichment_recovery_credit'),deferral.indexOf('-- Keep the complete authoritative candidate'));
 const stepGates=JSON.parse(read('tests/fixtures/owner-preflight-step-gates.json'));
 const stepBefore=JSON.parse(read('tests/fixtures/owner-preflight-step-before.json'));
+export const recoveryStages=JSON.parse(read('tests/fixtures/owner-recovery-code-stages-before.json'));
 const stepDefinitions=['icash_owner_active_export_capacity()','icash_owner_active_export_capacity(uuid)','icash_research_private.owner_preflight_cohort(uuid,uuid)','public.icash_owner_preflight_due_at(uuid,uuid)','icash_enrichment_candidate(uuid)','icash_next_acquisition()'].map(signature=>stepBefore.find(x=>x.signature===signature).definition).join(';\n');
 export const fixtureSql=setupSql+seedSql+read('config/owner-enrichment-evidence-indexes.sql')+capGuards+
+ 'alter table public.icash_owner_enrichment_recoveries drop constraint icash_owner_enrichment_recoveries_code_stage_check, add constraint icash_owner_enrichment_recoveries_code_stage_check '+recoveryStages.definition+';'+
  'alter table public.icash_automation_tickets add column prospecting_quote_cents bigint;'+migration+enableSql+`;
 create function public.fixture_expired_ticket_seed(n integer) returns jsonb language plpgsql as $$
 declare c jsonb;begin
