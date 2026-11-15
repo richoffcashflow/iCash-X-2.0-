@@ -52,3 +52,22 @@ necessary. It does not reconcile provider uncertainty or clear account holds.
 `worker-watchdog.test.mjs` injects hangs into the real scheduler and checks lane
 deadlines, once-only bounded exit, no fresh claims during drain, ordinary failure
 isolation and standby behavior without live provider requests.
+
+
+After an automation response has returned, its HTTP status and durable-hold header
+remain authoritative. The worker starts unused response-body cancellation once
+without waiting for cleanup to settle. A stuck cleanup cannot retain a completed
+worker slot and trigger a global watchdog drain; immediate or late cleanup
+rejections are handled without replaying the ticket. Genuine pending requests
+still retain their original deadlines and watchdog behavior. The shared database
+client similarly propagates its established failure without awaiting unused-body
+cleanup, so independent recovery lanes can report and handle that failure.
+
+Native `Response` regressions cover success, confirmed holds, ordinary failures,
+never-settling cleanup and late rejection. The real scheduler/watchdog test keeps
+independent pools progressing beyond the prior cleanup-induced stall threshold
+while retaining all existing genuine-stall tests. These are offline fault-path
+checks, not evidence that cleanup caused any particular production backlog or
+that an unresolved provider cost has been recovered. This change needs the tested
+web and worker release through the existing controller; no database migration,
+policy activation or environment change is required.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createScheduler} from '../worker/scheduler.mjs';
 import {createWatchdog} from '../worker/watchdog.mjs';
+import {automationTick} from '../worker/runner.mjs';
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 for(const [pool,deadline] of [['research',260000],['general',260000],['voice',140000],['messages',140000],['recovery',140000]]){
  let now=0,claims=0,finish,forced,delay,stops=0,logs=0,clears=0;const exits=[];
@@ -22,4 +23,21 @@ loop();await flush();callback();assert.equal(stopped,1);assert.equal(cleared,1);
 // Screening has its own existing 75-second stuck threshold.
 let clock=0,release;const screening=createScheduler({now:()=>clock,screening:()=>new Promise(r=>{release=r;}),automation:async()=>false});
 screening.run();await flush();clock=75000;screening.run();assert.equal(screening.isStalled(),false);clock++;assert.equal(screening.isStalled(),true);release(false);await screening.stop();
-console.log('PASS worker watchdog: real scheduler stalls, lane deadlines, standby, backoff isolation, no replay, bounded drain and once-only exit.');
+// A completed response's stuck cleanup cannot turn into a global restart that
+// stops unrelated accounts. Real pending handlers above retain every deadline.
+for(const status of [200,503]){
+ let at=0,research=0,voice=0,cancels=0;const capabilities=[];
+ const active=createScheduler({now:()=>at,screening:async()=>false,automationPools:['research','voice'],automation:pool=>automationTick(async()=>{
+  if(pool==='research')research++;else voice++;
+  return {token:`00000000-0000-4000-8000-${String(research+voice).padStart(12,'0')}`.repeat(2)};
+ },async(_url,options)=>{
+  capabilities.push(options.headers.Authorization);
+  return pool==='research'?new Response(new ReadableStream({cancel(){cancels++;return new Promise(()=>{});}}),{status,headers:status===503?{'X-iCash-Automation-Outcome':'job-held'}:{}}):new Response('{}');
+ },pool)});
+ const watch=createWatchdog({isStalled:()=>active.isStalled(),stop:()=>assert.fail('Response cleanup stopped every work pool'),exit:()=>assert.fail('Response cleanup restarted worker'),setTimer:()=>assert.fail('Response cleanup started global drain')});
+ for(at of [0,250,500,1000,260001,260251,260501]){active.run();await flush();watch();assert.equal(active.health().code,200);}
+ assert(research>=3&&voice>=3,'Both independent pools keep claiming fresh work beyond the old stall threshold');
+ assert.equal(cancels,research);assert.equal(new Set(capabilities).size,capabilities.length,'No capability is replayed');
+ await active.stop();
+}
+console.log('PASS worker watchdog: real scheduler stalls, lane deadlines, standby, backoff isolation, no replay, bounded drain and once-only exit; completed-response cleanup never triggers a global restart.');
