@@ -122,3 +122,9 @@ Past-tense reports that the bot has not texted or called anyone now enter the cu
 A current wrong-checkout-email complaint stays visible alongside a duplicate-charge report and a request to contact support. The answer preserves the separate ownership/payment checks, explains the statement-detail requirement while retaining supplied details instead of repeating the same question, and explains the conversation review path without promising a phone call. No payment, email or access change is implied. Fictional account/guest and topic/operator boundaries: `tests/support-mixed-purchase-review.test.mjs`.
 
 First-sale timing questions retain their product meaning after a management handoff, without promising a deal or treating the earlier fault as resolved. Mixed research-spend and end-to-end outreach questions receive the workflow explanation plus available account evidence, with guest isolation and Pause preserved. Refund, cancellation, operator and topic boundaries remain separate. Fictional coverage: `tests/support-sale-workflow-boundaries.test.mjs`.
+
+## Paid-access acknowledgments and startup pricing
+
+A paid-VIP complaint phrased as “nothing is showing” remains unresolved after a brief acknowledgment such as “OK” or “thanks.” The shared payment/access signal also retains urgent private review priority when a historical case has been marked resolved. It does not prove a charge or activate VIP. Explicit customer-confirmed recovery, routine informational questions and existing operator boundaries retain their separate handling.
+
+Direct bot-start cost questions and subscription-access expectations explain the existing distinction between software access and separately purchased work credits. They do not establish current account status, promise activity or change prices. Actual payment/access faults and later topic changes retain their own routes. Fictional offline replays cover both account and guest chat with paid model calls forbidden.

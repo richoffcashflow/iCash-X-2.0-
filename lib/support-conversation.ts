@@ -30,6 +30,7 @@ import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
 import {supportManagementReview} from './support-management-review.ts';
 import {supportInboxGuidance} from './support-inbox-guidance.ts';
+import {supportPaymentAccessConcern} from './support-learning-signals.ts';
 
 export type SupportTurn={role:string;content:string};
 export type SupportReply={reply:string;status:'open'|'waiting_on_customer'|'resolved'|'closed';ai:boolean;managementReview?:boolean;routineGuidance?:true};
@@ -40,7 +41,7 @@ const clean=(text:string)=>redactSupportQuestion(text).replace(/\b\d{6,10}\b/g,'
 function earlierSupportProblem(context:SupportContext){
  const users=context.messages.filter(m=>m.role==='user');
  const lastConfirmed=users.findLastIndex(m=>/\b(?:that worked|it worked|working now|fixed now|all fixed|problem solved)\b/i.test(m.content)&&!/(?:not|still|but)\b/i.test(m.content));
- return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportPurchaseMismatch(m.content)||supportMissingActivityConcern(m.content)||context.kind==='account'&&supportCurrentResearchQuestion(m.content)||supportMissingSellerContactQuestion(m.content)||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|waiting for (?:the )?next task|not (?:working|calling|texting|sent|sending|making|doing)|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
+ return context.historyComplete===false||users.slice(lastConfirmed+1,-1).some(m=>supportPaymentAccessConcern(m.content)||supportPurchaseMismatch(m.content)||supportMissingActivityConcern(m.content)||context.kind==='account'&&supportCurrentResearchQuestion(m.content)||supportMissingSellerContactQuestion(m.content)||/\b(?:bug|error|broken|blocked|stuck|blank|missing|fails?|failed|stopped|waiting for (?:the )?next task|not (?:working|calling|texting|sent|sending|making|doing)|no calls|no texts|no leads|no (?:phone )?numbers|no contacts|invalid numbers|wrong email|isn[’']?t|doesn[’']?t|won[’']?t|can[’']?t|cannot)\b/i.test(m.content));
 }
 
 /** Local replies also work during provider outages and interruption recovery. */
@@ -72,7 +73,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const correction=supportInstructionCorrection(context.messages,context.evidence??[]);
  if(correction)return result(correction,'open');
  const clarification=supportProductClarification(context.messages);
- if(clarification)return result(clarification.reply,clarification.answered&&!earlierSupportProblem(context)?'resolved':'open',clarification.answered);
+ if(clarification)return result(clarification.reply,clarification.answered&&!earlierSupportProblem(context)&&!context.handedOff?'resolved':'open',clarification.answered);
  const checkout=supportCheckoutReply(context);if(checkout)return checkout;
  const purchase=supportPurchaseHelp(context.messages);
  if(purchase)return result(purchase.reply,purchase.status);
