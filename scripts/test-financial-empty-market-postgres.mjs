@@ -6,9 +6,18 @@ import * as fixture from '../tests/helpers/financial-empty-market-fixture.mjs';
 const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE||'pg');
 const database='icash_financial_empty_fixture',clients=[];
 const connect=async(name,db=database)=>{
+ assert(['postgres',database].includes(db),'Only the bootstrap and disposable fixture databases are allowed');
  const c=new Client({host:'127.0.0.1',port:55443,user:'postgres',password:'isolated-fixture-only',database:db,
   application_name:'financial-empty-'+name,connectionTimeoutMillis:5000});
- clients.push(c);await c.connect();await c.query("set timezone='UTC';set statement_timeout='8s';set lock_timeout='5s';");return c;
+ clients.push(c);await c.connect();
+ // Docker's mapped localhost port has a non-loopback server-side address.
+ // Verify the client destination and actual socket before any fixture writes.
+ for(const [key,expected] of Object.entries({host:'127.0.0.1',port:55443,user:'postgres',database:db}))
+  assert.equal(c.connectionParameters[key],expected,'Fixed fixture connection '+key);
+ assert.equal(c.connection.stream.remoteAddress,'127.0.0.1');
+ assert.equal(c.connection.stream.remotePort,55443);
+ assert.equal((await c.query('select current_database()')).rows[0].current_database,db);
+ await c.query("set timezone='UTC';set statement_timeout='8s';set lock_timeout='5s';");return c;
 };
 const value=async(c,sql,args=[])=>Object.values((await c.query(sql,args)).rows[0]??{})[0];
 const finish=c=>value(c,'select public.icash_finish_empty_financial_market($1,$2,$3,$4)',
@@ -23,8 +32,6 @@ const waitForLock=async(observer,name)=>{
 
 try{
  const bootstrap=await connect('bootstrap','postgres');
- assert.equal(await value(bootstrap,'select current_database()'),'postgres');
- assert.equal(await value(bootstrap,'select host(inet_server_addr())'),'127.0.0.1');
  if(!await value(bootstrap,'select exists(select 1 from pg_database where datname=$1)',[database]))await bootstrap.query('create database '+database);
  const admin=await connect('observer'),holder=await connect('holder'),runner=await connect('runner');
  assert.equal(await value(admin,'select current_database()'),database);
