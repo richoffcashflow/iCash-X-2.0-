@@ -56,6 +56,14 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-owner-expired-checking-postgres.mjs
+      - name: Verify original retry deadlines under concurrent continuation and migration
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-owner-expired-deadline-postgres.mjs
+      - name: Verify continued originals through actual concurrent acquisition and issuance
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-continued-owner-scheduling-postgres.mjs
       - name: Verify rotating training evidence under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
