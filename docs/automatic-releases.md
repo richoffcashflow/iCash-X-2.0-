@@ -28,7 +28,7 @@ Only receipt-backed production verification means “live.” An open PR, a merg
 
 ## Continue delayed releases
 
-Queued CI or hosting work stays pending for the next run, without another approval request or repetitive waiting notifications. The existing production gate waits twenty minutes for CI. If that exact timeout is the only deployment failure, the matching main-push checks subsequently pass, and the intended commit has not been superseded, the controller may perform one normal provider redeploy for that production commit. Inspect earlier attempts first; preserve all gates and do not duplicate an unknown mutation.
+Queued CI or hosting work stays pending for the next run, without another approval request or repetitive waiting notifications. The production gate waits thirty-five minutes for CI, covering the complete thirty-minute all-tests job and bounded workflow startup. The test runner retains its sixty-second limit per suite, and all required jobs must still succeed. If the deployment's configured verification timeout is its only failure, the matching main-push checks subsequently pass, and the intended commit has not been superseded, the controller may perform one normal provider redeploy for that production commit. Inspect earlier attempts first; preserve all gates and do not duplicate an unknown mutation.
 
 A substantive failure requires a fix and fresh checks. Never deploy an older commit over newer main, infer that migrations ran from a green PR, or install unreviewed SQL to make a deployment pass. Preserve ordered migration receipts, compatible web/worker releases, explicit customer controls, original provider evidence and all paid-development-test restrictions.
 
