@@ -9,7 +9,7 @@ export async function verifyLegacyTrial(browser,base,options,name){
    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    if(url.pathname==='/api/billing/legacy-trial'){
     posts++;const body=route.request().postDataJSON();assert.equal(body.email,'returning@example.invalid');assert.equal(body.accepted,true);assert.equal(body.version,'legacy-trial-2026-10-25.1');
-    return posts===1?json({error:'Verify your email to resume your unfinished checkout.',recover:true},409):json({url:base+'/mock-trial-checkout'});
+    return posts===1?json({error:'Checkout could not open. Continue in this browser or contact support.',recover:true},409):json({url:base+'/mock-trial-checkout'});
    }
    if(url.pathname==='/mock-trial-checkout')return route.fulfill({contentType:'text/html',body:'Synthetic hosted checkout; no provider contacted'});
    if(url.pathname==='/api/auth/email'){codes++;assert.equal(route.request().postDataJSON().email,'returning@example.invalid');return json({message:'If eligible, a code will be sent.'});}
@@ -23,12 +23,24 @@ export async function verifyLegacyTrial(browser,base,options,name){
   await page.goto(base+'/legacy-offer');await page.getByRole('heading',{name:'$0 now. Then $50/month.'}).waitFor();
   assert(await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).isDisabled());
   await page.getByLabel('Original purchase email',{exact:true}).fill('returning@example.invalid');await page.getByRole('checkbox').check();
-  await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).click();await page.getByText('Verify your email to resume your unfinished checkout.',{exact:true}).waitFor();assert.equal(posts,1);
+  await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).click();await page.getByText('Checkout could not open. Continue in this browser or contact support.',{exact:true}).waitFor();assert.equal(posts,1);
+  assert.equal(await page.getByRole('button',{name:'Email me a code',exact:true}).count(),0,'Failed checkout must not force email verification');
+  assert.equal(codes,0);
+  await page.getByRole('button',{name:'Resume a checkout from another device',exact:true}).click();
   await page.getByRole('button',{name:'Close email verification',exact:true}).waitFor();
   await page.getByText('This verifies your email only',{exact:false}).waitFor();assert.equal(await page.getByRole('button',{name:'Use my checkout phone',exact:true}).count(),0);
-  await page.getByRole('button',{name:'Email me a code',exact:true}).click();await page.getByLabel('Email code',{exact:true}).fill('123456');await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.getByRole('button',{name:'Email me a code',exact:true}).click();await page.getByText('Recovery is only available',{exact:false}).waitFor();await page.getByLabel('Email code',{exact:true}).fill('123456');await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await page.getByText('Email verified. Continue to secure checkout above to resume your offer.',{exact:true}).waitFor();assert.equal(posts,1,'Email proof alone never starts checkout');assert.equal(codes,1);assert.equal(verifications,1);
   await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).click();await page.waitForURL(base+'/mock-trial-checkout');assert.equal(posts,2);
+  await page.goBack();await page.getByRole('heading',{name:'$0 now. Then $50/month.'}).waitFor();
+  // Browsers may restore from BFCache or reload; both must permit explicit continuation.
+  // A history reload may restore native input values before React hydration.
+  // Reaffirm consent with a real change, then await the resulting React commit.
+  await page.getByRole('checkbox').uncheck();
+  await page.getByRole('checkbox').check();
+  await page.waitForFunction(()=>document.querySelector('form .returning-primary')?.disabled===false,null,{timeout:5000});
+  assert.equal(await page.getByRole('button',{name:'Continue to secure checkout',exact:true}).isDisabled(),false);
+  assert.equal(posts,2,'Back navigation must not start checkout');
   await page.goto(base+'/legacy-offer?purchase='+id+'&session_id=cs_test_fixture');await page.getByText('Your checkout is being confirmed.',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Check again',exact:true}).click();await page.waitForURL(base+'/access?purchase='+id);await page.getByRole('heading',{name:'Open your iCash X account.'}).waitFor();
   assert.equal(posts,2,'Confirmation/claim never creates another subscription');assert.equal(codes,1,'Access handoff does not send an OTP automatically');

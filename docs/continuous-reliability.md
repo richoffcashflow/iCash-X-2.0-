@@ -13,6 +13,33 @@ settlement, concurrent finalizers, late claims/receipts and atomic rollback.
 This is a local verified implementation; exact release and private activation
 remain required. One operation does not resolve the separate pending backlog.
 
+## November 15 introductory checkout recovery
+
+The introductory checkout catch-all opened email recovery even when failure
+occurred before a recoverable checkout existed. The unchanged sign-in endpoint
+correctly sends no OTP for an ineligible email while returning the same public
+response. This combination trapped visitors in an irrelevant code-entry step.
+
+Checkout failures now remain in the existing form with same-browser continuation,
+support guidance and a random reference correlated to a fixed server stage.
+Email recovery remains explicit; its no-code guidance explains the checkout path.
+The page rejects same-render repeated submissions and resets its busy state when
+returning from Stripe through the back/forward cache. No layout, billing terms,
+eligibility, reservation locks, provider operations or idempotency keys change.
+
+Offline route/page regressions cover absent checkout,
+explicit eligible recovery, unknown-email privacy, original-session reuse, held
+outcomes, failed save retries, rapid clicks and navigation. The intercepted browser
+scenario is updated, but local Chromium could not launch because its socket
+operation was denied; canonical browser CI remains required. Neither fixture
+results nor a successful build establishes production recovery. The bounded historical log search timed out; a recent
+30-minute warning search found no matching events. The original customer failure
+stage remains unverified, with no payment-provider or delivery-cause attribution.
+
+This is a draft repair. Require final-head Reliability checks and review before
+normal release; no database migration or provider setup is introduced. Verify the
+exact production release and actual customer checkout before reporting recovery.
+
 ## November 15 export-capacity persistence health
 
 An offline replay through the actual export-capacity services and maintenance
