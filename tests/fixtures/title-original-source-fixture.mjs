@@ -10,6 +10,7 @@ export async function installOriginalSourceFixture(db){
  await db.exec(`do $$begin create role anon;exception when duplicate_object then null;end$$;
  do $$begin create role authenticated;exception when duplicate_object then null;end$$;
  do $$begin create role service_role bypassrls;exception when duplicate_object then null;end$$;
+ alter role service_role bypassrls;
  create table public.icash_accounts(id uuid primary key);
  create table public.icash_deal_files(id uuid primary key,account_id uuid,stage text);
  create table public.icash_title_requests(id uuid primary key,account_id uuid,deal_id uuid,recipient text,state text);

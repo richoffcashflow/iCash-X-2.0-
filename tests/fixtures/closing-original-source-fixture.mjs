@@ -7,6 +7,7 @@ export function sqlFunction(file,name){const source=read(file),start=source.sear
 export async function closingMetadata(db){return (await db.query(`select oid::regprocedure::text signature,md5(pg_get_functiondef(oid)) source_hash,pg_get_userbyid(proowner) owner,prosecdef,provolatile,proparallel,proconfig,proacl::text from pg_proc where oid in ('public.icash_auto_title_confirmation()'::regprocedure,'public.icash_confirm_closing_update(uuid,uuid,uuid,uuid,text,date,bigint,text)'::regprocedure) order by 1`)).rows;}
 export async function installClosingSourceFixture(db){
  await db.exec(`do $$begin create role anon;exception when duplicate_object then null;end$$;do $$begin create role authenticated;exception when duplicate_object then null;end$$;do $$begin create role service_role bypassrls;exception when duplicate_object then null;end$$;
+ alter role service_role bypassrls;
  create schema if not exists auth;create table auth.users(id uuid primary key);
  create table icash_accounts(id uuid primary key,owner_user_id uuid);
  create table icash_screening_jobs(id uuid primary key,account_id uuid,snapshot jsonb);
