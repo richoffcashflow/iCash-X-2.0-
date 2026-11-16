@@ -3,6 +3,7 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'sms-projection-screening',
+ 'research-priority-cost-isolation',
  'seller-call-learning-planning',
  'learning-completion-lock-isolation',
  'support-waiting-deal',
