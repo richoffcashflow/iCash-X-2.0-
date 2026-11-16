@@ -9,11 +9,13 @@ export function supportLocationGuidance(context:SupportContext):SupportReply|nul
  const searchLocation=/\b(?:search|target)(?:ing)? (?:locations?|areas?|markets?)\b/i.test(q)&&/\b(?:how|where|choose|select|set|change)\b/i.test(q);
  const focusRequest=/^(?:please |i (?:want|need) (?:you|the bot) to )?(?:only )?focus(?: my bot| the bot)? (?:only )?on (?:cities|states|markets)(?: like| such as| in)?\b/i.test(q.trim());
  const dealSearchLocation=/\b(?:cities|city|states?|markets?)\b/i.test(q)&&/\b(?:look|search|find)(?:ing)?(?: for)? deals?\b/i.test(q)&&/\b(?:want|would like|how)\b/i.test(q)&&!/\b(?:seller|do not|don[’']?t|no longer)\b/i.test(q);
- if(!/\bleads?\b/i.test(q)&&!searchLocation&&!focusRequest&&!dealSearchLocation)return null;
+ const propertySearch=!/\bseller\b/i.test(q)&&/\b(?:propert(?:y|ies)|houses?|homes?)\b/i.test(q)&&/\bsearch(?:es|ing)?\b/i.test(q)&&/\b(?:choose|select|set|change|prioriti[sz]e)\b/i.test(q)&&!/^(?:please )?(?:do not|don[’']t|i (?:do not|don[’']t) want to)\b/i.test(q.trim());
+ const nationwidePriority=/\b(?:can|how)\b/i.test(q)&&/\bprioriti[sz]e\b/i.test(q)&&/\bsearch(?:es|ing)? nationwide\b/i.test(q)&&!/\bseller\b/i.test(q);
+ if(!/\bleads?\b/i.test(q)&&!searchLocation&&!focusRequest&&!dealSearchLocation&&!propertySearch&&!nationwidePriority)return null;
  const origin=/\bleads?\b[^.!?]{0,30}\b(?:coming|come) (?:out of|from)\s+[a-z]/i.test(q);
  const geography=/\b(?:cities|city|states?|zip codes?|markets?|locations?|any ?where else)\b/i.test(q)&&/\b(?:why|where|choose|select|change|getting|find|get)\b/i.test(q);
  const request=/^(?:please )?(?:get|find|search for)(?: me)? leads? in [a-z .'-]+[.!?\s]*$/i.test(q.trim());
- if(!origin&&!geography&&!request&&!searchLocation&&!focusRequest&&!dealSearchLocation)return null;
+ if(!origin&&!geography&&!request&&!searchLocation&&!focusRequest&&!dealSearchLocation&&!nationwidePriority)return null;
  return {reply:'The bot selects markets automatically. The workspace has no city, state or ZIP-code selector, and this chat has not changed your search area. Leads appearing in one area do not establish why other areas are missing; that needs a check of the saved search settings and property records.',status:'open',ai:false};
 }
 
@@ -21,10 +23,14 @@ export function supportLocationGuidance(context:SupportContext):SupportReply|nul
  * older customer or operator turns, or strip a complaint inside one clause. */
 export function supportLocationParts(context:SupportContext){
  const q=context.messages.findLast(t=>t.role==='user')?.content??'';
- const clauses=q.replace(/^\s*\d+[.)]\s+/gm,'').split(/(?<=[?!;])\s*|\n+|(?<=\.)\s+(?=[A-Z])|\s+and\s+(?=how (?:do|can) i (?:choose|select|set|change))/i)
+ const clauses=q.replace(/^\s*\d+[.)]\s+/gm,'').split(/(?<=[?!;])\s*|\n+|(?<=\.)\s+(?=[A-Z])|\s+and\s+(?=(?:how|where|why|what|can)\b)/i)
   .map(s=>s.replace(/^\s*also[,\s]+/i,'').trim()).filter(Boolean);
  const locationClauses=clauses.filter(content=>supportLocationGuidance({...context,messages:[{role:'user',content}]}));
  if(!locationClauses.length)return null;
  const answer=supportLocationGuidance({...context,messages:[{role:'user',content:locationClauses[0]}]})!;
- return {answer,remaining:clauses.filter(s=>!locationClauses.includes(s)).join(' ')};
+ // These current-turn statements qualify an explicit search question; they
+ // are not requests to set up voice or evidence that an older fault is fixed.
+ // Keep every actual secondary question/fault for the existing composition.
+ const contextOnly=(s:string)=>/^(?:(?:i (?:am not|not) asking about|keep) (?:my|the|[a-z]+[’']s) (?:cloned |custom )?voice(?: unchanged)?|(?:my|the|[a-z]+[’']s) (?:cloned |custom )?voice is (?:already )?working|that is already working|i want to change (?:the |my |[a-z]+[’']s )?(?:real estate )?property search settings|please answer yes or no(?: and tell me (?:exactly )?where (?:the|those) settings are(?: located(?: in iCash X)?)?)?)[.!\s]*$/i.test(s);
+ return {answer,remaining:clauses.filter(s=>!locationClauses.includes(s)&&!contextOnly(s)).join(' ')};
 }
