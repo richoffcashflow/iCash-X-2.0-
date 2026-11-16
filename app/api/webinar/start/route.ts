@@ -18,7 +18,7 @@ import {webinarReturnJourney} from '@/lib/webinar-ad-returns';
 import {webinarLink} from '@/lib/webinar-links';
 import {webinarViewerMembership,returningBuyerVip} from '@/lib/webinar-vip';
 import {vipActive} from '@/lib/vip-policy';
-import {webinarBody,webinarError,WebinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
+import {webinarBody,webinarError,WebinarError,webinarHeaders,webinarLimit,webinarOrigin,webinarOwner,webinarEntryVisitor,webinarPaid,type WebinarSession} from '@/lib/webinar-server';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){try{
  webinarOrigin(req);const i=z.object({timezone:z.string().max(80),code:z.string().regex(/^\d{6,12}$/).optional(),variant:z.enum(['day','night']).optional(),resume:z.string().max(600).optional(),returnToWebinar:z.boolean().optional(),preview:z.guid().optional(),attribution:z.record(z.string(),z.string().max(250)).optional()}).strict().parse(await webinarBody(req,3000));
@@ -48,17 +48,21 @@ export async function POST(req:Request){try{
    return Response.json({redirect:account.destination,needsBudget:account.needsBudget},{headers:webinarHeaders});
   }
  }
- const visitor=await webinarVisitor(true,i.resume);const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
+ const timezone=visitorTimezone(process.env.VERCEL?req.headers.get('x-vercel-ip-timezone'):null,i.timezone);
  const location=webinarViewerLocation(req.headers);
  const attribution=Object.fromEntries(Object.entries(i.attribution??{}).filter(([k])=>['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id'].includes(k)));
- const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;if(!validGuest(fundingGuest)){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
+ const jar=await cookies();let fundingGuest=jar.get('icash_funding_guest')?.value;const newFundingGuest=!validGuest(fundingGuest);if(newFundingGuest){fundingGuest=randomBytes(32).toString('hex');jar.set('icash_funding_guest',fundingGuest,{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*30});}
  const activityRegion=process.env.VERCEL?approximateRegion(req.headers.get('x-vercel-ip-country'),req.headers.get('x-vercel-ip-country-region')):null;
+ const entry={timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest!),last_seen_at:new Date().toISOString(),...(account?{account_id:account.id}:{}),...(Object.keys(attribution).length?{attribution}:{})};
+ const [{visitor,created},settingsRows]=await Promise.all([webinarEntryVisitor(i.resume,entry),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config')]);
  // Return routing uses only the latest unsuperseded session. Filter before limiting
  // so old recording snapshots cannot inflate entry or hide a resumable session.
  // Independent entry reads run together; every access check still finishes before returning a session.
- const [initialHistory,settingsRows,,paid]=await Promise.all([i.preview?Promise.resolve([]):db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.id}&is_preview=eq.false&superseded_at=is.null&select=*&order=created_at.desc,updated_at.desc&limit=1`),db<{config:WebinarSettings}[]>('icash_webinar_settings?id=eq.1&select=config'),
-  db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',{timezone,activity_region:activityRegion,funding_guest_hash:guestHash(fundingGuest),last_seen_at:new Date().toISOString(),...(account?{account_id:account.id}:{}),...(Object.keys(attribution).length?{attribution}:{})}),
-  !i.preview&&!ownerWatching&&!target.parentWebinarId?Promise.all([webinarCustomerPaid(guestHash(fundingGuest)),webinarPaid(visitor)]).then(results=>results.some(Boolean)):Promise.resolve(false)
+ // A newly inserted identity has no saved sessions. Its entry metadata was
+ // written in the insert, and a freshly generated guest token has no purchases.
+ const [initialHistory,,paid]=await Promise.all([i.preview||created?Promise.resolve([]):db<WebinarSession[]>(`icash_webinar_sessions?visitor_id=eq.${visitor.id}&webinar_id=eq.${target.id}&is_preview=eq.false&superseded_at=is.null&select=*&order=created_at.desc,updated_at.desc&limit=1`),
+  created?Promise.resolve():db(`icash_webinar_visitors?id=eq.${visitor.id}`,'PATCH',entry),
+  !i.preview&&!ownerWatching&&!target.parentWebinarId?Promise.all([newFundingGuest?Promise.resolve(false):webinarCustomerPaid(guestHash(fundingGuest!)),created?Promise.resolve(false):webinarPaid(visitor)]).then(results=>results.some(Boolean)):Promise.resolve(false)
  ]);
  if(paid)return Response.json({redirect:webinarSite.workspacePath},{headers:webinarHeaders});
  const settings=settingsSchema.parse(settingsRows[0].config);
@@ -105,6 +109,8 @@ export async function POST(req:Request){try{
  const returnStart=!i.preview&&!ownerWatching&&!target.parentWebinarId&&!recordingChanged&&journey.kind==='advance'?webinarReturnPosition(snapshot):0;
  const session=await db<WebinarSession>('rpc/icash_webinar_begin','POST',{p_visitor:visitor.id,p_id:sessionId,p_config:returnStart?{...snapshot,_returnStartSeconds:returnStart}:snapshot,p_advance_from:!i.preview&&journey.kind==='advance'?journey.sessionId:null,p_preview:!!i.preview});
  if(target.legacyCampaignId&&!i.preview)await bindLegacyWebinar(visitor.id,target.legacyCampaignId).catch(()=>{});
- const messages=await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`,'GET',undefined,AbortSignal.timeout(1500)).then(rows=>rows.reverse()).catch(()=>[]);
+ // The begin RPC can reuse a concurrent/resumed session. Only the exact newly
+ // inserted session is known to have no earlier personal chat to restore.
+ const messages=session.id===sessionId?[]:await db<{id:string;role:'user'|'assistant';text:string;playback_seconds:number|null}[]>(`icash_webinar_messages?session_id=eq.${session.id}&role=eq.user&select=id,role,text,playback_seconds,display_name,public_status&order=created_at.desc&limit=60`,'GET',undefined,AbortSignal.timeout(1500)).then(rows=>rows.reverse()).catch(()=>[]);
  return Response.json({webinar:publicWebinar(webinarSchema.parse(session.config)),...(session.config.id!==current.id?{canonicalPath:webinarLink(session.config)}:{}),sessionId:session.id,progress:session.completed_at?0:session.progress_seconds,name:visitor.name??'',email:visitor.email??'',phone:visitor.phone??'',contactSaved:!!visitor.email&&!!visitor.phone,messages,preview:!!i.preview,ownerWatching,recordingRecheckAt:i.preview?null:recordingRecheckAt(target,session.config.recordingVersion??'day',timezone,entryNow,settings.routing,location),serverNow:Date.now()},{headers:webinarHeaders});
  }catch(e){if(e instanceof z.ZodError)return Response.json({error:'The webinar link could not be read.'},{status:400,headers:webinarHeaders});return webinarError(e);}}
