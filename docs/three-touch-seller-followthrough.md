@@ -1,0 +1,23 @@
+# Three calls and three texts for unanswered sellers
+
+The November 16 owner request ends with three calls and three texts. This means three total attempts per unanswered seller, including the initial contact. It is not three new attempts every day or for every property associated with the same phone.
+
+Operational seller calls can create a second and then a third distinct job, at least two hours after the previous actual call. Both previous calls must have exact completed unanswered evidence and settled costs. The bounded scanner covers the previous seven days, including pre-cutover calls, but requires the original contact's current eligibility. It never renews or rebinds expired voice evidence, retries an old job or releases an uncertain charge.
+
+Operational unanswered texts allow two distinct reminders after the original delivered text, at least four hours after the previous actual dispatch. Every prior submitted cold text must be delivered on the same thread. A bounded cursor catches omitted follow-ups from delivered questions and prior no-response reminders in the last seven days. It creates a gap for the ordinary recovery workflow, not a direct send. Canonical delivery reconciliation can therefore remain immutable. Expired evidence remains `contact_checks_expired`; original gap deadlines and existing contact revalidation controls remain unchanged. Historical expired contacts are not represented as contacted or automatically eligible.
+
+HomeOffer Network already has three consent-bound texts. Its third unanswered call becomes eligible at least 24 hours after the first outreach and two hours after the second completed call, inside the original 72-hour window. It reuses the existing parent link to preserve byte-for-byte original job snapshots used by financial recovery reviews. The initial follow-up and third call each retain a unique lead slot.
+
+Any real reply, refusal, wrong-owner response, human handoff, opt-out, account Pause, channel restriction, missing funds, stale source, unknown attempt or unresolved cost prevents the cold routine. Active conversations and requested callbacks retain their existing workflow. Recipient-wide counts cover other properties and accounts. Final sender/dial admission, local calling hours, financial qualification and current contact checks remain mandatory. Owner demonstrations and buyer calls are not added. Existing recorded runtime voicemail detection and bound stop/end behavior remain in place.
+
+## Installation and release
+
+Apply the four source-pinned migrations in filename order. They install with `three_touch_enabled=false`; no rollout flag is enabled by schema installation. The existing two-touch behavior remains available while inactive. The rollout requires the latest exact-head canonical Reliability checks, the serialized expected-head merge, exact main-push checks and matching healthy web/worker production releases. Do not race the existing release controller.
+
+After that verification, activate once under scheduler advisory lock `726341927` and the enabled operating-budget row lock. Set `three_touch_enabled=true` and `three_touch_activated_at=clock_timestamp()` only when it is currently false and the activation timestamp is null. Clear the call/text scan cursors in the same transaction so the ordinary scheduler can examine the eligible historical window. This changes no original jobs, messages, provider receipts or money. Disabling this flag is the rollback; already-admitted work remains subject to the original final checks and accounting. Do not reactivate automatically after an operator rollback.
+
+Verify source definitions, service-only grants, the inactive/active flag and ordinary queue progress separately from provider dispatch and completed work. Installation and offline tests do not establish delivered messages, completed calls or universal historical contact coverage. No paid development calls, texts or provider purchases are authorized.
+
+## Verification
+
+`three-touch-seller.test.mjs` covers three-attempt limits, legacy behavior while inactive, exact sources, cross-account counts, current controls, delivered-only text progression, canonical receipt catch-up and expired-contact holds. `three-touch-meta.test.mjs` executes the actual preparation and final phone predicates, including late control changes and preservation of original job snapshots. The native PostgreSQL test uses sixteen competing call queues and text catch-up scans, original-record comparisons and five real lock races. Provider/contact/entitlement adapters in the fixtures are explicit boundaries; existing release suites cover their production implementations, property filters and voicemail cutoff.

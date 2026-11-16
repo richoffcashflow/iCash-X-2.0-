@@ -200,6 +200,10 @@ jobs:
         run: python3 scripts/test-financial-prequalification-postgres.py
       - name: Verify one unanswered follow-up under concurrent queues and late controls
         run: python3 scripts/test-unanswered-seller-followups-postgres.py
+      - name: Verify three-call and three-text sequences under concurrent queues and late controls
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-three-touch-postgres.mjs
       - name: Verify one-use phone checks and immutable receipts under concurrent claims
         run: python3 scripts/test-seller-contact-refresh-postgres.py
       - name: Verify isolated refresh cost holds under concurrent claims and late controls
