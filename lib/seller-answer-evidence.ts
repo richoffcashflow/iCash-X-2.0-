@@ -5,7 +5,7 @@ export function sellerAnswerText(value:string){
 }
 export function sellerAffirmation(value:string){
  const text=sellerAnswerText(value);
- return /^(?:(?:um|uh|well)[, .]+)*(?:(?:yes|yeah|yep|sure|correct|absolutely|i am|it is|that's right|that is right)\b|(?:i (?:said|already said)|i(?:'ve| have)? (?:already )?told you(?: once)?)(?:[, .]+(?:mr\.? ai[, .]+)?)?[, .]*(?:yes|yeah|sure|i (?:am|would|do|will))\b)/i.test(text)
+ return /^(?:(?:um|uh|well)[, .]+)*(?:(?:yes|yeah|yep|yup|y|sure|correct|absolutely|i am|it is|that's right|that is right)\b|(?:i (?:said|already said)|i(?:'ve| have)? (?:already )?told you(?: once)?)(?:[, .]+(?:mr\.? ai[, .]+)?)?[, .]*(?:yes|yeah|sure|i (?:am|would|do|will))\b)/i.test(text)
   && !/\b(?:not|never|didn't|did not|if|unless|only if)\b/i.test(text);
 }
 export function sellerExplicitUnknown(value:string){

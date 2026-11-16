@@ -23,8 +23,8 @@ language sql stable security definer set search_path='' as $$
    order by o.created_at desc,o.id desc limit 1) question
   where m.id=p_message and m.account_id=p_account and m.direction='incoming' and m.state='received'
   and exists(select 1 from icash_seller_memory_private.settings where id=1 and public.icash_seller_memory_enabled(p_account) and enabled_at<=to_timestamp(public.icash_sms_reply_time(m.id)))
-  and m.body ~* '^(yes|yeah|yep|sure|i would|i am interested)[.! ,]*$'
-  and question.body ~* '(interested in selling|looking to sell|open to a cash offer|consider selling)'
+  and m.body ~* '^(yes|yeah|yep|yup|y|sure|i would|i am interested)[.! ,]*$'
+  and question.body ~* '(interested in selling|looking to sell|open to a cash offer|consider selling|considered a cash sale)'
   and position('?' in question.body)>0
   and not question.body ~* '(\$|[0-9]+[,0-9]* (dollars|thousand)|sign|agreement|accept|owner)')
 $$;

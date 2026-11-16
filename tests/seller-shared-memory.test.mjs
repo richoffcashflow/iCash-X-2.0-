@@ -34,6 +34,10 @@ const otherPerson=sellerOfferQualification({transcript:[u("I'm his son.")]},[{tr
 assert(otherPerson.missing.includes('ownership'));
 const ownerYes=sellerOfferQualification({transcript:[a('Are you the owner?'),u('Yes.')]});
 assert(ownerYes.missing.includes('interest'));
+for(const question of ['Have you considered a cash sale for 45 Oak Road?','Would you consider selling 45 Oak Road for all cash?','Would you be open to a cash offer for 45 Oak Road?']){
+ for(const answer of ['Y','Yup','I would.'])assert(!sellerOfferQualification({transcript:[a(question),u(answer)]}).missing.includes('interest'),question+' / '+answer);
+}
+assert(sellerOfferQualification({transcript:[a('Are you the owner?'),u('I would.')]}).missing.includes('ownership'),'conditional willingness alone does not prove ownership');
 const state=sellerDialogueState({sourceId:'fixture',transcript:[a('What repairs does it need?'),u("I don't know.")]});
 assert.equal(state.facts.condition.status,'unknown');assert(!state.qualification.missing.includes('condition'));
 

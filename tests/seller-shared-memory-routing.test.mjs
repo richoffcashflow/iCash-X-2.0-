@@ -110,6 +110,10 @@ await q("insert into icash_text_messages(account_id,thread_id,direction,state,bo
 source=await incoming(interested,'Yes');
 assert.equal(await rpc('icash_seller_memory_interest_reply',[interested.a,source.id]),true);
 assert.equal(await rpc('icash_seller_memory_interest_reply',[randomUUID(),source.id]),false);
+for(const question of ['Hi, have you considered a cash sale for 45 Oak Road?','Hi, would you consider selling 45 Oak Road for all cash?','Hi, would you be open to a cash offer for 45 Oak Road?']){
+ await q("update icash_text_messages set body=$1 where thread_id=$2 and direction='outgoing'",[question,interested.t]);
+ assert.equal(await rpc('icash_seller_memory_interest_reply',[interested.a,source.id]),true,'all three reviewed opener variants route the same fresh affirmative');
+}
 ctx=await rpc('icash_seller_text_offer_context',[interested.a,source.id]);assert(ctx,'fresh current interested reply enters supported offer qualification');
 assert.equal(planSellerTextOffer(ctx).action,'qualify_ownership','interest does not assert ownership');
 await q('update icash_text_threads set manual_only=true where id=$1',[interested.t]);assert.equal(await rpc('icash_seller_text_offer_context',[interested.a,source.id]),null,'manual takeover still owns the thread');

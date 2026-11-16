@@ -87,7 +87,7 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
     // An offer question is not an answer to a pending repairs/occupancy question.
     if(!sellerPropertyAnswer('condition',text)&&!sellerPropertyAnswer('occupancy',text)&&!sellerPropertyAnswer('timing',text))question='';
    }
-   if(interestQuestion&&(yes.test(text)||no.test(text)))remember('interest',!no.test(text));
+   if(interestQuestion&&(yes.test(text)||/^(?:i would|i do|i will)[.! ]*$/i.test(text)||no.test(text)))remember('interest',!no.test(text));
    if(/\b(?:(?:want|looking|ready|need|hoping|trying|plan|planning|like) to sell|interested in selling|(?:sell|selling) (?:it|my|the|this))\b/i.test(statement))remember('interest',true);
    if(/\b(?:not (?:interested|looking|ready).*sell|don['’]?t want to sell|do not want to sell|not selling)\b/i.test(statement))remember('interest',false);
    if(situationQuestion&&sellerPropertyAnswer('situation',text)){remember('situation',true);remember('interest',true,true);}
