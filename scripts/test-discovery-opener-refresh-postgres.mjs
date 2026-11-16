@@ -4,11 +4,15 @@ import assert from 'node:assert/strict';
 import {Client,connection} from '../tests/helpers/discovery-opener-refresh-native-db.mjs';
 import {createDiscoveryOpenerRefreshFixture} from '../tests/helpers/discovery-opener-refresh-fixture.mjs';
 import {verifyDiscoveryOpenerRefresh} from '../tests/helpers/discovery-opener-refresh-assertions.mjs';
-const admin=new Client({...connection,database:'postgres'});let created=false,f,a,b;
+const fixtureRoles=['anon','authenticated','service_role'];
+const admin=new Client({...connection,database:'postgres'});let created=false,priorRoles=null,f,a,b;
 try{
  await admin.connect();
  assert.equal((await admin.query('select current_database() db')).rows[0].db,'postgres');
  assert.equal((await admin.query('select 1 from pg_database where datname=$1',[connection.database])).rowCount,0,'Dedicated fixture database must not preexist');
+ // Roles are cluster-global even though all fixture objects use a dedicated DB.
+ // This runner is sequential; retain every role that existed before its setup.
+ priorRoles=new Set((await admin.query('select rolname from pg_roles where rolname=any($1::text[])',[fixtureRoles])).rows.map(row=>row.rolname));
  await admin.query('create database icash_discovery_refresh_test');created=true;
  f=await createDiscoveryOpenerRefreshFixture(new URL('../tests/helpers/discovery-opener-refresh-native-db.mjs',import.meta.url).pathname);
  console.log('PASS native common assertions',await verifyDiscoveryOpenerRefresh(f,{issuer:false}));
@@ -54,4 +58,15 @@ try{
  assert.equal((await a.query("select icash_operational_contact_current($1,$2,'sms',false) allowed",[f.account,successor])).rows[0].allowed,false,'committed STOP revokes new contact');
  console.log('PASS native PostgreSQL contention: observed competing-prepare lock, late Pause, late STOP, one-use competing apply, no send/operation.');
 }catch(error){console.error(error.stack,error.cause?.where??error.where??'');process.exitCode=1;}
-finally{await a?.query('rollback').catch(()=>{});await b?.query('rollback').catch(()=>{});await a?.end();await b?.end();await f?.pg.close();if(created)await admin.query('drop database icash_discovery_refresh_test');await admin.end();}
+finally{
+ try{
+  await a?.query('rollback').catch(()=>{});await b?.query('rollback').catch(()=>{});
+  await a?.end();await b?.end();await f?.pg.close();
+  if(created){
+   await admin.query('drop database icash_discovery_refresh_test');
+   // Drop only fixed, initially absent roles after their fixture dependencies
+   // disappear. Never alter or drop a preexisting shared-cluster role.
+   for(const role of fixtureRoles)if(!priorRoles.has(role))await admin.query('drop role if exists '+role);
+  }
+ }finally{await admin.end();}
+}
