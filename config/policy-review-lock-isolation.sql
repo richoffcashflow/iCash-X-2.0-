@@ -24,6 +24,8 @@ begin
 end $guard$;
 -- Do not queue a schema lock behind ordinary dispatch or learning work.
 lock table icash_learning_private.policy_cohorts in access exclusive mode nowait;
+create temporary table icash_policy_review_split_before on commit drop as
+ select * from icash_learning_private.policy_cohorts;
 alter table icash_learning_private.policy_cohorts rename to policy_cohort_sources;
 create table icash_learning_private.policy_cohort_reviews(
  domain text not null,context text not null,market text not null,policy_version text not null,
@@ -92,3 +94,15 @@ begin
   'update icash_learning_private.policy_cohort_reviews set last_reviewed_at');
  execute d;
 end $patch$;
+-- Verify the actual installed projection while the original source is still
+-- locked. A changed pointer or omitted diagnostic aborts the whole migration.
+do $verify$
+begin
+ if exists(
+  (select * from pg_temp.icash_policy_review_split_before
+   except all select * from icash_learning_private.policy_cohorts)
+  union all
+  (select * from icash_learning_private.policy_cohorts
+   except all select * from pg_temp.icash_policy_review_split_before)
+ ) then raise exception 'Policy cohort projection changed during migration';end if;
+end $verify$;

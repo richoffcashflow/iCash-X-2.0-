@@ -33,6 +33,8 @@ The migration pins five exact deployed definitions, refuses changed relations,
 and acquires its schema lock with NOWAIT. The migration runner must own the
 whole transaction, including its history receipt. Do not retry an ambiguous
 installation or reinstall an acknowledged migration.
+An in-transaction comparison verifies every original pointer and diagnostic
+against the new projection before the migration may commit.
 
 PGlite checks lossless migration and compatibility projection, outer transaction
 rollback, original function access, unchanged promotion/hold logic, hourly
