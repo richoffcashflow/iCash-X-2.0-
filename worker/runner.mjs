@@ -70,8 +70,10 @@ export async function automationTick(rpc,transport=fetch,lane){
  catch(error){throw new WorkerOperationError('AUTOMATION_HELD','automation_dispatch',null,null,requestFailureCode(error));}
  // Dispatch needs only the status and durable-hold header. Release successful
  // responses too, so continuous work cannot accumulate unread connections.
- // A cleanup failure cannot overturn an already returned dispatch outcome.
- try{await r.body?.cancel();}catch{/* No retry; preserve the original status below. */}
+ // Cleanup may itself never settle. Start it once without keeping a completed
+ // attempt in its worker slot or triggering a whole-worker stall restart.
+ // Both immediate and later cleanup failures preserve the returned outcome.
+ try{void r.body?.cancel().catch(()=>{});}catch{/* No retry; preserve the original status below. */}
  if(!r.ok){
   // A failed job remains held and visible in operator diagnostics. Once the
   // API confirms that exact one-use attempt was durably held, it must not put

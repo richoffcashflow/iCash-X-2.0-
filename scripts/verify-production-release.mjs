@@ -9,14 +9,58 @@ const pendingStatuses = new Set(['queued', 'requested', 'waiting', 'pending', 'i
 class GitHubAccessError extends Error {}
 class GitHubRateLimit extends Error {constructor(delayMs){super('GitHub rate limit');this.delayMs=delayMs;}}
 
-/** Honor the server reset without retrying a denied request in a tight loop. */
-function rateLimitDelay(response,wallNow){
- const get=name=>response.headers?.get?.(name);
- const retry=get('retry-after'),reset=get('x-ratelimit-reset');
- const delays=[];
- if(retry&&/^\d+$/.test(retry))delays.push(Number(retry)*1000);
- if(reset&&/^\d+$/.test(reset)&&get('x-ratelimit-remaining')==='0')delays.push(Number(reset)*1000-wallNow()+1000);
- return delays.length?Math.max(60_000,...delays):null;
+/** Parse only the three HTTP-date forms, without permissive Date.parse rollover. */
+function httpDate(value, wallTime) {
+  if (typeof value !== 'string' || value.length > 64 || !Number.isFinite(wallTime)) return null;
+  let parts = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat), (\d{2}) ([A-Z][a-z]{2}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/.exec(value);
+  let shortYear = false;
+  if (!parts) {
+    parts = /^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday), (\d{2})-([A-Z][a-z]{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) GMT$/.exec(value);
+    shortYear = Boolean(parts);
+  }
+  if (!parts) {
+    const old = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) ([A-Z][a-z]{2}) (\d{2}| \d) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/.exec(value);
+    if (old) parts = [old[0], old[1], old[3], old[2], old[7], old[4], old[5], old[6]];
+  }
+  if (!parts) return null;
+  const [, weekday, dayText, monthText, yearText, hourText, minuteText, secondText] = parts;
+  const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(monthText);
+  const [day, hour, minute, second] = [dayText, hourText, minuteText, secondText].map(Number);
+  let year = Number(yearText);
+  const currentYear = new Date(wallTime).getUTCFullYear();
+  if (shortYear) year += Math.ceil((currentYear - year) / 100) * 100;
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  date.setUTCHours(hour, minute, Math.min(second, 59), 0);
+  if (shortYear) {
+    // RFC 850 years more than 50 years ahead refer to the prior century.
+    const latest = new Date(wallTime);
+    latest.setUTCFullYear(currentYear + 50);
+    if (date.getTime() > latest.getTime()) {year -= 100; date.setUTCFullYear(year);}
+  }
+  if (month < 0 || date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day ||
+      hour > 23 || minute > 59 || second > 60 || (second === 60 && (hour !== 23 || minute !== 59)) ||
+      ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][date.getUTCDay()] !== weekday.slice(0, 3)) return null;
+  return date.getTime() + (second === 60 ? 1000 : 0);
+}
+
+/** Honor supplied timing without retrying an ambiguous denial in a tight loop. */
+function rateLimitTiming(response, wallNow) {
+  const get = name => response.headers?.get?.(name);
+  const retry = get('retry-after'), reset = get('x-ratelimit-reset');
+  const wallTime = wallNow();
+  const delays = [];
+  let reason = 'no usable retry timing';
+  if (retry) {
+    if (/^\d+$/.test(retry)) delays.push(Number(retry) * 1000);
+    else {
+      const date = httpDate(retry, wallTime);
+      if (date !== null && date > wallTime) delays.push(date - wallTime);
+      else reason = date === null ? 'invalid Retry-After timing' : 'Retry-After date has elapsed';
+    }
+  }
+  if (reset && /^\d+$/.test(reset) && get('x-ratelimit-remaining') === '0') delays.push(Number(reset) * 1000 - wallTime + 1000);
+  return {delayMs: delays.length ? Math.max(60_000, ...delays) : null, reason};
 }
 
 /** Deployment metadata comes from the host, never a fallback to another commit. */
@@ -107,11 +151,22 @@ export async function waitForReliabilityChecks(sha, {
         signal: AbortSignal.timeout(Math.max(1, Math.min(requestTimeoutMs, Math.ceil(deadline - now())))),
       });
       if (response.status !== 200) {
-        await response.body?.cancel();
-        const delay=[403,429].includes(response.status)?rateLimitDelay(response,wallNow):null;
-        if(delay!==null&&Number.isFinite(delay)&&delay<deadline-now()&&rateLimits++<2)throw new GitHubRateLimit(delay);
+        // Status is known. Cleanup must not replace or delay the gate's decision.
+        try {void response.body?.cancel().catch(() => {});} catch {}
+        let reason = 'access denied';
+        if ([403, 429].includes(response.status)) {
+          const timing = rateLimitTiming(response, wallNow);
+          const delay = timing.delayMs;
+          reason = timing.reason;
+          if (delay !== null) {
+            if (!Number.isFinite(delay)) reason = 'invalid retry timing';
+            else if (delay >= deadline - now()) reason = 'retry timing exceeds remaining verification window';
+            else if (rateLimits >= 2) reason = 'two rate-limit waits already used';
+            else {rateLimits += 1; throw new GitHubRateLimit(delay);}
+          }
+        }
         // Unknown resets and denied access remain fail-closed.
-        if ([401, 403, 404, 422, 429].includes(response.status)) throw new GitHubAccessError(`GitHub API access blocked verification (HTTP ${response.status}). Retry deployment after access or rate limits recover.`);
+        if ([401, 403, 404, 422, 429].includes(response.status)) throw new GitHubAccessError(`GitHub API access blocked verification (HTTP ${response.status}; ${reason}). Retry deployment after access or rate limits recover.`);
         throw new Error(`GitHub API returned HTTP ${response.status}.`);
       }
       payload = await response.json();

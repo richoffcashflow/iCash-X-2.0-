@@ -146,6 +146,10 @@ jobs:
         run: python3 scripts/test-voice-predial-abort-postgres.py
       - name: Verify rejected recording admission cannot strand funds or race a real dial
         run: python3 scripts/test-recording-admission-abort-postgres.py
+      - name: Verify reviewed original undialed recovery preserves evidence and zero-charge ledger
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-reviewed-undialed-recording-postgres.mjs
       - name: Verify historical cleanup recovery and concurrent customer Pause
         run: python3 scripts/test-cleanup-ticket-recovery-postgres.py
       - name: Verify bounded saved export recovery without provider retries
@@ -281,6 +285,14 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-owner-wait-admission-postgres.mjs
+      - name: Verify research ignores irrelevant global voice capacity
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-research-capacity-isolation-postgres.mjs
+      - name: Verify acquisition yields budget contention to independent recovery
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-acquisition-budget-yield-postgres.mjs
       - name: Verify continued original cohorts through the actual owner handler
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg

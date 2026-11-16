@@ -3,6 +3,7 @@ import {supportReviewScreenReply} from './support-review-screen.ts';
 import {supportSellerCapabilityReply} from './support-seller-capability.ts';
 import {supportLocationGuidance,supportLocationParts} from './support-location-guidance.ts';
 import {supportBillingComplaintReply} from './support-billing-complaints.ts';
+import {supportEmailRepurchaseReply} from './support-email-repurchase.ts';
 import {supportContactPrivacyReply} from './support-contact-privacy.ts';
 import {supportCallRecordingReply} from './support-call-recordings.ts';
 import {supportVoiceSetupReply} from './support-voice-setup.ts';
@@ -61,6 +62,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const reviewScreen=supportReviewScreenReply(context);if(reviewScreen)return reviewScreen;
  const sellerCapability=supportSellerCapabilityReply(context);if(sellerCapability)return sellerCapability;
  const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
+ const emailRepurchase=supportEmailRepurchaseReply(question,context.messages.findLast(m=>m.role==='operator')?.content);if(emailRepurchase)return emailRepurchase;
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const contactPrivacy=supportContactPrivacyReply(context);if(contactPrivacy)return contactPrivacy;
