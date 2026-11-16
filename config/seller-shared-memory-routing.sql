@@ -36,6 +36,15 @@ declare d text;needle text;replacement text;
 begin
  d:=pg_get_functiondef('public.icash_seller_dialogue_context(uuid,uuid)'::regprocedure);
  if md5(d)<>'36f1940f71735b2ae392d94a262d36d3' then raise exception 'Seller dialogue memory prerequisite changed';end if;
+ -- A seller offering to return the call is not a request for us to schedule
+ -- an outbound callback. Keep every other callback/safety exclusion unchanged.
+ needle:=$n$or b ~ '\m(call me|callback|call back|phone call|ignore (previous|all|the)|system prompt|developer message|wire|bank account|deposit|lawsuit|attorney)\M' then return null;end if;$n$;
+ replacement:=$n$or (b ~ '\m(call me|callback|call back|phone call|ignore (previous|all|the)|system prompt|developer message|wire|bank account|deposit|lawsuit|attorney)\M'
+  and not coalesce(public.icash_seller_memory_enabled(p_account)
+   and exists(select 1 from icash_seller_memory_private.settings where id=1 and enabled_at<=to_timestamp(source_at))
+   and public.icash_seller_communication_intent(m.body)='return_call',false)) then return null;end if;$n$;
+ if position(needle in d)=0 then raise exception 'Dialogue callback exclusion changed';end if;
+ d:=replace(d,needle,replacement);
  needle:=$n$ elsif public.icash_seller_conversion_source(p_account,m.id) and public.icash_seller_conversion_intent(m.body) is not null then$n$;
  replacement:=$n$ elsif public.icash_seller_memory_enabled(p_account)
   and exists(select 1 from icash_seller_memory_private.settings where id=1 and enabled_at<=to_timestamp(source_at))
