@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- The November 16 missing-receipt settlement repair refuses only still-dispatched research originals without their exact account/source receipt before taking the global budget row. Preserve all original holds, receipt-present locked rereads, costs, ledgers, retry cursors, outer wrapper authority and customer controls. Missing evidence never authorizes zero-cost settlement or replay. Use the source-pinned migration and native concurrent receipt tests; see docs/missing-receipt-settlement-yield.md.
+
 - The November 16 shared seller memory release carries source-backed answers across the exact account, active deal and phone. Preserve original quotes, correction order, current refusals, signer identity, exact agreement readbacks and final financial/contact/receipt locks. Missing or capped sources remain explicit; a preference or cached fact grants no action authority. Install the source-pinned migrations once, verify the exact web/worker release, then activate only a privately reviewed prospective cohort. Keep fair supervisor slots, qualified buyer backups, unknown cohort costs and the existing UI. Never replay historical replies or use paid development calls. See docs/seller-shared-memory-2026-11-16.md.
 
 - The November 16 receipt-check learning repair ignores only `estimate_checked_at` bookkeeping on `public.icash_operation_spend`. Preserve every simultaneous source, cost or state change, other tables, generation-bound completion and private function privileges. It never settles unknown work or changes retry cadence. Use the source-pinned forward migration and native/PGlite trigger tests in docs/learning-estimate-bookkeeping.md.

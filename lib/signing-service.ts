@@ -6,7 +6,7 @@ import {normalizeDocuseal as normalize,type Submission} from './docuseal-policy.
 import {z} from 'zod';
 import {db} from '@/lib/stripe-test';
 import {dispatchReservedOperation} from '@/lib/operating-costs';
-import {signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,type Signer,type SigningKind,type ProviderDocument} from './signing-policy.ts';
+import {SigningDeadlineReviewError,signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,type Signer,type SigningKind,type ProviderDocument} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 type Template={form_profile?:string;max_legal_description_chars:number;customer_consent_field:string|null;provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
 type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:SigningKind;terms_hash:string;template_id:string;provider_id:string|null;state:string;test_mode:boolean;recipients:{id:string;email?:string|null;phone?:string|null;name:string;placeholder_name:string}[]};
@@ -110,7 +110,16 @@ export async function refreshSigning(accountId:string,id:string){
   }))throw new Error('Agreement field values need review before signing.');
   await db('rpc/icash_save_signing_status','POST',{p_id:e.id,p_state:state,p_evidence:d});
   // A send-time pass does not authorize an expired or incomplete agreement to be signed days later.
-  signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),reviewedTemplate.form_profile);
+  try{signingDocumentReadiness(e.kind,dealTermsSchema.parse(e.terms),Date.now(),reviewedTemplate.form_profile);}
+  catch(error){
+   if(!(error instanceof SigningDeadlineReviewError))throw error;
+   // The original provider receipt was verified and saved. A deadline review
+   // blocks only a new signature, not successful polling of that receipt.
+   // Retain the pending envelope so later original receipts remain observable;
+   // never claim authorization, change terms or treat it as completed signing.
+   console.info('signing_poll_pending',{reason:error.code});
+   return {status:state};
+  }
   // Poll/save existing evidence while new live signatures remain blocked.
   if(!e.test_mode&&process.env.ICASH_LIVE_WORK_READY!=='true')return {status:state};
   const signature=await db<string|null>('rpc/icash_claim_auto_signature','POST',{p_account:accountId,p_envelope:e.id,p_hash:e.terms_hash});
