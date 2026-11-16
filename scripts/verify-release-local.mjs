@@ -11,7 +11,7 @@ const suites = [
  'automatic-outreach-bottlenecks', 'work-cohort', 'work-cohort-query',
  'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
  'requested-seller-followthrough', 'limited-seller-ownership-reply',
- 'funded-stall-recovery', 'reviewed-planning-relief-20261116', 'reviewed-planning-relief-source-20261116', 'recording-admission-abort',
+ 'funded-stall-recovery', 'reviewed-planning-relief-20261116', 'reviewed-planning-relief-source-20261116', 'reviewed-owner-preview-source-20261116', 'recording-admission-abort',
  'support-current-issues', 'support-terminal-call-evidence',
  'support-waiting-work-status',
  'support-idle-credit-question',

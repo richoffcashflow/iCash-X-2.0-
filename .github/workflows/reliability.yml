@@ -186,6 +186,8 @@ jobs:
         run: python3 scripts/test-funded-stall-recovery-postgres.py
       - name: Verify sealed November 16 planning review, source races and actual late settlement
         run: python3 scripts/test-reviewed-planning-relief-20261116-postgres.py
+      - name: Verify original completed owner previews preserve reviewed source and lock fences
+        run: python3 scripts/test-reviewed-owner-preview-source-20261116-postgres.py
       - name: Verify legacy search quarantine and customer Pause under concurrent transactions
         run: python3 scripts/test-legacy-search-postgres.py
       - name: Verify exact fresh-contact revalidation under concurrent controls
