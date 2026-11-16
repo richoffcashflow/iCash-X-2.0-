@@ -10,7 +10,7 @@ export const sellerConversionPatterns={
 };
 export type SellerConversionIntent='identity'|'identity_price'|'price'|'buying'|'listed_terms';
 export function sellerConversionIntent(source:string):SellerConversionIntent|null{
- const body=source.toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim();
+ const body=source.toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().replace(/\bdepen[dt]s (?:on|of) (the|your) (?=offer|price)/g,'depends on $1 ');
  if(!body||body.length>500||sellerResponseDisposition(body)!==null
   ||/["“”]/.test(body)||/\b(?:said|asked|wrote|example|ignore|instructions?|prompt|wire|bank account)\b/.test(body))return null;
  const identity=new RegExp(sellerConversionPatterns.identity).test(body);

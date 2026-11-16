@@ -6,11 +6,16 @@ import {opportunityConversationInstructions} from './outreach-conversation.ts';
 export function sellerRequestsPrice(message:string):boolean{
  const text=message.replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim();
  if(sellerResponseDisposition(text)!==null)return false;
+ if(/["“”]/.test(text)||/\b(?:(?:he|she|they|buyer|agent) (?:said|asked|wrote)|example|ignore|instructions?|prompt|wire|bank account)\b/i.test(text))return false;
+ // Speech commonly puts the price question after an answer. Inspect complete
+ // clauses without treating another person's quoted question as seller intent.
+ const clauses=text.split(/(?<=[.!?;])\s+|,\s*(?=(?:how much|what|can you|could you|would you|will you)\b)/i);
+ if(clauses.length>1)return clauses.some(sellerRequestsPrice);
  if(/^(?:(?:okay|ok|yeah|yes|sure|well|so|then|but)[,.!? ]+)*(?:how much(?: for (?:it|the (?:house|property)))?|what(?:'s| is) the (?:cash )?offer)[?!. ]*$/i.test(text))return true;
- return /^(?:(?:okay|ok|yeah|yes|sure|well|so|then|but)[,.!? ]+)*(?:(?:how much|what) (?:would|will|can|could|do|are) (?:you|you'll|you all) (?:give|pay|offer)(?: me| us)?\b|(?:how much|what) (?:you'll|you) (?:give|pay|offer)(?: me| us)?\b|what(?:'s| is) your (?:cash )?offer\b|(?:can|could|would|will) you (?:make|give|send)(?: me| us)? (?:a |an |your )?(?:cash )?offer\b)/i.test(text);
+ return /^(?:(?:okay|ok|yeah|yes|sure|well|so|then|but)[,.!? ]+)*(?:(?:how much|what) (?:would|will|can|could|do|are) (?:you|you'll|you all) (?:give|pay|offer)(?:ing)?(?: me| us)?\b|(?:how much|what) (?:you'll|you) (?:give|pay|offer)(?: me| us)?\b|what(?:'s| is) your (?:cash )?offer\b|(?:can|could|would|will) you (?:make|give|send)(?: me| us)? (?:a |an |your )?(?:cash )?offer\b)/i.test(text);
 }
 
-export const sellerConversationEfficiencyInstructions=`A direct request for our price answers availability/interest, not ownership or property facts. Use get_offer and its nextQuestion; never restart answered questions, invent a price or override a refusal. On an explicit voicemail greeting, record-after-tone instruction or disconnected announcement, end_call immediately without a pitch or repeated silence checks. End confirmed call-screening assistants through the bound stop tool; do not answer their prompts or wait for a person. Machines and silence are not seller interest.`;
+export const sellerConversationEfficiencyInstructions=`Reuse sellerMemory answers; clarify only corrections or missing facts. A price request answers availability/interest, never ownership or price authority. Follow get_offer without restarting qualification. "Can I call you later?" permits returning the call, not dialing or booking one. "Email" is a preference, not acceptance: clarify details versus agreement; do not substitute SMS. Honor saved channel/language preferences. Ask language once; use it if supported, otherwise request language support. On voicemail, "nothing has been recorded", recording menus or screening assistants, use end_call immediately. Machines and silence are not seller interest.`;
 
 /** Keep room for actual seller answers within the unchanged provider limit.
  * The frozen provider policy stays intact; this is the seller runtime prompt. */

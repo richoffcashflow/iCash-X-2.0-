@@ -100,6 +100,7 @@ assert.equal((await call('get_offer')).priceCents,8400000,'buyer inquiry does no
 const scoped={accountId:'account',dealId:'new-deal',screeningId:'new-screen',phone:'+12125550199'};
 let existingCalls=[];
 const read=async(path,method,input)=>{
+ if(path==='rpc/icash_seller_memory_context')return null;
  if(path==='rpc/icash_seller_prior_call_context'){assert.deepEqual(input,{p_account:'account',p_screening:'new-screen',p_phone:scoped.phone});return existingCalls;}
  assert.match(path,/deal_id=eq.new-deal/);assert.match(path,/retired_at=is.null/);return [];
 };
@@ -107,6 +108,7 @@ assert.equal((await boundSellerQualification(read,scoped,{transcript:ownerOnly})
 existingCalls=[{result:{transcript:qualifiedSellerTurns}}];
 assert.equal((await boundSellerQualification(read,scoped,{transcript:ownerOnly})).ready,true,'returning seller uses the exact new lead history');
 const smsRead=async(path,method,input)=>{
+ if(path==='rpc/icash_seller_memory_context')return null;
  if(path==='rpc/icash_seller_prior_call_context')return [];
  if(path.startsWith('icash_text_threads?'))return [{id:'new-thread'}];
  assert.match(path,/thread_id=eq.new-thread/);assert.match(path,/account_id=eq.account/);
