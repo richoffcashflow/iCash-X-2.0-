@@ -313,6 +313,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node --experimental-strip-types scripts/test-continued-owner-handler-postgres.mjs
+      - name: Verify compatible owner batching under native contention
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-owner-batch-pool-postgres.mjs
       - name: Verify delayed contact checks survive concurrent cleanup
         run: python3 scripts/test-preflight-waiting-postgres.py
       - name: Verify original list indexing, bounded polling and fair concurrent progress
