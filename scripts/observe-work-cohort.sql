@@ -1,7 +1,28 @@
 -- Read-only fixed-membership observation. Render with work-cohort.mjs; never remove exited members.
 begin read only;
 set local statement_timeout='20s';
-with fixed_members as (select value::uuid id from jsonb_array_elements_text($icash_cohort$__ICASH_COHORT_IDS__$icash_cohort$::jsonb)), cohort as materialized (
+with fixed_members as materialized (select value::uuid id from jsonb_array_elements_text($icash_cohort$__ICASH_COHORT_IDS__$icash_cohort$::jsonb)),
+-- The voice-job table has no general account index. Collect the exact union of
+-- both original windows once instead of scanning its full history twice for
+-- every cohort member. Keep original dial/recording identity and timing proof.
+cohort_voice_jobs as materialized (
+ select j.id,j.account_id,j.operation_key,j.provider_call_sid,j.conversation_id,
+  j.state,j.outcome,j.created_at,j.updated_at
+ from public.icash_voice_jobs j join fixed_members f on f.id=j.account_id
+ where j.created_at>=now()-interval '24 hours'
+  or j.updated_at>=now()-interval '24 hours' or j.state='dispatching'
+), voice_counts as materialized (
+ select account_id,jsonb_object_agg(state,n) calls_24h
+ from(select account_id,state,count(*) n from cohort_voice_jobs
+  where created_at>=now()-interval '24 hours' group by account_id,state) q
+ group by account_id
+), voice_receipts as materialized (
+ select j.account_id,jsonb_agg(jsonb_build_object('id',j.id,'operationId',j.operation_key,'providerId',j.provider_call_sid,'conversationId',j.conversation_id,'recordingId',recording.id,'dialClaimedAt',recording.dial_claimed_at,'recordingStartedAt',recording.provider_started_at,'state',j.state,'outcome',j.outcome,'createdAt',j.created_at,'updatedAt',j.updated_at) order by j.id) call_receipts
+ from cohort_voice_jobs j
+ left join lateral(select r.id,r.dial_claimed_at,r.provider_started_at from public.icash_call_recordings r where r.account_id=j.account_id and r.voice_job_id=j.id and r.operation_key=j.operation_key and r.call_sid is not distinct from j.provider_call_sid order by r.created_at,r.id limit 1) recording on true
+ where j.updated_at>=now()-interval '24 hours' or j.state='dispatching'
+ group by j.account_id
+), cohort as materialized (
  select fixed_members.id,a.created_at,a.bot_paused,a.workspace_ack_version is not null acknowledged,
  w.balance_cents,w.reserved_cents,public.icash_membership_work_allowed(a.id) membership_allowed,
  public.icash_prospecting_available(a.id) prospecting_available_cents,
@@ -32,14 +53,14 @@ select c.*,
  (select jsonb_object_agg(kind,counts) from (select kind,jsonb_build_object('issued',count(*) filter(where state='issued'),'held',count(*) filter(where state='held'),'last_completed_at',max(completed_at)) counts from public.icash_automation_tickets where account_id=c.id group by kind) q) tickets,
  (select jsonb_build_object('current',count(*) filter(where revoked_at is null and eligibility_until>now()),'expired',count(*) filter(where revoked_at is null and eligibility_until<=now()),'hours_open',count(*) filter(where revoked_at is null and eligibility_until>now() and public.icash_outreach_window_open(timezone,timezone_basis,now())),'unknown_timezone',count(*) filter(where timezone_basis='recipient' and timezone is null)) from public.icash_operational_contacts where account_id=c.id) contacts,
  (select jsonb_object_agg(state,n) from(select state,count(*) n from public.icash_text_messages where account_id=c.id and direction='outgoing' and created_at>=now()-interval '24 hours' group by state) q) texts_24h,
- (select jsonb_object_agg(state,n) from(select state,count(*) n from public.icash_voice_jobs where account_id=c.id and created_at>=now()-interval '24 hours' group by state) q) calls_24h
-from cohort c
+ v.calls_24h
+from cohort c left join voice_counts v on v.account_id=c.id
 )
 select now() as observed_at,to_jsonb(m)||jsonb_build_object(
  'original_operations',(select coalesce(jsonb_agg(jsonb_build_object('id',o.operation_key,'state',o.state,'cap',o.charge_cap_cents,'actualMicros',o.actual_micros,'chargedCents',o.charged_cents,'createdAt',o.created_at,'dispatchedAt',o.dispatched_at,'settledAt',o.settled_at,'evidence',o.settlement_evidence) order by o.operation_key),'[]'::jsonb) from public.icash_operation_spend o where o.account_id=m.id and (o.state in ('reserved','dispatched') or o.settled_at>=now()-interval '24 hours')),
  'research_receipts',(select coalesce(jsonb_agg(jsonb_build_object('id',r.operation_key,'createdAt',r.created_at,'resultHash',md5(r.result::text)) order by r.operation_key),'[]'::jsonb) from public.icash_discovery_results r where r.account_id=m.id and r.created_at>=now()-interval '24 hours'),
  'text_receipts',(select coalesce(jsonb_agg(jsonb_build_object('id',t.id,'providerId',t.provider_id,'requestId',t.request_key,'eventId',t.event_id,'threadId',t.thread_id,'state',t.state,'createdAt',t.created_at,'updatedAt',t.updated_at,'deliveryAt',t.last_delivery_at,'contentHash',md5(jsonb_build_array(t.body,t.attachments)::text)) order by t.id),'[]'::jsonb) from public.icash_text_messages t where t.account_id=m.id and t.direction='outgoing' and (t.state in ('ready','dispatching','accepted','needs_review') or t.updated_at>=now()-interval '24 hours')),
- 'call_receipts',(select coalesce(jsonb_agg(jsonb_build_object('id',j.id,'operationId',j.operation_key,'providerId',j.provider_call_sid,'conversationId',j.conversation_id,'recordingId',recording.id,'dialClaimedAt',recording.dial_claimed_at,'recordingStartedAt',recording.provider_started_at,'state',j.state,'outcome',j.outcome,'createdAt',j.created_at,'updatedAt',j.updated_at) order by j.id),'[]'::jsonb) from public.icash_voice_jobs j left join lateral(select r.id,r.dial_claimed_at,r.provider_started_at from public.icash_call_recordings r where r.account_id=j.account_id and r.voice_job_id=j.id and r.operation_key=j.operation_key and r.call_sid is not distinct from j.provider_call_sid order by r.created_at,r.id limit 1) recording on true where j.account_id=m.id and (j.updated_at>=now()-interval '24 hours' or j.state='dispatching')),
+ 'call_receipts',coalesce(v.call_receipts,'[]'::jsonb),
  'held_ticket_reasons',(select jsonb_agg(x) from(select kind,outcome,count(*) n,min(created_at) oldest,max(completed_at) last_at from public.icash_automation_tickets where account_id=m.id and state='held' group by kind,outcome)x)
-) evidence from measured m order by id;
+) evidence from measured m left join voice_receipts v on v.account_id=m.id order by id;
 commit;
