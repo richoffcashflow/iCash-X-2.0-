@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'support-seller-interest',
  'support-paid-portal',
  'support-code-plural-context', 'support-payment-detail-followup', 'support-proof-followup', 'support-proof-submission-boundaries',
  'owner-batch-pool-selection',

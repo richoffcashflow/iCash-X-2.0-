@@ -152,3 +152,5 @@ Requests to refund and repurchase because a checkout email is inaccessible recei
 Explicit waiting-for-a-deal questions distinguish the automatic process from actual work. Current account Pause and blocked readiness remain visible, guest answers do not assert account state, and neither waiting nor Run guarantees a deal or recovery. Fictional regression coverage includes acknowledgment, mixed payment and topic boundaries.
 
 Reported payment with missing portal or session access information must not become work-credit or workspace setup guidance. Preserve that unresolved episode through payment/no-information follow-ups; operator findings, negation, successful access and new topics end it. Fictional account/guest regression coverage is in `tests/support-paid-portal.test.mjs`; a claim of payment does not verify a purchase.
+
+Questions about how the bot knows an owner wants to sell distinguish researched prospects from confirmed seller intent. Only actual seller responses support interest; property discovery and call attempts do not. Fictional account/guest replays preserve account faults, operator findings and topic changes.
