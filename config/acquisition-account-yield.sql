@@ -1,0 +1,74 @@
+-- Lock each candidate account with its configuration using SKIP LOCKED.
+-- Otherwise the nested preparation waits on a busy account while holding
+-- the global dispatcher and budget locks, delaying every other account.
+-- The exact original predicates, order, scan bound and final gates remain.
+-- The release runner owns the migration-ledger transaction.
+set local lock_timeout='5s';
+set local statement_timeout='30s';
+set local search_path='';
+select pg_advisory_xact_lock(726341927);
+select 1 from public.icash_operating_budget where id=1 for update;
+
+do $patch$
+declare d text;actual record;new_hash text;continuation_before jsonb;step_before jsonb;headroom_before jsonb;
+ needle text:='d.next_run_at,d.account_id limit 5 for update of d skip locked loop';
+begin
+ if not exists(select 1 from public.icash_operating_budget where id=1) then
+  raise exception 'Acquisition account yield budget unavailable';
+ end if;
+ select p.*,pg_get_functiondef(p.oid) definition into actual
+  from pg_proc p where p.oid='public.icash_next_acquisition()'::regprocedure;
+ if md5(actual.definition) is distinct from '15426cf63cce56d98db8f14e66fb0675'
+  or pg_get_userbyid(actual.proowner) is distinct from 'postgres'
+  or actual.prosecdef or actual.provolatile::text is distinct from 'v'
+  or not has_function_privilege('service_role',actual.oid,'EXECUTE')
+  or exists(select 1 from aclexplode(coalesce(actual.proacl,acldefault('f',actual.proowner))) acl
+   where acl.privilege_type='EXECUTE' and acl.grantee not in
+    (actual.proowner,(select oid from pg_roles where rolname='service_role'))) then
+  raise exception 'Acquisition account yield scheduler prerequisite changed';
+ end if;
+ -- Lock and validate the already active policy chain. Do not reactivate it or
+ -- replace any other dependency hash, release receipt or fairness counter.
+ perform 1 from icash_work_private.continuation_policy where id=1 for update;
+ perform 1 from icash_work_private.preflight_step_policy where id=1 for update;
+ perform 1 from icash_research_private.acquisition_headroom_policy where id=1 for update;
+ if not exists(select 1 from icash_work_private.continuation_policy where id=1 and enabled
+   and activated_at is not null and release_sha~'^[a-f0-9]{40}$'
+   and scheduler_hash=md5(actual.definition))
+  or not exists(select 1 from icash_work_private.preflight_step_policy where id=1 and enabled
+   and activated_at is not null and release_sha~'^[a-f0-9]{40}$'
+   and jsonb_typeof(function_hashes)='object'
+   and (select count(*) from jsonb_object_keys(function_hashes))=18
+   and function_hashes->>'public.icash_next_acquisition()'=md5(actual.definition))
+  or not exists(select 1 from icash_research_private.acquisition_headroom_policy where id=1 and enabled
+   and activated_at is not null and release_sha~'^[a-f0-9]{40}$'
+   and acquisition_hash=md5(actual.definition)) then
+  raise exception 'Acquisition account yield activated manifest changed';
+ end if;
+ -- Capture under the same row locks so ordinary concurrent issuance cannot
+ -- obscure proof that this migration preserves every non-target policy field.
+ select to_jsonb(p)-'scheduler_hash' into continuation_before
+  from icash_work_private.continuation_policy p where id=1;
+ select to_jsonb(p) #- array['function_hashes','public.icash_next_acquisition()'] into step_before
+  from icash_work_private.preflight_step_policy p where id=1;
+ select to_jsonb(p)-'acquisition_hash' into headroom_before
+  from icash_research_private.acquisition_headroom_policy p where id=1;
+ d:=actual.definition;
+ if (length(d)-length(replace(d,needle,'')))<>length(needle) then
+  raise exception 'Acquisition account yield lock source changed';
+ end if;
+ execute replace(d,needle,'d.next_run_at,d.account_id limit 5 for update of d,a skip locked loop');
+ new_hash:=md5(pg_get_functiondef('public.icash_next_acquisition()'::regprocedure));
+ update icash_work_private.continuation_policy set scheduler_hash=new_hash where id=1;
+ update icash_work_private.preflight_step_policy set function_hashes=jsonb_set(function_hashes,
+  array['public.icash_next_acquisition()'],to_jsonb(new_hash)) where id=1;
+ update icash_research_private.acquisition_headroom_policy set acquisition_hash=new_hash where id=1;
+ if (select to_jsonb(p)-'scheduler_hash' from icash_work_private.continuation_policy p where id=1)
+   is distinct from continuation_before
+  or (select to_jsonb(p) #- array['function_hashes','public.icash_next_acquisition()']
+   from icash_work_private.preflight_step_policy p where id=1) is distinct from step_before
+  or (select to_jsonb(p)-'acquisition_hash' from icash_research_private.acquisition_headroom_policy p where id=1)
+   is distinct from headroom_before then
+  raise exception 'Acquisition account yield policy preservation failed';
+ end if;
+end $patch$;
