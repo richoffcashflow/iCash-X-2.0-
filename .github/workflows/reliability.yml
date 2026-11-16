@@ -198,6 +198,10 @@ jobs:
         run: python3 scripts/test-independent-search-continuation-postgres.py
       - name: Verify financial prefilters and free-only widening under concurrent controls
         run: python3 scripts/test-financial-prequalification-postgres.py
+      - name: Verify empty financial markets under concurrent source and customer controls
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-financial-empty-market-postgres.mjs
       - name: Verify one unanswered follow-up under concurrent queues and late controls
         run: python3 scripts/test-unanswered-seller-followups-postgres.py
       - name: Verify one-use phone checks and immutable receipts under concurrent claims
@@ -301,6 +305,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-acquisition-account-yield-postgres.mjs
+      - name: Verify ranking stays independent of pending-cost reports
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-research-priority-postgres.mjs
       - name: Verify continued original cohorts through the actual owner handler
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
@@ -393,7 +401,9 @@ jobs:
       - run: pnpm audit --prod --audit-level=high
   all-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # More than 1,000 isolated suites can pass just before the former deadline
+    # and still be cancelled during job cleanup. Retain every suite's 60s cap.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

@@ -4,7 +4,7 @@ import {workAccount} from '@/lib/work-account';
 import {db} from '@/lib/stripe-test';
 import {dealMachinePhoto} from '@/lib/property-photo';
 import {loadPropertyPhoto} from '@/lib/dealmachine-photo';
-import {persistentPropertyPhoto} from '@/lib/persistent-property-photo';
+import {persistentPropertyPhoto,savedPropertyPhoto} from '@/lib/persistent-property-photo';
 import {cachedPropertyPhoto} from '@/lib/property-photo-cache';
 export const dynamic='force-dynamic';
 export async function GET(req:Request){
@@ -15,7 +15,9 @@ export async function GET(req:Request){
   if(!row)return NextResponse.json({photo:null},{status:404,headers});
   const property=row.result.property,raw=row.snapshot?.raw?.data;
   const stored=dealMachinePhoto(property.images)??(raw?.dm_property_id===property.propertyId?dealMachinePhoto(raw.images):null);
-  const photo=stored??await cachedPropertyPhoto(accountId,id,()=>persistentPropertyPhoto(db,accountId,id,()=>loadPropertyPhoto(property.propertyId,process.env.DEALMACHINE_API_KEY)));
+  // Lookup freshness controls a new metadata request, not reuse of an already
+  // fetched public CDN image. Use the same tenant-bound read as owner inspection.
+  const photo=stored??await cachedPropertyPhoto(accountId,id,async()=>await savedPropertyPhoto(db,accountId,id)??await persistentPropertyPhoto(db,accountId,id,()=>loadPropertyPhoto(property.propertyId,process.env.DEALMACHINE_API_KEY)));
   return NextResponse.json({photo},{headers});
  }catch{return NextResponse.json({photo:null},{status:503,headers});}
 }

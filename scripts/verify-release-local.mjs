@@ -3,6 +3,7 @@
 import {spawnSync} from 'node:child_process';
 const suites = [
  'support-review-definition',
+ 'research-priority-cost-isolation',
  'seller-call-learning-planning',
  'learning-completion-lock-isolation',
  'support-waiting-deal',
@@ -19,7 +20,7 @@ const suites = [
  'support-idle-credit-question',
  'deal-supervisor', 'deal-supervisor-database',
  'assistant-text-actions', 'assistant-text-action-route', 'property-followthrough',
- 'financial-prequalification', 'financial-credit-outcomes', 'financial-query-filters', 'financial-query-contract',
+ 'financial-prequalification', 'financial-empty-market', 'financial-empty-market-service', 'financial-credit-outcomes', 'financial-query-filters', 'financial-query-contract',
  'cash-offer-math', 'offer-policy', 'screening-job', 'screening-recalculation', 'automatic-call-offer', 'seller-text-offer', 'seller-conversion-followthrough', 'free-sample',
  'support-access-purchase-stage', 'support-outreach-volume', 'support-review-wait', 'support-returning-access', 'support-current-research', 'support-stopped-work-phrasing', 'support-recording-question', 'support-refund-offer-followup', 'support-deletion-renewal', 'support-purchase-complaint', 'support-account-details', 'support-voice-setup', 'support-location-guidance', 'support-review-guidance', 'support-credit-exhaustion', 'support-manual-contact', 'support-account-deletion', 'support-center',
  'http-response-lifecycle', 'database-response-cleanup', 'deferred-text-recovery', 'external-reliability-monitor',
@@ -50,7 +51,7 @@ const suites = [
  'legacy-customer-launch', 'legacy-launch-ad-isolation', 'checkout-customer-context',
  'first-contact-hours', 'first-contact-voice-hours', 'voice-daytime-policy', 'seller-phone-call-spacing',
  'voice-queue-candidate-fence', 'voice-queue-candidate-validation', 'voice-queue-prior-route-scan', 'voice-channel-candidate-fence', 'voice-account-fairness', 'operational-preparation-candidate-fence',
- 'funding-outreach-notice', 'funded-lead-handoff', 'workspace-funded-refresh', 'workspace-ready-opportunities',
+ 'funding-outreach-notice', 'funded-lead-handoff', 'workspace-funded-refresh', 'workspace-ready-opportunities', 'workspace-page-concurrency',
  'funded-prospecting-budget', 'first-day-prospecting-pacing', 'daily-quarter-vip-savings', 'restore-fifty-percent-prospecting', 'quarter-credit-terms', 'prospecting-admission', 'owner-enrichment-service', 'research-efficiency', 'research-efficiency-database', 'owner-enrichment-deferral', 'owner-enrichment-deferral-sql', 'automatic-prospect-drafts', 'automatic-prospect-sms-route-conflicts', 'automatic-seller-email', 'opportunity-engine-database', 'workspace-activity-route',
  'private-vip', 'private-vip-database', 'private-vip-ui',
  'meta-instant-leads', 'meta-instant-leads-database', 'meta-lead-connection', 'meta-lead-webhook',
