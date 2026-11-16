@@ -33,7 +33,25 @@ try{
   assert.equal(await next(),null,'fresh introduction starves the original retry');
  }
  assert.equal(await one(`select state from public.icash_text_messages where id=${waiting}`),'ready');
- await exec(migration);
+ const beforeWaiting=await one('select jsonb_agg(to_jsonb(w)) from icash_sender_private.waiting w');
+ // A history-write failure must roll back DDL, function changes and the turn.
+ await exec('begin;'+migration);
+ await assert.rejects(()=>exec('select 1/0 as simulated_migration_history_failure'),/division by zero/);
+ await exec('rollback');
+ assert.equal(await one("select to_regprocedure('icash_sender_private.waiting_turn(text)')"),null);
+ assert.equal(await one("select count(*)::int from information_schema.columns where table_schema='icash_sender_private' and table_name='waiting' and column_name='last_selected_at'"),0);
+ assert.deepEqual(await one('select jsonb_agg(to_jsonb(w)) from icash_sender_private.waiting w'),beforeWaiting);
+ for(const mutation of [
+  'grant execute on function public.icash_next_sender_volume_retry() to public',
+  'grant execute on function public.icash_queue_seller_opener(uuid,uuid) to service_role with grant option',
+  'alter function public.icash_seller_opener_candidate_body(uuid,uuid) volatile',
+  'delete from public.icash_operating_budget where id=1',
+ ]){
+  await exec('begin;'+mutation);
+  await assert.rejects(()=>exec(migration),/Deferred sender/,mutation);await exec('rollback');
+  assert.equal(await one("select to_regprocedure('icash_sender_private.waiting_turn(text)')"),null);
+ }
+ await exec('begin;'+migration+'commit;');
  await exec(ageAssignments+readyRetry);
  assert.equal(await turn(),true);
  const candidate=await one("select fixture_thread('candidate')");
@@ -102,7 +120,7 @@ try{
  assert.equal(await one(`select public.icash_claim_text(${owner},${waiting},${line})`),null,'never duplicate original transport');
  assert.equal(await one('select count(*)::int from public.icash_operation_spend'),2);
  // Source pinning fails before DDL, also on a repeated installation.
- await assert.rejects(()=>exec(migration),/predecessor changed/);await exec('rollback');
+ await exec('begin');await assert.rejects(()=>exec(migration),/predecessor changed/);await exec('rollback');
  assert.equal(await one("select count(*)::int from information_schema.columns where table_schema='icash_sender_private' and table_name='waiting' and column_name='last_selected_at'"),1);
  console.log('PASS repeated fresh-opener starvation reproduced; original retry gets a bounded turn; seventeen invalid originals, manual routing, outage/claim expiry, unchanged limits and original single dispatch');
 }finally{await pg.close();}

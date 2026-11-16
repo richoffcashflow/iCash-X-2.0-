@@ -33,7 +33,7 @@ def main():
     data = json.loads(subprocess.check_output(['node', str(root / 'tests/helpers/deferred-sender-fairness-fixture.mjs')], text=True))
     sql('drop schema if exists icash_sender_private cascade;drop schema if exists icash_text_receipt_private cascade;'
         'drop schema if exists icash_work_private cascade;drop schema public cascade;create schema public;')
-    sql(data['setup'] + data['seedDelay'] + data['migration'] + data['ageAssignments'])
+    sql(data['setup'] + data['seedDelay'] + 'begin;' + data['migration'] + 'commit;' + data['ageAssignments'])
     original = sql("select row_to_json(o) from public.icash_operation_spend o")
     threads = [sql(f"select fixture_thread('race-{i}')") for i in range(12)]
     queues = [f"select public.icash_queue_seller_opener(md5('owner')::uuid,'{thread}')" for thread in threads]

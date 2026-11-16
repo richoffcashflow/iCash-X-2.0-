@@ -1,18 +1,31 @@
 -- Let an original, unattempted deferred message reach the existing final claim
 -- before this number queues another cold introduction. This is scheduling only.
-begin;
+-- The normal migration runner owns the transaction, including its history row.
 set local lock_timeout='3s';
 set local statement_timeout='30s';
+set local search_path='';
+select pg_advisory_xact_lock(726341927);
+select 1 from public.icash_operating_budget where id=1 for update;
 
 do $guard$
-declare r record;
+declare r record;actual record;
 begin
+ if not exists(select 1 from public.icash_operating_budget where id=1) then
+  raise exception 'Deferred sender budget prerequisite changed';end if;
  for r in select * from (values
   ('public.icash_queue_seller_opener(uuid,uuid)','edce56756856ac11b712557856dd9c4d'),
   ('public.icash_seller_opener_candidate_body(uuid,uuid)','e0cacbb59a32a4a7a03558fae1a06248'),
   ('public.icash_next_sender_volume_retry()','a71cf03b31a704c892478d23b2e1bafe')
  ) v(signature,expected) loop
-  if md5(pg_get_functiondef(r.signature::regprocedure)) is distinct from r.expected then
+  select p.*,pg_get_functiondef(p.oid) definition into actual from pg_proc p where p.oid=r.signature::regprocedure;
+  if md5(actual.definition) is distinct from r.expected
+   or pg_get_userbyid(actual.proowner) is distinct from 'postgres'
+   or actual.prosecdef or actual.proconfig is distinct from array['search_path=""']::text[]
+   or not has_function_privilege('service_role',actual.oid,'EXECUTE')
+   or exists(select 1 from aclexplode(coalesce(actual.proacl,acldefault('f',actual.proowner))) acl
+    where acl.privilege_type='EXECUTE' and (acl.grantee not in
+     (actual.proowner,(select oid from pg_roles where rolname='service_role'))
+     or (acl.grantee<>actual.proowner and acl.is_grantable))) then
    raise exception 'Deferred sender predecessor changed: %',r.signature;
   end if;
  end loop;
@@ -74,4 +87,3 @@ begin
   execute replace(definition,r.needle,r.replacement);
  end loop;
 end $patch$;
-commit;

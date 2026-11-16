@@ -32,13 +32,16 @@ cold pacing. Transactional messages retain their existing separate admission.
 Previously queued or in-flight work still passes the same final limits; a turn
 is not a promise that the provider will accept or deliver a message.
 
-The migration checks the three exact predecessor definitions before adding one
+The migration checks the three exact predecessor definitions and private execute
+privileges under the existing dispatcher/budget locks before adding one
 private timestamp/index/helper and patching those three functions. It does not
 alter the dispatcher, claim functions, triggers, volume limits, provider events,
 account health definition or activation policy. There is no separate activation.
 Old application workers remain compatible with the unchanged retry response.
 Install only once after exact-head checks, preserve the installation receipt,
 and verify the normal serialized source release and exact production deployments.
+The migration runner owns the transaction and history insert; a later history
+failure rolls back all schema/function changes together.
 
 Validation uses synthetic data and local PostgreSQL only. It covers the repeated
 starvation reproduction, bounded failed-claim and worker-outage cases, invalid
