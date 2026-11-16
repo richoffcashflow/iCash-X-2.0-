@@ -53,11 +53,51 @@ try{
   const after=await report(period,timezone);assert.deepEqual(after,before,`${period} / ${timezone}: every card, recording, day, watch metric and funnel must match`);
   assert(validWebinarReport(after,period,timezone));assert.equal(after.days.length,period==='30d'?30:period==='7d'?7:1);
  }
+ // Pooled API connections can choose a generic plan after repeated small windows.
+ // Keep the SQL/data contract identical while the function plans its own window.
+ const planning=read('config/webinar-report-planning.sql');
+ assert.equal(planning,read('supabase/migrations/20261116204300_webinar_report_planning.sql'));
+ assert(planning.includes('d0cf08efe4c4536d11c0fa8921cf4c81'));
+ const original=(await query("select md5(pg_get_functiondef(oid)) hash,prosrc,proacl from pg_proc where oid='icash_webinar_report_with_funnel(text,text)'::regprocedure")).rows[0];
+ // The fixture substitutes a fixed clock; only its expected source digest differs.
+ const fixturePlanning=planning.replace('d0cf08efe4c4536d11c0fa8921cf4c81',original.hash);
+ await pg.exec("alter function icash_webinar_report_with_funnel(text,text) set search_path to public");
+ await assert.rejects(pg.exec(fixturePlanning),/Webinar report source changed/);
+ await pg.exec("alter function icash_webinar_report_with_funnel(text,text) set search_path to ''");
+ await pg.exec(fixturePlanning);
+ const planned=(await query("select prosrc,proacl,proconfig from pg_proc where oid='icash_webinar_report_with_funnel(text,text)'::regprocedure")).rows[0];
+ assert.equal(planned.prosrc,original.prosrc);assert.deepEqual(planned.proacl,original.proacl);
+ assert(planned.proconfig.includes('plan_cache_mode=force_custom_plan'));
+ const deadline=read('config/webinar-report-deadline.sql');
+ assert.equal(deadline,read('supabase/migrations/20261116205000_webinar_report_deadline.sql'));
+ assert(deadline.includes('65639530a3c096a43019c05a770ed5d7'));
+ const plannedHash=(await query("select md5(pg_get_functiondef('icash_webinar_report_with_funnel(text,text)'::regprocedure)) hash")).rows[0].hash;
+ const fixtureDeadline=deadline.replace('65639530a3c096a43019c05a770ed5d7',plannedHash);
+ await pg.exec(fixtureDeadline);
+ const bounded=(await query("select prosrc,proacl,proconfig from pg_proc where oid='icash_webinar_report_with_funnel(text,text)'::regprocedure")).rows[0];
+ assert.equal(bounded.prosrc,original.prosrc);assert.deepEqual(bounded.proacl,original.proacl);
+ assert(bounded.proconfig.includes('statement_timeout=12s'));
+ assert(bounded.proconfig.includes('plan_cache_mode=force_custom_plan'));
+ await assert.rejects(pg.exec(fixtureDeadline),/Webinar report source changed/);
+ await pg.exec("set statement_timeout='4s'");
+ await query('prepare repeated_report(text,text) as select icash_webinar_report_with_funnel($1,$2) r');
+ for(const mode of ['force_generic_plan','force_custom_plan','auto']){
+  await pg.exec('set plan_cache_mode='+mode);
+  for(let n=0;n<6;n++)await query("execute repeated_report('today','UTC')");
+  for(const {period,timezone,before} of cases){
+   const after=(await query(`execute repeated_report('${period}','${timezone}')`)).rows[0].r;
+   assert.deepEqual(after,before,`${mode}: repeated short reports followed by ${period} / ${timezone}`);
+  }
+  assert.equal((await query('show plan_cache_mode')).rows[0].plan_cache_mode,mode,'function setting must remain scoped');
+  assert.equal((await query('show statement_timeout')).rows[0].statement_timeout,'4s','report deadline must not change its caller');
+ }
+ await pg.exec('deallocate repeated_report;set plan_cache_mode=auto;set statement_timeout=0');
+ await assert.rejects(pg.exec(fixturePlanning),/Webinar report source changed/);
  for(const args of [['bad','UTC'],[null,'UTC'],['today','Bad/Zone'],['today',null]])await assert.rejects(report(...args),/Invalid report/);
  for(const role of ['anon','authenticated','service_role'])assert.equal((await query("select has_function_privilege($1,'icash_webinar_report_with_funnel(text,text)','execute') allowed",[role])).rows[0].allowed,role==='service_role');
  const fn=(await query("select prosecdef,provolatile,proconfig from pg_proc where oid='icash_webinar_report_with_funnel(text,text)'::regprocedure")).rows[0];
  assert.equal(fn.prosecdef,false);assert.equal(fn.provolatile,'s');assert(fn.proconfig.includes('search_path=""'));
  await pg.exec('truncate icash_webinar_events,icash_funding_orders,icash_membership_invoices');
  for(const period of ['7d','30d']){const empty=await report(period,'America/Chicago');assert(validWebinarReport(empty,period,'America/Chicago'));assert.equal(empty.summary.viewers,0);assert.equal(empty.summary.revenueCents,0);assert(empty.conversionFunnel.summary.every(s=>s.count===0));}
- console.log('PASS webinar report ranges: exact old/new equality for 12 period/timezone combinations, recording scopes, repeated viewers, legacy/preview/test/review exclusions, payment deduplication, watch metrics, empty periods and service-only access.');
+ console.log('PASS webinar report ranges: exact old/new equality for 12 period/timezone combinations, repeated prepared reports under all plan modes, source-drift rejection, scoped planning, recording scopes, repeated viewers, legacy/preview/test/review exclusions, payment deduplication, watch metrics, empty periods and service-only access.');
 }finally{await pg.close();}

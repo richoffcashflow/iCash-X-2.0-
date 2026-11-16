@@ -15,3 +15,17 @@ Validation:
 - Read-only production EXPLAIN of the revised complete 30-day query completed in approximately 7.1 seconds, within the unchanged fifteen-second database request deadline. This is a measurement, not a guaranteed latency.
 
 Rollback, if required, restores the previously deployed `icash_webinar_report_with_funnel` definition from `20261010020902_conversion_funnels.sql` with the regular-webinar view substitutions from `20261020041010_legacy_customer_launch.sql`. Rollback preserves access and data but restores the slow query.
+
+## Repeated-request planning
+
+The final live check reproduced an intermittent 30-day failure after the first query repair. The API connection inherits the authenticator's eight-second statement timeout, which is shorter than the application's fifteen-second fetch deadline. A generic prepared report plan estimated only 144 source events and one cohort row; production had about 27,000 events and 12,500 cohort rows. It chose nested loops over those cohorts and exceeded a bounded twelve-second diagnostic. The same report with a custom plan completed in approximately 4.5 seconds. These observations are not a guaranteed latency.
+
+`config/webinar-report-planning.sql` source-pins the reviewed function definition and changes only its `plan_cache_mode` to `force_custom_plan`. Each call plans against its actual date window, including on pooled connections that favor generic plans. The SQL body, permissions, stable/invoker behavior, empty search path, reporting results and all deadlines remain unchanged. No global planner setting, schema/data rewrite, worker release or provider action is needed. Apply the separate forward migration once; the guard rejects unknown source and a second application.
+
+The report equivalence fixture now runs six short prepared calls followed by every period/timezone combination with outer generic, custom and automatic planning. It verifies identical complete results, unchanged function source/ACLs, rejection of source drift and restoration of the caller's planner setting. A hosted service-role call with a generic outer plan completed within an eight-second diagnostic deadline. Planning-only rollback resets this function's `plan_cache_mode`; it retains the faster query but can restore the intermittent timeout.
+
+## Bounded report deadline
+
+Repeated live refreshes also caught an eight-second cutoff after custom planning was installed: this report's large historical snapshots still have variable execution time. `config/webinar-report-deadline.sql` source-pins that exact function and assigns only this reporting RPC a twelve-second database deadline, leaving three seconds inside the unchanged fifteen-second application fetch limit. It reloads PostgREST's function metadata so the API uses the setting. Role/global deadlines, other RPCs, the SQL body, access and results stay intact. This is bounded headroom for the optimized query, not a claim that a longer deadline makes it faster.
+
+The fixture verifies the scoped deadline, complete report equivalence and restoration of the caller's timeout. Verify repeated authenticated long-range loads after applying the separate forward migration once. Reset only this function's `statement_timeout` to roll back the deadline change; reload the schema metadata afterward. The original eight-second cutoff then applies again.
