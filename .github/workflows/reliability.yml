@@ -299,6 +299,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-acquisition-account-yield-postgres.mjs
+      - name: Verify eligible texts survive stale candidates and concurrent control changes
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-sms-projection-screening-postgres.mjs
       - name: Verify continued original cohorts through the actual owner handler
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg

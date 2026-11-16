@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- The November 16 outreach-volume repair filters the existing final screening and manual-property prerequisites before SMS projection's expensive proof/routing and 100-candidate limit. Preserve SQL NULL semantics, automatic missing-draft handoff, original source choice, conversation identity, every locked final check, provider limits and unknown operations. Thread preparation is not a sent text or completed call. See docs/sms-projection-screening.md.
+
 - The November 16 reviewed planning relief is an inactive, operator-only extension for an exact private source pool and immutable eligible activation subset. Preserve both earlier manifests, original unknown operations, usage authorizations, supplier reserves, late actual settlement, Pause and final admission. Require current per-kind handler/source proof and bounded NOWAIT transactions; ordinary progress excludes changed originals without expanding the review. This is planning relief, not zero-cost settlement, funded company cash or completed work. See docs/reviewed-planning-relief-2026-11-16.md.
 
 - The November 16 acquisition account-lock repair must skip a busy account and its configuration together before the existing five-candidate limit. Preserve the original candidate predicates, ordering, aging, final money/contact admission and locked account authority. Only the exact selector and its three active manifest hashes change; no due-time resets or unknown-operation settlement. See docs/acquisition-account-yield.md.
