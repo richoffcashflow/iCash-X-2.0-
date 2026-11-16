@@ -1,4 +1,5 @@
 import {recordingAuthorized,directCallTwiml} from './direct-call-entry.ts';
+import {readSellerMemory,sellerMemoryPrompt,type SellerMemoryBinding} from './seller-memory.ts';
 import {sellerAgreementReceptionEnabled} from './seller-agreement-reception.ts';
 import {randomBytes} from 'node:crypto';
 import {affirmativeSpeech,recordingGateOptOut,object,privateHeaders,sha,sid,uuid,verifiedTwilioForm} from './required-call-recording.ts';
@@ -81,6 +82,12 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
      propertyReceptionEnabled(c)?rpc('icash_recorded_reception_property_context',{p_id:row.id,p_nonce_hash:row.nonce_hash}).catch(()=>null):Promise.resolve(null),
      deps.selectVoice?deps.selectVoice(row.account_id,c).catch(()=>null):Promise.resolve(null),
     ]);
+    const binding=object(object(context).sellerMemoryBinding);
+    if(object(context).status==='matched'&&binding.accountId===row.account_id&&binding.phone===row.from_phone
+     &&typeof binding.screeningId==='string'&&typeof binding.dealId==='string'){
+     const memory=await readSellerMemory((path,_method,body)=>rpc(path.replace(/^rpc\//,''),object(body)),binding as SellerMemoryBinding);
+     Object.assign(object(context),{sellerMemory:sellerMemoryPrompt(memory)});
+    }
     next=await transition(row,'claim_register');if(!next)throw Error('REGISTER_ALREADY_CLAIMED');Object.assign(row,next);
     const remaining=Math.floor((Date.parse(row.call_deadline_at)-now())/1000);if(remaining<1||remaining>row.max_total_seconds)throw Error('CALL_CAP_EXHAUSTED');
     console.info('recorded_reception_voice_selected',{sessionId:row.id,voice:voiceId?'custom':'standard'});

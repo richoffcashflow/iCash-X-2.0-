@@ -4,6 +4,10 @@ const a=message=>({role:'agent',message}),u=message=>({role:'user',message}),his
 const name='Hank Hill';
 const complete=[a('What is your full legal name for the agreement?'),u('Hank Hill.'),a('Are you the only owner and decision maker, or does anyone else need to agree?'),u('Yes, just me.')];
 assert.equal(hold(evidence(history(complete),name)),null);
+for(const changed of ["I'm his son.","This is her daughter.","I'm a tenant."]){
+ const fresh=evidence(history([...complete,u(changed)]),name);
+ assert.equal(fresh.legalNameConfirmed,false);assert.equal(fresh.soleOwnerConfirmed,false);assert.equal(fresh.allDecisionMakersConfirmed,false);
+}
 const unsupported=[a('The legal name will be yours alone. May I text the agreement?'),u('Yes, text it.')];
 assert.equal(hold(evidence(history(unsupported),name)).reason,'seller_legal_name_required');
 assert.equal(hold(evidence(history(complete.slice(0,2)),name)).reason,'sole_owner_confirmation_required');

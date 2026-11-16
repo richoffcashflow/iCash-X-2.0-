@@ -62,6 +62,7 @@ assert.equal(callOfferEvidence({transcript:[...interrupted,seller('Hold off, I n
 // does not invent a contract send or force the seller through qualification again.
 let historyReads=0;
 const bound=await boundSellerQualification(async(path,method,input)=>{
+ if(path==='rpc/icash_seller_memory_context')return null;
  if(path==='rpc/icash_seller_prior_call_context'){
   historyReads++;assert.deepEqual(input,{p_account:'account',p_screening:'screen',p_phone:'+12125550199'});
   return [{completed_at:'2026-10-14T19:55:00Z',result:{transcript:qualifiedSellerTurns}}];

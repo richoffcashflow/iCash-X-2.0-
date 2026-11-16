@@ -6,6 +6,7 @@ import {incomingCallIdentityMatches,receptionRecordingMatches,receptionConversat
 import {getRecordedReception,transitionRecordedReception,endRecordedReception,boundEndReceipt,bindRecordedReceptionCallStart} from './recorded-reception-service.ts';
 import {settleRecordedReception} from './recorded-reception-settlement.ts';
 import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
+import {sellerMemoryInboundTurns} from './seller-memory.ts';
 
 /** Independent cleanup and termination worker. Launch/account/wallet gates never
  * control recovery or deletion. Provider deletion is verified before finalizing. */
@@ -122,6 +123,7 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
      const transcript=turns.length>80?[...turns.slice(0,40),...turns.slice(-40)]:turns;
      if(transcript.length){
       await rpc('icash_save_seller_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+      if(await rpc('icash_save_seller_memory_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:sellerMemoryInboundTurns(conversation)})===false)throw Error('SELLER_MEMORY_HISTORY_REQUIRED');
       await rpc('icash_save_buyer_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
      }
     }
