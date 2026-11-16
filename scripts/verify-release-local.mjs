@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'discovery-opener-refresh', 'discovery-opener-refresh-billing', 'discovery-opener-refresh-worker', 'discovery-opener-refresh-cli', 'discovery-opener-refresh-migration',
  'seller-call-learning-planning',
  'learning-completion-lock-isolation',
  'support-waiting-deal',
