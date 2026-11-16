@@ -39,6 +39,7 @@ try{
  await assert.rejects(()=>exec('select 1/0 as simulated_migration_history_failure'),/division by zero/);
  await exec('rollback');
  assert.equal(await one("select to_regprocedure('icash_sender_private.waiting_turn(text)')"),null);
+ assert.equal(await one("select to_regclass('icash_sender_private.retry_progress')"),null);
  assert.equal(await one("select count(*)::int from information_schema.columns where table_schema='icash_sender_private' and table_name='waiting' and column_name='last_selected_at'"),0);
  assert.deepEqual(await one('select jsonb_agg(to_jsonb(w)) from icash_sender_private.waiting w'),beforeWaiting);
  for(const mutation of [
@@ -68,6 +69,23 @@ try{
  await exec("update icash_sender_private.waiting set last_selected_at=now()-interval '31 seconds'");
  assert.equal(await turn(),false,'a selected message that cannot dispatch returns its turn');
  await exec(readyRetry);assert.equal(await turn(),true,'ordinary due check renews fairness');
+ // A live minute-by-minute worker can need several batches to reach a due row.
+ // Reproduce the observed four-minute-late original behind eight held rows.
+ await exec("begin;update icash_sender_private.waiting set last_selected_at=null,next_check_at=now()-interval '4 minutes';");
+ for(let i=0;i<8;i++)await exec(`
+  select fixture_message('backlog-${i}',fixture_thread('backlog-${i}'));
+  select icash_sender_private.defer(${owner},md5('messagebacklog-${i}')::uuid,${line},'automatic');
+  update public.icash_text_threads set paused=true where id=md5('threadbacklog-${i}')::uuid;
+  update icash_sender_private.waiting set queued_at=now()-interval '20 minutes',next_check_at=now()-interval '5 minutes'
+   where message_id=md5('messagebacklog-${i}')::uuid;`);
+ assert.equal(await next(),null,'one existing bounded batch checks eight held originals');
+ assert.equal(await one(`select next_check_at<now()-interval '3 minutes' from icash_sender_private.waiting where message_id=${waiting}`),true);
+ assert.equal(await turn(),true,'healthy backlog traversal must retain the overdue original turn');
+ assert.equal(await queue('backlog-fresh'),null,'fresh introduction cannot exploit a healthy retry backlog');
+ await exec("update icash_sender_private.retry_progress set checked_at=now()-interval '121 seconds'");
+ assert.equal(await turn(),false,'a stopped selector loses its overdue-backlog extension');
+ await exec('rollback');
+ await exec("update icash_sender_private.retry_progress set checked_at=now()-interval '121 seconds'");
  await exec("update icash_sender_private.waiting set last_selected_at=null,next_check_at=now()-interval '61 seconds'");
  assert.equal(await turn(),false,'a stopped maintenance worker cannot freeze new openers');
  await exec(readyRetry);
@@ -114,6 +132,10 @@ try{
  // No number limit or final claim implementation was weakened.
  assert.deepEqual(await one(protectedDefinitions),untouched);
  for(const role of ['anon','authenticated'])assert.equal(await one("select has_function_privilege($1,'icash_sender_private.waiting_turn(text)','execute')",[role]),false);
+ for(const role of ['anon','authenticated'])assert.equal(await one("select has_table_privilege($1,'icash_sender_private.retry_progress','select,insert,update,delete')",[role]),false);
+ assert.equal(await one("select has_table_privilege('service_role','icash_sender_private.retry_progress','select,update')"),true);
+ assert.equal(await one("select has_table_privilege('service_role','icash_sender_private.retry_progress','insert,delete')"),false);
+ assert.equal(await one("select relrowsecurity from pg_class where oid='icash_sender_private.retry_progress'::regclass"),true);
  assert.equal(await one("select prosecdef from pg_proc where oid='icash_sender_private.waiting_turn(text)'::regprocedure"),false);
  await exec("begin;insert into icash_sender_private.uses(source,source_id,sender,cold,admitted_at) select 'full',md5(i::text)::uuid,'+14155550100',true,now() from generate_series(1,1000)i;"+readyRetry);
  assert.equal(await next(),null,'fairness never increases shared sending capacity');await exec('rollback');

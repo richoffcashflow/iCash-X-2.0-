@@ -34,19 +34,37 @@ end $guard$;
 alter table icash_sender_private.waiting add column last_selected_at timestamptz;
 create index sender_volume_waiting_number on icash_sender_private.waiting(sender,queued_at);
 
+-- A due row can wait behind several healthy eight-row maintenance batches.
+-- Record completed selector activity independently of any one row's due time.
+create table icash_sender_private.retry_progress(
+ singleton boolean primary key default true check(singleton),
+ checked_at timestamptz
+);
+insert into icash_sender_private.retry_progress(singleton) values(true);
+alter table icash_sender_private.retry_progress enable row level security;
+create policy retry_progress_service on icash_sender_private.retry_progress
+ to service_role using(true) with check(true);
+revoke all on table icash_sender_private.retry_progress from public,anon,authenticated,service_role;
+grant select,update on table icash_sender_private.retry_progress to service_role;
+
 -- Do not turn a stopped retry worker or a failed final claim into a permanent
--- sender hold. An overdue worker loses priority after one minute. A selected
+-- sender hold. Healthy backlog traversal retains priority; a stopped selector
+-- loses that extension after two minutes. A selected
 -- message has thirty seconds to reach its ORIGINAL claim, then yields until its
 -- next ordinary check. Actual dispatch deletes the waiting row as before.
 create function icash_sender_private.waiting_turn(p_sender text)
-returns boolean language sql stable security invoker set search_path='' as $$
+returns boolean language sql volatile security invoker set search_path='' as $$
  select exists(
   select 1 from icash_sender_private.waiting w
   join public.icash_text_messages m on m.id=w.message_id and m.account_id=w.account_id and m.thread_id=w.thread_id
   join public.icash_text_threads t on t.id=w.thread_id and t.account_id=w.account_id and t.sender=w.sender
   join public.icash_accounts a on a.id=w.account_id and not a.bot_paused
   where w.sender=p_sender and w.queued_at between now()-interval '24 hours' and now()-interval '1 minute'
-   and w.next_check_at between now()-interval '1 minute' and now()+interval '5 minutes'
+   -- A retry may reschedule after the waiting queue transaction began.
+   -- Check its five-minute bound against the actual post-lock clock.
+   and w.next_check_at<=clock_timestamp()+interval '5 minutes'
+   and (w.next_check_at>=now()-interval '1 minute' or exists(
+    select 1 from icash_sender_private.retry_progress p where p.singleton and p.checked_at>now()-interval '2 minutes'))
    and (w.last_selected_at is null or w.last_selected_at>now()-interval '30 seconds' or w.next_check_at<=now())
    and m.direction='outgoing' and m.state='ready' and m.provider_id is null and m.last_delivery_at is null
    and w.binding=icash_sender_private.message_binding(m,t.recipient)
@@ -71,6 +89,12 @@ begin
   ('public.icash_seller_opener_candidate_body(uuid,uuid)',
    'if not found or not icash_text_receipt_private.sender_opener_available(t.sender)',
    'if not found or icash_sender_private.waiting_turn(t.sender) or not icash_text_receipt_private.sender_opener_available(t.sender)'),
+  ('public.icash_next_sender_volume_retry()',
+   'begin'||chr(10)||' for w in select * from icash_sender_private.waiting',
+   'begin'||chr(10)||
+   ' update icash_sender_private.retry_progress set checked_at=clock_timestamp() where singleton in'||chr(10)||
+   '  (select singleton from icash_sender_private.retry_progress where singleton for update skip locked);'||chr(10)||
+   ' for w in select * from icash_sender_private.waiting'),
   ('public.icash_next_sender_volume_retry()',
    'set next_check_at=now()+interval ''5 minutes'' where message_id=w.message_id;',
    'set next_check_at=now()+interval ''5 minutes'',last_selected_at=null where message_id=w.message_id;'),

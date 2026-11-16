@@ -85,7 +85,7 @@ def main():
                     break
                 time.sleep(0.025)
             assert waiting, 'queue did not reach the original budget lock'
-            blocker.stdin.write('commit;\n\\q\n')
+            blocker.stdin.write("update icash_sender_private.waiting set next_check_at=clock_timestamp()+interval '5 minutes';commit;\n\\q\n")
             blocker.stdin.flush()
             blocker.wait(timeout=5)
             assert blocker.returncode == 0, blocker.stderr.read()
@@ -95,7 +95,31 @@ def main():
             blocker.kill()
             blocker.wait(timeout=5)
     assert sql('select count(*) from public.icash_operation_spend') == '2'
-    print('PASS native PostgreSQL: 12 fresh queues yield, 8 selectors choose one original, 8 claims dispatch once; post-lock fresh reads, existing pacing, separate numbers and original unknown money preserved')
+    # Retry liveness must not introduce a shared blocking lock. A competing
+    # selector proceeds even while this private progress row is held.
+    progress = sql('select checked_at from icash_sender_private.retry_progress')
+    blocker = subprocess.Popen(fixture.CMD, env=fixture.ENV, stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    try:
+        blocker.stdin.write("begin;set local statement_timeout='8s';do $$begin perform 1 from icash_sender_private.retry_progress for update;end$$;select 'progress_locked';\n")
+        blocker.stdin.flush()
+        fixture.wait_for_marker(blocker, 'progress_locked')
+        sql("set role service_role;set statement_timeout='1s';" + retry)
+        assert sql('select checked_at from icash_sender_private.retry_progress') == progress
+        blocker.stdin.write('rollback;\n\\q\n')
+        blocker.stdin.flush()
+        blocker.wait(timeout=5)
+        assert blocker.returncode == 0, blocker.stderr.read()
+    finally:
+        if blocker.poll() is None:
+            blocker.kill()
+            blocker.wait(timeout=5)
+    sql('set role service_role;' + retry)
+    assert sql('select checked_at from icash_sender_private.retry_progress') != progress
+    progress = sql('select checked_at from icash_sender_private.retry_progress')
+    sql('begin;' + retry + ';rollback;')
+    assert sql('select checked_at from icash_sender_private.retry_progress') == progress, 'failed transactions cannot report progress'
+    print('PASS native PostgreSQL: 12 fresh queues yield, 8 selectors choose one original, 8 claims dispatch once; nonblocking rollback-safe progress, post-lock fresh reads, existing pacing, separate numbers and original unknown money preserved')
 
 
 if __name__ == '__main__':

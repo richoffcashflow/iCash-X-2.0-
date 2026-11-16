@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
-- The November 16 deferred sender fairness repair gives original unattempted waiting messages a bounded turn before fresh cold introductions on the same number. Preserve original claim kinds, sender limits, signed provider delay, Pause/STOP, final financial/contact admission and unknown original money. A selected retry yields after thirty seconds; an overdue retry worker loses priority after one minute. No provider demonstration, replay or UI change. See docs/deferred-sender-fairness.md.
+- The November 16 deferred sender fairness repair gives original unattempted waiting messages a bounded turn before fresh cold introductions on the same number. Preserve original claim kinds, sender limits, signed provider delay, Pause/STOP, final financial/contact admission and unknown original money. A selected retry yields after thirty seconds; active retry traversal preserves overdue originals, while stopped-worker priority remains bounded by its two-minute activity and six-minute due windows. No provider demonstration, replay or UI change. See docs/deferred-sender-fairness.md.
 
 - The November 16 DealMachine efficiency repair selects compatible active/mobile owner siblings before the existing five-property limit, only for fresh active-export work. Preserve exact live/continued cohorts, legacy selection, all financial/contact admission, unknown originals and provider limits. The guarded migration updates only the candidate and its current continued-cohort hash slot. Use offline/native fixtures and ordinary production receipts; no paid test or savings claim is implied. See docs/owner-batch-pool-selection.md.
 
