@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- The November 16 webinar report follow-up scopes custom planning to the exact reviewed report function. Preserve its SQL body, complete metrics/funnel semantics, service-only ACLs and actual eight-second API deadline. Source-pin the forward migration and verify repeated short-to-long reports under generic/custom/automatic outer plans. No global planner, data, worker, provider or UI change is needed. See docs/webinar-report-ranges.md.
+
 - The November 16 DealMachine efficiency repair selects compatible active/mobile owner siblings before the existing five-property limit, only for fresh active-export work. Preserve exact live/continued cohorts, legacy selection, all financial/contact admission, unknown originals and provider limits. The guarded migration updates only the candidate and its current continued-cohort hash slot. Use offline/native fixtures and ordinary production receipts; no paid test or savings claim is implied. See docs/owner-batch-pool-selection.md.
 
 - The November 16 research-priority repair computes the existing settled-use rank without pending-cost report fields. Preserve the full target report, exact numeric/time/coverage semantics, continuation fairness, account locks and final financial/contact admission. Only the selector priority expression and its three active manifest hash slots change; unknown originals and supplier reserves remain intact. See docs/research-priority-cost-isolation.md.
