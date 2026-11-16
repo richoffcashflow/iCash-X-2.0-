@@ -22,3 +22,8 @@ const dispatch={permitted:true,suppressed:false,botPaused:false,humanOwnsConvers
 assert.equal(contactDispatchAllowed(dispatch),true);
 for(const overrides of [{humanOwnsConversation:true},{exclusiveContactLease:false},{suppressed:true},{duplicateOperation:true},{botPaused:true}]) assert.equal(contactDispatchAllowed({...dispatch,...overrides}),false);
 console.log('buyer planning and deal lifecycle checks passed');
+
+const backupPlan=planBuyerOutreach(deal,[a,b,{...a,id:'blocked',entityId:'blocked',permitted:false},{...a,id:'unverified',entityId:'unverified',proofOfFundsVerifiedAt:null}],now,1000,0);
+assert.deepEqual(backupPlan.backupBuyerIds,['b'],'unverified or unpermitted contacts are not ready backups');
+assert.deepEqual(backupPlan.qualificationNeededIds,['unverified']);
+assert.equal(planBuyerOutreach(deal,[{...a,id:'tight',maxPriceCents:deal.askingPriceCents,maxRepairCents:deal.repairsCents},{...a,id:'fit',entityId:'fit'}],now,1000,0).matches[0].id,'fit');

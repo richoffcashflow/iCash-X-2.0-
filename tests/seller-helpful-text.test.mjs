@@ -20,7 +20,7 @@ for(const s of scenarios){
  assert.equal(p.kind,'message');assert.equal(p.action,s.action);assert.equal(p.body,s.expected);
  assert(p.body.length<=160,'Preserve the single-segment reviewed copy budget');
  assert((p.body.match(/\?/g)??[]).length<=1,'One useful question at most');
- assert.equal(p.state.acceptedPriceCents,undefined,'An informational answer never accepts an offer');
+ assert.equal(p.state.acceptedPriceCents??null,null,'An informational answer never accepts an offer');
  assert.deepEqual(c,before,'Never rewrite source messages or their receipts');
  // A copy refresh cannot restart the existing two-delivered-reply limit.
  for(const bodies of [[s.old,s.old],[s.old,s.expected],[s.expected,s.expected]]){
@@ -42,7 +42,8 @@ for(const s of scenarios){
   const result=await processSellerTextOffer(c,{
    now:()=>now,
    db:async(path,method,body)=>{
-    if(path==='rpc/icash_seller_prior_call_context')return [];
+    if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_prior_call_context')return [];
     assert.equal(path,'rpc/icash_save_seller_text_offer');saved=body;
     return sourceCurrent?{messageId:'fixture-message'}:null;
    },

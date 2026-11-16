@@ -221,3 +221,22 @@ export function supportRefundDisclosureReply(context:PurchaseContext){
  if(!disclosure)return null;
  return {reply:'You’re asking for a refund because you say the separate work-credit cost wasn’t explained before purchase. The refund policy is unchanged; this chat has not approved or issued a refund. That sales-disclosure concern needs management review. You don’t need to repeat receipt or sign-in troubleshooting.',status:'open' as const,managementReview:true,ai:false};
 }
+
+/** A reported payment without portal instructions is not a work-credit question.
+ * Keep only this unresolved episode; operator findings and new topics reset it. */
+export function supportPaidPortalReply(context:PurchaseContext){
+ let active=false;
+ for(const turn of context.messages){
+  if(turn.role==='operator'){active=false;continue;}
+  if(turn.role!=='user')continue;
+  const q=turn.content;
+  const negative=/\b(?:did not|didn[’']?t|never|not yet) (?:pay|paid|payed|purchase)|\b(?:if|hypothetically)\b|\b(?:refund|cancel|credits?|contracts?|seller|buyer|voice|signed in|got in|working now)\b/i.test(q);
+  const paid=/\b(?:paid|payed|purchased)\b/i.test(q);
+  const portal=/\b(?:get into|access|enter|open)\b.{0,35}\b(?:portal|workspace)\b/i.test(q);
+  const missing=/\b(?:no|not|nothing|never|haven[’']?t|do not know|don[’']?t know|cannot|can[’']?t)\b/i.test(q);
+  const follow=paid&&(missing&&/\b(?:nothing|information|instructions|started)\b/i.test(q)||/\bhow do i get started\b/i.test(q))&&!/\b(?:received|got) (?:the |my )?(?:information|instructions|access)\b/i.test(q);
+  active=!negative&&(paid&&portal&&missing||active&&follow);
+ }
+ if(!active)return null;
+ return {reply:'You’ve reported paying but still need the portal or session access information. The purchase and access remain unconfirmed; I should not assume that payment bought work credits or that you can open the workspace. What product or merchant name appears on your receipt or bank statement? If no receipt arrived, say that here. Leave out card numbers and codes, and do not pay again to troubleshoot.',status:'open' as const,ai:false as const};
+}

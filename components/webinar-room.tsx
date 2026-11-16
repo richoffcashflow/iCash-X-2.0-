@@ -22,6 +22,8 @@ import {webinarOfferFocus} from '@/lib/webinar-offer-focus';
 import {observeWebinarOfferView} from '@/lib/webinar-offer-view';
 import {WebinarVipWelcome} from '@/components/webinar-vip-welcome';
 import {WebinarPlayer} from '@/components/webinar-player';
+import {WebinarLoading} from '@/components/webinar-loading';
+import {webinarEntryBody,type WebinarEntryStart} from '@/lib/webinar-entry';
 import {WebinarPanelBoundary} from '@/components/webinar-panel-boundary';
 import {webinarPost as post,webinarBeacon,webinarRequest} from '@/lib/webinar-client';
 import {restoredPosition,savePosition,clearPosition,withinWebinarResumeWindow,webinarReturnNeedsReload} from '@/lib/webinar-playback';
@@ -30,7 +32,8 @@ const WebinarCheckout=dynamic(()=>import('@/components/webinar-checkout-adapter'
 type PublicWebinar=ReturnType<typeof publicWebinar>;
 type Message=WebinarMessage;
 type Session={webinar:PublicWebinar;canonicalPath?:string;sessionId:string;progress:number;name:string;email?:string;phone?:string;contactSaved:boolean;messages:Message[];preview:boolean;ownerWatching?:boolean;recordingRecheckAt?:number|null;serverNow:number};
-export function WebinarRoom({webinarCode}:{webinarCode?:string}){
+export function WebinarRoom({webinarCode,initialStart}:{webinarCode?:string;initialStart?:WebinarEntryStart}){
+ const initialEntry=useRef(initialStart);
  const [vipWelcomeUrl,setVipWelcomeUrl]=useState<string|null>(null),vipWelcomeRef=useRef<string|null>(null);
  const [previewPublicPath,setPreviewPublicPath]=useState<string|null>(null);
  const [previewLocked,setPreviewLocked]=useState(false);
@@ -94,12 +97,16 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
   });
  },[session?.sessionId,session?.preview,currentOffer?.id,previewChatVisible,isVip]);
  const load=useCallback(async()=>{if(starting.current)return;starting.current=true;setError('');setUnavailable('');setPreviewLocked(false);setPreviewPublicPath(null);try{
-  const params=new URLSearchParams(location.search),attribution=Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','adset_id','campaign_id','fbclid'].flatMap(k=>params.has(k)?[[k,params.get(k)!]]:[]));
-  const d=await post<Session&{previewLocked?:boolean;publicPath?:string|null;redirect?:string;unavailable?:boolean;message?:string}>('/api/webinar/start',{...(webinarCode?{code:webinarCode}:{}),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',...(params.get('r')?{resume:params.get('r')}:{}),...(params.get('watch')==='1'?{returnToWebinar:true}:{}),...(params.get('preview')?{preview:params.get('preview'),variant:params.get('variant')==='night'?'night':'day'}:{}),attribution});
+  const params=new URLSearchParams(location.search),start=initialEntry.current;initialEntry.current=undefined;
+  const result=start?await start():{data:await post('/api/webinar/start',webinarEntryBody(webinarCode,location.search)),receivedAt:Date.now()};
+  if('error' in result)throw result.error;
+  const d=result.data as Session&{previewLocked?:boolean;publicPath?:string|null;redirect?:string;unavailable?:boolean;message?:string};
   if(d.previewLocked){const preview=params.get('preview');if(preview){const next='/webinar?preview='+encodeURIComponent(preview)+'&variant='+(params.get('variant')==='night'?'night':'day');navigateWebinar('/dashboard-unlock?next='+encodeURIComponent(next),true);return;}setPreviewLocked(true);setPreviewPublicPath(d.publicPath&&/^\/live\/\d{6,12}$/.test(d.publicPath)?d.publicPath:null);setError('This preview is for your owner account. Use the public webinar link for Instagram and other visitors.');return;}
   if(!alive.current)return;
   if(d.redirect){navigateWebinar(d.redirect,true);return;}if(d.unavailable){setUnavailable(d.message||'The next session is being prepared.');return;}
   if(typeof d.sessionId!=='string'||!Number.isFinite(d.progress)||!Number.isFinite(d.serverNow))throw Error('The session could not load. Please try again.');
+  // Preserve the server clock if the entry response beat the room download.
+  d.serverNow+=Math.max(0,Date.now()-result.receivedAt);
   d.webinar=publicWebinar(webinarSchema.parse({...d.webinar,faq:'',chatStyle:''}));
   const canonical=d.canonicalPath&&/^\/live\/\d{6,12}$/.test(d.canonicalPath)?d.canonicalPath:location.pathname;
   if(params.has('r')||params.has('watch')||canonical!==location.pathname){params.delete('r');params.delete('watch');history.replaceState(null,'',canonical+(params.size?'?'+params.toString():'')+location.hash);}
@@ -242,7 +249,7 @@ export function WebinarRoom({webinarCode}:{webinarCode?:string}){
      {formError&&<p role="alert">{formError}</p>}
     </form>;
  if(vipWelcomeUrl)return <WebinarVipWelcome href={vipWelcomeUrl} fullScreen/>;
- if(!session&&!error&&!unavailable&&!previewLocked)return <div className="wb-room"><main className="wb-stage" aria-busy="true" aria-label="Webinar"><section className="wb-watch"><div className="wb-player"/></section><aside className="wb-side"><section className="wb-chat wb-entry-chat" aria-hidden="true"><div className="wb-chat-heading"><span><MessageCircle size={18}/><strong>Chat</strong></span></div></section></aside></main></div>;
+ if(!session&&!error&&!unavailable&&!previewLocked)return <WebinarLoading/>;
  return <div className={`wb-room${focus.countdown?' wb-has-countdown':''}${inputActive?' wb-input-active':''}`} onFocusCapture={e=>{setInputActive(e.target.matches('input:not([type=checkbox]):not([type=radio]),textarea'));}} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setInputActive(false);}}>
   {session&&!isVip&&<dialog ref={exitDialog} className="wb-exit-dialog" aria-labelledby="wb-exit-title" aria-describedby="wb-exit-benefit" onClose={()=>{exitNavigation.current=null;}}>
    <span className="wb-eyebrow">BEFORE YOU GO</span>

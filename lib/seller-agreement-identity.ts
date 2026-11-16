@@ -1,4 +1,5 @@
 import {object} from './required-call-recording.ts';
+import {sellerIdentityInterruption} from './seller-answer-evidence.ts';
 
 export type SellerAgreementIdentityEvidence={legalNameConfirmed:boolean;soleOwnerConfirmed:boolean;allDecisionMakersConfirmed:boolean;otherSignersRequired:boolean};
 const normalized=(value:string)=>value.toLowerCase().replace(/[’']/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -26,6 +27,10 @@ export function sellerAgreementIdentityEvidence(value:unknown,sellerLegalName:st
    continue;
   }
   const answer=text.replace(/^(?:(?:um|uh|well)\b[\s,.-]*)+/i,'');
+  if(pending?.legal&&sellerIdentityInterruption(answer)){pending=null;continue;}
+  if(/\b(?:i(?:'m| am) (?:his|her|their) (?:wife|husband|son|daughter|tenant)|this is (?:his|her|their) (?:wife|husband|son|daughter)|i(?:'m| am) (?:the |a )?tenant)\b/i.test(answer)){
+   evidence.legalNameConfirmed=false;evidence.soleOwnerConfirmed=false;evidence.allDecisionMakersConfirmed=false;evidence.otherSignersRequired=false;pending=null;continue;
+  }
   const named=!!name&&(` ${normalized(answer)} `).includes(` ${name} `);
   const deniedName=!!name&&(` ${normalized(answer)} `).includes(` not ${name} `);
   const explicitName=/\b(?:my (?:full |legal )?name is|call me|name (?:should|needs to) be)\b/i.test(answer);

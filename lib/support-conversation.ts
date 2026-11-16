@@ -29,7 +29,7 @@ import {supportLegacyMigrationReply,supportVersionClarification} from './support
 import {currentAccessConversation} from './support-access-topic.ts';
 import {supportCheckoutReply,supportIdentityReply} from './support-checkout.ts';
 import {supportProductClarification} from './support-product-clarifications.ts';
-import {supportPurchaseHelp,supportRefundDisclosureReply,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply,supportPurchaseEmailCorrection} from './support-purchase-help.ts';
+import {supportPurchaseHelp,supportPaidPortalReply,supportRefundDisclosureReply,supportPaidAccessReply,supportVipPurchaseReply,supportCheckoutOwnershipReply,supportPurchaseEmailCorrection} from './support-purchase-help.ts';
 import {supportMissingSellerContactQuestion} from './support-lead-policy.ts';
 import {supportProductConflict} from './support-product-conflicts.ts';
 import {supportManagementReview} from './support-management-review.ts';
@@ -63,6 +63,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const sellerCapability=supportSellerCapabilityReply(context);if(sellerCapability)return sellerCapability;
  const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
  const emailRepurchase=supportEmailRepurchaseReply(question,context.messages.findLast(m=>m.role==='operator')?.content);if(emailRepurchase)return emailRepurchase;
+ const paidPortal=supportPaidPortalReply(context);if(paidPortal)return paidPortal;
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const contactPrivacy=supportContactPrivacyReply(context);if(contactPrivacy)return contactPrivacy;
@@ -212,6 +213,7 @@ export async function replyToSupport(context:SupportContext,fetcher:typeof fetch
 async function replyToTechnicalSupport(context:SupportContext,fetcher:typeof fetch=fetch):Promise<SupportReply>{
  const fallback=reviewedTechnicalFallback(context);
  if(supportLocationParts(context))return fallback;
+ if(supportPaidPortalReply(context))return fallback;
  if(supportCreditBalanceReply(context))return fallback;
  if(supportCallRecordingReply(context))return fallback;
  if(fallback.managementReview||context.kind==='account'&&context.evidence?.some(e=>e.key==='work_value'))return fallback;
