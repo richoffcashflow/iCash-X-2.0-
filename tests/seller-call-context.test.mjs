@@ -33,6 +33,13 @@ assert(!ownershipAlreadyConfirmed({...confirmed,messages:[...confirmed.messages,
 assert(!ownershipAlreadyConfirmed({...confirmed,messages:[msg('Are you free?','outgoing'),msg('Yes.')]},'45 Oak Road'));
 assert(sellerFirstMessage({...context,history:confirmed}).includes("good time to talk about 45 Oak Road"));
 assert(!sellerFirstMessage({...context,history:confirmed}).includes('Is this the owner'));
+const memory={history:[],fingerprint:'fixture',complete:true,state:{facts:{ownership:{value:false,status:'declined',quote:'I no longer own it.',question:'Are you the owner?',sourceId:'fixture',at:null,channel:'sms'}},priceRequested:false,qualification:{ready:false,missing:['ownership'],stop:true,nextQuestion:'Stop the property discussion.'}}};
+const correctedPrompt=sellerCallPrompt({...context,history:confirmed,memory});
+assert(correctedPrompt.includes('"ownershipAlreadyConfirmed":false'),'newer canonical ownership correction also controls the legacy call prompt');
+for(const sellerMemory of [{complete:true,facts:{ownership:{value:false}}},{complete:false,facts:{ownership:{value:true}}}]){
+ const corrected=sellerAgreementReceptionVariables({status:'matched',address:context.address,smsContext:confirmed,sellerMemory});
+ assert.equal(JSON.parse(corrected.icash_property_context).ownershipAlreadyConfirmed,false,'inbound incomplete or corrected memory cannot fall back to stale ownership');
+}
 
 const priorCalls=[{completed_at:'2026-10-02T12:00:00Z',result:{summary:'Discussed roof.',maxOfferCents:999999,transcript:[{role:'agent',message:'Is this the owner of 45 Oak Road?'},{role:'user',message:'Yes.'},{role:'user',message:'This is Jane.'}]}}];
 assert.equal(boundedSellerPriorCalls(priorCalls).length,1);assert(!JSON.stringify(boundedSellerPriorCalls(priorCalls)).includes('999999'));
