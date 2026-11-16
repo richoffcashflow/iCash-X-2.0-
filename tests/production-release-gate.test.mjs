@@ -64,6 +64,22 @@ assert.equal(happy.calls[0].options.method, 'GET');
 assert.equal(happy.calls[0].options.redirect, 'error');
 assert.equal(happy.calls[0].options.headers.Authorization, undefined);
 assert.ok(happy.calls[0].options.signal instanceof AbortSignal);
+// The complete suite now has more than 1,000 files. Its 30-minute job budget,
+// plus workflow startup, can legitimately finish beyond the former 20-minute
+// deployment window. Waiting longer must retain exact-release proof and a cap.
+const pendingFullRun = ok(payload(run({status: 'in_progress', conclusion: null})));
+const delayedFullRun = fixture([...Array(32).fill(pendingFullRun), ok(payload(run()))], {maxWaitMs: undefined, pollMs: 60_000});
+assert.equal((await waitForReliabilityChecks(sha, delayedFullRun.options)).state, 'passed');
+assert.equal(delayedFullRun.sleeps.reduce((a, b) => a + b, 0), 32 * 60_000);
+const fullRunDeadline = fixture([pendingFullRun], {maxWaitMs: undefined, pollMs: 60_000});
+await assert.rejects(waitForReliabilityChecks(sha, fullRunDeadline.options), /Timed out/);
+assert.equal(fullRunDeadline.calls.length, 35);
+assert.equal(fullRunDeadline.sleeps.reduce((a, b) => a + b, 0), 35 * 60_000);
+for (const changes of [{conclusion: 'failure'}, {conclusion: 'cancelled'}, {head_sha: 'b'.repeat(40)}, {event: 'pull_request'}]) {
+  const delayedInvalid = fixture([...Array(21).fill(pendingFullRun), ok(payload(run(changes)))], {maxWaitMs: undefined, pollMs: 60_000});
+  await assert.rejects(waitForReliabilityChecks(sha, delayedInvalid.options), /failure|cancelled|identity/);
+  assert.equal(delayedInvalid.calls.length, 22, 'Extra waiting never accepts failed, cancelled or unrelated checks');
+}
 const temporary = fixture([new Error('network unavailable'), ok(payload(run()))]);
 assert.equal((await waitForReliabilityChecks(sha, temporary.options)).state, 'passed');
 const unavailable = fixture([{status: 503}]);
