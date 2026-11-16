@@ -5,7 +5,7 @@ while older unattempted follow-ups repeatedly lose their retry opportunity. More
 workers do not fix that ordering. An offline reproduction using the current queue,
 delay and retry definitions repeats the starvation three times before this change.
 
-The queue and its candidate reader now yield to a matching deferred cold message
+The queue and its candidate reader now yield to a matching deferred original
 that has waited at least one minute. This applies to that physical sending number
 only. The retry keeps its original message, account, binding and claim kind; the
 existing final claim still decides whether any transport or spend is permitted.
@@ -29,6 +29,8 @@ capacity, cold limits, contact hours, original signed provider-delay evidence,
 financial checks, consent, sender identity and unknown original money remain
 unchanged. Requested introductions retain the queue's existing exemption from
 cold pacing. Transactional messages retain their existing separate admission.
+The scheduling preference includes deferred transactional originals; their existing
+classification runs at retry/final admission, not again for every fresh candidate.
 Previously queued or in-flight work still passes the same final limits; a turn
 is not a promise that the provider will accept or deliver a message.
 

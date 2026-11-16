@@ -56,7 +56,6 @@ returns boolean language sql stable security invoker set search_path='' as $$
    and not exists(select 1 from icash_sender_private.uses u where u.source='property' and u.source_id=m.id)
    and not exists(select 1 from public.icash_text_messages newer where newer.thread_id=t.id and newer.account_id=t.account_id
     and newer.id<>m.id and newer.created_at>=m.created_at and newer.id is distinct from icash_sender_private.reply_source(m,t))
-   and not icash_sender_private.transactional(m,t)
  )
 $$;
 revoke all on function icash_sender_private.waiting_turn(text) from public,anon,authenticated;

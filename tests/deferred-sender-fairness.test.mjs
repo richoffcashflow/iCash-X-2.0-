@@ -88,11 +88,15 @@ try{
   ["update icash_sender_private.waiting set sender='+16195550101'",'line mismatch'],
   ["update icash_sender_private.waiting set queued_at=now()-interval '25 hours'",'expired original'],
   ["update icash_sender_private.waiting set next_check_at=now()+interval '1 hour'",'postponed retry cannot reserve a number'],
-  [`insert into public.icash_contract_text_deliveries(message_id,thread_id,account_id) select id,thread_id,account_id from public.icash_text_messages where id=${waiting}`,'transactional work retains its separate path'],
   [`select fixture_message('newer',thread_id) from public.icash_text_messages where id=${waiting}`,'new conversation evidence'],
  ];
  for(const [mutation,label] of cases){await exec('begin;'+mutation);assert.equal(await turn(),false,label);await exec('rollback');assert.equal(await turn(),true,label+' rollback');}
  assert.equal(await one("select icash_sender_private.waiting_turn('+16195550101')"),false,'independent physical number');
+ await exec(`begin;insert into public.icash_contract_text_deliveries(message_id,thread_id,account_id)
+  select id,thread_id,account_id from public.icash_text_messages where id=${waiting};`);
+ assert.equal(await turn(),true,'a deferred transactional original also gets a turn before new cold introductions');
+ assert.equal((await next()).messageId,await one(`select ${waiting}`),'the existing retry retains transactional classification and the exact original');
+ await exec('rollback');
  await exec(`begin;
   select fixture_thread('requested');
   insert into public.icash_seller_intakes(id,phone,ai_consented,state,name)
@@ -122,5 +126,5 @@ try{
  // Source pinning fails before DDL, also on a repeated installation.
  await exec('begin');await assert.rejects(()=>exec(migration),/predecessor changed/);await exec('rollback');
  assert.equal(await one("select count(*)::int from information_schema.columns where table_schema='icash_sender_private' and table_name='waiting' and column_name='last_selected_at'"),1);
- console.log('PASS repeated fresh-opener starvation reproduced; original retry gets a bounded turn; seventeen invalid originals, manual routing, outage/claim expiry, unchanged limits and original single dispatch');
+ console.log('PASS repeated fresh-opener starvation reproduced; original retry gets a bounded turn; sixteen exclusions, transactional/manual/requested routing, outage/claim expiry, unchanged limits and original single dispatch');
 }finally{await pg.close();}
