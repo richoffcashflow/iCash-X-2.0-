@@ -5,9 +5,10 @@ type Receipt={httpStatus:number|null;raw:unknown;rawText:string;headers?:{minute
 async function saveProbe(db:ResearchDb,reviewId:string,probe:Probe,receipt:Receipt){
  // Only the identical evidence write may be retried after acknowledgment loss.
  for(let attempt=0;attempt<2;attempt++)try{
-  return await db<boolean>('rpc/icash_record_export_capacity_probe','POST',{p_review:reviewId,p_probe:probe,p_receipt:receipt});
- }catch{if(attempt===1)return false;}
- return false;
+  const saved=await db<boolean>('rpc/icash_record_export_capacity_probe','POST',{p_review:reviewId,p_probe:probe,p_receipt:receipt});
+  return typeof saved==='boolean'?saved:null;
+ }catch{if(attempt===1)return null;}
+ return null;
 }
 async function readReceipt(response:Response):Promise<Receipt>{
  if(!response.body)throw Error('CAPACITY_BODY_UNAVAILABLE');
@@ -31,6 +32,12 @@ export async function recoverAutomaticOwnerExportCapacity(db:ResearchDb,transpor
  const claim=await db<{reviewId:string;requestId:string}|null>('rpc/icash_claim_automatic_export_capacity','POST',{p_release:release});
  if(!claim)return null;
  const deadline=AbortSignal.timeout(55000);
+ let databaseUnavailable=false;
+ const recordProbe=async(probe:Probe,receipt:Receipt)=>{
+  const saved=await saveProbe(db,claim.reviewId,probe,receipt);
+  if(saved===null)databaseUnavailable=true;
+  return saved===true;
+ };
  try{
   const readProbe=async(probe:Probe,requestId:string)=>{
    deadline.throwIfAborted();
@@ -41,11 +48,11 @@ export async function recoverAutomaticOwnerExportCapacity(db:ResearchDb,transpor
       method:'GET',headers:{Authorization:`Bearer ${env.DEALMACHINE_API_KEY}`,'Cache-Control':'no-cache, max-age=0'},redirect:'error',cache:'no-store',signal:AbortSignal.any([deadline,AbortSignal.timeout(25000)]),
      });
      received=await readReceipt(response);
-     saved=await saveProbe(db,claim.reviewId,probe,received);
+     saved=await recordProbe(probe,received);
      return new Response(received.rawText,{status:response.status,headers:response.headers});
     });
    }catch{
-    if(!received)await saveProbe(db,claim.reviewId,probe,{httpStatus:null,raw:null,rawText:'',outcome:'read_unavailable'});
+    if(!received)await recordProbe(probe,{httpStatus:null,raw:null,rawText:'',outcome:'read_unavailable'});
     return false;
    }
    const receipt=received as Receipt|null;
@@ -58,7 +65,9 @@ export async function recoverAutomaticOwnerExportCapacity(db:ResearchDb,transpor
    try{
     for(const probe of ['pending','processing'] as const){
      deadline.throwIfAborted();
-     const requestId=await db<string|null>('rpc/icash_claim_export_capacity_probe','POST',{p_review:claim.reviewId,p_probe:probe});
+     let requestId:string|null;
+     try{requestId=await db<string|null>('rpc/icash_claim_export_capacity_probe','POST',{p_review:claim.reviewId,p_probe:probe});}
+     catch(error){databaseUnavailable=true;throw error;}
      if(!requestId)break;
      requests.push({probe,requestId});
     }
@@ -69,7 +78,11 @@ export async function recoverAutomaticOwnerExportCapacity(db:ResearchDb,transpor
  // responses were lost. A failed final acknowledgment cannot repeat a GET.
  for(let attempt=0;attempt<2;attempt++)try{
   const status=await db<string>('rpc/icash_finish_automatic_export_capacity','POST',{p_review:claim.reviewId});
-  return {status:status==='capacity_verified'?'capacity_verified':'capacity_review_held'};
- }catch{if(attempt===1)return {status:'capacity_review_held'};}
- return {status:'capacity_review_held'};
+  // Canonical finalization can confirm writes whose acknowledgments were lost.
+  // An ordinary held source is distinct from unavailable persistence; neither
+  // outcome grants another provider attempt or changes the original holds.
+  if(status==='capacity_verified')return {status};
+  return {status:status==='capacity_review_held'&&!databaseUnavailable?'capacity_review_held':'capacity_recovery_unavailable'};
+ }catch{if(attempt===1)return {status:'capacity_recovery_unavailable'};}
+ return {status:'capacity_recovery_unavailable'};
 }

@@ -1,7 +1,7 @@
 import {processAutomationFollowup} from '@/lib/automation-followup-service';
 import {ProspectingBudgetError} from '@/lib/voice-budget-failure';
 import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '@/lib/owner-enrichment-deferral';
-import {OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError} from '@/lib/owner-export-preflight';
+import {OwnerExportPreflightPendingError,OwnerPreflightCleanupPendingError,OwnerCheckingCleanupPendingError} from '@/lib/owner-export-preflight';
 import {dispatchCustomerUpdate} from '@/lib/customer-updates-service';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '@/lib/live-work-admission';
 import {dispatchAttentionNotification} from '@/lib/attention-notifications-service';
@@ -61,12 +61,13 @@ export async function POST(request:Request){
    if(error instanceof OwnerExportCapacityBusyError)console.info('automation_waiting',{kind:'contacts',reason:'OWNER_EXPORT_CAPACITY_BUSY'});
    // The RPC checks the exact consumed capability and absence of all paid-work
    // evidence under lock. It schedules a new capability, never reuses this token.
-   const cleanup=error instanceof OwnerPreflightCleanupPendingError;
-   const deferral=cleanup?'rpc/icash_defer_owner_preflight_cleanup':error instanceof OwnerExportPreflightPendingError?'rpc/icash_defer_owner_preflight':'rpc/icash_defer_owner_enrichment';
-   try{if(await db<boolean>(deferral,'POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey,...(cleanup?{p_preflight:error.preflightId}:{})})===true)return NextResponse.json({status:cleanup?'owner_preflight_cleanup_pending':error instanceof OwnerExportPreflightPendingError?'owner_export_preflight_pending':'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
+   const cleanup=error instanceof OwnerPreflightCleanupPendingError,checkingCleanup=error instanceof OwnerCheckingCleanupPendingError;
+   if(checkingCleanup)console.info('automation_waiting',{kind:'contacts',reason:'OWNER_CHECKING_CLEANUP_PENDING'});
+   const deferral=checkingCleanup?'rpc/icash_defer_expired_checking_cleanup':cleanup?'rpc/icash_defer_owner_preflight_cleanup':error instanceof OwnerExportPreflightPendingError?'rpc/icash_defer_owner_preflight':'rpc/icash_defer_owner_enrichment';
+   try{if(await db<boolean>(deferral,'POST',{p_id:ticket.id,p_account:ticket.accountId,p_screening:ticket.screeningId,p_token:token,p_operation:error.operationKey,...(cleanup||checkingCleanup?{p_preflight:error.preflightId}:{})})===true)return NextResponse.json({status:checkingCleanup?'owner_checking_cleanup_pending':cleanup?'owner_preflight_cleanup_pending':error instanceof OwnerExportPreflightPendingError?'owner_export_preflight_pending':'owner_preview_rate_limited'},{headers});}catch{/* An uncertain database outcome is never treated as a retry grant. */}
    // A lost deferral response may already have led to a fresh issued/consumed
    // capability. Never let this stale worker finish that newer attempt by ID.
-   console.error('automation_held',{kind:'contacts',reason:error instanceof OwnerExportPreflightPendingError?'OWNER_PREFLIGHT_DEFERRAL_HELD':'OWNER_PREVIEW_DEFERRAL_HELD'});
+   console.error('automation_held',{kind:'contacts',reason:checkingCleanup?'OWNER_CHECKING_CLEANUP_DEFERRAL_HELD':error instanceof OwnerExportPreflightPendingError?'OWNER_PREFLIGHT_DEFERRAL_HELD':'OWNER_PREVIEW_DEFERRAL_HELD'});
    return heldResponse(await finishHeldAttempt(true));
   }
   if(ticket&&error instanceof ProspectingBudgetError){
@@ -76,8 +77,9 @@ export async function POST(request:Request){
   // Active owner exports bypass the legacy enrichment logger. Preserve their
   // exact fixed failure code for operators, without interpreting it as retry
   // permission or changing the durable reconciliation outcome below.
-  const contactReasons=['OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_SAVE_UNCONFIRMED','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_EXPORT_RECONCILIATION_REQUIRED','OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED','OWNER_EXPORT_RESPONSE_UNAVAILABLE','OWNER_EXPORT_RESPONSE_TOO_LARGE','OWNER_EXPORT_DOWNLOAD_UNAVAILABLE','OWNER_EXPORT_CAPACITY_BUSY'];
-  const reason=error instanceof Error&&(['Database request failed','DISCOVERY_RATE_LIMIT','DISCOVERY_CONFIGURATION_INVALID','DISCOVERY_FILTER_INVALID','DISCOVERY_ESTIMATE_INVALID','DISCOVERY_RATE_TOO_LOW','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(error.message)||ticket?.kind==='contacts'&&contactReasons.includes(error.message))?error.message:'unclassified';
+  const contactReasons=['OWNER_PREVIEW_FAILED_NO_RETRY','OWNER_PREVIEW_SAVE_UNCONFIRMED','OWNER_LOOKUP_FAILED_NO_RETRY','OWNER_EXPORT_RECONCILIATION_REQUIRED','OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED','OWNER_EXPORT_RESPONSE_UNAVAILABLE','OWNER_EXPORT_RESPONSE_TOO_LARGE','OWNER_EXPORT_DOWNLOAD_UNAVAILABLE','OWNER_EXPORT_CAPACITY_BUSY','OWNER_CHECKING_CLEANUP_HELD','OWNER_CHECKING_CLEANUP_UNCONFIRMED','OWNER_CHECKING_CONTINUATION_HELD'];
+  const checkingInfrastructureReasons=['OWNER_EXPORT_RECOVERY_UNAVAILABLE','OWNER_CONTINUATION_SOURCE_UNAVAILABLE','OWNER_CHECKING_CLEANUP_ADMISSION_UNAVAILABLE','OWNER_CHECKING_CLEANUP_ADMISSION_INVALID','OWNER_CHECKING_CLEANUP_CLAIM_UNAVAILABLE','OWNER_CHECKING_CLEANUP_RECEIPT_UNAVAILABLE','OWNER_CHECKING_CLEANUP_RECEIPT_UNCONFIRMED'];
+  const reason=error instanceof Error&&(['Database request failed','DISCOVERY_RATE_LIMIT','DISCOVERY_CONFIGURATION_INVALID','DISCOVERY_FILTER_INVALID','DISCOVERY_ESTIMATE_INVALID','DISCOVERY_RATE_TOO_LOW','DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY','DISCOVERY_RESPONSE_REQUIRES_RECONCILIATION','DISCOVERY_DELIVERY_REQUIRES_RECONCILIATION'].includes(error.message)||ticket?.kind==='contacts'&&[...contactReasons,...checkingInfrastructureReasons].includes(error.message))?error.message:'unclassified';
   const provider=error as {stage?:unknown;httpStatus?:unknown}|null;
   console.error('automation_held',{kind:ticket?.kind??'unclaimed',reason,...(reason==='DISCOVERY_PROVIDER_REQUEST_FAILED_NO_RETRY'?{stage:provider?.stage==='estimate'?'estimate':provider?.stage==='paid'?'paid':'unknown',httpStatus:typeof provider?.httpStatus==='number'&&Number.isInteger(provider.httpStatus)&&provider.httpStatus>=100&&provider.httpStatus<=599?provider.httpStatus:null}:{})});
   // Only recognized request/receipt failures are scoped to this job. Unknown

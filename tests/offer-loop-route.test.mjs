@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {automaticCallOffer,blockedOffer} from '../lib/automatic-call-offer.ts';
 import {callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence} from '../lib/call-offer-evidence.ts';
-import {sellerPayoffEvidence} from '../lib/seller-payoff.ts';
+import {sellerPayoffEvidence,sellerPayoffRecovery} from '../lib/seller-payoff.ts';
 import {sellerListingEvidence} from '../lib/seller-listing.ts';
 import {sellerRoutineOwnershipAnswer} from '../lib/seller-ownership-answer.ts';
 import {sellerRoutineTimingAnswer} from '../lib/seller-timing-answer.ts';
@@ -25,7 +25,7 @@ const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},after:callback=>observations.push(callback),process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},
  db:async(path,method,b)=>{if(path==='rpc/icash_targeting_note_qualified'){observed.push(b);return observationPending;}if(path==='rpc/icash_call_offer_context')return structuredClone(context);assert.equal(path,'rpc/icash_save_call_offer');assert.equal(b.p_expected_version,context.offerVersion);context.offerState=b.p_state;context.offerVersion++;return true;},
  bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>{reads++;return {transcript:[...qualifiedSellerTurns,...transcript.transcript]};}}),
- callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerListingEvidence,sellerRoutineOwnershipAnswer,sellerRoutineTimingAnswer,automaticCallOffer,blockedOffer,sellerAgreementInput,object,sha,sellerAgreementFailure,
+ callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerPayoffRecovery,sellerListingEvidence,sellerRoutineOwnershipAnswer,sellerRoutineTimingAnswer,automaticCallOffer,blockedOffer,sellerAgreementInput,object,sha,sellerAgreementFailure,
  sellerAgreementAction:forbidden,sendForSignatures:forbidden,textPendingContract:forbidden,refreshSigning:forbidden,
 });
 const post=async body=>{const response=await route.POST(new Request('https://fixture.test/api/internal/voice/cash-offer',{method:'POST',headers:{authorization:'Bearer '+'a'.repeat(64)},body:JSON.stringify({conversationId:'conv_fixture',...body})}));assert.equal(response.status,200);return response.json();};

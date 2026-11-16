@@ -17,6 +17,22 @@ async function readReceipt(path:string,key:string,fetcher:typeof fetch,now:()=>n
  try{raw=JSON.parse(rawText);}catch{/* Save the invalid original response; SQL will retain the hold. */}
  return {url,status:response.status,rawText,raw,checkedAt:new Date(now()).toISOString()};
 }
+/** The finalizer journals this exact attempt once and returns its saved outcome
+ * on repetition. Recover a lost acknowledgment without another provider read,
+ * new claim or changed receipt. Both database attempts share the original bound.
+ */
+async function finishReceipt(db:Database,id:string,receipt:Record<string,unknown>){
+ const signal=AbortSignal.timeout(6000),body={p_id:id,p_receipt:receipt};
+ for(let attempt=0;attempt<2;attempt++){
+  signal.throwIfAborted();
+  try{
+   const outcome=await db<unknown>('rpc/icash_finish_text_delivery_recheck','POST',body,signal);
+   if(typeof outcome!=='string'||!['delivered','needs_review','changed','held'].includes(outcome))throw Error('TEXT_RECEIPT_ACKNOWLEDGMENT_UNVERIFIED');
+   return outcome;
+  }catch(error){if(attempt===1||signal.aborted)throw error;}
+ }
+ throw Error('TEXT_RECEIPT_ACKNOWLEDGMENT_UNVERIFIED');
+}
 export async function recoverTextDeliveryReceipts(db:Database,env:Environment={VERCEL_ENV:process.env.VERCEL_ENV,CONTIGUITY_API_KEY:process.env.CONTIGUITY_API_KEY,CONTIGUITY_WEBHOOK_SECRET:process.env.CONTIGUITY_WEBHOOK_SECRET},fetcher:typeof fetch=fetch,now:()=>number=Date.now){
  const result={checked:0,delivered:0,review:0,held:0,changed:0,errors:0,readErrors:0};
  // Receipt reads remain independent of customer Pause and outbound-send flags.
@@ -51,7 +67,7 @@ export async function recoverTextDeliveryReceipts(db:Database,env:Environment={V
    }
   }catch{result.readErrors++;receipt.messageReadError='canonical_read_unavailable';receipt.reason??='canonical_read_unavailable';}
   try{
-   const outcome=await db<string>('rpc/icash_finish_text_delivery_recheck','POST',{p_id:claim.id,p_receipt:receipt},AbortSignal.timeout(6000));
+   const outcome=await finishReceipt(db,claim.id,receipt);
    if(outcome==='delivered')result.delivered++;else if(outcome==='needs_review')result.review++;
    else if(outcome==='changed')result.changed++;else result.held++;
   }catch{result.errors++;}

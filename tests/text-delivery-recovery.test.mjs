@@ -6,7 +6,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const pg=await PGlite.create(),q=(sql,args=[])=>pg.query(sql,args),one=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const sender='+17205550100',recipient='+12145550101',account=id(1),rate=id(2),thread=id(3);
-let current;
+let current,persistenceFailure=null,finishWrites=0,finishBodies=[],finishSignals=[];
 try{
  await pg.exec(read('tests/fixtures/text-delivery-recovery-base.sql'));
  const migration=read('config/text-delivery-recovery.sql');
@@ -35,15 +35,24 @@ try{
   await q("insert into icash_seller_opener_assignments(thread_id,account_id,body,message_id) values($1,$2,'Original fixture?',$3)",[thread,account,current]);
   await pg.exec('update icash_text_receipt_private.control set next_run_at=now()');
  };
- const db=async(path,method,body)=>{
+ const db=async(path,method,body,signal)=>{
   assert.equal(method,'POST');
   if(path==='rpc/icash_claim_text_delivery_rechecks')return one('select icash_claim_text_delivery_rechecks()');
   if(path==='rpc/icash_finish_text_delivery_recheck'){
+   finishWrites++;finishBodies.push(structuredClone(body));finishSignals.push(signal);
+   if(persistenceFailure==='persistent_failure'||(persistenceFailure==='precommit_failure'&&finishWrites===1))throw Error('Fixture original receipt write unavailable');
+   if(persistenceFailure==='callback_between_attempts'&&finishWrites===1){
+    await one('select icash_ingest_text_event_before_operational($1,false)',[{id:'evt_callback_before_retry',type:'text.delivery.confirmed',timestamp:Date.now()/1000,data:{message_id:body.p_receipt.message.raw.data.id,from:sender,to:recipient}}]);
+    throw Error('Fixture failed receipt save while callback arrives');
+   }
    if(mode==='missing_source')delete body.p_receipt.source;
    if(mode==='wrong_source')body.p_receipt.source='other_source';
    if(mode==='missing_tracking_query')body.p_receipt.message.url=body.p_receipt.message.url.replace('?tracking=true','');
    if(mode==='false_tracking_query')body.p_receipt.message.url=body.p_receipt.message.url.replace('?tracking=true','?tracking=false');
-   return one('select icash_finish_text_delivery_recheck($1,$2)',[body.p_id,body.p_receipt]);
+   const outcome=await one('select icash_finish_text_delivery_recheck($1,$2)',[body.p_id,body.p_receipt]);
+   if(persistenceFailure==='lost_commit_ack'&&finishWrites===1)throw Error('Fixture commit succeeded; response lost');
+   if(persistenceFailure==='malformed_ack'&&finishWrites===1||persistenceFailure==='persistent_malformed_ack')return null;
+   return outcome;
   }
   throw Error(path);
  };
@@ -131,6 +140,39 @@ try{
   assert.deepEqual(await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]),before);
   assert.equal(await one('select attempts from icash_text_receipt_private.schedule where message_id=$1',[current]),1,'No retry-counter reset');
   assert.equal(await one('select count(*) from fixture_opened_gaps'),0,'Receipt collection cannot create historical follow-up');
+ }
+ // Resume only the exact original database acknowledgment. Real SQL and its
+ // observers must journal once even when the response disappears after commit.
+ for(const [index,scenario] of ['lost_commit_ack','precommit_failure','malformed_ack','persistent_malformed_ack','persistent_failure','callback_between_attempts'].entries()){
+  await pg.exec('begin');
+  try{
+   await seed(70+index);mode='delivered';fetches=[];finishWrites=0;finishBodies=[];finishSignals=[];persistenceFailure=scenario;
+   const before=await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]);
+   const result=await recoverTextDeliveryReceipts(db,env,fetcher);
+   assert.equal(fetches.length,2,scenario+' must not repeat provider reads, sends or cancellations');
+   assert.equal(finishWrites,2,scenario+' has one bounded original acknowledgment retry');
+   assert.deepEqual(finishBodies[0],finishBodies[1],scenario+' retries the exact original attempt and evidence');
+   assert.equal(finishSignals[0],finishSignals[1],scenario+' shares one database deadline');
+   const attempts=(await q('select * from icash_text_receipt_private.attempts where message_id=$1',[current])).rows;
+   assert.equal(attempts.length,1,scenario+' never creates a replacement attempt');
+   assert.equal(await one('select attempts from icash_text_receipt_private.schedule where message_id=$1',[current]),1,'Original retry counter is unchanged');
+   assert.deepEqual(await one('select to_jsonb(o) from icash_operation_spend o where operation_key=$1',['text:'+current]),before,'A repeated acknowledgment never changes financial history');
+   assert.equal(await one('select sender from icash_text_threads where id=$1',[thread]),sender);
+   const failed=scenario.startsWith('persistent_'),callback=scenario==='callback_between_attempts';
+   assert.equal(result.errors,failed?1:0);assert.equal(result.delivered,!failed&&!callback?1:0);
+   assert.equal(result.changed,callback?1:0);
+   assert.equal(result.status,failed?'receipt_write_unavailable':'checked','Unconfirmed acknowledgment remains visible');
+   assert.equal(await one('select state from icash_text_messages where id=$1',[current]),scenario==='persistent_failure'?'accepted':'delivered');
+   if(scenario==='persistent_failure')assert.equal(attempts[0].finished_at,null,'Both failed writes retain an unfinished journal');
+   else{
+    assert.equal(attempts[0].outcome,callback?'changed':'delivered');
+    assert.deepEqual(attempts[0].receipt,finishBodies[0].p_receipt,'Saved original provider evidence is immutable');
+   }
+   if(!callback){
+    assert.equal(await one('select count(*) from fixture_opened_gaps'),0,'A lost acknowledgment cannot create historical outreach');
+    assert.equal(await one('select first_outreach_at from icash_meta_leads'),null);
+   }
+  }finally{persistenceFailure=null;await pg.exec('rollback');}
  }
  await seed(21);mode='delivered';race=async()=>q("update icash_text_messages set state='needs_review',last_delivery_at=now() where id=$1",[current]);
  assert.equal((await recoverTextDeliveryReceipts(db,env,fetcher)).changed,1,'Late callback wins without being overwritten');
