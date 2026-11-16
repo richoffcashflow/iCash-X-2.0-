@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- The November 16 policy review isolation repair separates private hourly review cursors from synchronous canonical decision/application pointers. Preserve the compatible private read projection, every existing learning/promotion/hold check, original pointers and hourly review ownership. Use the source-pinned NOWAIT migration and native foreground/reviewer contention tests; no policy activation, historical replay or zero-stall claim follows. See docs/policy-review-lock-isolation.md.
+
 - The November 16 DealMachine efficiency repair selects compatible active/mobile owner siblings before the existing five-property limit, only for fresh active-export work. Preserve exact live/continued cohorts, legacy selection, all financial/contact admission, unknown originals and provider limits. The guarded migration updates only the candidate and its current continued-cohort hash slot. Use offline/native fixtures and ordinary production receipts; no paid test or savings claim is implied. See docs/owner-batch-pool-selection.md.
 
 - The November 16 research-priority repair computes the existing settled-use rank without pending-cost report fields. Preserve the full target report, exact numeric/time/coverage semantics, continuation fairness, account locks and final financial/contact admission. Only the selector priority expression and its three active manifest hash slots change; unknown originals and supplier reserves remain intact. See docs/research-priority-cost-isolation.md.
