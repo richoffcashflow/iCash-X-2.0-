@@ -24,6 +24,7 @@ export type SellerFactEvidence={value:boolean;status:'answered'|'unknown'|'decli
 export type SellerDialogueState={qualification:SellerQualification;facts:Partial<Record<Fact,SellerFactEvidence>>;priceRequested:boolean};
 export type SellerQualification={ready:true}|{ready:false;nextQuestion:string;missing:Fact[];stop?:boolean};
 const yes={test:sellerAffirmation};
+const differentSeller=/\b(?:i(?:'m| am) (?:his|her|their|the owner's) (?:wife|husband|son|daughter|tenant)|this is (?:his|her|their) (?:wife|husband|son|daughter)|i(?:'m| am) (?:just )?(?:the |a )?tenant)\b/i;
 const no=/^(?:(?:um|uh|well)[, .]+)*(?:no|nope|not really|not interested)\b/i;
 const answerable=(s:string)=>/[a-z0-9]/i.test(s)&&! /^(?:um|uh|hmm|hello|what|sorry|pardon)[.!? ]*$/i.test(s)&&! /\b(?:repeat (?:that|the question)|what do you mean|(?:didn['’]?t|did not) (?:hear|understand|catch)|(?:can|could|would) you (?:please )?(?:repeat|rephrase|say|ask|explain)|(?:say|ask) (?:that |it |the question )?again|what was (?:that|the question))\b/i.test(s);
 
@@ -77,7 +78,7 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
    if(availabilityQuestion&&/\b(?:not now|(?:can't|cannot) talk|not a good time|busy right now)\b/i.test(text))remember('availability',false);
    if(/\b(?:i(?:'m| am) (?:the |an? )?owner|i (?:still )?own (?:it|this|the (?:house|property)))\b/i.test(statement))remember('ownership',true);
    if(/\b(?:not (?:the )?owner|don['’]?t own|do not own|wrong (?:number|person|property)|no longer own)\b/i.test(statement))remember('ownership',false);
-   if(/\b(?:i(?:'m| am) (?:his|her|their|the owner's) (?:wife|husband|son|daughter|tenant)|this is (?:his|her|their) (?:wife|husband|son|daughter)|i(?:'m| am) (?:just )?(?:the |a )?tenant)\b/i.test(text)){
+   if(differentSeller.test(text)){
     delete facts.ownership;delete evidence.ownership;delete facts.interest;delete evidence.interest;
    }
    const intent=sellerConversionIntent(text);
@@ -126,6 +127,24 @@ export function sellerQualificationHold(result:Exclude<SellerQualification,{read
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
+type SavedSellerText={id:string;direction:string;body:string;state:string;provider_id:string|null;event_id:string|null;last_delivery_at:string|null;created_at:string};
+/** Event IDs come only from the already tenant/thread-bound incoming rows. Read
+ * just original event times, in bounded batches; ingestion time is not proof
+ * that an ambiguous answer followed delivery of a question. */
+async function sellerTextEventTimes(db:Db,messages:SavedSellerText[]){
+ const ids=[...new Set(messages.filter(m=>m.direction==='incoming'&&m.state==='received'&&m.event_id&&m.event_id.length<=512).map(m=>m.event_id!))];
+ const times=new Map<string,number>();
+ await Promise.all(Array.from({length:Math.ceil(ids.length/25)},async(_,index)=>{
+  const batch=ids.slice(index*25,index*25+25),filter=batch.map(id=>JSON.stringify(id)).join(',');
+  const events=await db<{id:string;type:string;source_time:unknown}[]>(`icash_text_events?id=in.(${encodeURIComponent(filter)})&select=id,type,source_time:payload->timestamp&limit=25`);
+  if(!Array.isArray(events)||events.length>25)throw Error('SELLER_TEXT_EVENT_ORDER_REQUIRED');
+  for(const event of events)if(batch.includes(event.id)&&['text.incoming.sms','text.incoming.mms'].includes(event.type)&&typeof event.source_time==='number'&&Number.isFinite(event.source_time)&&event.source_time>0&&event.source_time*1000<=Date.now())times.set(event.id,Math.floor(event.source_time*1000));
+ }));
+ return new Map(messages.map(m=>{
+  const at=m.event_id?times.get(m.event_id):undefined;
+  return [m.id,at!==undefined&&at<=Date.parse(m.created_at)+300000?at:null];
+ }));
+}
 /** Reuse real answers on return calls, scoped by server-resolved IDs. A reset
  * creates a new screening/deal, so the old property's answers cannot leak in. */
 export async function boundSellerQualification(db:Db,context:{accountId?:string;dealId?:string;screeningId?:string;phone?:string;conversationId?:string},current:unknown,readCurrent?:()=>Promise<unknown>){
@@ -153,20 +172,91 @@ export async function boundSellerQualification(db:Db,context:{accountId?:string;
   }
   return sellerOfferQualification(current,memory.history);
  }
- if(first.ready)return first;
- const [calls,threads]=await Promise.all([
-  db<unknown[]>('rpc/icash_seller_prior_call_context','POST',{p_account:accountId,p_screening:screeningId,p_phone:phone}),
-  db<{id:string}[]>(`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&recipient=eq.${encodeURIComponent(phone)}&party=eq.seller&retired_at=is.null&select=id&limit=2`),
- ]);
+ const incomplete:SellerQualification={ready:false,missing:[],stop:true,nextQuestion:'The full saved conversation needs reconciliation. Do not repeat qualification or quote from partial history.'};
+ const threadPath=`icash_text_threads?account_id=eq.${accountId}&deal_id=eq.${dealId}&recipient=eq.${encodeURIComponent(phone)}&party=eq.seller&retired_at=is.null&select=id&limit=2`;
+ let calls:unknown[],threads:{id:string}[];
+ try{[calls,threads]=await Promise.all([
+  first.ready?Promise.resolve([]):db<unknown[]>('rpc/icash_seller_prior_call_context','POST',{p_account:accountId,p_screening:screeningId,p_phone:phone}),
+  db<{id:string}[]>(threadPath),
+ ]);}catch{return incomplete;}
+ if(!Array.isArray(threads)||threads.length>1)return incomplete;
  const history=Array.isArray(calls)?calls.map(c=>({at:String(object(c).completed_at??''),value:object(c).result})):[];
  if(threads.length===1){
-  const messages=await db<{direction:string;body:string;created_at:string}[]>(`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threads[0].id}&state=in.(accepted,sent,delivered,received)&select=direction,body,created_at&order=created_at.asc&limit=200`);
-  let question='';
+  // Read one overflow row rather than treating the oldest 200 as complete. An
+  // omitted later refusal/correction must not inherit an older positive answer.
+  const messagePath=`icash_text_messages?account_id=eq.${accountId}&thread_id=eq.${threads[0].id}&select=id,direction,body,state,provider_id,event_id,last_delivery_at,created_at&order=created_at.asc,id.asc&limit=201`;
+  let messages:SavedSellerText[];try{messages=await db<SavedSellerText[]>(messagePath);}catch{return incomplete;}
+  const snapshot=JSON.stringify(messages),smsHistory:{value:unknown;at:number;original:boolean}[]=[];
+  if(!Array.isArray(messages)||messages.length>200)return incomplete;
+  let sourceTimes:Map<string,number|null>;try{sourceTimes=await sellerTextEventTimes(db,messages);}catch{return incomplete;}
+  const messageTime=(m:SavedSellerText)=>m.direction==='incoming'?(sourceTimes.get(m.id)??Date.parse(m.created_at)):Date.parse(m.created_at);
+  const outgoingTimes=new Set(messages.filter(m=>m.direction==='outgoing').map(messageTime)),incomingTimes=new Set<number>();
   for(const m of messages){
-   if(m.direction==='outgoing'){question=m.body;continue;}
-   if(m.direction==='incoming')history.push({at:m.created_at,value:{transcript:[{role:'agent',message:question},{role:'user',message:m.body}]}});
+   const at=messageTime(m);if(!Number.isFinite(at))return incomplete;
+   if(m.direction==='incoming'&&m.state==='received'&&(m.provider_id||m.event_id)){
+    // A UUID tie-break makes pagination stable, not simultaneous answers
+    // chronological. Do not let arbitrary ID order undo a seller correction.
+    if(incomingTimes.has(at))return incomplete;incomingTimes.add(at);
+   }
+  }
+  let question='',questionAt=Infinity;
+  for(const m of [...messages].sort((a,b)=>messageTime(a)-messageTime(b))){
+   if(m.direction==='outgoing'){
+    // Unconfirmed messages remain boundaries, so a later "yes" cannot borrow
+    // an older question. A delivery arriving after the answer is insufficient.
+    const delivered=Date.parse(m.last_delivery_at??'');
+    question=m.state==='delivered'&&m.provider_id&&Number.isFinite(delivered)&&delivered>=Date.parse(m.created_at)&&delivered<=Date.now()?m.body:'';
+    questionAt=delivered;continue;
+   }
+   if(m.direction==='incoming'){
+    if(m.state!=='received'||!(m.provider_id||m.event_id)){question='';continue;}
+    const at=messageTime(m),originalAt=sourceTimes.get(m.id);
+    const value={sourceId:m.id,at:new Date(at).toISOString(),channel:'sms',transcript:[{role:'agent',message:originalAt!==null&&originalAt!==undefined&&originalAt>questionAt&&!outgoingTimes.has(at)?question:''},{role:'user',message:m.body}]};
+    history.push({at:value.at,value});smsHistory.push({value,at,original:originalAt!==null&&originalAt!==undefined});
+   }
+  }
+  const conflicts=smsHistory.map(sms=>({...sms,state:sellerDialogueState(sms.value,[],'sms'),identityChanged:(object(sms.value).transcript as {role:string;message:string}[]).some(t=>t.role==='user'&&differentSeller.test(t.message))}))
+   .filter(sms=>sms.identityChanged||!sms.state.qualification.ready&&sms.state.qualification.stop);
+  if(conflicts.length){
+   // Contact stops/review requests are not reversible qualification facts. An
+   // unstructured withdrawal also cannot be erased by a generic later yes.
+   for(const sms of conflicts){
+    const rows=object(sms.value).transcript as {role:string;message:string}[];
+    const disposition=sellerCallDisposition(rows.map(t=>({...t,message:t.role==='agent'?latestQualificationQuestion(t.message):t.message})));
+    if(disposition==='opt_out'||disposition==='review'||!(sms.state.facts.ownership?.value===false||sms.state.facts.interest?.value===false||sms.state.facts.listing||sms.identityChanged))return sms.state.qualification;
+   }
+   const hold:SellerQualification={ready:false,missing:[],stop:true,nextQuestion:'A saved text conflicts with this call. Its timing needs reconciliation before an offer; honor the seller request and do not repeat answered qualification.'};
+   if(!context.conversationId||smsHistory.some(sms=>!sms.original))return hold;
+   let fresh:Record<string,unknown>;try{fresh=object(readCurrent?await readCurrent():current);}catch{return hold;}
+   const start=object(fresh.metadata).start_time_unix_secs,rows=fresh.transcript,prior=object(current).transcript,suppliedStart=object(object(current).metadata).start_time_unix_secs;
+   if(fresh.conversation_id!==context.conversationId||typeof start!=='number'||!Number.isFinite(start)||start<=0||start*1000>Date.now()||!Array.isArray(rows)||rows.length>1000||typeof suppliedStart==='number'&&start!==suppliedStart)return hold;
+   const voiceRows=rows.map(object).filter(t=>t.role==='agent'||t.role==='user');
+   const supplied=Array.isArray(prior)?prior.map(object).filter(t=>t.role==='agent'||t.role==='user'):[];
+   if(supplied.some((turn,index)=>voiceRows[index]?.role!==turn.role||voiceRows[index]?.message!==turn.message))return hold;
+   let previous=-Infinity;
+   for(const turn of voiceRows.filter(t=>t.role==='user')){
+    const seconds=turn.time_in_call_secs;
+    if(typeof seconds!=='number'||!Number.isFinite(seconds)||seconds<0||seconds>600||seconds<previous||(start+seconds)*1000>Date.now()||smsHistory.some(sms=>sms.at===Math.floor((start+seconds)*1000)))return hold;
+    previous=seconds;
+   }
+   // Completion before every timed source proves the prior call's answers
+   // precede this conflict without inventing missing per-turn speech times.
+   const cutoff=Math.min(start*1000,...smsHistory.map(sms=>sms.at));
+   const priorCalls=Array.isArray(calls)?calls.map(c=>({at:Date.parse(String(object(c).completed_at??'')),value:object(c).result})):[];
+   if(priorCalls.some(c=>!Number.isFinite(c.at)||c.at<=0||c.at>=cutoff))return hold;
+   const freshQualification=sellerOfferQualification(fresh);if(!freshQualification.ready&&freshQualification.stop)return freshQualification;
+   // Recheck bounded sources after the provider read. A concurrent message or
+   // receipt change must not be hidden behind the original history snapshot.
+   try{const [latest,latestThreads]=await Promise.all([db<SavedSellerText[]>(messagePath),db<{id:string}[]>(threadPath)]);
+    if(JSON.stringify(latest)!==snapshot||JSON.stringify(latestThreads)!==JSON.stringify(threads))return hold;
+   }catch{return hold;}
+   const ordered=chronologicalSellerHistory([...smsHistory.map(sms=>sms.value),{sourceId:'current:'+context.conversationId,channel:'voice',startedAt:new Date(start*1000).toISOString(),transcript:voiceRows.map(t=>({role:t.role,message:t.message,time_in_call_secs:t.time_in_call_secs}))}]);
+   const result=sellerOfferQualification(null,[...priorCalls.sort((a,b)=>a.at-b.at).map(c=>c.value),...ordered]);
+   if(!result.ready&&conflicts.some(sms=>sms.identityChanged)&&(result.missing.includes('ownership')||result.missing.includes('interest')))return {...result,stop:true,nextQuestion:'The text identifies a different speaker. Confirm the current speaker’s ownership and interest before an offer; do not reuse the previous owner’s answers.'};
+   return result;
   }
  }
+ if(first.ready)return first;
  history.sort((a,b)=>(Date.parse(a.at)||0)-(Date.parse(b.at)||0));
  return sellerOfferQualification(current,history.map(h=>h.value));
 }
