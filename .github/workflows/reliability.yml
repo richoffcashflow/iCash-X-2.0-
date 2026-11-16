@@ -61,6 +61,11 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-title-negated-review-postgres.mjs
+      - name: Verify shared seller memory uses original SMS receipts and serialized source changes
+        env:
+          SELLER_MEMORY_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node tests/seller-memory-receipt-native.mjs
       - name: Verify expired preflight cleanup and renewal under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg

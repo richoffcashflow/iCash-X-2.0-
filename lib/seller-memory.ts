@@ -37,7 +37,8 @@ export function chronologicalSellerHistory(conversations:unknown[]):unknown[]{
    if(!Number.isFinite(at))continue;
    const sourceId=String(turn.sourceId??String(c.sourceId)+':'+index);
    exchanges.push({at,order:exchanges.length,value:{sourceId,at:new Date(at).toISOString(),channel:c.channel,
-    transcript:[{role:'agent',message:thread?threadQuestions.get(thread)??'':question},{role:'user',message:turn.message,sourceId,at:new Date(at).toISOString(),channel:c.channel}]}});
+    transcript:[{role:'agent',message:thread?threadQuestions.get(thread)??'':question},{role:'user',message:turn.message,sourceId,at:new Date(at).toISOString(),channel:c.channel,
+     ...(turn.questionUnverified===true?{questionUnverified:true}:{})}]}});
   }
  }
  return exchanges.sort((a,b)=>a.at-b.at||a.order-b.order).map(x=>x.value);
@@ -54,13 +55,30 @@ export async function readSellerMemory(db:Database,binding:SellerMemoryBinding):
   ||binding.dealId&&bound.dealId!==binding.dealId||!Array.isArray(source.conversations)||typeof source.fingerprint!=='string')throw Error('SELLER_MEMORY_BINDING_REQUIRED');
  const history=chronologicalSellerHistory(source.conversations);
  const state=sellerDialogueState(null,history);
- const complete=source.complete===true;
+ // Older applications keep the conservative complete=false hold. This exact
+ // source projection is usable only with typed uncertainty markers and the raw
+ // source cap, independent of the extra question row before each answer.
+ let complete=source.complete===true;
+ if(source.receiptProjectionVersion!==undefined&&source.receiptProjectionVersion!=='seller-sms-receipts-v1')throw Error('SELLER_MEMORY_RECEIPT_PROJECTION_REQUIRED');
+ if(source.receiptProjectionVersion==='seller-sms-receipts-v1'){
+  const sms=source.conversations.map(object).filter(c=>c.channel==='sms');
+  if(typeof source.receiptSourceComplete!=='boolean'||sms.length!==1)throw Error('SELLER_MEMORY_RECEIPT_PROJECTION_REQUIRED');
+  const text=sms[0],rows=Array.isArray(text.transcript)?text.transcript.map(object):[];
+  const original=rows.filter(t=>typeof t.receiptFingerprint==='string');
+  if(text.receiptProjectionVersion!=='seller-sms-receipts-v1'||typeof text.receiptSourceComplete!=='boolean'
+   ||!Number.isInteger(text.rawSourceCount)||Number(text.rawSourceCount)<0||Number(text.rawSourceCount)>1001
+   ||original.length!==text.rawSourceCount||new Set(original.map(t=>t.sourceId)).size!==original.length
+   ||original.some(t=>typeof t.sourceId!=='string'||! /^[a-f0-9]{64}$/.test(String(t.receiptFingerprint))||typeof t.questionUnverified!=='boolean')
+   ||rows.some(t=>t.role==='user'&&(typeof t.questionUnverified!=='boolean'||typeof t.receiptFingerprint!=='string')))
+   throw Error('SELLER_MEMORY_RECEIPT_PROJECTION_REQUIRED');
+  complete=source.receiptSourceComplete===true&&text.receiptSourceComplete===true&&Number(text.rawSourceCount)<=1000;
+ }
  if(!complete)state.qualification={ready:false,missing:[],stop:true,nextQuestion:'The full saved conversation needs reconciliation. Do not repeat qualification or quote from partial history.'};
  // Recompute from source even on a cache hit. A cache cannot manufacture facts.
  const projection={version:sellerMemoryVersion,...state};
  // Oversized exact quotes still participate in the source-backed answer. The
  // optional cache must not turn a complete history into a permanent retry loop.
- if(complete&&object(source.cached).version!==sellerMemoryVersion&&Buffer.byteLength(JSON.stringify(projection),'utf8')<=18000){
+ if(complete&&source.complete===true&&object(source.cached).version!==sellerMemoryVersion&&Buffer.byteLength(JSON.stringify(projection),'utf8')<=18000){
   const saved=await db('rpc/icash_save_seller_memory','POST',{...args,p_fingerprint:source.fingerprint,p_projection:projection});
   if(saved!==true)throw Error('SELLER_MEMORY_SOURCE_CHANGED');
  }

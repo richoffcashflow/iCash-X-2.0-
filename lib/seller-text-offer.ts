@@ -156,6 +156,12 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  if(previous?.action==='communication_language'&&communication!=='return_call')return review('seller_language_support_required','Continue in the seller-requested language through supported assistance; do not restart English qualification.');
  if(previous?.action==='communication_email'&&!communication)return review('seller_email_delivery_required','Use a verified, permitted email contact and supported delivery for the requested details or agreement. Do not substitute an SMS agreement or claim email delivery.');
  if(communication)return ask('communication_'+communication,sellerCommunicationReplies[communication]);
+ const qualification=sellerOfferQualification(null,conversationHistory,'sms');
+ // Unknown question timing holds price/signing authority, but a verified
+ // current reply can still receive a bounded clarification through normal SMS
+ // admission. Refusals, listing restrictions and unresolved sends stay held.
+ if(!qualification.ready&&qualification.clarificationRequired===true)return ask('clarify_source_answer',qualification.nextQuestion);
+ if(!qualification.ready&&qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
  const sellerPrice=callSellerPriceEvidence(transcript,input);
  // The server binds this shared ledger to the same account, deal and current
  // research. A channel switch is not a withdrawal or a new price.
@@ -211,7 +217,6 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  if(/^(?:who pays (?:the )?closing costs|(?:are there|what about|what are|any) (?:the |any )?fees)[?! .]*$/i.test(source.body))return ask('explain_costs',sellerAnswerCopy.explain_costs.current);
  if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process',sellerAnswerCopy.explain_process.current);
  if(isDeliveredCallInvitation(previous)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
- const qualification=sellerOfferQualification(null,conversationHistory,'sms');
  // Answer the seller's actual question before resuming the missing fact. A
  // listing reference does not establish agent representation or accept its terms.
  if(c.conversionEnabled&&(qualification.ready||!qualification.stop)){
@@ -231,7 +236,6 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   }
  }
  if(!qualification.ready){
-  if(qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
   if(c.callInvitationAllowed===true&&intent!=='price'&&!sellerRequestsPrice(source.body)&&!source.body.includes('?')&&!qualification.missing.includes('ownership')&&!qualification.missing.includes('interest')
    &&!priorCallPreference(c.messages)&&!state.quotedPriceCents&&!state.acceptedPriceCents)
    return ask('invite_call',sellerCallInvitation);
