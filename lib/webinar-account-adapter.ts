@@ -6,9 +6,9 @@ import {db} from '@/lib/stripe-test';
 import {webinarSite} from '@/lib/webinar-site';
 
 const webinarOwnerId=()=>process.env.WEBINAR_OWNER_USER_ID||(webinarSite.companyKey==='icash-x'?ownerInboundTarget.ownerUserId:null);
-export async function webinarOwnerIdentity(){
+export async function webinarOwnerIdentity(refresh=true){
  const ownerId=webinarOwnerId();
- const user=await dashboardCurrentUser(true);return ownerId&&user?.id===ownerId?user:null;
+ const user=await dashboardCurrentUser(refresh);return ownerId&&user?.id===ownerId?user:null;
 }
 export async function webinarCustomerAccount(){
  const user=await currentUser(true);if(!user)return null;
