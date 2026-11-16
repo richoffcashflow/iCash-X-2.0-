@@ -33,7 +33,7 @@ try{
  const fixture=threeTouchFixtureSql().replace(/create role (anon|authenticated|service_role)( bypassrls)?;/g,(_,role,extra)=>`do $$begin create role ${role}${extra??''};exception when duplicate_object then null;end$$;`);
  async function setup(){
   await owner.query('drop schema if exists icash_recording_private,icash_seller_recovery_private,icash_seller_agreement_private,icash_text_receipt_private cascade;drop schema public cascade;create schema public;');
-  await owner.query(fixture+threeTouchMetaFixtureSql()+'begin;'+threeTouchMigrations()+read('config/three-touch-meta-calls.sql')+'commit;'+seed);
+  await owner.query(fixture+threeTouchMetaFixtureSql()+'begin;'+threeTouchMigrations()+read('config/three-touch-meta-calls.sql')+read('config/three-touch-text-settlement.sql')+'commit;'+seed);
   await admin.query('alter role service_role bypassrls');
  }
  await setup();
@@ -69,16 +69,30 @@ try{
  await owner.query("insert into icash_deal_files(id,account_id,screening_id,stage,terms) values($1,$2,$3,'draft','{}')",[thread,a,screen]);
  for(const [id,age] of [[m1,'12 hours'],[m2,'6 hours']])await owner.query("insert into icash_text_messages(id,thread_id,account_id,direction,state,provider_id,body,created_at,last_delivery_at) values($1,$2,$3,'outgoing','delivered',$1::uuid::text,'Would you consider selling?',now()-$4::interval,now()-$4::interval)",[id,thread,a,age]);
  await owner.query("insert into icash_seller_recovery_attempts(account_id,thread_id,message_id,reason,assigned_at,delivered_at) values($1,$2,$3,'no_response',now()-interval '6 hours',now()-interval '6 hours')",[a,thread,m2]);
+ await owner.query("insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('text:'||$1::uuid::text,$2,'settled',now()-interval '12 hours')",[m1,a]);
  await owner.query("insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('text:'||$1::uuid::text,$2,'settled',now()-interval '6 hours')",[m2,a]);
  const gaps=await Promise.all(workers.map(c=>value(c,'select icash_prepare_unanswered_seller_texts()')));
  assert.equal(gaps.reduce((n,x)=>n+x,0),1);assert.equal(await value(owner,'select source_id from icash_seller_gaps'),m2);
  assert.equal(await value(owner,'select count(*)::int from icash_text_messages'),2,'no historical message replay');
  const gap=await value(owner,'select id from icash_seller_gaps');
+ await holder.query('begin;select 1 from icash_operating_budget where id=1 for update');
+ await holder.query("update icash_operation_spend set state='dispatched' where operation_key='text:'||$1::uuid::text",[m1]);
+ const textPid=await value(workers[0],'select pg_backend_pid()');
+ const lateText=value(workers[0],'select icash_prepare_seller_recovery($1,$2)',[a,gap]);
+ let textBlocked=false;
+ for(let i=0;i<200;i++){
+  if(await value(owner,"select wait_event_type='Lock' from pg_stat_activity where pid=$1",[textPid])){textBlocked=true;break;}
+  await new Promise(r=>setTimeout(r,10));
+ }
+ assert.ok(textBlocked,'text preparation waits behind the original-cost update');
+ await holder.query('commit');assert.equal(await lateText,null,'late unresolved introduction cost blocks actual third preparation');
+ assert.equal(await value(owner,'select count(*)::int from icash_text_messages'),2);
+ await owner.query("update icash_operation_spend set state='settled' where operation_key='text:'||$1::uuid::text",[m1]);
  const prepared=await Promise.all(workers.map(c=>value(c,'select icash_prepare_seller_recovery($1,$2)',[a,gap])));
  assert.equal(prepared.filter(Boolean).length,1,'16 preparations queue the actual third message once');
  assert.equal(await value(owner,'select count(*)::int from icash_text_messages'),3);
  assert.equal(await value(owner,"select state from icash_text_messages where id=$1",[prepared.find(Boolean)]),'ready');
- console.log('PASS native three-touch: 16 competing call queues and 16 text catch-up scans create one next step, original jobs/costs stay unchanged, five late control races block the third call.');
+ console.log('PASS native three-touch: 16 competing call queues and 16 text catch-up scans create one next step, original jobs/costs stay unchanged, five late call-control races and one late SMS-cost race block preparation.');
 }finally{
  await Promise.allSettled(clients.filter(c=>c!==admin).map(c=>c.end()));
  if(admin){

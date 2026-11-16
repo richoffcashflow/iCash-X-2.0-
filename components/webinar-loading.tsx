@@ -1,0 +1,2 @@
+import {MessageCircle} from 'lucide-react';
+export function WebinarLoading(){return <div className="wb-room"><main className="wb-stage" aria-busy="true" aria-label="Webinar"><section className="wb-watch"><div className="wb-player"/></section><aside className="wb-side"><section className="wb-chat wb-entry-chat" aria-hidden="true"><div className="wb-chat-heading"><span><MessageCircle size={18}/><strong>Chat</strong></span></div></section></aside></main></div>;}

@@ -25,7 +25,7 @@ try{
  for(const [name,version] of [['calls','20261116183024'],['texts','20261116183150'],['catchup','20261116183154']])assert.equal(read(`config/three-touch-seller-${name}.sql`),read(`supabase/migrations/${version}_three_touch_seller_${name}.sql`));
  await pg.exec(threeTouchFixtureSql());
  const before=await q('select to_jsonb(j) row from icash_voice_jobs j order by id');
- await pg.exec('begin;'+threeTouchMigrations()+'commit;');
+ await pg.exec('begin;'+threeTouchMigrations()+read('config/three-touch-text-settlement.sql')+'commit;');
  assert.deepEqual(await q('select to_jsonb(j) row from icash_voice_jobs j order by id'),before,'inactive install never changes original jobs');
  assert.equal(await val('select three_touch_enabled from icash_seller_recovery_private.unanswered_policy'),false);
  await q("update icash_call_recordings set dial_claimed_at=now()-interval '10 hours',call_ended_at=now()-interval '599 minutes'");
@@ -78,6 +78,7 @@ try{
  await q("insert into icash_text_threads(id,account_id,deal_id,recipient,sender,party,operational_contact_id,eligibility_until,paused,manual_only,ai_mode) values($1,$2,$1,$3,'+17205550100','seller',$4,now()+interval '10 hours',false,false,'auto')",[thread,a,phone,contact]);
  await q("insert into icash_deal_files(id,account_id,screening_id,stage,terms) values($1,$2,$3,'draft','{}')",[thread,a,screen]);
  await seedText(initial,'12 hours');
+ await q("insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('text:'||$1::uuid::text,$2,'settled',now()-interval '12 hours')",[initial,a]);
  await seedText(secondText,'6 hours','Still interested in discussing a cash offer?');
  await q("insert into icash_seller_recovery_attempts(account_id,thread_id,message_id,reason,assigned_at,delivered_at) values($1,$2,$3,'no_response',now()-interval '6 hours',now()-interval '6 hours')",[a,thread,secondText]);
  await q("insert into icash_operation_spend(operation_key,account_id,state,dispatched_at) values('text:'||$1::uuid::text,$2,'settled',now()-interval '6 hours')",[secondText,a]);

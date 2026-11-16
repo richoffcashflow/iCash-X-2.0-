@@ -15,15 +15,19 @@ export function webinarKey(){const key=process.env.ICASH_WEBINAR_SECRET||process
 export function webinarToken(id:string,purpose:'visitor'|'resume'|'unsubscribe',seconds:number){return signWebinarToken(id,purpose,seconds,webinarKey());}
 export type Visitor={attribution?:Record<string,string>;marketing_consent_at?:string|null;measurement?:Record<string,string>;id:string;name:string|null;email:string|null;phone:string|null;timezone:string;email_consent_at:string|null;sms_consent_at?:string|null;sms_opted_out_at?:string|null;sms_replied_at?:string|null;opted_out_at:string|null;funded_at:string|null;account_id:string|null;funding_guest_hash:string|null};
 export type WebinarSession={id:string;visitor_id:string;webinar_id:string;revision:number;progress_seconds:number;max_seconds:number;watched_seconds?:number;completed_at:string|null;superseded_at:string|null;created_at:string;updated_at:string;config:Webinar;is_preview:boolean};
-export async function webinarVisitor(create=false,resume?:string,signal?:AbortSignal){
+export type WebinarVisitorEntry={timezone:string;activity_region:string|null;funding_guest_hash:string;last_seen_at:string;account_id?:string;attribution?:Record<string,string>};
+async function resolveWebinarVisitor(create:boolean,resume?:string,signal?:AbortSignal,initial?:WebinarVisitorEntry){
  const jar=await cookies();let id=readWebinarToken(jar.get('icash_webinar')?.value,'visitor',webinarKey());
  const resumed=readWebinarToken(resume,'resume',webinarKey());if(resumed)id=resumed;
  let v=id?(await db<Visitor[]>(`icash_webinar_visitors?id=eq.${id}&select=*&limit=1`,'GET',undefined,signal))[0]:undefined;
- if(!v&&create){[v]=await db<Visitor[]>('icash_webinar_visitors','POST',{id:randomUUID()},signal);}
+ const created=!v&&create;
+ if(created){[v]=await db<Visitor[]>('icash_webinar_visitors','POST',{id:randomUUID(),...initial},signal);}
  signal?.throwIfAborted();
  if(v&&create)jar.set('icash_webinar',webinarToken(v.id,'visitor',86400*180),{httpOnly:true,secure:process.env.NODE_ENV!=='development',sameSite:'lax',path:'/',maxAge:86400*180});
- if(!v)throw new WebinarError(401,'Reload the webinar to restore your session.');return v;
+ if(!v)throw new WebinarError(401,'Reload the webinar to restore your session.');return {visitor:v,created};
 }
+export async function webinarVisitor(create=false,resume?:string,signal?:AbortSignal){return (await resolveWebinarVisitor(create,resume,signal)).visitor;}
+export function webinarEntryVisitor(resume:string|undefined,initial:WebinarVisitorEntry){return resolveWebinarVisitor(true,resume,undefined,initial);}
 export type WebinarSessionSummary=Pick<WebinarSession,'id'|'visitor_id'|'webinar_id'|'revision'|'is_preview'|'superseded_at'|'progress_seconds'>&{config:Pick<Webinar,'recordingVersion'>};
 export async function webinarSession(id:string,summary:true):Promise<{v:Visitor;s:WebinarSessionSummary}>;
 export async function webinarSession(id:string,summary?:false):Promise<{v:Visitor;s:WebinarSession}>;
