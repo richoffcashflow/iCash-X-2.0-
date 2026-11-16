@@ -26,7 +26,13 @@ async function databaseFailureCode(response){
   body+=decoder.decode();
   const code=JSON.parse(body)?.code;
   return databaseFailureCodes.has(code)?code:null;
- }catch{return null;}finally{try{await reader.cancel();}catch{/* Diagnostic failure preserves the original HTTP failure. */}reader.releaseLock();}
+ }catch{return null;}finally{
+  // The HTTP failure is already known. A bounded diagnostic read must not
+  // remain in a worker slot while transport cleanup is still pending. Start
+  // cleanup once, observe any later rejection and retain the original failure.
+  try{void reader.cancel().catch(()=>{});}catch{/* Preserve the original HTTP failure. */}
+  reader.releaseLock();
+ }
 }
 export async function tick(rpc, screen=runQueuedScreening){
  const job=await rpc('icash_claim_screening',{});
