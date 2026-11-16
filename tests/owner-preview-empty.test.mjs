@@ -10,6 +10,7 @@ const empty=(c,i=0,snapshot=c.items[i].snapshot)=>v('select icash_owner_prefligh
 let next=1;
 const seed=()=>v('select fixture_empty_preview_seed($1)',[next++]);
 const count=()=>v('select count(*)::integer from icash_research_private.owner_empty_preview_receipts');
+const noOwnerRow=row=>({...row,contacts:[],availability:{emails:0,owners:0,phones:0,renters:0,residents:0,owner_family:0}});
 try{
  await pg.exec(read('tests/fixtures/owner-preview-empty.sql'));
  const def=read('config/owner-enrichment-deferral.sql');
@@ -30,6 +31,19 @@ try{
  const newCredit="  or (p_preview->'credits' is distinct from '{\"used\":0,\"people\":0,\"properties\":0,\"deduplicated\":0}'::jsonb\n   and p_preview->'credits' is distinct from '{\"used\":0,\"people\":0,\"properties\":0,\"deduplicated\":0,\"licensed\":0}'::jsonb)";
  assert.equal(patchedDefinition.replace(newCredit,oldCredit),originalDefinition,'Every source, receipt, account, expiry and admission-lock predicate is unchanged');
  await assert.rejects(pg.exec(creditShape),/prerequisite changed/);await pg.exec('rollback');
+ const zeroOwner=noOwnerRow(c.preview.data[0]);
+ assert.equal(await v('select icash_research_private.owner_preview_has_no_phones($1)',[zeroOwner]),false,'Reproduce explicit zero-owner rows remaining selectable before the repair');
+ const emptyAudience=read('config/owner-preview-empty-audience.sql');
+ assert.equal(emptyAudience,read('supabase/migrations/20261116210229_owner_preview_empty_audience.sql'));
+ const helperMetadata=()=>v("select jsonb_build_object('owner',proowner,'acl',proacl,'securityDefiner',prosecdef,'volatility',provolatile,'config',proconfig) from pg_proc where oid='icash_research_private.owner_preview_has_no_phones(jsonb)'::regprocedure");
+ const originalHelper=await v("select pg_get_functiondef('icash_research_private.owner_preview_has_no_phones(jsonb)'::regprocedure)"),originalMetadata=await helperMetadata();
+ await assert.rejects(pg.exec('begin;\n'+emptyAudience+'\nselect missing_empty_audience_history_write();'),/does not exist/);await pg.exec('rollback');
+ assert.equal(await v("select pg_get_functiondef('icash_research_private.owner_preview_has_no_phones(jsonb)'::regprocedure)"),originalHelper,'A later migration-history failure rolls back the helper replacement');
+ await pg.exec('begin;\n'+emptyAudience+'\ncommit;');
+ assert.deepEqual(await helperMetadata(),originalMetadata,'Owner/ACL/security mode/volatility/search path stay unchanged');
+ assert.equal(await v('select icash_research_private.owner_preview_has_no_phones($1)',[zeroOwner]),true);
+ assert.equal(await v("select pg_get_functiondef('public.icash_record_empty_owner_preview(uuid,uuid,uuid,jsonb,jsonb)'::regprocedure)"),patchedDefinition,'The recorder and all admission/expiry/immutable evidence checks stay unchanged');
+ await assert.rejects(pg.exec('begin;\n'+emptyAudience),/prerequisite changed/);await pg.exec('rollback');
  await pg.exec('set role service_role');
  try{
   assert.equal(await save(c),true,'The real service role can resolve and execute the RPC in a recreated public schema');
@@ -86,10 +100,34 @@ try{
  }
  assert.equal(await v('select count(*)::integer from icash_credit_reservations'),0);
  assert.equal(await v('select count(*)::integer from icash_owner_contacts'),0);
+ // Observed shape: four explicitly empty owner audiences plus one phone-less
+ // owner. Previously only the last row was retained, leaving four future polls.
+ const observed=await seed();observed.preview.data=observed.preview.data.map((row,i)=>i<4?noOwnerRow(row):row);
+ assert.equal(phoneLessOwnerPreviews(ownerBatchAudience(observed.preview,observed.items,25)).length,5);
+ assert.equal(await save(observed),true);
+ for(let i=0;i<5;i++)assert.equal(await empty(observed,i),true);
+ const allEmpty=await seed();allEmpty.preview.data=allEmpty.preview.data.map(noOwnerRow);
+ assert.equal(phoneLessOwnerPreviews(ownerBatchAudience(allEmpty.preview,allEmpty.items,25)).length,5);
+ assert.equal(await save(allEmpty),true);
+ for(let i=0;i<5;i++)assert.equal(await empty(allEmpty,i),true);
+ for(const mutate of [row=>{delete row.availability;},row=>{delete row.availability.owners;},row=>{delete row.availability.phones;},row=>{row.availability.owners=null;},row=>{row.availability.phones=null;},row=>{row.availability.owners='0';},row=>{row.availability.phones='0';},row=>{row.availability.owners=1;},row=>{row.availability.phones=1;},row=>{row.availability=[];}]){
+  const unknown=await seed();unknown.preview.data=unknown.preview.data.map(noOwnerRow);for(const row of unknown.preview.data)mutate(row);
+  assert.equal(phoneLessOwnerPreviews(ownerBatchAudience(unknown.preview,unknown.items,25)).length,0,'Unknown or contradictory availability is not empty evidence');
+  assert.equal(await save(unknown),false);for(let i=0;i<5;i++)assert.equal(await empty(unknown,i),false);
+ }
+ for(const mutate of [row=>{delete row.contacts;},row=>{row.contacts=null;},row=>{row.contacts={};},row=>{row.error=null;}]){
+  const malformed=await seed();malformed.preview.data=malformed.preview.data.map(noOwnerRow);mutate(malformed.preview.data[0]);
+  assert.throws(()=>ownerBatchAudience(malformed.preview,malformed.items,25),/CONTACT_PREVIEW_INVALID/);
+  assert.equal(await save(malformed),false);assert.equal(await empty(malformed),false);
+ }
+ const missing=await seed();missing.preview.data=missing.preview.data.map(row=>({...noOwnerRow(row),found:false}));missing.preview.totals.found=0;missing.preview.totals.not_found=5;
+ assert.equal(phoneLessOwnerPreviews(ownerBatchAudience(missing.preview,missing.items,25)).length,0,'Not-found properties are outside this narrow extension');
+ assert.equal(await save(missing),false);
  // Exercise both real service paths against the real recorder and exclusion
  // predicate. Previously all five siblings were rediscovered independently.
- for(const active of [false,true]){
+ for(const active of [false,true])for(const shape of ['phone_less','no_owners','mixed']){
   const flow=await seed();let previews=0;
+  if(shape!=='phone_less')flow.preview.data=flow.preview.data.map((row,i)=>shape==='no_owners'||i<4?noOwnerRow(row):row);
   for(const item of flow.items){
    const id=item.snapshot.propertyId;item.snapshot={...item.snapshot,sellerCostReserveCents:100000,raw:{data:{dm_property_id:id,full_address:'Synthetic fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}};
    await q('update icash_screening_jobs set snapshot=$1 where id=$2',[item.snapshot,item.screeningId]);
@@ -115,5 +153,5 @@ try{
   for(let i=0;i<5;i++)assert.equal(await empty(flow,i),true);
   assert.deepEqual(await run(),{status:'held'});assert.equal(previews,1,'No second free preview for any proved-empty sibling');
  }
- console.log('Empty owner previews: original zero-credit proof excludes every explicit zero-phone sibling once; unknown/malformed/source/account/expiry/paid/Pause guards and immutable private evidence pass. No providers.');
+ console.log('Empty owner previews: original zero-credit proof excludes explicit zero-phone owners and explicit empty owner audiences once; unknown/malformed/source/account/expiry/paid/Pause guards and immutable private evidence pass. No providers.');
 }finally{await pg.close();}

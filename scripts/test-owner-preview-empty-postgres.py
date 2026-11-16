@@ -40,6 +40,14 @@ def seed(n):
     return json.loads(sql(f"select fixture_empty_preview_seed({n});"))
 
 
+def no_owner_audience(case, count=5):
+    for row in case['preview']['data'][:count]:
+        row['contacts'] = []
+        row['availability'] = {'emails': 0, 'owners': 0, 'phones': 0,
+                               'renters': 0, 'residents': 0, 'owner_family': 0}
+    return case
+
+
 def evidence(case):
     return sql(f"select md5(to_jsonb(r)::text) from icash_research_private.requests r where id='{case['request']}';")
 
@@ -82,6 +90,11 @@ def run():
     assert sql(save_query(case)) == 'f', 'Reproduce current licensed:0 response rejection'
     assert sql("select count(*) from icash_research_private.owner_empty_preview_receipts;") == '0'
     sql(fixture.read("config/owner-preview-empty-credit-shape.sql"))
+    case = no_owner_audience(case, 4)
+    zero_row = literal(case['preview']['data'][0])
+    assert sql(f"select icash_research_private.owner_preview_has_no_phones({zero_row});") == 'f', 'Reproduce known empty-owner audience remaining selectable'
+    sql('begin;\n' + fixture.read("config/owner-preview-empty-audience.sql") + '\ncommit;')
+    assert sql(f"select icash_research_private.owner_preview_has_no_phones({zero_row});") == 't'
     barrier = Barrier(24)
 
     def save(_):
@@ -98,7 +111,7 @@ def run():
     for item in case['items']:
         assert sql(f"set role service_role;select public.icash_owner_preflight_empty('{case['account']}'::uuid,'{item['screeningId']}'::uuid,{literal(item['snapshot'])});") == 't'
     conflicting = json.loads(json.dumps(case))
-    conflicting['preview']['data'][0]['contacts'][0]['availability']['phones'] = 1
+    conflicting['preview']['data'][0]['availability']['phones'] = 1
     assert sql(save_query(conflicting)) == 'f'
     legacy = seed(10)
     del legacy['preview']['credits']['licensed']
@@ -116,22 +129,24 @@ def run():
             if mutation == 'legacy_extra':
                 del invalid['preview']['credits']['licensed']
         assert sql(save_query(invalid)) == 'f', 'Unknown fields or missing known credit proof stay held'
-    paused = seed(2)
-    late_guard(paused, f"update icash_accounts set bot_paused=true where id='{paused['account']}';")
-    observed = seed(3)
-    operation = f"owners:{observed['account']}:{observed['items'][0]['screeningId']}"
-    late_guard(observed, f"insert into icash_cost_observations values('other','{operation}:original','original unknown receipt',null,'unknown');")
-    assert sql(f"select count(*) from icash_cost_observations where event_key='{operation}:original' and amount is null;") == '1'
-    paid = seed(4)
-    operation = f"owners:{paid['account']}:{paid['items'][0]['screeningId']}"
-    late_guard(paid, f"insert into icash_operation_spend(operation_key,account_id) values('{operation}','{paid['account']}');")
+    for offset, empty_owner in ((100, False), (200, True)):
+        transform = no_owner_audience if empty_owner else lambda case: case
+        paused = transform(seed(offset + 2))
+        late_guard(paused, f"update icash_accounts set bot_paused=true where id='{paused['account']}';")
+        observed = transform(seed(offset + 3))
+        operation = f"owners:{observed['account']}:{observed['items'][0]['screeningId']}"
+        late_guard(observed, f"insert into icash_cost_observations values('other','{operation}:original','original unknown receipt',null,'unknown');")
+        assert sql(f"select count(*) from icash_cost_observations where event_key='{operation}:original' and amount is null;") == '1'
+        paid = transform(seed(offset + 4))
+        operation = f"owners:{paid['account']}:{paid['items'][0]['screeningId']}"
+        late_guard(paid, f"insert into icash_operation_spend(operation_key,account_id) values('{operation}','{paid['account']}');")
     for role in ('anon', 'authenticated', 'service_role'):
         assert sql(f"select has_schema_privilege('{role}','public','usage');") == 't'
         assert sql(f"select has_function_privilege('{role}','public.icash_record_empty_owner_preview(uuid,uuid,uuid,jsonb,jsonb)','execute');") == ('t' if role == 'service_role' else 'f')
         assert sql(f"select has_table_privilege('{role}','icash_research_private.owner_empty_preview_receipts','select');") == 'f'
     assert sql("select count(*) from icash_credit_reservations;") == '0'
     assert sql("select count(*) from icash_owner_contacts;") == '0'
-    print('PASS native empty-preview retention: 24 competing acknowledgments save one original receipt/five exclusions; contradictory replay, late Pause, original unknown receipt and paid operation reject; original request evidence unchanged. No providers or financial writes.')
+    print('PASS native empty-preview retention: 24 competing acknowledgments save one original receipt/five exclusions including four explicit empty owner audiences; contradictory replay, late Pause, original unknown receipt and paid operation reject; original request evidence unchanged. No providers or financial writes.')
 
 
 if __name__ == '__main__':
