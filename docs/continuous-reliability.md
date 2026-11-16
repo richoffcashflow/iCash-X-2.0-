@@ -9,9 +9,9 @@ index preserve the original source predicates and output. The bounded forward
 migration pins the predecessor and changes only its existing active manifest
 hash slot, preserving all other policy state and original evidence.
 
-Focused synthetic helper and captured-selector regressions pass. Native
-concurrent CI, full installed-schema assessment, complete collector equivalence
-and normal release prerequisites remain pending. This is not live recovery,
+Focused synthetic helper, captured-selector and complete collector-query
+equivalence regressions pass. Native concurrent CI, full installed-schema
+assessment and normal release prerequisites remain pending. This is not live recovery,
 does not retry a collection or provider action, and does not fill historical
 observation gaps or extend the collector timeout.
 

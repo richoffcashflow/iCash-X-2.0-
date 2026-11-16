@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {exerciseCollectorSelector} from '../tests/helpers/collector-selector-equivalence.mjs';
+import {exerciseCompleteCollector} from '../tests/helpers/collector-complete-query-fixture.mjs';
 import {installCollectorDeadlineFixture,value,catalog,policy,deadlines,migration,original,marker,replacement,signature} from '../tests/helpers/collector-deadline-fixture.mjs';
 import {assertDisposablePostgresTarget} from '../tests/helpers/disposable-postgres-target.mjs';
 const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE||'pg');
@@ -28,6 +29,7 @@ try{
  const admin=await connect('admin'),holder=await connect('holder'),first=await connect('first'),second=await connect('second');
  await admin.query(reset);
  const vectors=await exerciseCollectorSelector(admin);
+ await admin.query(reset);const completeQuery=await exerciseCompleteCollector(admin);
  await admin.query(reset);await installCollectorDeadlineFixture(admin);
  // A large same-account historical tail reproduces the generic-plan filter.
  await admin.query(`insert into icash_research_private.owner_export_preflights(id,account_id,items,state,checked_at,created_at,next_check_at,cleanup_attempts)
@@ -35,10 +37,10 @@ try{
  await admin.query('begin;set local plan_cache_mode=force_generic_plan');
  const before=await deadlines(admin),beforeCatalog=await catalog(admin),beforePolicy=await policy(admin);
  await admin.query(`prepare predecessor_inner(uuid,uuid) as ${body(original)}`);
- const oldPlan=(await admin.query('explain(analyze,format json,timing off) execute predecessor_inner(fid(100000),fid(2))')).rows[0]['QUERY PLAN'][0];
+ const oldPlan=(await admin.query('explain(analyze,format json,timing off) execute predecessor_inner(public.fid(100000),public.fid(2))')).rows[0]['QUERY PLAN'][0];
  await admin.query(migration);
  await admin.query(`prepare candidate_inner(uuid,uuid) as ${body(original.replace(marker,replacement))}`);
- const newPlan=(await admin.query('explain(analyze,format json,timing off) execute candidate_inner(fid(100000),fid(2))')).rows[0]['QUERY PLAN'][0];
+ const newPlan=(await admin.query('explain(analyze,format json,timing off) execute candidate_inner(public.fid(100000),public.fid(2))')).rows[0]['QUERY PLAN'][0];
  assert.deepEqual(await deadlines(admin),before,'Exact deadlines preserved in the same transaction');
  const indexNodes=nodes(newPlan.Plan).filter(n=>n['Index Name']==='icash_owner_preflight_primary_screening');
  assert(indexNodes.some(n=>/account_id/.test(n['Index Cond']||'')&&/screeningId/.test(n['Index Cond']||'')),'Generic plan must constrain both account and original primary screening');
@@ -46,6 +48,15 @@ try{
  await admin.query('rollback');
  assert.deepEqual(await catalog(admin),beforeCatalog);assert.deepEqual(await policy(admin),beforePolicy);
  assert.equal(await value(admin,"select to_regclass('icash_research_private.icash_owner_preflight_primary_screening')"),null,'Migration/index roll back together');
+ // A genuine writer lock conflicts with index SHARE. NOWAIT must reject rather
+ // than queue behind it while holding the operating-budget and policy rows.
+ await holder.query('begin;lock table icash_research_private.owner_export_preflights in row exclusive mode');
+ await first.query('begin');const busyStart=performance.now();
+ await assert.rejects(first.query(migration),error=>error.code==='55P03');
+ assert(performance.now()-busyStart<2000,'Busy writer rejection must be immediate, not the 5s lock bound');
+ await first.query('rollback');await holder.query('rollback');
+ assert.deepEqual(await catalog(admin),beforeCatalog);assert.deepEqual(await policy(admin),beforePolicy);
+ assert.equal(await value(admin,"select to_regclass('icash_research_private.icash_owner_preflight_primary_screening')"),null);
  // Live readers cannot see a new source with the old policy, and concurrent
  // installers serialize. The second refuses its now-stale source, not replay.
  await holder.query('begin;select 1 from public.icash_operating_budget where id=1 for update');
@@ -65,7 +76,7 @@ try{
  const expectedPolicy=structuredClone(beforePolicy);
  expectedPolicy.continued_original_hashes[signature]=await value(admin,'select md5(pg_get_functiondef($1::regprocedure))',[signature]);
  assert.deepEqual(finalPolicy,expectedPolicy);
- console.log(JSON.stringify({result:'PASS native collector deadline plan and serialized migration',postgres:await value(admin,'show server_version'),...vectors,
-  originalInnerMs:oldPlan['Execution Time'],candidateInnerMs:newPlan['Execution Time'],accountAndPrimaryIndex:true,transactionRollback:true,concurrentReplayRejected:true}));
+ console.log(JSON.stringify({result:'PASS native collector deadline plan and serialized migration',postgres:await value(admin,'show server_version'),...vectors,completeQuery,
+  originalInnerMs:oldPlan['Execution Time'],candidateInnerMs:newPlan['Execution Time'],accountAndPrimaryIndex:true,transactionRollback:true,busyWriterRejected:true,concurrentReplayRejected:true}));
 }catch(error){console.error(error.stack,error.where??'');process.exitCode=1;}
 finally{await Promise.allSettled(clients.map(c=>c.query('rollback')));await Promise.allSettled(clients.map(c=>c.end()));}

@@ -43,6 +43,9 @@ begin
   from icash_work_private.continuation_policy p where id=1;
  if to_regclass('icash_research_private.icash_owner_preflight_primary_screening') is not null then
   raise exception 'Collector deadline index already exists';end if;
+ -- Do not queue behind an existing writer while holding the shared budget.
+ -- This still blocks later writers for the bounded build/commit transaction.
+ lock table icash_research_private.owner_export_preflights in share mode nowait;
  create index icash_owner_preflight_primary_screening
   on icash_research_private.owner_export_preflights(account_id,((items->0->>'screeningId')))
   where state in ('waiting','ready');
