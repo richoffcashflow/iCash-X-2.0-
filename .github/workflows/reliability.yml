@@ -344,6 +344,39 @@ jobs:
           persist-credentials: false
       - name: Verify eligible seller quota under native concurrent transactions
         run: python3 scripts/test-seller-atomic-quota-postgres.py
+  seller-learning-planning:
+    # Own empty fixture; never reset another native suite's schemas.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_PASSWORD: isolated-fixture-only
+          POSTGRES_DB: icash_learning_perf_c46
+        ports:
+          - 55543:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      - name: Install isolated native driver
+        run: npm install --prefix "$RUNNER_TEMP/learning-planning-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Verify complete learning results and account-index plans
+        env:
+          ICASH_LEARNING_PLANNING_NATIVE: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/learning-planning-pg/node_modules/pg
+        run: node tests/seller-call-learning-planning.test.mjs
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
