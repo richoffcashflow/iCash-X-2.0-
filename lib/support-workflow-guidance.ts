@@ -11,6 +11,9 @@ export function supportWorkflowReply(messages:Turn[],evidence:SupportEvidence[])
  const issue=currentSupportIssue(messages);
  if(/\b(?:refund|cancel|billing|charged|payment|card|sign.?in|log.?in)\b/i.test(latest))return null;
  const answer=(reply:string)=>({reply,status:'open' as const,ai:false});
+ if(/\b(?:set ?up|setup)\b/i.test(latest)&&/\b(?:account|bot|start|ready|all set)\b/i.test(latest)&&/\b(?:check|ready|all set|am i|is my)\b/i.test(latest)&&!/\b(?:voice|seller|buyer|title|closing|contract|agreement|not working|no calls|no texts|no leads|stopped|stuck|failed|error)\b/i.test(latest)){
+  return answer('I can’t confirm that every setup requirement is complete from this question alone. In Settings, check your contact email/phone and individual or company name for agreements, and complete any required workspace acknowledgment. Bot naming is under Customize bot. Software access, separate work credits and current bot status also need to be checked; Run alone does not prove work has started. What setup warning or bot status is currently shown?');
+ }
  if(supportMissingSellerContactQuestion(issue)){
   const snapshot=evidence.find(e=>e.key==='outreach')?.outreach;
   const prior=messages.slice(0,-1).findLast(m=>m.role==='assistant'||m.role==='operator')?.content??'';
@@ -27,7 +30,8 @@ export function supportWorkflowReply(messages:Turn[],evidence:SupportEvidence[])
   if(/\b(?:can.t|cannot|won.t|unable|not|disabled|grey|gray)\b.{0,40}\b(?:save|click|press)|\b(?:save|button)\b.{0,25}\b(?:disabled|grey|gray|not working)/i.test(latest))return answer('Save resolution needs a note of at least 10 characters describing what you actually completed. It saves an internal note; it does not send the seller a message or restart outreach. If your completed note is long enough, what error appears when you save it?');
   return answer('“No reply to delivered question” means no seller answer is recorded for that follow-up. Open the property under Your leads and review Texts. Save resolution is an internal note for follow-up you have completed; it does not reply to the seller, renew contact checks or restart outreach.');
  }
- if(/\bneeds? (?:you|me)\b/i.test(issue))return answer('Needs you marks a property that needs your review, such as an agreement, seller question or blocked follow-up. Open that property and read its alert. Save resolution records completed follow-up; it does not send a seller message or restart the bot.');
+ // A request such as 'I need you to check my account' is not a UI label.
+ if(/\bneeds (?:you|me)\b/i.test(latest)||/\b(?:alert|label|status|screen|said|says)\b.{0,25}\bneed (?:you|me)\b/i.test(latest))return answer('Needs you marks a property that needs your review, such as an agreement, seller question or blocked follow-up. Open that property and read its alert. Save resolution records completed follow-up; it does not send a seller message or restart the bot.');
  if(/\b(?:agreements?|contracts?|documents?)\b/i.test(issue)&&/\b(?:where|how|find|open|tab|section|button|create|prepare|send|download|missing|no|can.t|cannot|isn.t|don.t)\b/i.test(issue)){
   // A failed download/send needs troubleshooting; directions alone do not fix it.
   if(/\b(?:fails?|failed|error|blank|spinning|blocked|disabled|unavailable|unresponsive|greyed out|grayed out)\b|\b(?:can.t|cannot|won.t|unable to)\b.{0,20}\b(?:download|send|save|sign)\b/i.test(issue))return null;
