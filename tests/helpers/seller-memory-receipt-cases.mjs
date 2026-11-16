@@ -74,8 +74,9 @@ export async function cases(pg){
   const m=await memory(f);assert.equal(m.state.qualification.clarificationRequired,true);
   const messages=[{id:q.id,direction:'outgoing',body:'Are you the owner?',state:'delivered',providerId:'fixture',at:f.at(1),action:'cash_offer'},
    {id:u.id,direction:'incoming',body:'No.',state:'received',providerId:'fixture',at:f.at(2)}];
-  const context={...f.binding,jobId:randomUUID(),threadId:f.thread,sourceId:u.id,ownerUserId:randomUUID(),ownerEmail:'owner@example.invalid',principal:'Fixture Buyer',address:'45 Oak Road',snapshot:{},terms:{},offerState:{acceptedPriceCents:6000000},offerVersion:1,messages,fingerprint:'fixture',memoryFingerprint:m.fingerprint,historyComplete:true,history:m.history};
+  const context={...f.binding,jobId:randomUUID(),threadId:f.thread,sourceId:u.id,ownerUserId:randomUUID(),ownerEmail:'owner@example.invalid',principal:'Fixture Buyer',address:'45 Oak Road',snapshot:{},terms:{},offerState:{acceptedPriceCents:6000000,quotedPriceCents:6000000,textThreadId:'older-thread',processedSource:'older-source'},offerVersion:1,messages,fingerprint:'fixture',memoryFingerprint:m.fingerprint,historyComplete:true,history:m.history};
   const plan=planSellerTextOffer(context);assert.equal(plan.kind,'message');assert.equal(plan.action,'clarify_source_answer','uncertain no must not become a cash-offer counterprice');assert.equal(plan.body,m.state.qualification.nextQuestion);assert.equal(plan.state.acceptedPriceCents,6000000,'preserve original accepted evidence while withholding authority');assert.equal(plan.terms,undefined);
+  assert.equal(plan.state.processedSource,u.id);assert.equal(plan.state.textThreadId,f.thread);
   let dispatched=0,saved=0;const db=async(path,method,args)=>{
    if(path==='rpc/icash_save_seller_text_offer'){saved++;assert.equal(args.p_plan.action,'clarify_source_answer');assert.equal(args.p_fingerprint,'fixture');return {messageId:'original-clarification'};}
    return f.db(path,method,args);

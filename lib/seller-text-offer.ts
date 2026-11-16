@@ -160,7 +160,10 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  // Unknown question timing holds price/signing authority, but a verified
  // current reply can still receive a bounded clarification through normal SMS
  // admission. Refusals, listing restrictions and unresolved sends stay held.
- if(!qualification.ready&&qualification.clarificationRequired===true)return ask('clarify_source_answer',qualification.nextQuestion);
+ if(!qualification.ready&&qualification.clarificationRequired===true){
+  state.textThreadId=c.threadId;state.processedSource=c.sourceId;
+  return ask('clarify_source_answer',qualification.nextQuestion);
+ }
  if(!qualification.ready&&qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
  const sellerPrice=callSellerPriceEvidence(transcript,input);
  // The server binds this shared ledger to the same account, deal and current
