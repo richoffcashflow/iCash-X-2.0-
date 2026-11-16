@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
-- The November 16 webinar report follow-up scopes custom planning to the exact reviewed report function. Preserve its SQL body, complete metrics/funnel semantics, service-only ACLs and actual eight-second API deadline. Source-pin the forward migration and verify repeated short-to-long reports under generic/custom/automatic outer plans. No global planner, data, worker, provider or UI change is needed. See docs/webinar-report-ranges.md.
+- The November 16 webinar report follow-up scopes custom planning and a twelve-second database deadline to the exact reviewed report function, inside the unchanged fifteen-second application fetch. Preserve its SQL body, complete metrics/funnel semantics and service-only ACLs. Source-pin both forward migrations, reload function metadata and verify repeated short-to-long reports under generic/custom/automatic outer plans. No global planner/deadline, data, worker, provider or UI change is needed. See docs/webinar-report-ranges.md.
 
 - The November 16 DealMachine efficiency repair selects compatible active/mobile owner siblings before the existing five-property limit, only for fresh active-export work. Preserve exact live/continued cohorts, legacy selection, all financial/contact admission, unknown originals and provider limits. The guarded migration updates only the candidate and its current continued-cohort hash slot. Use offline/native fixtures and ordinary production receipts; no paid test or savings claim is implied. See docs/owner-batch-pool-selection.md.
 

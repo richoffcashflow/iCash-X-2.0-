@@ -68,6 +68,18 @@ try{
  const planned=(await query("select prosrc,proacl,proconfig from pg_proc where oid='icash_webinar_report_with_funnel(text,text)'::regprocedure")).rows[0];
  assert.equal(planned.prosrc,original.prosrc);assert.deepEqual(planned.proacl,original.proacl);
  assert(planned.proconfig.includes('plan_cache_mode=force_custom_plan'));
+ const deadline=read('config/webinar-report-deadline.sql');
+ assert.equal(deadline,read('supabase/migrations/20261116205000_webinar_report_deadline.sql'));
+ assert(deadline.includes('65639530a3c096a43019c05a770ed5d7'));
+ const plannedHash=(await query("select md5(pg_get_functiondef('icash_webinar_report_with_funnel(text,text)'::regprocedure)) hash")).rows[0].hash;
+ const fixtureDeadline=deadline.replace('65639530a3c096a43019c05a770ed5d7',plannedHash);
+ await pg.exec(fixtureDeadline);
+ const bounded=(await query("select prosrc,proacl,proconfig from pg_proc where oid='icash_webinar_report_with_funnel(text,text)'::regprocedure")).rows[0];
+ assert.equal(bounded.prosrc,original.prosrc);assert.deepEqual(bounded.proacl,original.proacl);
+ assert(bounded.proconfig.includes('statement_timeout=12s'));
+ assert(bounded.proconfig.includes('plan_cache_mode=force_custom_plan'));
+ await assert.rejects(pg.exec(fixtureDeadline),/Webinar report source changed/);
+ await pg.exec("set statement_timeout='4s'");
  await query('prepare repeated_report(text,text) as select icash_webinar_report_with_funnel($1,$2) r');
  for(const mode of ['force_generic_plan','force_custom_plan','auto']){
   await pg.exec('set plan_cache_mode='+mode);
@@ -77,8 +89,9 @@ try{
    assert.deepEqual(after,before,`${mode}: repeated short reports followed by ${period} / ${timezone}`);
   }
   assert.equal((await query('show plan_cache_mode')).rows[0].plan_cache_mode,mode,'function setting must remain scoped');
+  assert.equal((await query('show statement_timeout')).rows[0].statement_timeout,'4s','report deadline must not change its caller');
  }
- await pg.exec('deallocate repeated_report;set plan_cache_mode=auto');
+ await pg.exec('deallocate repeated_report;set plan_cache_mode=auto;set statement_timeout=0');
  await assert.rejects(pg.exec(fixturePlanning),/Webinar report source changed/);
  for(const args of [['bad','UTC'],[null,'UTC'],['today','Bad/Zone'],['today',null]])await assert.rejects(report(...args),/Invalid report/);
  for(const role of ['anon','authenticated','service_role'])assert.equal((await query("select has_function_privilege($1,'icash_webinar_report_with_funnel(text,text)','execute') allowed",[role])).rows[0].allowed,role==='service_role');
