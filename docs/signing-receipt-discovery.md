@@ -1,0 +1,23 @@
+# Original signing receipt discovery
+
+The previous due-signing selector omitted originals created at least 45 days ago and every `needs_review` envelope. A transient cancellation-check read after a provider ID was durably saved therefore left an original document invisible to automated receipt polling. Both omissions are reproduced against the original SQL and actual service path.
+
+The bounded selector alternates ordinary pending receipts and expanded receipt discovery, skips locked originals, and retains the existing ten-minute reservation and one-minute claim limits. Expanded work uses a distinct `signing_receipt` ticket. The predecessor application holds that unknown kind without provider I/O during a rolling release; the new handler only GETs the already saved original provider ID. It cannot create or replace a document, claim automatic signature authority, sign, expire, notify, or settle costs.
+
+Original provider ID, account, envelope, terms hash, mode, recipient identities, signing order and chronology must agree. Signed states also require the frozen envelope terms to match provider field values. Unknown states remain retryable holds. Known decline, expiry or archive observations end repeated discovery of that exact original without erasing review. Observations are immutable and private. Historical `needs_review` records retain their state, deal stage, authority and financial evidence.
+
+Only a new, specifically recorded failure can resume the original pending flow: creation succeeded, the exact provider ID save was acknowledged, and the next cancellation-check read itself threw before any cancellation refusal was observed. Its immutable checkpoint captures the original envelope and the complete send-time template. An uncertain provider create/save, cancellation refusal, failed expiry, historical review, or failed checkpoint write does not qualify. The application retains the ordinary hold in each case.
+
+Resume occurs under database locks only if the checkpoint is untouched, current account ownership and Pause permit it, deal terms and template are unchanged and reviewed, property controls permit automation, cancellation authority remains current, and the original live operation is dispatched or settled. A subsequent envelope edit invalidates the checkpoint. No new authorization or operation is created. If cancellation wins a race, late original evidence uses the existing cancellation saver and release requirement.
+
+## Release and verification
+
+`config/signing-receipt-discovery.sql` and migration `20261116231728_signing_receipt_discovery.sql` must stay byte-identical. The caller owns one transaction containing the source-pinned changes and migration-history receipt. The script takes advisory key `726341927`, sets bounded local timeouts, refuses drift in the selector, poll claim, status saver, action guard, ticket constraint, owners, ACLs and function metadata, and verifies the resulting public function bodies and unchanged guards before commit. Do not split schema changes from the ledger receipt or reset any historical workflow flag based only on this deployment.
+
+The expanded receipt lane is compatible with either app version; deploy and verify the new route before expecting receipts to be handled. The prospective marker is never backfilled. No live provider calls or production mutations are part of these tests.
+
+- `node tests/signing-receipt-discovery-database.test.mjs`: real PostgreSQL engine predecessor reproduction, migration/source/ACL guards, bounded selection, historical holds, immutable observations, exact bindings, prospective recovery, changed authority and test-mode isolation.
+- `node tests/signing-receipt-discovery-service.test.mjs`: actual send and receipt services, provider response failures, GET-only requests, saved-ID checkpoint classification, normalized receipts, sanitization, one-use worker routing, and the hash-preserved predecessor route during rolling deployment.
+- `ICASH_PG_MODULE=/absolute/pinned/pg node scripts/test-signing-receipt-discovery-postgres.mjs`: local PostgreSQL on `127.0.0.1:55443`, fixed fixture database and credentials; creates/removes its own disposable child database. Tests ledger rollback, migration contention, fair concurrent selection, locked rows, concurrent cancellation/terms/Pause/manual/template/owner/envelope changes, and transaction rollback.
+
+Existing signing validation, cancellation, automation failure/hold, bot activity suites and TypeScript checking also pass locally. These tests prove the described fixtures and transaction behavior; they do not prove an original customer document has completed or that production has received a new receipt.

@@ -9,7 +9,7 @@ import {dispatchReservedOperation} from '@/lib/operating-costs';
 import {SigningDeadlineReviewError,signingReadiness,signingDocumentReadiness,signingTermsHash,signingFields,verifiedSigningStatus,type Signer,type SigningKind,type ProviderDocument} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 type Template={form_profile?:string;max_legal_description_chars:number;customer_consent_field:string|null;provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
-type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:SigningKind;terms_hash:string;template_id:string;provider_id:string|null;state:string;test_mode:boolean;recipients:{id:string;email?:string|null;phone?:string|null;name:string;placeholder_name:string}[]};
+type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:SigningKind;terms_hash:string;template_id:string;provider_id:string|null;state:string;test_mode:boolean;created_at:string;recipients:{id:string;email?:string|null;phone?:string|null;name:string;placeholder_name:string}[]};
 async function request(path:string,body?:unknown,testMode=false,method='POST'){
  const key=testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY;if(!key)throw new Error('Signing setup is not finished.');
  const r=await fetch(`https://api.docuseal.com/${path}`,{method:body?method:'GET',headers:{'X-Auth-Token':key,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,cache:'no-store',redirect:'error',signal:AbortSignal.timeout(25000)});
@@ -69,6 +69,11 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
  const recipients=[...i.signers,{name:identity.principal,email:i.customerEmail}].map((s,n)=>({...s,id:String(n+1),placeholder_name:template.placeholder_names[n],delivery_method:'phone' in s&&s.phone?'sms':'email'}));
  if(recipients.some(r=>!r.placeholder_name))throw new Error('Signer mapping needs review.');
  const envelope=await db<Envelope>('rpc/icash_begin_signing','POST',{p_user:i.userId,p_account:i.accountId,p_deal:i.dealId,p_kind:i.kind,p_template:template.id,p_hash:signingTermsHash(terms),p_recipients:recipients});
+ let durableProviderId:string|undefined,checkpointFailure=false,cancellationObserved=false;
+ const checkSavedCreation=async()=>{
+  try{const allowed=await signingAllowed(i.accountId,envelope.id);if(!allowed)cancellationObserved=true;return allowed;}
+  catch(error){if(durableProviderId&&!cancellationObserved)checkpointFailure=true;throw error;}
+ };
  try{
   if(signingTermsHash(envelope.terms)!==envelope.terms_hash)throw new Error('Contract changed. Review required before sending.');
   const send=async()=>{
@@ -80,15 +85,21 @@ export async function sendForSignatures(i:{accountId:string;userId:string;custom
    const providerId=numericId(raw[0].submission_id);
    // Keep a late provider ID even if cancellation won the race. The database preserves the hold.
    await db(`icash_signing_envelopes?id=eq.${envelope.id}&account_id=eq.${i.accountId}`,'PATCH',{provider_id:providerId,state:'awaiting_counterparty',provider_status:'Created'});
-   if(!await signingAllowed(i.accountId,envelope.id)){
+   durableProviderId=providerId;
+   if(!await checkSavedCreation()){
     const expired=await request(`submissions/${providerId}`,{expire_at:new Date(Date.now()-60000).toISOString()},testMode,'PUT');
     await expired.body?.cancel().catch(()=>undefined);
    }
   };
   if(testMode)await send();else await dispatchReservedOperation({accountId:i.accountId,operationKey:`signing:${envelope.id}`,rateId:template.rate_id!,permissionUntil:template.reviewed_until},send);
-  const active=await signingAllowed(i.accountId,envelope.id);
+  const active=await checkSavedCreation();
   return {id:envelope.id,testMode,message:!active?'Signing is held for cancellation. Open the cancellation controls to check its final status.':testMode?'Test signing request sent. It cannot put the property under contract.':'Signing request created. The other party signs first. You can review and sign from your workspace.'};
- }catch(e){await db(`icash_signing_envelopes?id=eq.${envelope.id}`,'PATCH',{state:'needs_review'});throw e;}
+ }catch(error){
+  let recorded=false;
+  if(checkpointFailure&&durableProviderId)try{recorded=await db<boolean>('rpc/icash_note_signing_checkpoint_failure','POST',{p_account:i.accountId,p_envelope:envelope.id,p_provider:durableProviderId,p_hash:envelope.terms_hash,p_template:template,p_original:envelope});}catch{/* Missing/uncertain checkpoint evidence keeps the ordinary review hold. */}
+  if(!recorded)await db(`icash_signing_envelopes?id=eq.${envelope.id}&account_id=eq.${i.accountId}`,'PATCH',{state:'needs_review'});
+  throw error;
+ }
 }
 export async function refreshSigning(accountId:string,id:string){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
@@ -142,6 +153,34 @@ export async function refreshSigning(accountId:string,id:string){
  if(!e.test_mode&&state==='customer_signature_needed')try{await dispatchAttentionNotification(accountId,{db});}catch{/* Durable notification sources remain available to the worker. */}
  if(!e.test_mode&&['customer_signature_needed','completed'].includes(state))try{await dispatchCustomerUpdate(accountId,{db});}catch{/* Delivery retries remain idempotent in the notification worker. */}
  return {status:state};
+}
+/** Expanded historical/review discovery can only GET this saved original. It
+ * never claims a signature, creates a document, expires one or sends a notice. */
+export async function reconcileSigningReceipt(accountId:string,id:string){
+ const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
+ if(!e?.provider_id)return {status:'needs_review'};
+ if(['completed','test_completed','cancellation_pending','cancelled'].includes(e.state))return {status:'signing_receipt_checked',state:e.state};
+ if(!await db<boolean>('rpc/icash_claim_signing_poll','POST',{p_account:accountId,p_id:id}))return {status:'signing_receipt_waiting',state:e.state};
+ const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json() as Submission&{archived_at?:string|null};
+ const d=normalize(raw,e);
+ let state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients}),terminal=false;
+ const status=raw.status?.toLowerCase(),clock=Date.now(),created=Date.parse(e.created_at);
+ const badTime=!Number.isFinite(created)||[raw.completed_at,raw.archived_at,...raw.submitters.map(r=>r.completed_at)].some(at=>at!==null&&at!==undefined&&(!Number.isFinite(Date.parse(at))||Date.parse(at)>clock||Date.parse(at)<created))
+  ||!!raw.completed_at&&raw.submitters.some(r=>!!r.completed_at&&Date.parse(r.completed_at)>Date.parse(raw.completed_at!));
+ const unknown=badTime||(raw.expire_at!==null&&raw.expire_at!==undefined&&!Number.isFinite(Date.parse(raw.expire_at)))||(status!==undefined&&!['pending','completed','declined','expired'].includes(status))
+  ||raw.submitters.some(r=>!['awaiting','sent','opened','completed','declined'].includes(r.status)||(r.status==='completed')!==!!r.completed_at)
+  ||(!!raw.completed_at&&!['completed','test_completed'].includes(state))||(status==='completed'&&!raw.completed_at)||(!!raw.completed_at&&status!==undefined&&status!=='completed');
+ if(unknown){state='needs_review';d.status='Unknown';}
+ else if(!raw.completed_at&&(status==='declined'||d.status==='Declined')){state='needs_review';d.status='Declined';terminal=true;}
+ else if(!raw.completed_at&&(status==='expired'||raw.expire_at&&Number.isFinite(Date.parse(raw.expire_at))&&Date.parse(raw.expire_at)<=clock)){state='needs_review';d.status='Expired';terminal=true;}
+ else if(!raw.completed_at&&raw.archived_at){state='needs_review';d.status='Archived';terminal=true;}
+ if(['customer_signature_needed','completed','test_completed'].includes(state)){
+  const [template]=await db<Template[]>(`icash_signing_templates?id=eq.${e.template_id}&select=*`);
+  const fields=signingFields(dealTermsSchema.parse(e.terms),e.kind,Object.hasOwn(template.field_map,'earnestCents'),template.form_profile),actual=raw.submitters.flatMap(s=>s.values??[]);
+  if(Object.entries(fields).some(([key,value])=>{const found=actual.filter(f=>f.field===template.field_map[key]);return found.length?found.some(f=>String(f.value??'')!==value):!(template.form_profile===originalContractProfile&&value==='');}))throw Error('Original agreement field values need review.');
+ }
+ const evidence={id:d.id,status:d.status,test_mode:d.test_mode,metadata:d.metadata,apply_signing_order:d.apply_signing_order,recipients:d.recipients.map(r=>({id:r.id,email:r.email,phone:r.phone,status:r.status,signing_order:r.signing_order}))};
+ return {status:'signing_receipt_checked',state:await db<string>('rpc/icash_record_signing_receipt','POST',{p_account:accountId,p_envelope:e.id,p_provider:e.provider_id,p_hash:e.terms_hash,p_state:state,p_evidence:evidence,p_terminal:terminal})};
 }
 export async function completedSigningPdf(accountId:string,id:string,audit=false){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
