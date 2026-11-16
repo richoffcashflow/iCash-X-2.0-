@@ -40,6 +40,15 @@ The full selector and target are actual SQL; unrelated preparation/admission
 services use the existing synthetic fixture boundaries. This is a dependency
 and locking reproduction, not proof of production latency or customer recovery.
 
+The first canonical run passed all 1,001 suites but its all-tests job was
+cancelled at the twenty-minute job boundary during final cleanup. The full-job
+budget is now thirty minutes, and the production verification wait is thirty-five
+minutes to cover that budget and workflow startup. Every suite retains its
+sixty-second deadline. A simulated-clock regression reproduces the former
+premature release timeout, verifies later exact-main success, rejects failed,
+cancelled or unrelated late results and stops at the new bounded deadline. No
+customer operation timeout or required release check changes.
+
 ## Installation and release
 
 Apply `20261116172000_research_priority_cost_isolation.sql` once after exact-head
