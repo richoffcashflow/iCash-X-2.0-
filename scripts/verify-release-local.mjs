@@ -2,6 +2,7 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'learning-completion-lock-isolation',
  'support-waiting-deal',
  'seller-intake-start', 'seller-voice-turn-policy', 'stage-seller-voice-turns', 'recording-review-transition', 'seller-call-offer-delivery-replay', 'seller-timing-answer', 'seller-ownership-answer',
  'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
@@ -10,7 +11,7 @@ const suites = [
  'automatic-outreach-bottlenecks', 'work-cohort', 'work-cohort-query',
  'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
  'requested-seller-followthrough', 'limited-seller-ownership-reply',
- 'funded-stall-recovery', 'recording-admission-abort',
+ 'funded-stall-recovery', 'reviewed-planning-relief-20261116', 'reviewed-planning-relief-source-20261116', 'recording-admission-abort',
  'support-current-issues', 'support-terminal-call-evidence',
  'support-waiting-work-status',
  'support-idle-credit-question',
@@ -22,7 +23,7 @@ const suites = [
  'http-response-lifecycle', 'database-response-cleanup', 'deferred-text-recovery', 'external-reliability-monitor',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
  'maintenance-failure-health', 'maintenance-recovery-accounting', 'journey-lane-concurrency', 'recorded-reception-maintenance-health',
- 'scheduler-reliability', 'workflow-stall-isolation', 'research-capacity-isolation', 'acquisition-budget-yield', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database', 'unanswered-seller-followups',
+ 'scheduler-reliability', 'workflow-stall-isolation', 'research-capacity-isolation', 'acquisition-budget-yield', 'acquisition-account-yield', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database', 'unanswered-seller-followups',
  'dealmachine-list-quality', 'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',
