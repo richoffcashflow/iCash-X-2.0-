@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Product display preference
 
+- The November 16 planning-source correction recognizes only a bounded, completed original free owner preview before its paid lookup. Preserve legacy zero-preview evidence, duplicate paid/active/unknown request exclusions, exact preview fingerprints and fail-fast source locks. Install the source-pinned forward migration only while the new planning lifecycle is empty; require the corrected exact release and fresh private source review before staging or activation. Keep original operations, financial controls and the UI unchanged. See docs/reviewed-owner-preview-source-2026-11-16.md.
+
 - The November 16 reviewed planning relief is an inactive, operator-only extension for an exact private source pool and immutable eligible activation subset. Preserve both earlier manifests, original unknown operations, usage authorizations, supplier reserves, late actual settlement, Pause and final admission. Require current per-kind handler/source proof and bounded NOWAIT transactions; ordinary progress excludes changed originals without expanding the review. This is planning relief, not zero-cost settlement, funded company cash or completed work. See docs/reviewed-planning-relief-2026-11-16.md.
 
 - The November 16 acquisition account-lock repair must skip a busy account and its configuration together before the existing five-candidate limit. Preserve the original candidate predicates, ordering, aging, final money/contact admission and locked account authority. Only the exact selector and its three active manifest hashes change; no due-time resets or unknown-operation settlement. See docs/acquisition-account-yield.md.
