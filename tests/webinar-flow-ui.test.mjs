@@ -1,3 +1,4 @@
+import {webinarEntryBody} from '../lib/webinar-entry.ts';
 import {webinarOfferFocus} from '../lib/webinar-offer-focus.ts';
 import {webinarSite} from '../lib/webinar-site.ts';
 import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import ts from 'typescript';
@@ -24,13 +25,13 @@ window.location=location;
 const replaced=[];globalThis.history={replaceState:(_state,_title,url)=>replaced.push(url)};
 globalThis.localStorage=globalThis.sessionStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
 Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
-const components=Object.fromEntries(['WebinarVipWelcome','WebinarTimers','WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCountdownBanner','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
+const components=Object.fromEntries(['WebinarLoading','WebinarVipWelcome','WebinarTimers','WebinarPlayer','WebinarPanelBoundary','WebinarAudience','WebinarPurchaseNotifications','WebinarCountdownBanner','WebinarOfferImage','WebinarOfferSpots'].map(n=>[n,n]));
 const icons=Object.fromEntries(['MessageCircle','Send','X','ChevronDown','ShieldCheck','Maximize','Pause','Play','Volume2','VolumeX','Info'].map(n=>[n,n]));
 const w={...policy.newWebinar('00000000-0000-4000-8000-000000000123'),videoUrl:'https://example.test/day.mp4',status:'published',publicCode:'129340',chat:[{id:'before',at:499,name:'Sam',text:'Before submission',kind:'replay'},{id:'after',at:501,name:'Pat',text:'After submission',kind:'replay'}]};
 const sessionId='00000000-0000-4000-8000-000000000456';let emptyChat=false;let requestLog=[],remembered='',rememberedEmail='',completionGate=null,chatGate=null,failChat=false,failContact=false;const redirects=[];location.assign=path=>redirects.push(path);
 async function post(url,body){requestLog.push({url,body});if(url.endsWith('/start'))return {canonicalPath:'/live/129340',sessionId,webinar:policy.publicWebinar(w),progress:0,name:remembered,email:rememberedEmail,contactSaved:false,messages:[],preview:false,serverNow:Date.now()};if(url.endsWith('/event')&&body.kind==='completed'){if(completionGate)await completionGate;return {saved:true,redirect:'/webinar/checkout'};}if(url.endsWith('/contact')){if(failContact)throw Error('Name could not be saved.');remembered=body.name;if(!body.onlyName)rememberedEmail=body.email;return {name:remembered,contactSaved:!!body.email&&!!body.phone};}if(url.endsWith('/chat')){if(chatGate)await chatGate;if(failChat)throw Error('Connection lost.');return {messages:emptyChat?[]:[{id:'m'+requestLog.length,role:'user',text:body.text,playback_seconds:body.seconds,public_status:'pending'}]};}return {saved:true};}
 let timerInput;
-const roomDeps={installWebinarRecovery:()=>({sync(){},stop(){}}),...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite};
+const roomDeps={webinarEntryBody,installWebinarRecovery:()=>({sync(){},stop(){}}),...exitReminder,webinarOfferFocus,useWebinarSharedChat:()=>({messages:[],statuses:[]}),webinarChatStream,withOfferDeadlines,replayOfferActivity,recordedPurchaseMessage,useMemo:fn=>fn(),webinarRequest:async()=>({postPurchaseUrl:'/live/123457'}),dynamic:loader=>loader.toString().includes('WebinarCheckout')?'WebinarCheckout':'AccountAccess',useWebinarTimers:input=>{timerInput=input;return {deadlines:{},offerDeadlines:{},offset:0,now:Date.now()};},...purchaseFlow,...icons,...components,...policy,...prompts,...playback,availableOffers,selectOffer,post,webinarBeacon:()=>{},webinarBrowserReady:()=>{},webinarBrowserEvent:()=>{},webinarSite};
 const h=await harness('components/webinar-room.tsx',roomDeps);
 const render=()=>h.render('WebinarRoom',{webinarCode:'129339'});let tree=render();assert.equal(listeners.has('beforeunload'),false,'Loading never installs a reminder');await flush();tree=render();
 assert.equal(listeners.has('beforeunload'),true,'Regular viewers receive the one-time exit reminder');
@@ -541,3 +542,17 @@ console.log('PASS expired Day/Night preview completion opens the isolated checko
  }finally{globalThis.setTimeout=originalTimeout;globalThis.clearTimeout=originalClear;}
 }
 console.log('PASS completion latency: failed/hanging progress cannot strand ordinary checkout; late saves, payment engagement, custom offers, owner and unmounted rooms remain isolated.');
+
+// Early entry results preserve the clock and use the existing manual retry flow.
+{
+ const receivedAt=Date.now()-5000,startedAt=Date.now();let earlyCalls=0;
+ const earlyRoom=await harness('components/webinar-room.tsx',roomDeps);
+ const initialStart=async()=>{earlyCalls++;return {receivedAt,data:{sessionId,webinar:policy.publicWebinar(w),progress:0,name:'Viewer',messages:[],preview:false,serverNow:receivedAt}};};
+ const before=requestLog.length,draw=()=>earlyRoom.render('WebinarRoom',{webinarCode:'129339',initialStart});
+ draw();await flush();const tree=draw();assert.ok(find(tree,'WebinarPlayer'));assert.equal(earlyCalls,1);assert.equal(requestLog.length,before,'The room consumes the early result without another start POST');assert.ok(timerInput.now>=startedAt-100,'A delayed room download does not move the server clock backwards');earlyRoom.close();
+ const failedRoom=await harness('components/webinar-room.tsx',roomDeps),failure=async()=>({error:Error('Early entry failed')});
+ const drawFailure=()=>failedRoom.render('WebinarRoom',{webinarCode:'129339',initialStart:failure});
+ drawFailure();await flush();const failedTree=drawFailure();assert.equal(requestLog.length,before);
+ const retry=all(failedTree).find(n=>n.type==='button'&&n.props.children==='Try again');assert.ok(retry);retry.props.onClick();await flush();assert.ok(find(drawFailure(),'WebinarPlayer'));assert.equal(requestLog.length,before+1,'Only the explicit retry starts a fresh request');failedRoom.close();
+}
+console.log('PASS early entry handoff: one request, preserved server clock, and an explicit fresh retry after failure.');

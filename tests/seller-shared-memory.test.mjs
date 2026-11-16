@@ -88,6 +88,7 @@ create table icash_call_recordings(account_id uuid,operation_key text,provider_s
 create table icash_seller_agreement_private.call_history(session_id uuid,account_id uuid,screening_id uuid,contact_key text,completed_at timestamptz,transcript jsonb,conversation_id text);
 create table icash_recorded_reception_private.sessions(id uuid,account_id uuid,provider_started_at timestamptz,conversation_id text,from_phone text,call_ended_at timestamptz);`);
 await pg.exec(readFileSync(new URL('../config/seller-shared-memory.sql',import.meta.url),'utf8'));
+await pg.exec(readFileSync(new URL('../config/seller-memory-screening-index.sql',import.meta.url),'utf8'));
 const query=(sql,args=[])=>pg.query(sql,args),rpc=async(name,args)=>(await query(`select public.${name}(${Object.keys(args).map((_,i)=>'$'+(i+1)).join(',')}) value`,Object.values(args))).rows[0].value;
 const account=randomUUID(),screen=randomUUID(),deal=randomUUID(),thread=randomUUID(),phone='+12125550123';
 const binding={accountId:account,screeningId:screen,dealId:deal,phone};
