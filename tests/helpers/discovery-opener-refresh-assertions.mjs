@@ -52,6 +52,13 @@ export async function verifyDiscoveryOpenerRefresh(f,{issuer=true}={}){
   assert.deepEqual(await one('select to_jsonb(s) value from icash_screening_jobs s where id=$1',[screening]),original,'no stale evidence applied');
   assert.equal((await one('select operational_contact_id id from icash_text_threads where id=$1',[thread])).id,oldContact);
  });
+ await scenario('unreviewed successor does not issue the original opener',async()=>{
+  const r=await f.ready(undefined,{review:false});
+  assert.equal((await one('select state from icash_discovery_refresh_private.renewals where id=$1',[r.id])).state,'ready');
+  assert.equal((await one('select operational_contact_id id from icash_text_threads where id=$1',[thread])).id,oldContact,'staged successor never rebinds the original thread');
+  assert.equal(await rpc('icash_recover_unstarted_seller_opener',{}),null,'ordinary issuer cannot consume unreviewed evidence');
+  assert.equal((await one('select count(*)::int n from icash_discovery_refresh_private.applies')).n,0);
+ });
  await scenario('ordinary acquisition cursor progress is not source drift',async()=>{const r=await f.ready();await q("update icash_discovery_configs set next_page=next_page+1,next_run_at=clock_timestamp()+interval '1 minute',inventory_refreshed_at=clock_timestamp() where account_id=$1",[account]);assert.equal(await f.applyReview(r.review),true);});
  await scenario('snapshot has no quality-choice mutation',async()=>{
   await q('update icash_research_private.list_quality_settings set enabled=true');

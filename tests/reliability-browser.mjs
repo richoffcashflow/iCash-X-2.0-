@@ -33,6 +33,7 @@ import {verifySellerIntake} from './seller-intake-browser.mjs';
 import {verifyWebinarMeasurement} from './webinar-measurement-browser.mjs';
 import {verifyWebinarRecovery} from './webinar-recovery-browser.mjs';
 import {verifyWebinarAutoplay} from './webinar-autoplay-browser.mjs';
+import {verifyWebinarEntry} from './webinar-entry-browser.mjs';
 import {verifyWebinarCheckoutWindow} from './webinar-checkout-window-browser.mjs';
 import {verifyDirectVipCheckout} from './direct-vip-checkout-browser.mjs';
 import {sellerFunnelStages} from '../lib/conversion-funnel.ts';
@@ -109,6 +110,7 @@ try{
    if(process.env.BROWSER_SCENARIOS==='webinar-checkout-window'){await verifyWebinarCheckoutWindow(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-recovery'){await verifyWebinarRecovery(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-autoplay'){await verifyWebinarAutoplay(browser,base,options,name);continue;}
+   if(process.env.BROWSER_SCENARIOS==='webinar-entry'){await verifyWebinarEntry(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='seller'){await verifySellerIntake(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='webinar-measurement'){await verifyWebinarMeasurement(browser,base,options,name);continue;}
    if(process.env.BROWSER_SCENARIOS==='cost-evidence'){await verifyCostEvidence(browser,base,options,name,fixtureCookies,fixture);continue;}
@@ -133,6 +135,7 @@ try{
    await verifyWebinarCheckoutWindow(browser,base,options,name);
    await verifyWebinarRecovery(browser,base,options,name);
    await verifyWebinarAutoplay(browser,base,options,name);
+   await verifyWebinarEntry(browser,base,options,name);
    const context=await browser.newContext({...options,ignoreHTTPSErrors:true});let failure=false,denied=false,experienceFailure=false,experienceDenied=false,external=0;const errors=[];
    await context.route('**/*',async route=>{
     const url=new URL(route.request().url());

@@ -1,0 +1,12 @@
+[
+  {
+    "signature": "icash_settle_estimate_before_contact_refresh(text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_settle_estimate_before_contact_refresh(p_operation text)\n RETURNS boolean\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare j public.icash_text_ai_jobs;\nbegin\n select jobs.* into j from public.icash_text_ai_jobs jobs join public.icash_operation_spend o on o.operation_key='sms-ai:'||jobs.id and o.account_id=jobs.account_id join public.icash_operation_rates r on r.id=o.rate_id and r.version in ('sms-ai-gpt41mini-tokens-20261007','sms-ai-gpt41mini-tokens-20261007:standing-delivery-20261014') where o.operation_key=p_operation;\n if found then return public.icash_settle_sms_ai_tokens(j.account_id,j.id);end if;\n return public.icash_settle_estimate_before_sms_tokens(p_operation);\nend $function$\n",
+    "hash": "ccbbaee66cfb1824ce0a619a13572c0f"
+  },
+  {
+    "signature": "icash_settle_estimated_operation(text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_settle_estimated_operation(p_operation text)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nbegin\n if exists(select 1 from public.icash_operation_spend o join public.icash_operation_rates r on r.id=o.rate_id\n  where o.operation_key=p_operation and r.operation='contact_revalidation') then\n  return icash_seller_recovery_private.settle_contact_refresh(p_operation);\n end if;\n return public.icash_settle_estimate_before_contact_refresh(p_operation);\nend $function$\n",
+    "hash": "e393970e3ac66fc393c9893e284997ba"
+  }
+]

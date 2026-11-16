@@ -44,6 +44,23 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-learning-completion-lock-postgres.mjs
+      - name: Verify receipt-check cursors preserve learning source generations
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-learning-estimate-postgres.mjs
+      - name: Verify missing receipt checks preserve budget access and exact settlement
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-missing-receipt-settlement-postgres.mjs
+      - name: Verify unsent journey work resumes without replaying original dispatches
+        env:
+          JOURNEY_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node tests/journey-message-preflight-native.mjs
+      - name: Verify title reply classification preserves concurrent manual holds
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-negated-review-postgres.mjs
       - name: Verify expired preflight cleanup and renewal under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
@@ -198,6 +215,10 @@ jobs:
         run: python3 scripts/test-independent-search-continuation-postgres.py
       - name: Verify financial prefilters and free-only widening under concurrent controls
         run: python3 scripts/test-financial-prequalification-postgres.py
+      - name: Verify empty financial markets under concurrent source and customer controls
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-financial-empty-market-postgres.mjs
       - name: Verify one unanswered follow-up under concurrent queues and late controls
         run: python3 scripts/test-unanswered-seller-followups-postgres.py
       - name: Verify one-use phone checks and immutable receipts under concurrent claims
@@ -310,10 +331,18 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-research-priority-postgres.mjs
+      - name: Verify exact collector candidate vectors and indexed deadline plans
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-collector-preflight-deadline-postgres.mjs
       - name: Verify continued original cohorts through the actual owner handler
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node --experimental-strip-types scripts/test-continued-owner-handler-postgres.mjs
+      - name: Verify compatible owner batching under native contention
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-owner-batch-pool-postgres.mjs
       - name: Verify delayed contact checks survive concurrent cleanup
         run: python3 scripts/test-preflight-waiting-postgres.py
       - name: Verify original list indexing, bounded polling and fair concurrent progress

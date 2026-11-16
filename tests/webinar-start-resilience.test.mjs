@@ -11,7 +11,7 @@ import {webinarLink} from '../lib/webinar-links.ts';
 const now=Date.now(),id=randomUUID(),visitor={id:randomUUID(),name:'Viewer'};
 const current={...policy.newWebinar(id),status:'published',publicCode:'123456',videoUrl:'https://example.invalid/recording.mp4'};
 const settings=policy.settingsSchema.parse({enabled:false,fromEmail:'',postalAddress:'',subjects:['a','b','c'],messages:['a','b','c']});
-let rows=[],events=[],calls=[],slowChat=false,authorizationFailure=false,ownerChecks=0;
+let rows=[],events=[],calls=[],slowChat=false,authorizationFailure=false,ownerChecks=0,reuseSession=false;
 class WebinarError extends Error{constructor(status,message){super(message);this.status=status;}}
 const queryRows=(input,query)=>{
  let rows=input.filter(row=>[...query].every(([key,value])=>{
@@ -30,7 +30,7 @@ const db=async(path,method='GET',body,signal)=>{
  if(path.startsWith('icash_webinar_settings?'))return [{config:settings}];
  if(path.startsWith('icash_webinar_sessions?'))return queryRows(rows,new URLSearchParams(path.split('?')[1]));
  if(path.startsWith('icash_webinar_events?'))return queryRows(events,new URLSearchParams(path.split('?')[1]));
- if(path==='rpc/icash_webinar_begin')return {id:body.p_id,config:body.p_config,completed_at:null,progress_seconds:0};
+ if(path==='rpc/icash_webinar_begin')return {id:reuseSession?'concurrent-session':body.p_id,config:body.p_config,completed_at:null,progress_seconds:0};
  if(path.startsWith('icash_webinar_messages?')){
   if(slowChat)await new Promise((_resolve,reject)=>signal?.addEventListener('abort',()=>reject(signal.reason),{once:true}));
   return [];
@@ -41,7 +41,7 @@ const {POST}=await loadService('app/api/webinar/start/route.ts',{
  ...policy,z,randomBytes,randomUUID,db,selectRecording,recordingRecheckAt,snapshotChat,webinarLink,withinWebinarResumeWindow,selectOffer,
  webinarSite:{workspacePath:'/',checkoutPath:'/webinar/checkout'},WebinarError,webinarHeaders:{'Cache-Control':'private, no-store'},
  webinarOrigin(){},webinarBody:r=>r.json(),webinarLimit:async()=>{},webinarOwner:async()=>{ownerChecks++;},
- webinarVisitor:async()=>visitor,webinarCustomerAccount:async()=>null,webinarViewerMembership:async()=>{if(authorizationFailure)throw Error('Membership check unavailable');return null;},
+ webinarEntryVisitor:async()=>({visitor,created:false}),webinarCustomerAccount:async()=>null,webinarViewerMembership:async()=>{if(authorizationFailure)throw Error('Membership check unavailable');return null;},
  vipActive:()=>false,webinarPaid:async()=>false,webinarCustomerPaid:async()=>false,
  webinarViewerLocation:()=>null,approximateRegion:()=>null,validGuest:()=>true,guestHash:()=> 'guest',
  cookies:async()=>({get:()=>({value:'guest'}),set(){}}),
@@ -73,7 +73,7 @@ assert.equal(eventQuery.get('kind'),'eq.checkout_opened');assert.equal(eventQuer
 rows[0].config.offers[0]={...rows[0].config.offers[0],action:'link',url:'https://example.invalid/custom-product'};
 data=await(await post()).json();assert.equal(data.redirect,undefined,'An expired custom product never becomes ordinary membership checkout');
 
-rows=[];calls=[];slowChat=true;
+rows=[];calls=[];slowChat=true;reuseSession=true;
 let guard;const started=Date.now();
 try{response=await Promise.race([post(),new Promise((_resolve,reject)=>{guard=setTimeout(()=>reject(Error('Optional chat blocked startup')),2400);})]);}
 finally{clearTimeout(guard);}

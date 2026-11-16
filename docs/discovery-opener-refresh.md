@@ -74,7 +74,11 @@ Official documentation checked November 16, 2026:
 Before registration for normal automatic release:
 
 1. Review the complete inactive implementation, source-pinned predecessor chain,
-   migration atomicity and all private function/table grants.
+   migration atomicity and all private function/table grants. The installer takes
+   shared advisory transaction lock `726341927` before schema creation/source
+   reads, rejects exact predecessor owner/ACL/security/execution-metadata drift,
+   and checks the resulting wrapper, private delegate and DNC constraint before
+   the runner commits its ledger.
 2. Exercise actual receipt, financial and contact SQL using synthetic fixtures.
    Cover malformed evidence, wrong account/property/phone, changed original
    source, missing costs, expired rights and every no-replay boundary.
@@ -124,7 +128,7 @@ source hash or call apply merely to see whether it works.
   post-quota expiry and atomic rollback. A real worker/property-qualification
   journey binds input echo, property ID, raw response and request-start time.
 - The source/application suite uses current source-pinned DNC and final SMS
-  guards. Its 20 scenarios cover immutable originals, exact review, concurrent
+  guards. Its 21 scenarios cover immutable originals, exact review, concurrent
   control changes' sequential equivalents and the ordinary unchanged issuer.
   New receipts are synthetic and separately settled in this suite, not live
   purchases or proof of production provider behavior.
@@ -132,11 +136,21 @@ source hash or call apply merely to see whether it works.
   separate connections, observed competing preparation locks, late Pause/STOP,
   competing application, irreversible STOP revocation and ordinary ticket
   issuance after commit. It creates no SMS spend operation or provider ID.
+  First receipt persistence also races identical and conflicting writers on
+  separate connections, observes their original-row locks and verifies that
+  only identical acknowledgement recovery succeeds without changing the saved
+  body, status, timestamp or request binding. This receipt test retains the
+  explicit synthetic settlement seam; it is not native paid-acquisition proof.
 - Worker/CLI checks cover request uncertainty, identical receipt-write recovery,
   raw-error persistence and exact clean-release/inactive-backend refusal.
 - Migration checks prove the exact source mirror and outer-runner rollback of
-  schema and ledger on source drift or a later failure. Installation is inactive
-  and creates no provider requests.
+  schema and ledger on source, owner or ACL drift or a later failure. Native
+  tests observe the bounded shared migration lock, actual ledger-failure
+  rollback and two competing complete installers with exactly one receipt.
+  Installation is inactive and creates no provider requests. The public DNC
+  wrapper reads back as `5732251fb38f612876284509741be86d`; its renamed private
+  predecessor is `ea3ee514e8cd2af5ba96a21c3bfa78f9`; the extended DNC shape is
+  `7a6af28f5d39273f412815b8ef1b4868`. No runtime renewal behavior changed.
 
 These tests do not prove provider delivery, live cost invoices, complete native
 financial-wrapper behavior or eligibility of an arbitrary historical draft.

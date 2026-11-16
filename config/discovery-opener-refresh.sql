@@ -3,6 +3,7 @@
 begin;
 set local lock_timeout='2s';
 set local statement_timeout='30s';
+select pg_advisory_xact_lock(726341927);
 create schema icash_discovery_refresh_private;
 revoke all on schema icash_discovery_refresh_private from public,anon,authenticated,service_role;
 create table icash_discovery_refresh_private.policy(

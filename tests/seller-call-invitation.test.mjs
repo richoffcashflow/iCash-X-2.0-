@@ -59,7 +59,8 @@ for(const eligibility of [true,false,'true','error']){
  let saved,read=0,dispatch=0;
  const result=await processSellerTextOffer(ready,{
   db:async(path,method,body)=>{
-   if(path==='rpc/icash_seller_prior_call_context')return [];
+   if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_prior_call_context')return [];
    if(path==='rpc/icash_outreach_voice_current'){assert.deepEqual(body,{p_account:base.accountId});read++;if(eligibility==='error')throw Error('read unavailable');return eligibility;}
    if(path==='rpc/icash_seller_conversation_context')return {sellerConversation:true};
    if(path.startsWith('icash_contact_permissions?')){assert(path.includes('screening_id=eq.fixture-screen'));assert(path.includes('phone=eq.%2B12125550123'));return [{id:'permission'}];}
@@ -79,7 +80,8 @@ for(const failure of ['context','permissions','permission','malformed','read_err
  let saved;
  await processSellerTextOffer(ready,{
   db:async(path,method,body)=>{
-   if(path==='rpc/icash_seller_prior_call_context')return [];
+   if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_prior_call_context')return [];
    if(path==='rpc/icash_outreach_voice_current')return true;
    if(path==='rpc/icash_seller_conversation_context')return failure==='context'?null:{sellerConversation:true};
    if(path.startsWith('icash_contact_permissions?'))return failure==='permissions'?[]:[{id:'bound'}];

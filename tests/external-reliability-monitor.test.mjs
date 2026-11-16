@@ -76,4 +76,35 @@ const healthy={checked_at:at(),result:{observedAt:at(),releaseSha:'a'.repeat(40)
 assert.equal(await externalMonitorFresh(async()=>[],clock),true,'Before companion installation, no missing-service alarm');
 assert.equal(await externalMonitorFresh(async()=>[healthy],clock),true,'Observed degradation is distinct from observer freshness');
 for(const rows of [null,[{...healthy,checked_at:new Date(clock-180000).toISOString()}],[{...healthy,result:{...healthy.result,releaseSha:'bad'}}],[{...healthy,checked_at:new Date(clock+6000).toISOString(),result:{...healthy.result,observedAt:new Date(clock+6000).toISOString()}}]])assert.equal(await externalMonitorFresh(async()=>rows,clock),false);
+
+// Even simultaneous core dependency failures cannot prove every customer feature
+// stopped. All fallback evidence stays hour-bound for cross-replica idempotency.
+const fallbackPayloads=[];
+for(const kind of ['web','database','both','core_services','stale','malformed']){
+ let time=Date.parse('2026-11-16T22:05:00Z');const messages=[];
+ const fixtureTransport=async(url,options)=>{
+  const path=new URL(url).pathname;
+  if(path==='/api/health'){
+   if(['web','both'].includes(kind))throw Error('PRIVATE_PROBE_ERROR');
+   if(kind==='malformed')return new Response('invalid',{status:503});
+   return Response.json({status:kind==='core_services'?'degraded':'ok',checkedAt:new Date(time-(kind==='stale'?180000:0)).toISOString(),
+    checks:{database:kind==='core_services'?'unavailable':'ok',authentication:kind==='core_services'?'unavailable':'ok',workflows:kind==='core_services'?'unavailable':'ok'}},{status:kind==='core_services'?503:200});
+  }
+  if(path.startsWith('/auth/v1/admin/users/'))return Response.json({id:ownerInboundTarget.ownerUserId,email:'private-owner@example.invalid',email_confirmed_at:'2026-11-16T20:00:00Z'});
+  if(path==='/rest/v1/icash_integration_checks')return new Response(null,{status:201});
+  if(path==='/emails'){messages.push({key:options.headers['Idempotency-Key'],payload:JSON.parse(options.body)});return Response.json({id:id(8)});}
+  assert.fail('Unexpected fallback fixture request');
+ };
+ const instance=createExternalMonitor({env,transport:fixtureTransport,now:()=>time,dispatch:async()=>{if(['database','both'].includes(kind))throw Error('PRIVATE_INCIDENT_ERROR');return 'idle';}});
+ for(let i=0;i<3;i++){await instance.tick();time+=60000;}
+ assert.equal(messages.length,1,kind);
+ assert.equal(messages[0].payload.subject,'iCash X · Availability checks failing — impact unverified');
+ assert.match(messages[0].payload.text,/Scope: unknown. A whole-platform outage is not confirmed/);
+ assert.match(messages[0].payload.text,/What works: unverified/);
+ assert.match(messages[0].payload.text,/hour beginning Nov 16, 2026, 4:00 PM Central/);
+ assert.match(messages[0].payload.text,/not the confirmed outage start time/);
+ assert(!JSON.stringify(messages[0].payload).includes('PRIVATE_'));
+ fallbackPayloads.push(messages[0]);
+}
+for(const payload of fallbackPayloads)assert.deepEqual(payload,fallbackPayloads[0],'Different probes/replicas in the same hour retain an identical key and complete payload');
 console.log('PASS independent observer, production boundaries, real incident dispatch, bounded fallback, owner verification, redaction, no customer operations and reciprocal freshness.');

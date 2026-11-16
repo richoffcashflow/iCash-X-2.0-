@@ -8,6 +8,7 @@ const assembled='-- Source-bound inactive discovery opener renewal.\n-- The migr
 const migration=read('supabase/migrations/20261116183352_discovery_opener_refresh.sql');
 assert.equal(migration,assembled,'migration mirrors both reviewed components exactly');
 assert(!/^begin;|^commit;/m.test(migration),'runner owns the atomic schema/history transaction');
+assert(migration.indexOf('select pg_advisory_xact_lock(726341927);')<migration.indexOf('create schema'),'shared migration lock precedes schema and source reads');
 assert.match(migration,/enabled boolean not null default false/);
 assert.match(migration,/check\(not enabled or coalesce\(release_sha/,'missing release evidence fails closed');
 assert.match(migration,/unique\(renewal_id,kind\)/,'each paid stage is one-use');
@@ -20,6 +21,18 @@ try{
  const predecessor=JSON.parse(read('tests/fixtures/discovery-opener-refresh-live-predecessors.json')).find(x=>x.name==='icash_lock_operational_dnc(uuid,uuid)').definition;
  await f.pg.exec('create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key);');
  const absent=async()=>assert.equal((await f.one("select to_regnamespace('icash_discovery_refresh_private') missing")).missing,null);
+ const metadata=()=>f.one("select md5(pg_get_functiondef(oid)) hash,pg_get_userbyid(proowner) owner,proacl::text acl from pg_proc where oid='public.icash_lock_operational_dnc(uuid,uuid)'::regprocedure");
+ const originalMetadata=await metadata();
+ for(const drift of [
+  'grant execute on function public.icash_lock_operational_dnc(uuid,uuid) to authenticated',
+  'alter function public.icash_lock_operational_dnc(uuid,uuid) owner to authenticated',
+ ]){
+  await f.pg.exec('begin;'+drift);
+  assert.equal((await metadata()).hash,originalMetadata.hash,'metadata drift leaves source hash unchanged');
+  await assert.rejects(f.pg.exec(migration),/predecessor metadata changed/);
+  await f.pg.exec('rollback');await absent();assert.deepEqual(await metadata(),originalMetadata);
+ }
+
  // A changed predecessor must reject after the first component without leaving
  // any partial schema behind. The runner, not the migration, owns rollback.
  await f.pg.exec("create or replace function public.icash_lock_operational_dnc(p_account uuid,p_contact uuid) returns boolean language plpgsql security definer set search_path='' as $$begin return false;end$$;");

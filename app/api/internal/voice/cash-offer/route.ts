@@ -37,7 +37,8 @@ export async function POST(request:Request){
   const intake=await instantCallAddress(token,input,{db,sms:dispatchTextMessage,voice:dispatchLiveVoice,bind:bindSellerAgreementCall,history:()=>transcript(input),env:process.env});
   if(intake)return NextResponse.json(intake,{headers});
   const d={db,bind:bindSellerAgreementCall,verifyQualification:async(i:Record<string,unknown>,context:Parameters<typeof boundSellerQualification>[1])=>{
-   const current=await transcript(i),qualification=await boundSellerQualification(db,context,current);
+   const current=await transcript(i),qualification=await boundSellerQualification(db,{...context,conversationId:String(i.conversationId)},current,
+    ()=>evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId)));
    if(qualification.ready){
     const observation={p_hash:sha(token),p_conversation:i.conversationId,p_evidence_hash:sha(JSON.stringify(current))};
     // Reporting is not offer authority. Keep it after the caller's response;

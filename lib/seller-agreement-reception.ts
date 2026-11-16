@@ -80,11 +80,14 @@ export function sellerAgreementReceptionVariables(value:unknown,now=Date.now()){
  if(safe?.status==='matched'||safe?.status==='buyer'){safe.companyName=companyName;base.icash_property_context=JSON.stringify(safe);}
  if(safe?.status!=='matched')return base;
  const progress=sellerConversationProgress(safe.address,object(value).smsContext,object(value).priorCalls);
+ const memory=object(object(value).sellerMemory);
+ if(typeof memory.complete==='boolean'&&object(memory.facts))safe.sellerMemory=memory;
  safe.returningName=progress.returningName??safe.returningName;
  safe.ownershipAlreadyConfirmed=progress.ownershipAlreadyConfirmed;
+ if(typeof memory.complete==='boolean')safe.ownershipAlreadyConfirmed=memory.complete&&object(object(memory.facts).ownership).value===true;
  safe.today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);safe.timeZone='America/Chicago';
  Object.assign(safe,compactSellerProgress(progress,3500));
- if(progress.ownershipAlreadyConfirmed)base.icash_property_greeting=`${safe.returningName?'Hi '+safe.returningName+'. ':''}Let's continue with the cash offer for ${spokenStreet(safe.address)}.`;
+ if(safe.ownershipAlreadyConfirmed)base.icash_property_greeting=`${safe.returningName?'Hi '+safe.returningName+'. ':''}Let's continue with the cash offer for ${spokenStreet(safe.address)}.`;
  const t=object(object(value).purchaseTerms),pending=object(object(value).pendingAgreement);
  const money=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null;
  const purchaseTerms={inspectionDays:Number.isInteger(t.inspectionDays)&&Number(t.inspectionDays)>=0&&Number(t.inspectionDays)<=90?t.inspectionDays:10,closingDate:typeof t.closingDate==='string'?t.closingDate:'',escrowAgent:typeof t.escrowAgent==='string'?t.escrowAgent.slice(0,200):'',legalDescriptionAvailable:t.legalDescriptionAvailable===true};

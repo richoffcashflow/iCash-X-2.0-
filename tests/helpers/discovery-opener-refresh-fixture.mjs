@@ -103,7 +103,15 @@ export async function createDiscoveryOpenerRefreshFixture(modulePath,{skipRenewa
  await pg.exec(finalGuards.find(row=>row.name.startsWith('icash_sms_thread_review_current')).definition);
  await q('update icash_discovery_configs set enabled=true,auto_enabled=true where account_id=$1',[account]);
  const predecessors=JSON.parse(read('tests/fixtures/discovery-opener-refresh-live-predecessors.json'));
- for(const row of predecessors)if(row.kind==='function')await pg.exec(row.definition);
+ for(const row of predecessors)if(row.kind==='function'){
+  await pg.exec(row.definition);
+  // Definitions alone omit grants. Model the separately observed metadata so
+  // installer tests can reject drift instead of silently normalizing it.
+  await pg.exec('revoke all on function '+row.name+' from public,anon,authenticated,service_role');
+  if(row.metadata.acl.includes('service_role=X/postgres'))await pg.exec('grant execute on function '+row.name+' to service_role');
+  const actual=await one('select pg_get_userbyid(proowner) owner,proacl::text acl,prosecdef,provolatile,proparallel,proconfig from pg_proc where oid=$1::regprocedure',[row.name]);
+  assert.deepEqual(actual,row.metadata,'Exact observed predecessor metadata: '+row.name);
+ }
 
  // Untouched final issuer and actual sender/hour gates. No transport is loaded.
  const filter=read('config/outbound-filter-experiments.sql');
@@ -125,19 +133,24 @@ export async function createDiscoveryOpenerRefreshFixture(modulePath,{skipRenewa
  const enable=()=>q("update icash_discovery_refresh_private.policy set enabled=true,release_sha=repeat('a',40),review_reference='SIMULATION reviewed source release' where id=1");
  const hash=async(sql,args)=>(await one("select encode(sha256(convert_to(("+sql+")::text,'UTF8')),'hex') hash",args)).hash;
  const prepareRenewal=async()=>rpc('icash_prepare_discovery_opener_refresh',{p_message:message,p_expected_hash:await hash('icash_discovery_refresh_private.snapshot($1)',[message]),p_reference:'SIMULATION exact original discovery source'});
- const settledRequest=async(renewal,kind,raw)=>{
+ const settledRequest=async(renewal,kind,raw,{record=null}={})=>{
   const id=randomUUID(),operation='discovery-refresh:'+id;
   const rate=(await one("insert into icash_operation_rates(operation,version,charge_cents,costs_micros,evidence_ref,verified_at,expires_at,enabled) select $2,$3,charge_cents,costs_micros,'SIMULATION settled new evidence',verified_at,expires_at,enabled from icash_operation_rates where id=$1 returning id",[f.owners,kind==='dnc'?'contact_revalidation':'property_search',randomUUID()])).id;
   const cr=(await one("insert into icash_credit_reservations(account_id,operation_key,amount_cents,status,settled_cents) values($1,$2,1,'settled',1) returning id",[account,operation])).id;
   await q("insert into icash_operation_spend(operation_key,account_id,rate_id,credit_reservation_id,charge_cap_cents,reserved_micros,state,permission_until,charged_cents,actual_micros,settled_at) values($1,$2,$3,$4,1,1000,'settled',clock_timestamp()+interval '1 day',1,1000,clock_timestamp())",[operation,account,rate,cr]);
   const request=kind==='dnc'?{phones:[{number:phone}]}:{data:[{full_address:'123 Main Street, TX 75201'}],include_contacts:false};
-  return one("insert into icash_discovery_refresh_private.requests(id,renewal_id,kind,operation_key,rate_id,unit_cost_micros,quota_request_id,requested_at,request,http_status,response,response_at,settled) values($1,$2,$3,$4,$5,1000,gen_random_uuid(),date_trunc('milliseconds',clock_timestamp()),$6,200,$7,clock_timestamp(),true) returning *",[id,renewal,kind,operation,rate,request,raw]);
+  const saved=await one("insert into icash_discovery_refresh_private.requests(id,renewal_id,kind,operation_key,rate_id,unit_cost_micros,quota_request_id,requested_at,request,http_status,response,response_at,settled) values($1,$2,$3,$4,$5,1000,gen_random_uuid(),date_trunc('milliseconds',clock_timestamp()),$6,case when $8::boolean then null else 200 end,case when $8 then null else $7::jsonb end,case when $8 then null else clock_timestamp() end,not $8) returning *",[id,renewal,kind,operation,rate,request,raw,Boolean(record)]);
+  if(!record)return saved;
+  // Native receipt races use the actual recorder before this fixture supplies
+  // its explicitly synthetic settlement. This does not exercise paid admission.
+  await record(saved,raw);
+  return one('update icash_discovery_refresh_private.requests set settled=true where id=$1 returning *',[id]);
  };
- const ready=async(existingId)=>{
+ const ready=async(existingId,{recordProperty=null,review=true}={})=>{
   const id=existingId??await prepareRenewal();assert(id,'source-bound renewal prepared');
   const input={full_address:'123 Main Street, TX 75201'};
   const property={data:[{input,matched:true,dm_property_id:'prop_1001',full_address:input.full_address,city:'Dallas',state:'TX',zip:'75201',property_type:'Single Family',estimated_value:300000,estimated_repair_cost:30000,estimated_equity_amount:300000,total_estimated_loan_balance:0,living_area_sqft:1500}],credits:{used:1,properties:1,people:0,deduplicated:0},totals:{submitted:1,matched:1,unmatched:0}};
-  const p=await settledRequest(id,'property',property);
+  const p=await settledRequest(id,'property',property,{record:recordProperty});
   // Real worker consumes the immutable saved receipt and real financial model.
   // Missing key intentionally stops before any new claim/provider request.
   const resultBeforeDnc=await processDiscoveryOpenerRefresh(databaseAdapter(pg).db,undefined,id,async()=>{throw Error('Provider forbidden in fixture');});
@@ -147,8 +160,9 @@ export async function createDiscoveryOpenerRefreshFixture(modulePath,{skipRenewa
   const d=await settledRequest(id,'dnc',dnc);
   const result=(await one('select icash_discovery_refresh_private.process($1) result',[id])).result;
   assert.equal(result.status,'ready_for_review');
-  const review=await rpc('icash_review_discovery_opener_refresh',{p_id:id,p_hash:await hash('icash_discovery_refresh_private.review_snapshot($1)',[id]),p_note:'SIMULATION exact original plus fresh receipts'});
-  assert(review,'fresh source-bound review');return {id,review,property:p,dnc:d};
+  if(!review)return {id,review:null,property:p,dnc:d};
+  const reviewId=await rpc('icash_review_discovery_opener_refresh',{p_id:id,p_hash:await hash('icash_discovery_refresh_private.review_snapshot($1)',[id]),p_note:'SIMULATION exact original plus fresh receipts'});
+  assert(reviewId,'fresh source-bound review');return {id,review:reviewId,property:p,dnc:d};
  };
  const applyReview=review=>rpc('icash_apply_discovery_opener_refresh',{p_review:review});
  return {...f,message,oldContact:old,oldReceipt,nationalSource:src,enable,prepareRenewal,settledRequest,ready,applyReview};

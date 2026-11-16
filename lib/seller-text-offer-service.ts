@@ -1,5 +1,6 @@
 import {planSellerTextOffer,type TextOfferContext} from './seller-text-offer.ts';
 import {signingReadiness} from './signing-policy.ts';
+import {readSellerMemory} from './seller-memory.ts';
 import {object} from './required-call-recording.ts';
 type Database=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Dependencies={db:Database;dispatch:(account:string,id:string)=>Promise<{status:string}>;send:(input:{accountId:string;dealId:string;userId:string;customerEmail:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms:unknown})=>Promise<{id:string;testMode:boolean}>;text:(account:string,id:string,phone:string)=>Promise<{sent:boolean;status:string}>;now?:()=>number};
@@ -7,8 +8,11 @@ type Dependencies={db:Database;dispatch:(account:string,id:string)=>Promise<{sta
  * compare the complete source context again under the existing budget/deal locks. */
 export async function processSellerTextOffer(context:TextOfferContext,d:Dependencies){
  const now=(d.now??Date.now)();
- const calls=await d.db<unknown[]>('rpc/icash_seller_prior_call_context','POST',{p_account:context.accountId,p_screening:context.screeningId,p_phone:context.phone});
- const bound={...context,history:Array.isArray(calls)?calls.map(c=>object(c).result):[],callInvitationAllowed:false};
+ const memory=await readSellerMemory(d.db,context);
+ if(memory&&!memory.complete)return {status:'seller_memory_reconciliation_required'};
+ if(context.memoryFingerprint&&context.memoryFingerprint!==memory?.fingerprint)return {status:'text_ai_context_changed'};
+ const calls=memory?[]:await d.db<unknown[]>('rpc/icash_seller_prior_call_context','POST',{p_account:context.accountId,p_screening:context.screeningId,p_phone:context.phone});
+ const bound={...context,historyComplete:!!memory,history:memory?.history??(Array.isArray(calls)?[...calls].sort((a,b)=>(Date.parse(String(object(a).completed_at))||0)-(Date.parse(String(object(b).completed_at))||0)).map(c=>({...object(object(c).result),at:object(c).completed_at,channel:'voice'})):[]),callInvitationAllowed:false};
  let plan=planSellerTextOffer(bound,now);
  // Offer a call only where the existing source-bound SMS callback workflow
  // is available. These are read-only checks, never permission to dial: final

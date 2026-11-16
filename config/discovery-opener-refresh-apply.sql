@@ -3,6 +3,7 @@
 begin;
 set local lock_timeout='2s';
 set local statement_timeout='8s';
+select pg_advisory_xact_lock(726341927);
 
 create function icash_discovery_refresh_private.snapshot(p_message uuid) returns jsonb
 language plpgsql security definer set search_path='' as $$
@@ -166,13 +167,21 @@ begin
 end $$;
 
 -- Pin the entire installed predecessor chain; leave all old scopes unchanged.
-do $pin$declare x record;d text;begin
+do $pin$declare x record;d text;p record;begin
  for x in select * from (values
- ('public.icash_lock_operational_dnc(uuid,uuid)','994a2fd9bd7dd31c51bcfe4254d58071'),
- ('icash_seller_recovery_private.original_contact_binding(uuid,uuid)','26fff16d3cc4c274e68d60e48b4af0e6'),
- ('public.icash_operational_contact_current(uuid,uuid,text,boolean)','7d47504dc185227f4d508dafcdffc0f1'),
- ('public.icash_dealmachine_observation_immutable()','6e4a740fa7d0b585b973a58919ac37f3')) v(signature,checksum)
- loop if md5(pg_get_functiondef(x.signature::regprocedure))<>x.checksum then raise exception 'Discovery renewal predecessor changed: %',x.signature;end if;end loop;
+ ('public.icash_lock_operational_dnc(uuid,uuid)','994a2fd9bd7dd31c51bcfe4254d58071',true,'{postgres=X/postgres,service_role=X/postgres}'),
+ ('icash_seller_recovery_private.original_contact_binding(uuid,uuid)','26fff16d3cc4c274e68d60e48b4af0e6',true,'{postgres=X/postgres}'),
+ ('public.icash_operational_contact_current(uuid,uuid,text,boolean)','7d47504dc185227f4d508dafcdffc0f1',false,'{postgres=X/postgres,service_role=X/postgres}'),
+ ('public.icash_dealmachine_observation_immutable()','6e4a740fa7d0b585b973a58919ac37f3',false,'{postgres=X/postgres,service_role=X/postgres}')) v(signature,checksum,definer,acl)
+ loop
+  select md5(pg_get_functiondef(oid)) checksum,pg_get_userbyid(proowner) owner,proacl::text acl,prosecdef,provolatile,proparallel,proconfig into p
+   from pg_proc where oid=to_regprocedure(x.signature);
+  if p.checksum is distinct from x.checksum then raise exception 'Discovery renewal predecessor changed: %',x.signature;end if;
+  if p.owner is distinct from 'postgres' or p.acl is distinct from x.acl or p.prosecdef is distinct from x.definer
+   or p.provolatile is distinct from 'v' or p.proparallel is distinct from 'u' or p.proconfig is distinct from array['search_path=""'] then
+   raise exception 'Discovery renewal predecessor metadata changed: %',x.signature;
+  end if;
+ end loop;
  select pg_get_constraintdef(oid) into d from pg_constraint where conrelid='public.icash_dnc_verification_receipts'::regclass and conname='icash_dnc_phone_observation_shape';
  if md5(d) is distinct from '36121bde6cfd0ded016c6f8f9c16fd95' then raise exception 'Discovery renewal DNC shape changed';end if;
  -- Only add a private source-table alternative. Existing observation semantics,
@@ -301,4 +310,25 @@ grant select on icash_discovery_refresh_private.reviews,icash_discovery_refresh_
 revoke all on all functions in schema icash_discovery_refresh_private from public,anon,authenticated,service_role;
 revoke all on function public.icash_lock_operational_dnc_before_discovery_refresh(uuid,uuid),public.icash_lock_operational_dnc(uuid,uuid),public.icash_review_discovery_opener_refresh(uuid,text,text),public.icash_apply_discovery_opener_refresh(uuid) from public,anon,authenticated,service_role;
 grant execute on function public.icash_lock_operational_dnc(uuid,uuid),public.icash_review_discovery_opener_refresh(uuid,text,text),public.icash_apply_discovery_opener_refresh(uuid) to service_role;
+-- Verify the exact changed wrapper and private predecessor before the runner
+-- may commit its receipt. Existing unrelated guards retain their full metadata.
+do $result$
+declare x record;p record;shape text;
+begin
+ for x in select * from (values
+  ('public.icash_lock_operational_dnc(uuid,uuid)','5732251fb38f612876284509741be86d',true,'{postgres=X/postgres,service_role=X/postgres}'),
+  ('public.icash_lock_operational_dnc_before_discovery_refresh(uuid,uuid)','ea3ee514e8cd2af5ba96a21c3bfa78f9',true,'{postgres=X/postgres}'),
+  ('icash_seller_recovery_private.original_contact_binding(uuid,uuid)','26fff16d3cc4c274e68d60e48b4af0e6',true,'{postgres=X/postgres}'),
+  ('public.icash_operational_contact_current(uuid,uuid,text,boolean)','7d47504dc185227f4d508dafcdffc0f1',false,'{postgres=X/postgres,service_role=X/postgres}'),
+  ('public.icash_dealmachine_observation_immutable()','6e4a740fa7d0b585b973a58919ac37f3',false,'{postgres=X/postgres,service_role=X/postgres}')
+ ) expected(signature,checksum,definer,acl) loop
+  select md5(pg_get_functiondef(oid)) checksum,pg_get_userbyid(proowner) owner,proacl::text acl,prosecdef,provolatile,proparallel,proconfig into p
+   from pg_proc where oid=to_regprocedure(x.signature);
+  if p.checksum is distinct from x.checksum or p.owner is distinct from 'postgres' or p.acl is distinct from x.acl
+   or p.prosecdef is distinct from x.definer or p.provolatile is distinct from 'v' or p.proparallel is distinct from 'u'
+   or p.proconfig is distinct from array['search_path=""'] then raise exception 'Discovery renewal result or metadata changed: %',x.signature;end if;
+ end loop;
+ select md5(pg_get_constraintdef(oid)) into shape from pg_constraint where conrelid='public.icash_dnc_verification_receipts'::regclass and conname='icash_dnc_phone_observation_shape';
+ if shape is distinct from '7a6af28f5d39273f412815b8ef1b4868' then raise exception 'Discovery renewal result DNC shape changed';end if;
+end $result$;
 commit;
