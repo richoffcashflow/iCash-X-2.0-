@@ -36,6 +36,10 @@ jobs:
         run: python3 scripts/test-learning-refresh-postgres.py
       - name: Install isolated learning contention driver
         run: npm install --prefix "$RUNNER_TEMP/icash-learning-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Verify paid suppression stays scoped and atomic under contention
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-legacy-paid-suppression-postgres.mjs
       - name: Verify learning timeouts preserve independent account progress
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
