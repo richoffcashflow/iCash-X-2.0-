@@ -96,6 +96,13 @@ export async function discoverForAccount(accountId:string){
    if(widened)return {status:'financial_preferences_widened'};
    return {status:'inventory_held'};
   }
+  if(queryPolicy?.version==='financial-prefilter-v1'&&queryPolicy.tier===2&&filterPlan?.strategy==='baseline'&&filterPlan.providerPage===1){
+   // A current broad zero-total receipt can cover its narrower audiences.
+   // Missing proof/schema keeps the original per-arm path available; only SQL
+   // can validate scope, exclusion generation and every unresolved purchase.
+   const finished=await db<boolean>('rpc/icash_finish_empty_financial_market','POST',{p_account:accountId,p_scope:scope,p_plan:filterPlan,p_policy:queryPolicy}).catch(()=>false);
+   if(finished)return result;
+  }
   await finishEmpty('empty');
  }
  return result;
