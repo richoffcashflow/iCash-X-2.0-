@@ -63,8 +63,8 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const sellerCapability=supportSellerCapabilityReply(context);if(sellerCapability)return sellerCapability;
  const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
  const emailRepurchase=supportEmailRepurchaseReply(question,context.messages.findLast(m=>m.role==='operator')?.content);if(emailRepurchase)return emailRepurchase;
- const paidPortal=supportPaidPortalReply(context);if(paidPortal)return paidPortal;
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
+ const paidPortal=supportPaidPortalReply(context);if(paidPortal)return paidPortal;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
  const contactPrivacy=supportContactPrivacyReply(context);if(contactPrivacy)return contactPrivacy;
  const accountDetails=supportAccountDetailsReply(context);if(accountDetails)return accountDetails;

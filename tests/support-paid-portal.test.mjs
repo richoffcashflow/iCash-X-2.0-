@@ -14,3 +14,8 @@ for(const kind of ['access','account']){
  const r=await replyToSupport({kind,allowAI:false,messages:[u(opening),{role:'operator',content:'The purchase review has new findings; use the existing verified recovery workflow.'},u('How do I get started?')]});assert.doesNotMatch(r.reply,/purchase and access remain unconfirmed/i);
 }
 console.log('PASS fictional paid-portal priority, continuation, negative/operator/topic boundaries');
+
+const observedAt='2026-09-12T12:00:00Z';
+const evidence=[{key:'subscription',source:'icash_memberships',status:'attention',softwareAccess:false,observedAt,detail:'Access inactive.'},{key:'membership_payments',source:'icash_membership_invoices',status:'ok',code:'software_payments_recorded',observedAt,detail:'Recorded software payments: $75.00 recorded 9/12/2026, 11:00:00 AM UTC (subscription active).'}];
+const verified=await replyToSupport({kind:'account',allowAI:false,evidence,messages:[u('I just paid but cannot access the portal.')]});
+assert.match(verified.reply,/software payment is recorded/i);assert.doesNotMatch(verified.reply,/purchase and access remain unconfirmed/i);
