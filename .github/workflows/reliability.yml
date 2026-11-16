@@ -52,6 +52,15 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-missing-receipt-settlement-postgres.mjs
+      - name: Verify unsent journey work resumes without replaying original dispatches
+        env:
+          JOURNEY_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node tests/journey-message-preflight-native.mjs
+      - name: Verify title reply classification preserves concurrent manual holds
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-negated-review-postgres.mjs
       - name: Verify expired preflight cleanup and renewal under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
