@@ -57,6 +57,11 @@ jobs:
           JOURNEY_NATIVE_TEST: '1'
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node tests/journey-message-preflight-native.mjs
+      - name: Verify completed buyer calls retain one source-bound package delivery
+        env:
+          BUYER_CALL_PACKAGE_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node tests/buyer-call-package-native.mjs
       - name: Verify title reply classification preserves concurrent manual holds
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg

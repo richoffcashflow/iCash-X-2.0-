@@ -1,4 +1,5 @@
-import {retryVolumeDeferredText} from '@/lib/text-message-service';
+import {retryVolumeDeferredText,dispatchTextMessage} from '@/lib/text-message-service';
+import {processBuyerCallPackages} from '@/lib/buyer-call-package-service';
 import {recoverTextDeliveryReceipts} from '@/lib/text-delivery-recovery';
 import {processSupportCustomerNotifications} from '@/lib/support-customer-notifications';
 import {refreshVoiceCapacity,readVoiceCapacityProvider} from '@/lib/voice-capacity';
@@ -67,6 +68,7 @@ export async function GET(request:Request){
   ownerPreflightCleanup:async()=>{const result=await ownerPreflightCleanup;return Response.json(result,{status:result.status==='cleanup_unavailable'?503:200});},
   ownerTicketContinuation:async()=>{const result=await ownerTicketContinuation;return Response.json(result,{status:result.status==='continuation_unavailable'?503:200});},
   senderVolume:async()=>{const result=await retryVolumeDeferredText();return Response.json(result,{status:['messaging_configuration_required','business_number_verification_required','inbound_invitation_not_ready'].includes(result.status)?503:200});},
+  buyerCallPackages:async()=>{const result=await processBuyerCallPackages({db,dispatch:dispatchTextMessage});return Response.json(result,{status:result.errors===0?200:503});},
   textReceipts:async()=>{const result=await recoverTextDeliveryReceipts(db);return Response.json(result,{status:result.errors===0&&['idle','checked'].includes(result.status)?200:503});},
   supportCustomerEmail:async()=>{const result=await processSupportCustomerNotifications({db});return Response.json(result,{status:result.failed===0?200:503});},
   supportCopies:async()=>{const closed=await db('rpc/icash_close_inactive_support','POST',{}).catch(()=>null);const recovered=await recoverAccessHelpReplies(db).catch(()=>null);const result=await processSupportOwnerNotifications({db,monitorAccess:true});return Response.json({...result,recovered,closed},{status:result.failed===0&&recovered!==null&&closed!==null?200:503});},
