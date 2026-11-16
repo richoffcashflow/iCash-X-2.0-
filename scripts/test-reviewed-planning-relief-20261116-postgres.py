@@ -17,10 +17,11 @@ import select
 import subprocess
 from threading import Barrier
 import time
+from disposable_planning_postgres_target import PSQL_COMMAND, fixture_environment, assert_fixture_client, assert_fixture_identity
 
 ROOT = Path(__file__).resolve().parents[1]
-ENV = {**os.environ, 'PGPASSWORD': 'isolated-fixture-only', 'PGCONNECT_TIMEOUT': '5'}
-CMD = ['psql', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', '55443', '-U', 'postgres', '-d', 'icash_reliability']
+ENV = fixture_environment(os.environ)
+CMD = list(PSQL_COMMAND)
 ACCOUNT = '10000000-0000-4000-8000-000000000001'
 RATE = '10000000-0000-4000-8000-000000000011'
 RELEASE = 'b' * 40
@@ -32,6 +33,7 @@ HELPER = ROOT / 'tests/helpers/reviewed-planning-relief-20261116-fixture.mjs'
 
 
 def sql(query):
+    assert_fixture_client(CMD, ENV)
     result = subprocess.run(CMD, input="set statement_timeout='8s';set timezone='UTC';\n" + query,
                             env=ENV, text=True, capture_output=True, timeout=15)
     if result.returncode:
@@ -88,6 +90,7 @@ def marker(process):
 @contextmanager
 def locked(query, commit=False):
     """Hold deterministic row/table state; never infer a race from a sleep."""
+    assert_fixture_client(CMD, ENV)
     process = subprocess.Popen(CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV)
     try:
         process.stdin.write(("set statement_timeout='8s';set timezone='UTC';begin;" + query + ";select 'RELIEF_LOCK_READY';\n").encode())
@@ -175,8 +178,7 @@ def real_source_seed(kind):
 
 
 def setup(peer=False, real_kind=None):
-    assert sql('select current_database();') == 'icash_reliability'
-    assert sql("select host(inet_server_addr());") == '127.0.0.1'
+    assert_fixture_identity(json.loads(sql("select jsonb_build_object('database',current_database(),'user',current_user,'application',current_setting('application_name'),'port',inet_server_port());")))
     sql('drop schema if exists icash_reliability_private cascade;drop schema if exists icash_work_private cascade;drop schema if exists icash_research_private cascade;drop schema if exists icash_text_receipt_private cascade;drop schema public cascade;create schema public;')
     sql(BASE)
     if peer:
@@ -317,6 +319,7 @@ for mutation, reason in [
 
 
 def stale_insert_after(snapshot_query, action, insertion):
+    assert_fixture_client(CMD, ENV)
     process = subprocess.Popen(CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV)
     try:
         process.stdin.write(("begin isolation level repeatable read;" + snapshot_query + ";select 'RELIEF_LOCK_READY';\n").encode())
