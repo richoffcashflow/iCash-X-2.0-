@@ -6,7 +6,7 @@ import {cashOfferPolicy} from './cash-offer-math.ts';
  * Current controls and verified checks take precedence over course examples.
  */
 export const supportProductGuide = `
-Original platform (owner confirmed October 30, 2026): iCash X 1.0 is no longer active and is being shut down; iCash X 2.0 is the current platform. Explain this directly, without a made-up shutdown date or sign-in troubleshooting. Former 1.0 buyers may receive two calendar months of 2.0 software access free only after Support verifies original purchase proof. A claim of purchase, visitor email, or 2.0 payment is not verification. Ask for the original receipt by email to support@geticashx.com; chat has no receipt-upload control. Do not distribute or invent an offer link from conversation text. The authenticated operator review action supplies the approved link after proof review. The offer requires a payment method, renews at $50/month unless cancelled, and excludes work credits. Account data does not transfer. Never claim this chat activated access, transferred data or granted credit.
+Original platform (owner confirmed October 30, 2026): iCash X 1.0 is no longer active. iCash X 2.0 is the current platform. Explain this directly, without a made-up shutdown date or sign-in troubleshooting. Former 1.0 buyers may receive two calendar months of 2.0 software access free only after Support verifies original purchase proof. A claim of purchase, visitor email, or 2.0 payment is not verification. Ask for the original receipt by email to support@geticashx.com; chat has no receipt-upload control. Do not distribute or invent an offer link from conversation text. The authenticated operator review action supplies the approved link after proof review. The offer includes the 2.0 training course. Once software access is active, the customer can open Training course in the workspace. The offer requires a payment method, renews at $50/month unless cancelled, and excludes work credits. Account data does not transfer. Never claim this chat activated access, transferred data or granted credit.
 
 iCash X is real-estate deal automation. Customers are using their bot to find and work seller leads, pursue purchase agreements, find cash buyers, and coordinate closing. They are not asking how to market a freelance service. Interpret "get a client" or "get leads" in this iCash X context. Do not suggest networking, referrals, social media marketing, freelance platforms, or ask what service/product they sell as the normal way to get leads.
 
@@ -16,7 +16,7 @@ Getting leads: with access, credits, required setup and checks ready, keep the b
 
 Identity and research: when a customer asks what company to say they are calling from, explain that they represent their own individual or company name saved in Settings. They are the buyer using iCash X, not an employee of the software company. This is not a question about adding leads. If the customer explicitly asks about DealMachine, confirm that 2.0 uses it for automatic property research and owner-contact lookup; do not claim it is separate or requires manual lead uploads. Do not introduce provider names unprompted.
 
-City selection: the current customer workspace has no city, ZIP-code or target-market selector. Customize bot offers the bot name and custom voice, not a market setting. Answer a city-targeting question directly: customers cannot select a specific city in the current workspace; the bot selects markets automatically. Do not invent a city-setting button or claim support has changed their market. Older saved market preferences do not mean a control exists in the current interface.
+City selection: the current customer workspace has no city, state, ZIP-code or target-market selector. Customize bot offers the bot name and custom voice, not a market setting. Answer with the place the customer asked about. The bot selects markets automatically. Do not invent a city-setting button or claim support has changed their market. Older saved market preferences do not mean a control exists in the current interface. An absent market selector does not establish the number of workspaces a customer has or eligibility for a second signup. Do not recommend another checkout as a way to choose a market.
 
 Contact availability: a lead can appear before usable contact details are available. Contact lookup and checks are separate; do not promise a number for every lead or a contact-arrival time. Off-market properties are not publicly listed, and a researched prospect is not proof of seller interest. There is no verified average or guaranteed time to a signed contract. Explain these questions directly rather than repeating Add listings or agreement-navigation instructions.
 
@@ -96,12 +96,25 @@ export function supportUnansweredCallQuestion(q:string){
  return /^(?:if (?:the|a|my) seller (?:doesn[’']?t|does not) answer[, ]+(?:will|does) (?:you|it|the bot|my bot) call (?:them )?again|will (?:you|it|the bot|my bot) call (?:the|a|my) seller again if they (?:don[’']?t|do not) answer)[?!.\s]*$/i.test(q.trim());
 }
 
+export function supportMarketSelectionAnswer(q:string):string|null{
+ if(/\b(?:billing|payment|refund|cancel|charg(?:e|ed)|licen[cs]e|mailing|checkout|course|title|contract|sign[ -]?in|log[ -]?in|error|not working|not calling|not texting)\b/i.test(q))return null;
+ const place=q.match(/\b(cit(?:y|ies)|states?|zip(?: codes?|s)?|markets?|areas?)\b/i)?.[0].toLowerCase();
+ const choosing=/\b(?:specific|choose|pick|select|target|change|set|switch|limit|focus)\b/i.test(q);
+ const marketContext=/\b(?:bot|call|calling|leads?|properties|target|markets?|search|states?)\b/i.test(q)
+  || /^(?:can|could|may) i (?:choose|pick|select) (?:a |my )?(?:city|zip code|area)[?!.\s]*$/i.test(q.trim());
+ if(!place||!choosing||!marketContext)return null;
+ let location=place.replace(/s$/,'');
+ if(place.startsWith('zip'))location='ZIP code';
+ if(place.startsWith('cit'))location='city';
+ return `You can’t select a specific ${location} in the current workspace. Your bot selects markets automatically.`;
+}
+
 export function supportSimpleProductAnswer(question:string):string|null{
  const q=question.trim();
  if(supportUnansweredCallQuestion(q))return 'An unanswered seller call can be eligible for one additional automatic attempt under the active follow-up policy. It depends on a confirmed unanswered result, current contact checks, outreach hours, available work credits and your Run/Pause and takeover controls. A seller reply or refusal changes eligibility. I can’t promise another call or its timing; this explains eligibility and does not confirm current outreach or a repair.';
  if(/\b(?:refund|cancel|charge(?:d|s)?|payments?|card|billing|bug|error|not working|not calling|not texting)\b|\b(?:isn[’']?t|doesn[’']?t|won[’']?t|cannot|can[’']?t)\b.{0,30}\b(?:call|text|send|run)\b/i.test(q))return null;
  if(supportRoleQuestion(q))return 'The bot handles the automated lead work. Your part is to watch messages and notifications, follow up when needed, and review the seller conversation, deal numbers and agreements before signing. Choose and verify your title company, complete the closing setup, and respond to its requests. Payment comes from title after closing and disbursement; signing a contract alone does not guarantee a payout.';
- if(/\b(?:cit(?:y|ies)|states?|zip(?: code)?s?|markets?|areas?)\b/i.test(q)&&/\b(?:specific|choose|select|target|change|set|switch|limit|focus)\b/i.test(q)&&/\b(?:bot|call|calling|leads?|properties|target|markets?|search|states?)\b/i.test(q))return 'You can’t select a specific city in the current workspace. Your bot selects markets automatically.';
+ const marketSelection=supportMarketSelectionAnswer(q);if(marketSelection)return marketSelection;
  if(/^(?:what(?:[’']s| is)(?: the| my bot[’']s)? outreach|what does outreach mean)[?!.\s]*$/i.test(q))return 'Outreach means your bot contacting sellers by call or text.';
  if(/\b(?:bot|automation)\b/i.test(q)&&/\b(?:close|closing|leave|exit|get off|logged out|log out|sign out|background|keep.{0,12}open)\b/i.test(q)&&/\b(?:app|browser|website|tab|page|background|logged out)\b/i.test(q))return 'Your bot runs in the background. Closing the app doesn’t pause it.';
  if(/^do i (?:need to |have to )?send (?:a |the )?text[?!.\s]*$/i.test(q))return 'Texting is automatic. You can send a text yourself if you want to take over a conversation.';
