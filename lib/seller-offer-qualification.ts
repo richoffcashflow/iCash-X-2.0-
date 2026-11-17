@@ -1,5 +1,6 @@
 import {hasHumanCallWords} from './call-contact-evidence.ts';
-import {sellerAffirmation,sellerPropertyAnswer,sellerUnrelatedAnswer,sellerExplicitUnknown,sellerStatementText} from './seller-answer-evidence.ts';
+import {sellerAffirmation,sellerPropertyAnswer,sellerUnrelatedAnswer,sellerExplicitUnknown,sellerStatementText,sellerAnswerText} from './seller-answer-evidence.ts';
+import {sellerInterestPatterns} from './seller-interest-evidence.ts';
 import {object} from './required-call-recording.ts';
 import {sellerListingEvidence} from './seller-listing.ts';
 import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
@@ -24,6 +25,11 @@ export type SellerFactEvidence={value:boolean;status:'answered'|'unknown'|'decli
 export type SellerDialogueState={qualification:SellerQualification;facts:Partial<Record<Fact,SellerFactEvidence>>;priceRequested:boolean};
 export type SellerQualification={ready:true}|{ready:false;nextQuestion:string;missing:Fact[];stop?:boolean};
 const yes={test:sellerAffirmation};
+// Reuse the already source-bound interest vocabulary. These phrases answer a
+// selling question or explicitly declare selling interest; they are never an
+// ownership answer, an accepted price or permission to send an agreement.
+const interestAffirmation=new RegExp(sellerInterestPatterns.affirmative,'i');
+const explicitInterest=new RegExp(sellerInterestPatterns.explicit,'i');
 const differentSeller=/\b(?:i(?:'m| am) (?:his|her|their|the owner's) (?:wife|husband|son|daughter|tenant)|this is (?:his|her|their) (?:wife|husband|son|daughter)|i(?:'m| am) (?:just )?(?:the |a )?tenant)\b/i;
 const no=/^(?:(?:um|uh|well)[, .]+)*(?:no|nope|not really|not interested)\b/i;
 const answerable=(s:string)=>/[a-z0-9]/i.test(s)&&! /^(?:um|uh|hmm|hello|what|sorry|pardon)[.!? ]*$/i.test(s)&&! /\b(?:repeat (?:that|the question)|what do you mean|(?:didn['’]?t|did not) (?:hear|understand|catch)|(?:can|could|would) you (?:please )?(?:repeat|rephrase|say|ask|explain)|(?:say|ask) (?:that |it |the question )?again|what was (?:that|the question))\b/i.test(s);
@@ -88,7 +94,8 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
     // An offer question is not an answer to a pending repairs/occupancy question.
     if(!sellerPropertyAnswer('condition',text)&&!sellerPropertyAnswer('occupancy',text)&&!sellerPropertyAnswer('timing',text))question='';
    }
-   if(interestQuestion&&(yes.test(text)||/^(?:i would|i do|i will)[.! ]*$/i.test(text)||no.test(text)))remember('interest',!no.test(text));
+   if(interestQuestion&&(yes.test(text)||interestAffirmation.test(sellerAnswerText(text))||/^(?:i would|i do|i will)[.! ]*$/i.test(text)||no.test(text)))remember('interest',!no.test(text));
+   if(explicitInterest.test(sellerAnswerText(text)))remember('interest',true);
    if(/\b(?:(?:want|looking|ready|need|hoping|trying|plan|planning|like) to sell|interested in selling|(?:sell|selling) (?:it|my|the|this))\b/i.test(statement))remember('interest',true);
    if(/\b(?:not (?:interested|looking|ready).*sell|don['’]?t want to sell|do not want to sell|not selling)\b/i.test(statement))remember('interest',false);
    if(situationQuestion&&sellerPropertyAnswer('situation',text)){remember('situation',true);remember('interest',true,true);}
