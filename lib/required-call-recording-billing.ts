@@ -2,7 +2,7 @@ import type {RecordingGateHoldReason} from './recording-gate-diagnostics.ts';
 import {costCategories} from './cost-guard.ts';
 import {twilioUnansweredCall,twilioUsdChargeMicros} from './twilio-usd-cost.ts';
 import {object,type RecordingRow} from './required-call-recording.ts';
-import {recordingAddonCosts,completedRecordingReceipt} from './required-call-recording-cost.ts';
+import {recordingAddonCosts,completedRecordingReceipt,recordedAnswerDetectionMicros} from './required-call-recording-cost.ts';
 import {canonicalCall,type RecordingDb} from './required-call-recording-service.ts';
 import type {RecordingProviders,RecordingEnv} from './required-call-recording-provider.ts';
 import {settleBoundVoiceUsage,type VoiceUsagePolicy} from './voice-usage-service.ts';
@@ -30,12 +30,13 @@ export async function settleRecordingGateOnly(db:RecordingDb,provider:RecordingP
  const price=unanswered?0:twilioUsdChargeMicros(c.price,c.price_unit);
  if(price===null)return gateHold(c.price===null||c.price===undefined?'terminal_carrier_price_pending':'terminal_carrier_price_invalid');
  const speech=row.entry_policy!=='direct_recorded_v1'&&(row.state==='declined'||c.status==='completed');
+ const answerDetectionPolicy=recordedAnswerDetectionMicros(row),answerDetection=c.status==='completed'?answerDetectionPolicy:0;
  const [rate]=await db<{costs_micros:Record<string,number>}[]>(`icash_operation_rates?id=eq.${row.rate_id}&select=costs_micros`);if(!rate)return gateHold('reviewed_costs_required');
  const components=Object.fromEntries(costCategories.map(k=>[k,{amountMicros:rate.costs_micros[k],basis:'estimated',evidenceRef:'Reviewed gate-only operation overhead; '+row.rate_id}]));
  components.elevenlabs={amountMicros:0,basis:'not_applicable',evidenceRef:'No ElevenLabs registration or recording-start attempt for '+row.id};
  components.llm={amountMicros:0,basis:'not_applicable',evidenceRef:'No ElevenLabs registration or model use for '+row.id};
  components.twilio={amountMicros:price,basis:'verified',evidenceRef:'Canonical terminal Twilio Call '+row.call_sid};
- components.other=Object.assign({amountMicros:speech?20000:0,basis:'estimated',evidenceRef:'One consent Gather estimate only; audio recording and storage not applicable'}, {subitems:{speechGatherMicros:speech?20000:0,recordingMicros:0,storageMicros:0}});
+ components.other=Object.assign({amountMicros:(speech?20000:0)+answerDetection,basis:'estimated',evidenceRef:answerDetectionPolicy?'Carrier AMD Enable estimate: 7500 micros per completed call; no speech Gather, recording or storage':'One consent Gather estimate only; audio recording and storage not applicable'}, {subitems:{speechGatherMicros:speech?20000:0,recordingMicros:0,storageMicros:0,...(answerDetectionPolicy?{answerDetectionMicros:answerDetection}: {})}});
  const result=object(await db('rpc/icash_settle_unstarted_recorded_call','POST',{p_id:row.id,p_account:row.account_id,p_operation:row.operation_key,p_receipt:{providerAccountSid:row.provider_account_sid,callSid:row.call_sid,fromPhone:row.from_phone,toPhone:row.to_phone,status:c.status,durationSeconds:duration,priceMicros:price,currency:'USD',speechGatherUsed:speech},p_components:components,p_evidence:'Canonical Twilio terminal call receipt, no agent registration, reviewed speech-gather estimate: '+row.id}));
  return result.settled===true?{...result,settled:true}:gateHold('terminal_carrier_settlement_rejected');
 }

@@ -9,6 +9,7 @@ import {usdMicros} from './voice-usage-service.ts';
 import {affirmativeSpeech,recordingGateOptOut,audioAvailable,endTwiml,object,privateHeaders,recordingAgentMatches,recordingBaseUrl,recordingDisclosure,recordingPolicy,recordingPricing,sha,sid,uuid,verifiedTwilioForm,consentTwiml,type RecordingRow,type RecordingReview} from './required-call-recording.ts';
 import {boundedBytes,RecordingProviderError,type RecordingEnv,type RecordingProviders} from './required-call-recording-provider.ts';
 import {readRecordingReviews,recordingReviewForRow,recordingReviewInPair} from './recording-review-transition.ts';
+import {carrierAnswerDisposition,carrierAnswerPolicy} from './call-answer-detection.ts';
 export type RecordingDb=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export type RecordingDeps={db:RecordingDb;receiptDb?:RecordingDb;provider:RecordingProviders;now?:()=>number;dispatchAllowed?:()=>boolean;dispatchReview?:RecordingReview;reviewUnchanged?:()=>boolean};
 const hangup=()=>new Response('<Response><Hangup/></Response>',{headers:{...privateHeaders,'Content-Type':'text/xml'}});
@@ -91,7 +92,7 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
    if(!uuid(input.accountId)||!/^voice:[0-9a-f-]{36}$/i.test(input.operationKey)||input.prompt.length>24000||input.firstMessage.length>2000)throw Error('RECORDING_CONTEXT_REQUIRED');
    const maxSeconds=input.maxTotalSeconds??600;if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
    const disclosure=recordingDisclosure(input.principal,input.assistantName,input.buyerKind),nonce=randomBytes(32).toString('hex'),stop=recordingStopToken(input.operationKey,env);
-   let row=await db<RecordingRow|null>('rpc/icash_create_direct_recorded_call','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
+   let row=await db<RecordingRow|null>('rpc/icash_create_direct_recorded_call','POST',{p_account:input.accountId,p_operation:input.operationKey,p_provider_account_sid:review.providerAccountSid,p_call_sid:null,p_nonce_hash:sha(nonce),p_stop_token_hash:sha(stop),p_disclosure_version:recordingPolicy.disclosureVersion,p_pricing_policy:recordingPricing,p_context:{fromPhone,branchId:review.branchId,versionId:review.versionId,maxTotalSeconds:maxSeconds,callContext:{principal:input.principal,assistantName:input.assistantName,firstMessage:input.firstMessage,prompt:input.prompt,strategyKey:input.strategyKey,answerPolicy:carrierAnswerPolicy,...(input.voiceId?{voiceId:input.voiceId}:{})}}});
    // A completed null admission response proves this handler cannot reach dial.
    // The abort RPC still rejects an existing/conflicting recording or late proof.
    // A thrown/lost admission response never receives this marker.
@@ -103,7 +104,8 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     // A changed release or expired deadline after admission cannot start a call.
     if(!dispatchAllowed())return {status:'recording_release_required'};
     stage='dial';
-    const call=await provider.dial(row.from_phone,row.to_phone,directCallTwiml(recordingBaseUrl+'/connect',row.id,nonce),recordingBaseUrl+'/terminal?id='+row.id,row.max_total_seconds);
+    const answerPolicy=object(row.call_context).answerPolicy as string|undefined;
+    const call=await provider.dial(row.from_phone,row.to_phone,directCallTwiml(recordingBaseUrl+'/connect',row.id,nonce),recordingBaseUrl+'/terminal?id='+row.id,row.max_total_seconds,answerPolicy,answerPolicy===carrierAnswerPolicy?recordingBaseUrl+'/connect?id='+row.id+'&nonce='+nonce:undefined);
     stage='bind_call';
     // This is the authenticated response to this one-use dial claim, not a
     // discovered call. Bind its exact identity without depending on an optional
@@ -137,6 +139,9 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     row=await getRow(db,id);if(!row||row.nonce_hash!==sha(nonce)||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||noticeMode&&row.party!=='seller'||directMode!==(row.entry_policy==='direct_recorded_v1'))return hangup();
     if(row.call_sid&&row.call_sid!==form.get('CallSid'))return hangup();
     const optOut=recordingGateOptOut(form),review=await readReview(row);
+    const answerChecked=directMode&&Object.hasOwn(object(row.call_context),'answerPolicy');
+    const signedAnswer=answerChecked&&object(row.call_context).answerPolicy===carrierAnswerPolicy&&form.getAll('AnsweredBy').length===1?carrierAnswerDisposition(form.get('AnsweredBy')):'unconfirmed';
+    const carrierCutoff=answerChecked&&(signedAnswer==='machine'||signedAnswer==='unconfirmed');
     const reviewMatches=!!review&&row.agent_id===review.agentId&&row.branch_id===review.branchId&&row.version_id===review.versionId&&row.disclosure_version===recordingPolicy.disclosureVersion;
     // These are independent authenticated reads. Serializing them consumes the
     // carrier's short response window before recording/AI startup can begin.
@@ -144,7 +149,7 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     stage='entry_preflight';
     const [callRead,agentRead]=await Promise.allSettled([
      provider.getCall(form.get('CallSid')!),
-     !optOut&&row.state==='consent_pending'&&!row.consent_at&&reviewMatches?checkAgent(review!):Promise.resolve(false),
+     !optOut&&!carrierCutoff&&row.state==='consent_pending'&&!row.consent_at&&reviewMatches?checkAgent(review!):Promise.resolve(false),
     ]);
     stage='call_readback';if(callRead.status==='rejected')throw callRead.reason;
     const call=callRead.value;
@@ -154,6 +159,21 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     // Replayed or concurrent callbacks cannot start/register again. Ending is safest.
     if(row.state!=='consent_pending'||row.consent_at){await endBound(row);return hangup();}
     if(optOut){const stopped=await transition(db,row,'contact_opt_out',{nonceHash:sha(nonce),utterance:optOut});if(stopped)row=stopped;await endBound(row);return xml(finishTwiml);}
+    if(answerChecked){
+     stage='carrier_answer';
+     // The initial, signed URL webhook carries AMD. Canonical GET still
+     // establishes call/account/from/to identity and must not contradict it.
+     const canonicalAnswer=carrierAnswerDisposition(call.answered_by);
+     const disposition=call.answered_by!=null&&call.answered_by!==''&&canonicalAnswer!==signedAnswer?'unconfirmed':signedAnswer;
+     if(disposition==='machine'||disposition==='unconfirmed'){
+      const reason=disposition==='machine'?(form.get('AnsweredBy')==='fax'?'carrier_fax_detected':'carrier_machine_detected'):'carrier_answer_unconfirmed';
+      diagnostic(reason);
+      const failed=await transition(db,row,'fail',{reason}).catch(()=>null);if(failed)row=failed;
+      // Ending must survive bookkeeping failure. Maintenance retains the
+      // original carrier receipt/cost; no AI or recording was started.
+      await endBound(row);return hangup();
+     }
+    }
     const age=now()-Date.parse(String(call.start_time));
     stage='agent_review';if(agentRead.status==='rejected')throw agentRead.reason;
     const currentReview=await readReview(row);
@@ -219,12 +239,16 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
     const token=request.headers.get('authorization')?.replace(/^Bearer /,'');if(!token||!/^[a-f0-9]{64}$/.test(token))return Response.json({stopped:false},{status:401,headers:privateHeaders});
     const b=object(JSON.parse((await boundedBytes(request,2048)).toString('utf8')));if(Object.keys(b).length!==1||!uuid(b.recordingId))return Response.json({stopped:false},{status:400,headers:privateHeaders});
     let row=await getRow(db,b.recordingId);if(!row||row.stop_token_hash!==sha(token)||!row.call_sid||!recordingAuthorized(row)||now()-Date.parse(row.created_at)>20*60000)return Response.json({stopped:false},{status:401,headers:privateHeaders});
-    const next=await transition(db,row,'stop',{stopTokenHash:sha(token)});if(next)row=next;
+    // The exact call capability is already validated. A bookkeeping outage must
+    // not prevent the requested hangup; endBound also retries a missing intent.
+    const next=await transition(db,row,'stop',{stopTokenHash:sha(token)}).catch(()=>null);if(next)row=next;
     // Withdrawal or confirmed voicemail ends the whole call. Partial success is not completion.
     const ended=await endBound(row);let stopped=ended;
     if(!ended&&row.recording_sid){try{const p=await provider.stop(row.call_sid!,row.recording_sid);stopped=recordingReceipt(row,p)&&['stopped','completed','processing'].includes(String(p.status));}catch{/* Durable end request remains due. */}}
     if(!ended)return Response.json({stopped,callEnded:false,instruction:'Call termination is not confirmed. End this call now; do not continue talking.'},{status:503,headers:privateHeaders});
-    const confirmed=await transition(db,row,'call_ended',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,status:'completed'});if(confirmed)row=confirmed;
+    // Report the verified carrier outcome even if its receipt save is delayed.
+    // Do not fabricate persisted completion; ordinary reconciliation keeps it due.
+    const confirmed=await transition(db,row,'call_ended',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,status:'completed'}).catch(()=>null);if(confirmed)row=confirmed;
     if(row.recording_sid&&row.provider_started_at)await transition(db,row,'processing',{recordingSid:row.recording_sid,providerStartedAt:row.provider_started_at}).catch(()=>null);
     return Response.json({stopped:stopped||ended,callEnded:ended,instruction:'This call is ended. Do not continue the conversation or restart recording.'},{headers:privateHeaders});
    }catch{return Response.json({stopped:false,instruction:'Stop is not confirmed. End this call now.'},{status:503,headers:privateHeaders});}
