@@ -5,7 +5,7 @@ import {elevenRequest} from './elevenlabs.ts';
 import {db} from './stripe-test.ts';
 import {sendContiguityText,textPayload} from './contiguity.ts';
 import {saveTextReceipt} from './text-receipt.ts';
-import {SellerInventoryUnavailableError} from './voice-budget-failure.ts';
+import {SellerInventoryUnavailableError,TextClaimRefusedError} from './voice-budget-failure.ts';
 type TextClaimKind='automatic'|'manual'|'meta';
 export async function dispatchTextMessage(accountId:string,messageId:string,manual=false,requiredClaim?:TextClaimKind){
  if(!smsWorkEnabled())return {status:'live_work_not_ready'};
@@ -38,9 +38,10 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
  let job:unknown;
  try{job=await db<unknown>(metaMessage.length?'rpc/icash_meta_claim_text':manual?'rpc/icash_claim_customer_text':'rpc/icash_claim_text','POST',{p_account:accountId,p_message:messageId,p_sender:from});}
  catch(error){
-  // Only the exact atomic inventory rejection is an expected pre-send hold.
+  // Only exact atomic claim rejections are expected pre-send holds.
   // Unknown database/provider outcomes still propagate to reconciliation.
   if(error instanceof SellerInventoryUnavailableError)return {status:'seller_inventory_unavailable'};
+  if(error instanceof TextClaimRefusedError)return {status:'message_held'};
   throw error;
  }
  if(!job)return {status:'message_held'};
