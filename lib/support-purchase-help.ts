@@ -63,19 +63,26 @@ const accessProblem=(text:string)=>/\b(?:access|sign[ -]?in|log[ -]?in|locked|su
 const cancellationRequest=(text:string)=>supportRenewalCancellationRequested(text)||/\b(?:refund|money back|cancel|charged twice|duplicate charge)\b/i.test(text);
 const deniesVipPurchase=(text:string)=>/\b(?:not|never) (?:for |the |a )?vip\b|\b(?:didn[’']?t|did not|never) (?:buy|purchase|pay for) (?:the |a )?vip\b/i.test(text);
 
+const clarifyReceiptDestination=()=>({
+ reply:`Our receipt inbox is ${supportLegacyProofEmail}. If your receipt went to a different inbox, forward it to ours once with the checkout email you meant to use. If you already sent it to ours, just share the email subject and date here so we can look for it. Your purchase and access still need verification. Leave out passwords, card numbers and sign-in codes.`,
+ status:'open' as const,managementReview:true as const,ai:false as const
+});
 /** Recognize a completed proof-submission claim, never proof or ownership itself.
  * Keep clause-local negation/hypotheticals separate from a later missing reply. */
-function supportProofSubmissionClaim(text:string){
+function supportProofSubmissionClaim(text:string):'support'|'unconfirmed_recipient'|null{
  const proof='(?:(?:my|the|a|an|our|purchase|payment|merchant|vip|software)\\s+){0,4}(?:receipts?|proof|screenshots?)\\b';
  const subject="(?:\\bi(?:[’']ve| have| had)?\\s+(?:(?:already|just)\\s+)*|\\band\\s+|^\\s*(?:(?:already|just)\\s+)?)";
  const affirmative=new RegExp(subject+'(?:(?:sent|emailed|submitted)\\s+(?:(?:you|support)\\s+)?(?:(?:an? |the |my )?email\\s+with\\s+|with\\s+)?'+proof+'|contacted\\s+(?:support|you|the support team)(?:\\s+by email)?\\s+with\\s+'+proof+')','i');
- let submitted=false;
- for(const clause of text.split(/[.!?;,\n]+|\b(?:but|however|although|though)\b/iu)){
+ // Resolve complete email addresses before sentence punctuation splits their domains.
+ const recipients=text.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, address=>
+  address.toLowerCase()===supportLegacyProofEmail.toLowerCase()?'iCash X support':'a different inbox');
+ let submitted:'support'|'unconfirmed_recipient'|null=null;
+ for(const clause of recipients.split(/[.!?;,\n]+|\b(?:but|however|although|though)\b/iu)){
   // Quoted examples and uncertain conditions are not the customer's completed act.
   if(/["“”]/u.test(clause))continue;
   const denied=/(?:\bi\s+|^\s*(?:actually\s+)?)(?:(?:did|have|had)\s+not|didn[’']?t|haven[’']?t|hadn[’']?t|never)\s+(?:send|sent|email|emailed|submit|submitted|attach|attached)\b/i.exec(clause)
    ?? /\b(?:(?:the|my)\s+(?:email|receipt|proof)|it)\s+(?:(?:was|is|has been)\s+not|wasn[’']?t|isn[’']?t)\s+(?:sent|emailed|submitted|attached)\b/i.exec(clause);
-  if(denied&&!/\b(?:if|unless|whether|suppose|assuming|hypothetically|imagine)\b/i.test(clause.slice(0,denied.index))&&/\b(?:receipt|proof|screenshots?|it|email)\b/i.test(clause.slice(denied.index))){submitted=false;continue;}
+  if(denied&&!/\b(?:if|unless|whether|suppose|assuming|hypothetically|imagine)\b/i.test(clause.slice(0,denied.index))&&/\b(?:receipt|proof|screenshots?|it|email)\b/i.test(clause.slice(denied.index))){submitted=null;continue;}
   const claim=affirmative.exec(clause);
   if(!claim||/\b(?:if|unless|whether|suppose|assuming|hypothetically|imagine|said|says?|wrote|asked|claims?|claimed|told|thought|thinks?|believes?|believed)\b/i.test(clause.slice(0,claim.index)))continue;
   const lead=clause.slice(0,claim.index).trim();
@@ -83,9 +90,9 @@ function supportProofSubmissionClaim(text:string){
   // Arbitrary reported speech (including unnamed speakers) remains unconfirmed.
   if(lead&&!/^i (?:(?:never|did not|didn[’']?t) received? (?:a |the )?confirmation because i )?(?:(?:mis[ -]?spelled|mis[ -]?spelt|mistyped) (?:my|the) (?:(?:checkout|purchase|sign[ -]?in) )?email|(?:typed|used|entered) (?:the |a |my )?(?:wrong|incorrect) (?:(?:checkout|purchase|sign[ -]?in) )?email)(?:\s+and)?$/i.test(lead))continue;
   // An explicitly different recipient is not a claim of submission to support.
-  const destination=/^\s+to\s+(.+)/i.exec(clause.slice(claim.index+claim[0].length))?.[1].toLowerCase();
-  if(destination&&!/^(?:support|you|the support team)\b/.test(destination)&&!destination.startsWith(supportLegacyProofEmail.toLowerCase()))continue;
-  submitted=true;
+  const destination=/^\s+to\s+(.+)/i.exec(clause.slice(claim.index+claim[0].length))?.[1].trim();
+  const ourSupport=/^(?:you|(?:(?:the|your) )?(?:icash x )?support(?: team| inbox)?)(?: (?:by email|today|yesterday|just now|last (?:night|week)|this (?:morning|afternoon|evening)))*$/i;
+  submitted=destination&&!ourSupport.test(destination)?'unconfirmed_recipient':'support';
  }
  return submitted;
 }
@@ -115,7 +122,9 @@ export function supportCheckoutOwnershipReply(context:PurchaseContext){
  // Reuse direct purchase guidance, including its no-repeat proof handling.
  const direct=supportPurchaseHelp(context.messages);
  if(direct)return {...direct,ai:false};
- const sent=supportProofSubmissionClaim(q);
+ const submission=supportProofSubmissionClaim(q);
+ if(submission==='unconfirmed_recipient')return clarifyReceiptDestination();
+ const sent=submission==='support';
  const product=deniesVipPurchase(q)?'You’re describing regular software access. ':/\bvip\b/i.test(q)?'A VIP session screenshot does not establish a VIP software purchase. ':'';
  return {reply:product+(sent?'You’ve said you sent the proof. I haven’t confirmed that it has been matched; you do not need to send the same proof again. ':'')+'The purchase and its ownership still need verification before the checkout email can be corrected. This chat has not changed the email or restored access; don’t pay again to troubleshoot.',status:'open' as const,managementReview:true,ai:false};
 }
@@ -203,7 +212,8 @@ export function supportPurchaseHelp(messages:Turn[]){
  }
  if(supportPurchaseEmailCorrection(q)){
   const submitted=supportProofSubmissionClaim(q);
-  if(submitted)return {reply:'You’ve said you already sent the purchase proof to support. You do not need to send the same proof again. What subject and date did you use for that email? That can help locate it; receipt and ownership verification are still unconfirmed. This chat has not changed the checkout email or restored access. Don’t pay again or share sign-in codes.',status:'open' as const,managementReview:true};
+  if(submitted==='unconfirmed_recipient')return clarifyReceiptDestination();
+  if(submitted==='support')return {reply:'You’ve said you already sent the purchase proof to support. You do not need to send the same proof again. What subject and date did you use for that email? That can help locate it; receipt and ownership verification are still unconfirmed. This chat has not changed the checkout email or restored access. Don’t pay again or share sign-in codes.',status:'open' as const,managementReview:true};
   const requested=messages.some(m=>m.role!=='user'&&/\b(?:receipt|purchase)\b.{0,100}\b(?:email|correction|correct|verify|match)\b/i.test(m.content));
   return {reply:requested?'The purchase needs to be matched and ownership verified before its checkout email can be corrected. Follow the earlier proof-submission instructions only for details you have not already supplied. I haven’t confirmed an email change or restored access; repeating code requests won’t correct a wrong email.':`A wrong checkout email needs a purchase-ownership check before it can be corrected. Email your merchant receipt to ${supportLegacyProofEmail} with the purchase date, amount, order reference if available, and the email you intended to use. This chat has not changed the email; don’t pay again or share sign-in codes.`,status:requested?'open' as const:'waiting_on_customer' as const};
  }

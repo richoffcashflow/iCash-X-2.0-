@@ -18,6 +18,11 @@ const negatives=[
  'I contacted support without proof.',
  'I contacted support with no proof.',
  'I sent my receipt to my friend.',
+ 'I sent my receipt to support at my bank.',
+ 'I emailed my receipt to the support team for a different app.',
+ 'I sent my receipt to support@example.org.',
+ 'I sent my receipt to support@geticashx.com.example.org.',
+ 'I sent my receipt to [email removed].',
  'The operator wrote "I sent my receipt" as an example.',
  'I already sent my receipt, but actually I did not send it.',
  'I emailed the receipt, but the email was not sent.',
@@ -35,6 +40,9 @@ const positives=[
  'I already emailed my receipt but nobody replied.',
  'I have already submitted my purchase proof, but I have not heard back.',
  'I just sent the merchant receipt to support.',
+ 'I sent my receipt to you yesterday.',
+ 'I sent my receipt to the iCash X support team.',
+ 'I sent my receipt to SUPPORT@GETICASHX.COM.',
  'I emailed my receipt. Why is access still not restored?',
  'I emailed support with my receipt but nobody replied.',
  'I sent an email with my receipt but have not heard back.',
@@ -60,6 +68,14 @@ for(const kind of ['account','access'])for(const inherited of [false,true])for(c
   assert.doesNotMatch(r.reply,/ownership (?:is|was) verified|email (?:has been|was) changed|access (?:has been|was) restored/i);
   assert.notEqual(r.status,'resolved');checks++;
  }
+}
+for(const kind of ['account','access'])for(const recipient of ['support at my bank','support@example.org','[email removed]']){
+ const r=await replyToSupport({kind,messages:[user('I used the wrong checkout email.'),{role:'assistant',content:'The purchase still needs an ownership check.'},user('I sent my receipt to '+recipient+'.')],evidence:[]},deny);
+ assert.match(r.reply,/support@geticashx\.com/i);
+ assert.match(r.reply,/different inbox, forward it to ours once/i);
+ assert.match(r.reply,/already sent it to ours, just share the email subject and date/i);
+ assert.equal(r.status,'open');
+ assert.equal(r.managementReview,true);
 }
 for(const q of ['The seller misspelled their email and sent proof.','How do I call a seller?','Cancel my subscription.'])assert.equal(supportPurchaseHelp([user(q)]),null);
 for(const kind of ['account','access'])for(const q of negatives){
