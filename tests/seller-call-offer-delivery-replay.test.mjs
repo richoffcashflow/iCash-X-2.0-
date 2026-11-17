@@ -22,7 +22,8 @@ for(const direction of ['inbound','outbound'])for(const interrupted of [false,tr
    assert.equal(body.p_expected_version,current.offerVersion);assert.deepEqual(body.p_expected_snapshot,snapshot);
    current.offerState=structuredClone(body.p_state);current.offerVersion++;return true;
   }
-  if(path==='rpc/icash_seller_agreement_call_context')return {callKey:direction+':fixture',accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.invalid',dealId:'deal',screeningId:'screen',phone:'+12025550123'};
+  if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_agreement_call_context')return {callKey:direction+':fixture',accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.invalid',dealId:'deal',screeningId:'screen',phone:'+12025550123'};
   if(path.startsWith('icash_signing_envelopes?'))return envelopes;
   if(path.startsWith('icash_deal_files?'))return [{terms,stage:'draft'}];
   if(path.startsWith('icash_screening_jobs?'))return [{snapshot}];

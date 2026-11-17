@@ -1,3 +1,4 @@
+import {sellerUnqualifiedAgreementAnswer} from './seller-answer-evidence.ts';
 import {object} from './required-call-recording.ts';
 import {agreementTextRequested,spokenMoneyAmounts} from './call-offer-evidence.ts';
 import {offerPricePresentation} from './automatic-call-offer.ts';
@@ -47,9 +48,9 @@ export function sellerAgreementEvidence(value:unknown,terms:DealTerms,now=Date.n
   // "No other owners" answers an ownership question, not the agreement. Only
   // this complete, unambiguous answer is exempt; an added withdrawal still stops.
   const noOtherOwners=/\b(?:other|else|anyone|anybody)\b/i.test(previousQuestion)&&/\b(?:owners?|decision makers?|agree)\b/i.test(previousQuestion)&&/^no[,. ]+(?:(?:there are )?no other owners?(?: or decision makers?)?|(?:just|only) me|nobody else|no one else)[.!]?$/i.test(answer);
-  const objection=(!noOtherOwners&&/\b(?:no|not|don['’]?t|do not|but|if|unless|wait|stop|cancel|hold off|instead|changed|change|different|maybe|think|later|tomorrow|spouse|wife|husband|partner|attorney|lawyer)\b/i.test(answer))||spokenMoneyAmounts(answer).some(amount=>amount!==Number(terms.priceCents))||/\b(?:need|want|prefer)\b.{0,60}\b(?:closing|close|inspection|date|days?)\b/i.test(answer);
+  const objection=(!noOtherOwners&&/\b(?:no|not|don['’]?t|do not|but|if|unless|wait|stop|cancel|hold off|reject|refuse|withdraw|sold|fire|damage|mortgage|lien|instead|changed|change|different|maybe|think|later|tomorrow|spouse|wife|husband|partner|attorney|lawyer)\b/i.test(answer))||spokenMoneyAmounts(answer).some(amount=>amount!==Number(terms.priceCents))||/\b(?:need|want|prefer)\b.{0,60}\b(?:closing|close|inspection|date|days?)\b/i.test(answer);
   if(objection)confirmed=false;
-  if(pending)confirmed=!objection&&(/^(?:yes|yeah|yep|correct|sure|okay|ok|i agree|that works|sounds good|please (?:text|send)|(?:text|send)(?: me)? (?:the |that )?(?:agreement|contract))\b/i.test(answer)||agreementTextRequested(answer));
+  if(pending)confirmed=!objection&&sellerUnqualifiedAgreementAnswer(answer);
   pending=false;
  }
  return confirmed;

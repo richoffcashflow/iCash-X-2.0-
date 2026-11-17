@@ -251,12 +251,13 @@ for(const role of ['anon','authenticated'])for(const f of ['icash_seller_text_of
 const unclearSeller=await seed();await run(unclearSeller,'I need $210k');
 const unclearSource=await incoming(unclearSeller,'Yes.'),unclearJob=await one('select * from icash_text_ai_jobs where message_id=$1',[unclearSource.id]);
 const unclearContext=(await rpc('icash_resume_seller_text_ai',[unclearSeller.a,unclearJob.id])).context;
-const unclearPlan=planSellerTextOffer({...unclearContext,offerState:{...unclearContext.offerState,acceptedPriceCents:9000000,quotedPriceCents:9000000,textThreadId:randomUUID(),processedSource:randomUUID()},historyComplete:true,history:[{transcript:qualifiedSellerTurns},{transcript:[{role:'agent',message:''},{role:'user',message:'Yes.',questionUnverified:true}]}]});
+const unclearPlan=planSellerTextOffer({...unclearContext,offerState:{...unclearContext.offerState,acceptedPriceCents:9000000,quotedPriceCents:9000000,textThreadId:randomUUID(),processedSource:randomUUID()},historyComplete:true,history:[{transcript:qualifiedSellerTurns},{transcript:[{role:'agent',message:''},{role:'user',message:'Yes.',sourceId:unclearSource.id,questionUnverified:true}]}]});
 assert.equal(unclearPlan.action,'clarify_source_answer');assert.equal(unclearPlan.state.processedSource,unclearSource.id);assert.equal(unclearPlan.state.textThreadId,unclearSeller.t);assert.equal(unclearPlan.state.acceptedPriceCents,9000000);
 const saveUnclear=plan=>rpc('icash_save_seller_text_offer',[unclearSeller.a,unclearJob.id,unclearContext.fingerprint,unclearContext.offerVersion,plan]);
 assert.equal(await saveUnclear({...unclearPlan,state:{...unclearPlan.state,processedSource:randomUUID()}}),null,'actual guard rejects old source');
 assert.equal(await saveUnclear({...unclearPlan,state:{...unclearPlan.state,textThreadId:randomUUID()}}),null,'actual guard rejects another thread');
 const unclearSaved=await saveUnclear(unclearPlan);assert(unclearSaved?.messageId,'actual SQL saver queues the bounded clarification');
+assert.deepEqual((await one('select state from icash_call_offer_private.offers where deal_id=$1',[unclearSeller.d])).state.receiptPriceAuthority,unclearPlan.state.receiptPriceAuthority,'actual SQL persists the original pending price authority without clearing evidence');
 assert.equal((await one('select body from icash_text_messages where id=$1',[unclearSaved.messageId])).body,unclearPlan.body);
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[unclearSeller.a])).n,0,'clarification cannot create signing authority');
 await dependencies.dispatch(unclearSeller.a,unclearSaved.messageId);

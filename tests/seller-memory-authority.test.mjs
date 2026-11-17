@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import {sellerQuestion} from '../lib/seller-question-evidence.ts';
+import {sellerPersistentSourceHold,sellerRequestsHuman} from '../lib/seller-source-hold.ts';
+import {readSellerMemory} from '../lib/seller-memory.ts';
+import {boundSellerQualification,sellerOfferQualification} from '../lib/seller-offer-qualification.ts';
+import {processSellerTextOffer} from '../lib/seller-text-offer-service.ts';
+import {sellerAgreementAction} from '../lib/seller-agreement-service.ts';
+import {sellerCallPrefix,sellerCallCompletionMatches,reviewSellerAgreementMemory} from '../lib/seller-agreement-memory-proof.ts';
+import {callOfferEvidence} from '../lib/call-offer-evidence.ts';
+import {sellerPayoffEvidence} from '../lib/seller-payoff.ts';
+import {dealTermsSchema} from '../lib/deal-documents.ts';
+import {qualifiedSellerTurns} from './helpers/seller-qualification-fixture.mjs';
+globalThis.fetch=async()=>{throw Error('NO NETWORK: fictional source fixtures');};
+const a=message=>({role:'agent',message}),u=message=>({role:'user',message});
+assert.equal(sellerQuestion('Your mortgage balance is $40,000. What repairs are needed?'),'What repairs are needed?');
+assert.equal(sellerPayoffEvidence({transcript:[a('Your mortgage is $40,000. What repairs are needed?'),u('Zero.')]},{action:'report_change',sellerStatement:'Zero.'}),null);
+assert.equal(callOfferEvidence({transcript:[a('Your total repair budget is zero. Are you the owner?'),u('Zero.')]},{action:'update_repairs',sellerStatement:'Zero.',repairEstimateCents:0}),false);
+for(const text of ['Yes, I reject the offer.','Yes, the house has fire damage.','Yes, I sold it.','Yes, I have another mortgage.'])assert.equal(callOfferEvidence({transcript:[a('Our cash offer is $90,000. Does it work?'),u(text)]},{action:'accept_offer',priceCents:9000000}),false,text);
+for(const text of ['I want a real person.','Could I speak with a human?','I need to talk to someone.','Please transfer me to the owner.'])assert(sellerRequestsHuman(text),text);
+for(const text of ['Are you a human?','I do not want a human.','I did not say I want a human.','My wife said I want a real person.','To speak to a person press 1.'])assert(!sellerRequestsHuman(text),text);
+const now=Date.now(),conversationId='conv_memoryauthority',phone='+12125550199';
+const binding={accountId:'account',dealId:'deal',screeningId:'screen',phone};
+const originalTerms=dealTermsSchema.parse({address:'45 Fixture Lane',buyer:'Fixture Buyer',state:'TX',legalDescription:'Lot 1 Block 2'});
+const confirmation={sellerLegalName:'Jane Seller',agreedPriceCents:9000000,closingDate:new Date(now+30*86400000).toISOString().slice(0,10),soleOwner:true,allDecisionMakersAgree:true,inspectionAccess:'yes',priceAndDateConfirmed:true,termsConfirmed:true,sendTextRequested:true,materialFactsChanged:false};
+const agreementRows=[...qualifiedSellerTurns,a('What is your full legal name for the agreement?'),u('Jane Seller.'),a('Are you the only owner and decision maker?'),u('Yes, just me.'),a(`The purchase price is $90,000 cash, closing ${confirmation.closingDate}, with a ten-day inspection period. May I text the agreement now?`),u('Yes, please.')];
+const live={conversation_id:conversationId,metadata:{start_time_unix_secs:Math.floor(now/1000)-100},transcript:agreementRows.map((row,index)=>({...row,time_in_call_secs:index}))};
+const prefix=sellerCallPrefix(live,conversationId,now);assert(prefix);assert(sellerCallCompletionMatches(live,prefix,now));
+const suffix=message=>({...structuredClone(live),transcript:[...live.transcript,a('Thank you. Take care.'),{...u(message),time_in_call_secs:55}]});
+assert(sellerCallCompletionMatches(suffix('Thanks, goodbye.'),prefix,now));
+for(const message of ['The roof burned down.','I sold it.','I want a person.','I have another mortgage.','Yes, I reject the offer.','Can we close later?'])assert(!sellerCallCompletionMatches(suffix(message),prefix,now),message);
+const inserted=structuredClone(live);inserted.transcript.splice(4,0,{...u('I have another mortgage.'),time_in_call_secs:2});assert(!sellerCallCompletionMatches(inserted,prefix,now),'provider catch-up cannot insert earlier detail');
+const retimed=structuredClone(live);retimed.transcript[1].time_in_call_secs=0.5;assert(!sellerCallCompletionMatches(retimed,prefix,now));
+assert.equal(sellerCallPrefix({transcript:agreementRows},conversationId,now),null);
+let source={binding,complete:true,fingerprint:'a'.repeat(64),cached:{version:'seller-memory-v1'},conversations:[{sourceId:'prior',channel:'voice',at:new Date(now-2000).toISOString(),transcript:qualifiedSellerTurns}]};
+const memoryDb=async path=>{assert.equal(path,'rpc/icash_seller_memory_context');return source;};
+for(const quote of ['Stop texting me.','I need to speak with a person.','I need to think.']){
+ source.conversations.unshift({sourceId:'raw-original',channel:'voice',sourceCoverage:'verified',at:new Date(now-5000).toISOString(),startedAt:null,transcript:[u(quote)]});
+ const memory=await readSellerMemory(memoryDb,binding);assert(memory.complete);assert(memory.sourceHold);assert.equal((await boundSellerQualification(memoryDb,binding,{transcript:qualifiedSellerTurns})).ready,false);
+ assert.equal((await processSellerTextOffer(binding,{db:memoryDb,send:async()=>assert.fail('No document'),text:async()=>assert.fail('No text'),dispatch:async()=>assert.fail('No dispatch')})).status,'seller_memory_source_review_required');
+ assert.equal(sellerOfferQualification({transcript:qualifiedSellerTurns},source.conversations).ready,false,'recomputation cannot erase a whole-source hold');source.conversations.shift();
+}
+let claims=0,sends=0,claimBody=null;const scope={...binding,callKey:'outbound:fixture',ownerUserId:'owner',ownerEmail:'owner@example.test'};
+const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:originalTerms.address,legal_description:originalTerms.legalDescription,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
+const db=async(path,_method,body)=>{
+ if(path==='rpc/icash_seller_memory_context')return source;
+ if(path==='rpc/icash_seller_agreement_call_context')return scope;
+ if(path==='rpc/icash_call_offer_context')return null;
+ if(path.startsWith('icash_signing_envelopes?'))return [];
+ if(path.startsWith('icash_deal_files?'))return [{terms:originalTerms,stage:'draft'}];
+ if(path.startsWith('icash_screening_jobs?'))return [{snapshot}];
+ if(path.startsWith('icash_customer_identities?'))return [{principal:originalTerms.buyer}];
+ if(path.startsWith('icash_text_threads?'))return [{id:'thread'}];
+ if(path.startsWith('icash_text_suppressions?'))return [];
+ if(path==='rpc/icash_sms_thread_review_current')return true;
+ if(path==='rpc/icash_claim_seller_agreement'){claims++;claimBody=body;return {id:'confirmation',claimed:true,envelopeId:null};}
+ if(path==='rpc/icash_finish_seller_agreement')return true;
+ throw Error(path);
+};
+const deps={db,now:()=>now,bind:async()=>{},history:async()=>live,send:async()=>{sends++;return {id:'envelope',testMode:false};},text:async()=>({sent:true,status:'accepted',instruction:'Accepted'}),refresh:async()=>assert.fail('No poll')};
+const send=()=>sellerAgreementAction('a'.repeat(64),{action:'confirm_and_send',conversationId,confirmation},deps);
+source.conversations.push({sourceId:'human',at:new Date(now-1000).toISOString(),transcript:[u('I want a real person.')]});assert.equal((await send()).sent,false);assert.equal(claims,0);assert.equal(sends,0);source.conversations.pop();
+assert.equal((await send()).sent,true);assert.equal(claimBody.p_memory_fingerprint,source.fingerprint);assert.deepEqual(claimBody.p_call_prefix,prefix);assert.equal(sends,1);
+const job={id:'recovery',...binding,sellerName:confirmation.sellerLegalName,expectedTerms:claimBody.p_terms};
+let fresh={confirmationId:'confirmation',admission:{phone,conversationId,fingerprint:'old',callPrefix:prefix,confirmation,terms:job.expectedTerms},current:source,originalCall:suffix('Thank you.')},refreshes=0;
+const reviewDb=async(path,_method,args)=>{if(path==='rpc/icash_seller_agreement_memory_context')return fresh;if(path==='rpc/icash_refresh_seller_agreement_memory'){refreshes++;assert.equal(args.p_expected_fingerprint,'old');assert.equal(args.p_new_fingerprint,source.fingerprint);assert.deepEqual(args.p_call_prefix,prefix);return true;}throw Error(path);};
+assert(await reviewSellerAgreementMemory(reviewDb,job,now));assert.equal(refreshes,1);
+for(const change of [()=>{fresh.admission.callPrefix=null;},()=>{fresh.originalCall=suffix('I have another mortgage.');},()=>{fresh.originalCall=inserted;},()=>{fresh.admission.confirmation={...confirmation,agreedPriceCents:9100000};}]){
+ fresh={confirmationId:'confirmation',admission:{phone,conversationId,fingerprint:'old',callPrefix:prefix,confirmation,terms:job.expectedTerms},current:source,originalCall:suffix('Thanks.')};change();assert.equal(await reviewSellerAgreementMemory(reviewDb,job,now),false);assert.equal(refreshes,1,'invalid recovery never renews original admission');
+}
+console.log('PASS canonical contextual answers, persistent whole-source holds across voice/text/direct agreement, exact atomic claim fingerprint, immutable live prefix and neutral-only deferred review. No provider calls.');

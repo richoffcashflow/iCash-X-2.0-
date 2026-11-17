@@ -1,10 +1,11 @@
+import {sellerQuestion} from './seller-question-evidence.ts';
 import {object} from './required-call-recording.ts';
 
 /** A short answer belongs to the latest question, not an earlier acknowledgement
  * in the same agent turn. Otherwise "not listed ... interested in selling?" +
  * "yes" silently reverses the seller's already established listing status. */
 function asksListingStatus(message:string):boolean{
- const sentence=message.split(/[.!?;\n]+/).map(part=>part.trim()).filter(Boolean).at(-1)??'';
+ const sentence=sellerQuestion(message);
  const starts=[...sentence.matchAll(/\b(?:is|are|do|does|have|has)\s+(?:you|it|(?:your|the|this|that)\s+(?:property|home|house|listing))\b/gi)];
  const last=starts.at(-1);if(!last)return false;
  const question=sentence.slice(last.index);

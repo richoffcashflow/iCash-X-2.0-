@@ -6,7 +6,9 @@ import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {callSellerPriceEvidence} from './call-offer-evidence.ts';
 import {sellerConversionIntent} from './seller-conversion-intent.ts';
 import {sellerCallDisposition} from './seller-response-policy.ts';
-import {readSellerMemory,chronologicalSellerHistory} from './seller-memory.ts';
+import {readSellerMemory,chronologicalSellerHistory,type SellerMemory} from './seller-memory.ts';
+import {sellerQuestion,canonicalSellerTranscript} from './seller-question-evidence.ts';
+import {sellerPersistentSourceHold} from './seller-source-hold.ts';
 
 const questions={
  ownership:'Are you the owner of this property?',
@@ -28,16 +30,6 @@ const differentSeller=/\b(?:i(?:'m| am) (?:his|her|their|the owner's) (?:wife|hu
 const no=/^(?:(?:um|uh|well)[, .]+)*(?:no|nope|not really|not interested)\b/i;
 const answerable=(s:string)=>/[a-z0-9]/i.test(s)&&! /^(?:um|uh|hmm|hello|what|sorry|pardon)[.!? ]*$/i.test(s)&&! /\b(?:repeat (?:that|the question)|what do you mean|(?:didn['’]?t|did not) (?:hear|understand|catch)|(?:can|could|would) you (?:please )?(?:repeat|rephrase|say|ask|explain)|(?:say|ask) (?:that |it |the question )?again|what was (?:that|the question))\b/i.test(s);
 
-/** An acknowledgement of an earlier answer is not the current question. In
- * particular, "you are the owner. Is anyone living there?" + "no" must not
- * revoke ownership or treat that occupancy answer as a refusal to sell. */
-function latestQualificationQuestion(message:string):string{
- const sentences=message.match(/[^.!?;\n]+[.!?;]?/g)??[];
- const sentence=sentences.findLast(part=>part.trim().endsWith('?'))??sentences.at(-1)??'';
- const clauses=sentence.split(/,\s*(?=(?:is|are|do|does|did|have|has|can|could|would|will|what|when|where|why|who|how|tell me)\b)|\b(?:and|also)\s+(?=(?:is|are|do|does|did|can|could|would|will)\s+(?:you|it|anyone|anybody|the|your|this|that)\b)/i);
- return clauses.at(-1)?.trim()??'';
-}
-
 /** The caller's actual answers, never research, an opener, or an LLM summary.
  * Historical conversations must already be bound to this account/deal/contact.
  * An explicit unknown/refusal answers a personal question; do not interrogate. */
@@ -45,12 +37,13 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
  const facts:Partial<Record<Fact,boolean>>={};let listed:boolean|null=null,priceRequested=false;
  const evidence:Partial<Record<Fact,SellerFactEvidence>>={},uncertain=new Set<Fact>();
  const result=(qualification:SellerQualification):SellerDialogueState=>({qualification,facts:evidence,priceRequested});
+ const sourceHold=sellerPersistentSourceHold([...history,current]);
  const currentRows=object(current).transcript;
  // A contextual "no" answers the final question, not an acknowledgement
  // such as "you want to sell" before an occupancy/repairs question.
  const disposition=Array.isArray(currentRows)?sellerCallDisposition(currentRows.map(row=>{
   const turn=object(row);
-  return {role:String(turn.role??''),message:typeof turn.message==='string'?(turn.role==='agent'?latestQualificationQuestion(turn.message):turn.message):null};
+  return {role:String(turn.role??''),message:typeof turn.message==='string'?(turn.role==='agent'?sellerQuestion(turn.message):turn.message):null};
  })):null;
 
  for(const conversation of [...history,current]){
@@ -62,8 +55,14 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
   for(let index=0;index<rows.length;index++){
    const row=object(rows[index]);if(typeof row.message!=='string')continue;
    const text=row.message.trim();
-   if(row.role==='agent'){question=latestQualificationQuestion(text);continue;}
+   if(row.role==='agent'){question=sellerQuestion(text);continue;}
    if(row.role!=='user'||!answerable(text)||!hasHumanCallWords(text)||sellerUnrelatedAnswer(text))continue;
+   if(row.sourceClockUnverified===true){
+    // Whole unclocked speech remains evidence of a gap, not positive facts.
+    // A later verified exchange may resolve it; source holds are separate.
+    for(const key of Object.keys(questions) as Fact[])if(facts[key]!==false&&!(key==='listing'&&listed===true)){delete facts[key];delete evidence[key];uncertain.add(key);}
+    if(listed===false)listed=null;priceRequested=false;continue;
+   }
    if(row.questionUnverified===true){
     question='';
     // A source-bound short answer may concern an older delivered question,
@@ -77,7 +76,7 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
      priceRequested=false;
     }
    }
-   const observedRows=row.questionUnverified===true?[{role:'user',message:text}]:rows.slice(0,index+1);
+   const observedRows=object(canonicalSellerTranscript({transcript:row.questionUnverified===true?[{role:'user',message:text}]:rows.slice(0,index+1)})).transcript;
    const statement=sellerStatementText(text);
    const remember=(key:Fact,value:boolean,onlyIfMissing=false)=>{
     if(onlyIfMissing&&facts[key]!==undefined)return;
@@ -125,7 +124,7 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
  // An actual refusal still wins below; this creates no calling permission.
  // A price-first seller need not supply a personal motivation. This changes no
  // property facts, offer calculation, listing rule, acceptance or signing gate.
- if(disposition)return result({ready:false,missing:[],stop:true,nextQuestion:'The seller has stopped this discussion or requested review. Honor the request; do not continue qualification.'});
+ if(sourceHold||disposition)return result({ready:false,missing:[],stop:true,nextQuestion:'The seller has stopped this discussion or requested review. Honor the request; do not continue qualification.'});
  const missing=(Object.keys(questions) as Fact[]).filter(key=>facts[key]!==true&&(channel!=='sms'||key!=='availability')&&(!priceRequested||key!=='situation'));
  if(facts.ownership===false||facts.interest===false||facts.availability===false||listed===true)return result({ready:false,missing,stop:true,nextQuestion:listed?'This property is listed with an agent. Do not quote an offer; follow the listing policy and end politely.':'The caller has declined this property discussion. Acknowledge and stop the pitch.'});
  if(missing.some(key=>uncertain.has(key)))return result({ready:false,missing,stop:true,clarificationRequired:true,nextQuestion:'I want to make sure I understood your reply. What were you referring to?'});
@@ -162,13 +161,13 @@ async function sellerTextEventTimes(db:Db,messages:SavedSellerText[]){
 }
 /** Reuse real answers on return calls, scoped by server-resolved IDs. A reset
  * creates a new screening/deal, so the old property's answers cannot leak in. */
-export async function boundSellerQualification(db:Db,context:{accountId?:string;dealId?:string;screeningId?:string;phone?:string;conversationId?:string},current:unknown,readCurrent?:()=>Promise<unknown>){
+export async function boundSellerQualification(db:Db,context:{accountId?:string;dealId?:string;screeningId?:string;phone?:string;conversationId?:string},current:unknown,readCurrent?:()=>Promise<unknown>,memorySnapshot?:SellerMemory|null){
  const first=sellerOfferQualification(current);if(!first.ready&&first.stop)return first;
  const {accountId,dealId,screeningId,phone}=context;
  if(!accountId||!dealId||!screeningId||!phone)return first;
- const memory=await readSellerMemory(db,{accountId,dealId,screeningId,phone});
+ const memory=memorySnapshot===undefined?await readSellerMemory(db,{accountId,dealId,screeningId,phone}):memorySnapshot;
  if(memory){
-  if(!memory.complete)return memory.state.qualification;
+  if(!memory.complete||memory.sourceHold)return memory.state.qualification;
   const live=memory.liveCalls?.find(c=>c.conversationId===context.conversationId);
   const concurrent=live?memory.history.filter(h=>object(h).channel==='sms'&&Date.parse(String(object(h).at))>=Date.parse(live.startedAt)):[];
   if(concurrent.length){
@@ -237,7 +236,7 @@ export async function boundSellerQualification(db:Db,context:{accountId?:string;
    // unstructured withdrawal also cannot be erased by a generic later yes.
    for(const sms of conflicts){
     const rows=object(sms.value).transcript as {role:string;message:string}[];
-    const disposition=sellerCallDisposition(rows.map(t=>({...t,message:t.role==='agent'?latestQualificationQuestion(t.message):t.message})));
+    const disposition=sellerCallDisposition(rows.map(t=>({...t,message:t.role==='agent'?sellerQuestion(t.message):t.message})));
     if(disposition==='opt_out'||disposition==='review'||!(sms.state.facts.ownership?.value===false||sms.state.facts.interest?.value===false||sms.state.facts.listing||sms.identityChanged))return sms.state.qualification;
    }
    const hold:SellerQualification={ready:false,missing:[],stop:true,nextQuestion:'A saved text conflicts with this call. Its timing needs reconciliation before an offer; honor the seller request and do not repeat answered qualification.'};

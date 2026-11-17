@@ -1,6 +1,7 @@
 import {signingTermsHash} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
-type Job={id:string;accountId:string;userId:string;customerEmail:string;dealId:string;phone:string;sellerName:string;expectedTerms:unknown};
+import {reviewSellerAgreementMemory} from './seller-agreement-memory-proof.ts';
+type Job={id:string;accountId:string;userId:string;customerEmail:string;dealId:string;phone:string;sellerName:string;expectedTerms:unknown;memoryReviewRequired?:boolean};
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Dependencies={db:Database;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms:unknown})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string}>};
 /** One owner-authorized request, one provider creation. An uncertain send stays
@@ -15,6 +16,7 @@ export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,
  let textAttempted=false;
  let result:{sent:boolean;status:string};
  try{
+  if(job.memoryReviewRequired===true&&!await reviewSellerAgreementMemory(d.db,job))throw Error('seller_memory_review_required');
   const existing=await d.db<{id:string;state:string;terms:unknown;recipients:{name:string;phone?:string}[];provider_id:string|null}[]>(`icash_signing_envelopes?account_id=eq.${job.accountId}&deal_id=eq.${job.dealId}&kind=eq.purchase&test_mode=eq.false&select=id,state,terms,recipients,provider_id&limit=2`);
   if(existing.length){
    const e=existing[0];

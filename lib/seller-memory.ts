@@ -1,11 +1,12 @@
 import {object} from './required-call-recording.ts';
 import {sellerDialogueState,type SellerDialogueState} from './seller-offer-qualification.ts';
 import {sellerCommunicationPreferences} from './seller-communication-intent.ts';
+import {sellerPersistentSourceHold,type SellerSourceHold} from './seller-source-hold.ts';
 
 export const sellerMemoryVersion='seller-memory-v1';
 export type SellerMemoryBinding={accountId:string;screeningId:string;phone:string;dealId?:string};
 type Database=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
-export type SellerMemory={history:unknown[];state:SellerDialogueState;fingerprint:string;complete:boolean;liveCalls?:{conversationId:string;startedAt:string}[]};
+export type SellerMemory={history:unknown[];state:SellerDialogueState;fingerprint:string;complete:boolean;sourceHold?:SellerSourceHold;liveCalls?:{conversationId:string;startedAt:string}[]};
 
 /** Exact provider conversation already verified by the reception maintenance
  * binding. Retain middle answers; oversize histories get an explicit marker. */
@@ -33,12 +34,14 @@ export function chronologicalSellerHistory(conversations:unknown[]):unknown[]{
    if(turn.role!=='user')continue;
    const seconds=turn.seconds??turn.time_in_call_secs;
    const spoken=Number.isFinite(start)&&typeof seconds==='number'&&Number.isFinite(seconds)&&seconds>=0?start+seconds*1000:NaN;
-   const at=typeof turn.at==='string'?Date.parse(turn.at):Number.isFinite(spoken)?spoken:Date.parse(String(c.at));
+   const rawCall=typeof c.sourceCoverage==='string';
+   const sourceClockUnverified=rawCall&&(!Number.isFinite(spoken)||spoken>Date.now()||typeof seconds!=='number'||seconds<0||seconds>600);
+   const at=sourceClockUnverified?Date.parse(String(c.at)):typeof turn.at==='string'?Date.parse(turn.at):Number.isFinite(spoken)?spoken:Date.parse(String(c.at));
    if(!Number.isFinite(at))continue;
    const sourceId=String(turn.sourceId??String(c.sourceId)+':'+index);
    exchanges.push({at,order:exchanges.length,value:{sourceId,at:new Date(at).toISOString(),channel:c.channel,
     transcript:[{role:'agent',message:thread?threadQuestions.get(thread)??'':question},{role:'user',message:turn.message,sourceId,at:new Date(at).toISOString(),channel:c.channel,
-     ...(turn.questionUnverified===true?{questionUnverified:true}:{})}]}});
+     ...(turn.questionUnverified===true||sourceClockUnverified?{questionUnverified:true}:{}),...(sourceClockUnverified?{sourceClockUnverified:true}:{})}]}});
   }
  }
  return exchanges.sort((a,b)=>a.at-b.at||a.order-b.order).map(x=>x.value);
@@ -53,6 +56,7 @@ export async function readSellerMemory(db:Database,binding:SellerMemoryBinding):
  const source=object(raw),bound=object(source.binding);
  if(bound.accountId!==binding.accountId||bound.screeningId!==binding.screeningId||bound.phone!==binding.phone
   ||binding.dealId&&bound.dealId!==binding.dealId||!Array.isArray(source.conversations)||typeof source.fingerprint!=='string')throw Error('SELLER_MEMORY_BINDING_REQUIRED');
+ const sourceHold=sellerPersistentSourceHold(source.conversations);
  const history=chronologicalSellerHistory(source.conversations);
  const state=sellerDialogueState(null,history);
  // Older applications keep the conservative complete=false hold. This exact
@@ -73,6 +77,11 @@ export async function readSellerMemory(db:Database,binding:SellerMemoryBinding):
    throw Error('SELLER_MEMORY_RECEIPT_PROJECTION_REQUIRED');
   complete=source.receiptSourceComplete===true&&text.receiptSourceComplete===true&&Number(text.rawSourceCount)<=1000;
  }
+ if(source.callSourceVersion!==undefined){
+  if(source.callSourceVersion!=='seller-call-source-v1'||typeof source.callSourceComplete!=='boolean')throw Error('SELLER_CALL_SOURCE_PROJECTION_REQUIRED');
+  complete=complete&&source.callSourceComplete;
+ }
+ if(sourceHold)state.qualification={ready:false,missing:[],stop:true,nextQuestion:'The seller has stopped this discussion or requested review. Honor the original request; do not continue qualification or prepare an agreement.'};
  if(!complete)state.qualification={ready:false,missing:[],stop:true,nextQuestion:'The full saved conversation needs reconciliation. Do not repeat qualification or quote from partial history.'};
  // Recompute from source even on a cache hit. A cache cannot manufacture facts.
  const projection={version:sellerMemoryVersion,...state};
@@ -83,7 +92,7 @@ export async function readSellerMemory(db:Database,binding:SellerMemoryBinding):
   if(saved!==true)throw Error('SELLER_MEMORY_SOURCE_CHANGED');
  }
  const liveCalls=(Array.isArray(source.liveCalls)?source.liveCalls:[]).map(object).filter(c=>typeof c.conversationId==='string'&&typeof c.startedAt==='string'&&Number.isFinite(Date.parse(c.startedAt))) as {conversationId:string;startedAt:string}[];
- return {history,state,fingerprint:source.fingerprint,complete,liveCalls};
+ return {history,state,fingerprint:source.fingerprint,complete,...(sourceHold?{sourceHold}:{}),liveCalls};
 }
 
 /** Bounded prompt evidence. The full quote remains in the private journal. */
