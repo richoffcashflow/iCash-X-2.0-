@@ -96,7 +96,7 @@ const suites = [
  'workspace-attention-readback', 'seller-default-conversation', 'workspace-panel-content', 'workspace-archived-attention', 'seller-recovery-route', 'workspace-attention-ui', 'production-release-gate', 'production-health',
  'workspace-experience', 'workspace-experience-database', 'reliability-alerts', 'reliability-stable-recovery', 'reliability-component-outages', 'reliability-email-reset', 'outbound-quota-wait-aging', 'operational-sms-candidate-fence',
  'workspace-request-recovery', 'server-request-deadlines', 'workspace-event-stream', 'scheduler-nonblocking-poll', 'durable-work-billing-stop',
- 'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
+ 'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database', 'usage-context-research-precheck',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
  'credit-refill-context', 'credit-refill-recommendation',
  'support-activity-confirmation',
