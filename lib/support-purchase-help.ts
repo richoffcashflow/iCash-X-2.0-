@@ -15,6 +15,7 @@ export function supportProofSubmissionFollowup(messages:Turn[]){
   &&!/\b(?:do not|don[’']t|never) reply\b/i.test(request.content);
  const detailsClaim=/^I (?:have )?already (?:did that|sent (?:it|those details))\b/i.test(q)&&q.length<=240
   &&!/\b(?:seller|buyer|bot|property|house|contract|course|vip|credits?|delete|deletion|refund|cancel|not yet|never|haven[’']t|did not|didn[’']t|would|will|if|friend|not to you|working now|fixed|resolved|signed in)\b/i.test(q);
+ if(checkoutDetails&&detailsClaim&&supportProofSubmissionClaim(q,true)==='unconfirmed_recipient')return {reply:'The requested checkout details need to reach the original iCash X Support email. If they went to a different inbox, reply once to that original email with the requested details. If you already replied there, share the subject and date here so we can look for the message. Your purchase and access still need verification.',status:'open' as const,managementReview:true as const,ai:false as const};
  if(checkoutDetails&&detailsClaim)return {reply:'You’re saying you sent the checkout details requested in the last support reply. That submission still needs to be checked against the purchase; you do not need to send those same details again. The earlier operator findings remain part of this review. This reply does not confirm any new email, subscription, refund or access change.',status:'open' as const,managementReview:true as const,ai:false as const};
  if(!request||request.role!=='operator'||!request.content.includes(supportLegacyProofEmail)
   ||!/\b(?:email|forward|send)\b[^.!?]{0,55}\b(?:purchase receipt|checkout (?:email|address)|original checkout address)\b/i.test(request.content)
@@ -69,12 +70,14 @@ const clarifyReceiptDestination=()=>({
 });
 /** Recognize a completed proof-submission claim, never proof or ownership itself.
  * Keep clause-local negation/hypotheticals separate from a later missing reply. */
-function supportProofSubmissionClaim(text:string):'support'|'unconfirmed_recipient'|null{
+function supportProofSubmissionClaim(text:string,priorProofRequest=false):'support'|'unconfirmed_recipient'|null{
  const proof='(?:(?:my|the|a|an|our|purchase|payment|merchant|vip|software)\\s+){0,4}(?:receipts?|proof|screenshots?)\\b';
  const subject="(?:\\bi(?:[’']ve| have| had)?\\s+(?:(?:already|just)\\s+)*|\\band\\s+|^\\s*(?:(?:already|just)\\s+)?)";
  const affirmative=new RegExp(subject+'(?:(?:sent|emailed|submitted)\\s+(?:(?:you|support)\\s+)?(?:(?:an? |the |my )?email\\s+with\\s+|with\\s+)?'+proof+'|contacted\\s+(?:support|you|the support team)(?:\\s+by email)?\\s+with\\s+'+proof+')','i');
  // Resolve complete email addresses before sentence punctuation splits their domains.
- const recipients=text.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, address=>
+ // A receipt or checkout request supplies the referent for a short reply.
+ const claimText=priorProofRequest?text.replace(/\b(sent|emailed|submitted) (?:it|those details)\b/gi,'$1 my receipt'):text;
+ const recipients=claimText.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, address=>
   address.toLowerCase()===supportLegacyProofEmail.toLowerCase()?'iCash X support':'a different inbox');
  let submitted:'support'|'unconfirmed_recipient'|null=null;
  for(const clause of recipients.split(/[.!?;,\n]+|\b(?:but|however|although|though)\b/iu)){
@@ -187,7 +190,11 @@ export function supportVipPurchaseReply(context:PurchaseContext){
  if(migration&&/\b(?:transfer|carry(?: over)?)\b/i.test(q)&&!/\b(?:not showing|missing|locked)\b/i.test(q))return {reply:policy+(vip?.code==='vip_active'?' Your current 2.0 account does have VIP active.':''),status:'resolved' as const,ai:false};
  if(vip?.code==='vip_active')return {reply:'Your current 2.0 account has VIP active, so you do not need to buy it again. Open Ask AI Bot beside Your leads. If it still shows an upgrade screen, that access mismatch remains unresolved here.',status:'open' as const,ai:false};
  const prefix=vip?.code==='vip_inactive'?'VIP is not active on this 2.0 account. ':'I haven’t confirmed 2.0 VIP access yet. ';
- const sent=activeUsers.some(receiptAcknowledged)||activeUsers.some(m=>/\b(?:sent|emailed|submitted)\b.{0,40}\b(?:vip|receipt)|\b(?:vip|receipt)\b.{0,35}\b(?:sent|emailed|submitted)\b|^(?:i (?:have |already |just )?)?(?:sent|emailed|submitted) it\b/i.test(m.content)&&!/\b(?:not|never|haven[’']t|didn[’']t)\b/i.test(m.content));
+ const sent=activeUsers.some(receiptAcknowledged)||activeUsers.some(m=>/\b(?:sent|emailed|submitted)\b.{0,40}\b(?:vip|receipt)|\b(?:vip|receipt)\b.{0,35}\b(?:sent|emailed|submitted)\b|^(?:i (?:have |already |just )?)?(?:sent|emailed|submitted) it\b/i.test(m.content)&&!/\b(?:not|never|haven[’']t|didn[’']t)\b/i.test(m.content)&&supportProofSubmissionClaim(m.content,true)!=='unconfirmed_recipient');
+ if(!sent&&supportProofSubmissionClaim(q,true)==='unconfirmed_recipient'){
+  const destination=clarifyReceiptDestination();
+  return {...destination,reply:prefix+(migration?policy+' ':'')+destination.reply};
+ }
  const asked=context.messages.slice(first).some(m=>m.role!=='user'&&/VIP purchase receipt/i.test(m.content));
  const next=sent?'You’ve said you sent the receipt. I haven’t confirmed that the VIP purchase has been matched yet; you do not need to send the same receipt again.':asked?'The receipt requested above is still needed to verify that VIP purchase.':`Email the VIP purchase receipt to ${supportLegacyProofEmail} so its product and account can be verified.`;
  return {reply:prefix+(migration?policy+' ':'')+'If your payment was specifically for 2.0 VIP, don’t buy it again before that purchase is verified. '+next,status:sent?'open' as const:'waiting_on_customer' as const,ai:false};

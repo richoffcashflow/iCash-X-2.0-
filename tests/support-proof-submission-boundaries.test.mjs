@@ -76,6 +76,14 @@ for(const kind of ['account','access'])for(const recipient of ['support at my ba
  assert.match(r.reply,/already sent it to ours, just share the email subject and date/i);
  assert.equal(r.status,'open');
  assert.equal(r.managementReview,true);
+ const details=await replyToSupport({kind,messages:[{role:'operator',content:'Reply to that email with the first and last name from checkout and the checkout email if different.'},user('I already sent those details to '+recipient+'.')],evidence:[]},deny);
+ assert.match(details.reply,/original iCash X Support email/i);
+ assert.doesNotMatch(details.reply,/do not need to send those same details again/i);
+ assert.equal(details.status,'open');
+ const vip=await replyToSupport({kind,messages:[user('I paid for 2.0 VIP but it is not active.'),user('I sent my receipt to '+recipient+'.')],evidence:[]},deny);
+ assert.match(vip.reply,/support@geticashx\.com/i);
+ assert.doesNotMatch(vip.reply,/you[’']ve said you sent/i);
+ assert.equal(vip.status,'open');
 }
 for(const q of ['The seller misspelled their email and sent proof.','How do I call a seller?','Cancel my subscription.'])assert.equal(supportPurchaseHelp([user(q)]),null);
 for(const kind of ['account','access'])for(const q of negatives){
