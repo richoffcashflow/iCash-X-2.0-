@@ -47,6 +47,7 @@ const suites = [
  'seller-interest-cash-offer-statements', 'seller-call-contact-cost-learning', 'cash-question-learning', 'targeting-call-exposure-clocks',
  'pro-voice-capacity', 'pro-voice-capacity-database',
  'full-business-voice-capacity', 'full-business-voice-capacity-database', 'fresh-sender-capacity-preference',
+ 'voice-cooldown-worker', 'voice-cooldown-database',
  'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-purpose-clarity', 'seller-voice-warmth', 'seller-helpful-text', 'seller-call-invitation', 'seller-initial-reply',
  'support-purchase-topic', 'support-work-repair-boundaries', 'support-pending-explanation',
  'support-checkout-email', 'support-email-repurchase', 'support-seller-text-review', 'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',

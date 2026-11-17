@@ -176,6 +176,13 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 55443 -U postgres -d postgres -c 'CREATE DATABASE icash_full_voice_capacity;'
           node tests/full-business-voice-capacity-database.test.mjs
+      - name: Verify voice cooldown hints and mixed original one-use claims
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+          PGPASSWORD: isolated-fixture-only
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 55443 -U postgres -d postgres -c 'CREATE DATABASE icash_voice_cooldown;'
+          node tests/voice-cooldown-database.test.mjs
       - name: Verify urgent voice source filtering and concurrent fair issuance
         run: python3 scripts/test-urgent-voice-source-gate-postgres.py
       - name: Verify legacy voice history is excluded before native eligibility checks
