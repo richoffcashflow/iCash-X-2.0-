@@ -8,7 +8,7 @@ export async function verifyWebinarRecovery(browser,base,options,name){
  // Ordinary checkout has its independent fallback; custom links still require
  // the server's recovered completion response and must never become membership.
  const webinar=publicWebinar({...newWebinar(id),title:'Recovery fixture',status:'published',publicCode:'123456',videoUrl:base+'/fixture-stalled.mp4',durationSeconds:600,nameAt:0,contactAt:0,pitchAt:300,offers:[{id:'primary',at:300,title:'Continue to checkout',description:'',ctaLabel:'Continue',action:'link',url:base+'/fixture-checkout',expiresAt:null}],showAudienceCount:false});
- let completionAttempts=0,failCompletion=true,videoRequests=0;const held=new Set(),errors=[];
+ let completionAttempts=0,failCompletion=true;const held=new Set(),errors=[];
  await context.route('**/*',async route=>{
   const url=new URL(route.request().url());if(url.origin!==base)return route.abort();
   const json=body=>route.fulfill({json:body});
@@ -24,7 +24,7 @@ export async function verifyWebinarRecovery(browser,base,options,name){
    return json({saved:true});
   }
   if(url.pathname==='/fixture-stalled.mp4'){
-   videoRequests++;await new Promise(resolve=>held.add(resolve));
+   await new Promise(resolve=>held.add(resolve));
    return route.abort().catch(()=>{});
   }
   if(url.pathname==='/fixture-checkout')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>Checkout recovered</title><p>Checkout recovered</p>'});
@@ -33,15 +33,17 @@ export async function verifyWebinarRecovery(browser,base,options,name){
  });
  try{
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.clock.install();
-  await page.goto(base+'/live/123456',{waitUntil:'domcontentloaded'});
+  const videoRequest=r=>new URL(r.url()).pathname==='/fixture-stalled.mp4';
+  // Observe the first actual request before simulating the stalled interval.
+  // A request event can precede its interception callback, especially in WebKit.
+  await Promise.all([page.waitForRequest(videoRequest),page.goto(base+'/live/123456',{waitUntil:'domcontentloaded'})]);
   await page.getByRole('heading',{name:'Recovery fixture'}).waitFor({state:'attached'});
   await page.waitForFunction(()=>!!document.querySelector('video'));
   await page.clock.fastForward(13000);
   const resume=page.getByRole('button',{name:'Resume video',exact:true});await resume.waitFor({state:'visible'});
-  const before=videoRequests;
-  await Promise.all([page.waitForRequest(r=>new URL(r.url()).pathname==='/fixture-stalled.mp4'),resume.click()]);
+  // A distinct request after Resume proves reload without a callback-counter race.
+  await Promise.all([page.waitForRequest(videoRequest),resume.click()]);
   await page.waitForFunction(()=>document.querySelector('video')?.networkState===2);
-  assert(videoRequests>before,'Resume reloads a video whose initial metadata never arrived');
   await page.close();
   for(const reconnect of [false,true]){
    failCompletion=true;completionAttempts=0;

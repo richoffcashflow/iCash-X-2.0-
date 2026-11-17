@@ -82,7 +82,7 @@ export function recordingService(env:RecordingEnv,{db,receiptDb=db,provider,now=
    // Repeat both fresh reviews at this final boundary, concurrently. Never
    // reuse the earlier dispatch preflight or admit while either is pending.
    const [agentRead,callerRead]=await Promise.allSettled([
-    checkAgent(review),fromPhone!==review.fromPhone?secondaryCallingReady(db,env,fetch,fromPhone):Promise.resolve(true),
+    checkAgent(review),fromPhone!==review.fromPhone?secondaryCallingReady(db,env,fetch,fromPhone,diagnostic=>console.warn('business_calling_preflight_held',{phase:'recording_preflight',...diagnostic})):Promise.resolve(true),
    ]);
    if(agentRead.status==='rejected')throw agentRead.reason;
    if(!agentRead.value)return beforeCreate('recording_review_required');

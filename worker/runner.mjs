@@ -26,7 +26,13 @@ async function databaseFailureCode(response){
   body+=decoder.decode();
   const code=JSON.parse(body)?.code;
   return databaseFailureCodes.has(code)?code:null;
- }catch{return null;}finally{try{await reader.cancel();}catch{/* Diagnostic failure preserves the original HTTP failure. */}reader.releaseLock();}
+ }catch{return null;}finally{
+  // The HTTP failure is already known. A bounded diagnostic read must not
+  // remain in a worker slot while transport cleanup is still pending. Start
+  // cleanup once, observe any later rejection and retain the original failure.
+  try{void reader.cancel().catch(()=>{});}catch{/* Preserve the original HTTP failure. */}
+  reader.releaseLock();
+ }
 }
 export async function tick(rpc, screen=runQueuedScreening){
  const job=await rpc('icash_claim_screening',{});
@@ -41,7 +47,7 @@ export function createRpc(url,key,transport=fetch){
  const base=new URL(url);
  if(base.protocol!=='https:'||!base.hostname.endsWith('.supabase.co')||!key)throw new Error('Invalid worker configuration');
  return async(name,args)=>{
-  if(!['icash_claim_screening','icash_finish_screening','icash_next_automation','icash_next_automation_lane','icash_record_service_heartbeat'].includes(name))throw new Error('Unsupported worker operation');
+  if(!['icash_claim_screening','icash_finish_screening','icash_next_automation','icash_next_automation_lane','icash_poll_voice_ticket','icash_record_service_heartbeat'].includes(name))throw new Error('Unsupported worker operation');
   let response;
   try{
    response=await transport(new URL('/rest/v1/rpc/'+name,base),{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(args),redirect:'error',signal:AbortSignal.timeout(15000)});
@@ -59,8 +65,16 @@ export function createRpc(url,key,transport=fetch){
 /** One-use ticket is minted in the shared DB; the API key stays on Vercel. No external call retries. */
 export async function automationTick(rpc,transport=fetch,lane){
  if(lane!==undefined&&!['general','research','voice','messages','recovery'].includes(lane))throw Error('INVALID_AUTOMATION_LANE');
- const ticket=await rpc(lane===undefined?'icash_next_automation':'icash_next_automation_lane',lane===undefined?{}:{p_lane:lane});
+ const ticket=await rpc(lane==='voice'?'icash_poll_voice_ticket':lane===undefined?'icash_next_automation':'icash_next_automation_lane',lane===undefined||lane==='voice'?{}:{p_lane:lane});
  if(!ticket)return false;
+ // This separate RPC can confirm only the short shared issuance cooldown.
+ // A tokenless hint is scheduling information, never a completed job or a
+ // capability. Unknown RPC outcomes must not fall back to another issuer.
+ if(ticket.status!==undefined||ticket.retryAfterMs!==undefined){
+  if(lane!=='voice'||Object.keys(ticket).length!==2||ticket.status!=='voice_cooldown'
+   ||!Number.isInteger(ticket.retryAfterMs)||ticket.retryAfterMs<100||ticket.retryAfterMs>1100)throw new Error('INVALID_AUTOMATION_TICKET');
+  return {status:'voice_cooldown',retryAfterMs:ticket.retryAfterMs};
+ }
  if(typeof ticket.token!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){2}$/.test(ticket.token))throw new Error('INVALID_AUTOMATION_TICKET');
  // Research can include a 120-second synchronous export followed by original
  // receipt persistence. The capability is still sent exactly once.

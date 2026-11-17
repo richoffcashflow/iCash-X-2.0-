@@ -24,6 +24,40 @@ try{
  globalThis.fetch=async url=>{if(url.includes('/auth/'))throw new DOMException('private connection details','TimeoutError');return new Response('[{"id":1}]');};
  result=await (await fresh()).serviceHealth();assert.equal(result.checks.database,'ok');assert.equal(result.checks.authentication,'unavailable');assert(!JSON.stringify(result).includes('private'));
  globalThis.fetch=async()=>new Response('secret upstream error',{status:503});assert.equal((await (await fresh()).serviceHealth()).status,'degraded');
+ // Optional body disposal cannot retain the shared pending probe after its
+ // HTTP result is already known. These are real unfinished streams, not
+ // database/auth/provider requests. Eventual failures must stay handled too.
+ for(const [target,status] of [['auth',200],['auth',503],['database',503],['workflows',503]])for(const mode of ['pending','rejected','synchronous']){
+  let cancelled=0,rejectCancel,calls=0;
+  const cleanup=new Promise((_,reject)=>{rejectCancel=reject;});
+  const response=new Response(new ReadableStream({
+   start(controller){controller.enqueue(new TextEncoder().encode('private ignored health payload'));},
+   cancel(){cancelled++;if(mode==='rejected')throw Error('private cleanup failure');return cleanup;},
+  }),{status});
+  if(mode==='synchronous')Object.defineProperty(response.body,'cancel',{value(){cancelled++;throw Error('private synchronous cleanup failure');}});
+  globalThis.fetch=async url=>{
+   calls++;
+   const kind=url.includes('/auth/')?'auth':url.includes('/rpc/')?'workflows':'database';
+   return kind===target?response:Response.json(kind==='workflows'?workflow:kind==='database'?[{id:1}]:{});
+  };
+  const module=await fresh();let timer;
+  try{
+   const [first,second]=await Promise.race([
+    Promise.all([module.serviceHealth(),module.serviceHealth()]),
+    new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Known health result blocked by response cleanup')),250);}),
+   ]);
+   const expected={database:'ok',authentication:'ok',workflows:'ok'};
+   if(status!==200)expected[target==='auth'?'authentication':target]='unavailable';
+   assert.deepEqual(first.checks,expected);assert.equal(first.status,status===200?'ok':'degraded');
+   assert.deepEqual(second,first,'Concurrent callers share the completed result');
+   assert.equal(cancelled,1,'Discard starts once without retrying the probe');
+   assert.equal(calls,3);assert(!JSON.stringify(first).includes('private'));
+   assert.deepEqual(await module.serviceHealth(),first);assert.equal(calls,3,'Completion still populates the original short cache');
+  }finally{
+   clearTimeout(timer);
+   if(mode==='pending'){rejectCancel(Error('private delayed cleanup failure'));await new Promise(resolve=>setImmediate(resolve));}
+  }
+ }
  delete process.env.SUPABASE_SECRET_KEY;globalThis.fetch=()=>{throw Error('Must not call provider without configuration');};assert.equal((await (await fresh()).serviceHealth()).status,'degraded');
  console.log('PASS service health: parallel bounded probes, shared cache, database/auth failures, missing configuration and no secret exposure.');
 }finally{globalThis.fetch=originalFetch;if(originalUrl===undefined)delete process.env.SUPABASE_URL;else process.env.SUPABASE_URL=originalUrl;if(originalKey===undefined)delete process.env.SUPABASE_SECRET_KEY;else process.env.SUPABASE_SECRET_KEY=originalKey;}
