@@ -11,6 +11,7 @@ const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',session='11111111-1111-4111-8
 const accountRow={id:account,name:'Fixture customer',email:'fixture@example.invalid',ownAccount:false,fundedCents:25000,balanceCents:12000,reservedCents:100,leadCount:1,paused:true,assistantName:'Bot',createdAt:new Date().toISOString(),billingModel:'membership_credits',vip:false,membership:null};
 const view={id:viewId,expiresAt:new Date(Date.now()+60000).toISOString(),account:accountRow};
 let user={id:owner},proof=true,binding={sub:owner,session_id:session},active=true,calls=[],media=[],validScreen=true;
+let botProgress={status:'paused'},botTickets=[];
 const cachedPhoto={url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg',view:'street_view',source:'DealMachine'};
 const load=(path,deps)=>{const code=ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const module={exports:{}};new Function('require','module','exports',code)(name=>{assert(name in deps,'Missing dependency '+name);return deps[name];},module,module.exports);return module.exports;};
 const database={db:async(path,method='GET',body)=>{
@@ -23,12 +24,12 @@ const database={db:async(path,method='GET',body)=>{
  if(path==='rpc/icash_owner_account_leads'){assert.equal(body.p_account,account);return {page:body.p_page,pageSize:12,query:body.p_query,total:0,leads:[]};}
  if(path==='rpc/icash_activity_report'){assert.equal(body.p_account,account);return {days:body.p_days,timezone:body.p_timezone,startAt:'2026-10-01T00:00:00Z',endAt:'2026-10-02T00:00:00Z',leads:1,calls:2,texts:3,contracts:0};}
  if(path==='rpc/icash_vip_savings'){assert.equal(body.p_account,account);return 100;}
- if(path==='rpc/icash_prospecting_progress'){assert.equal(body.p_account,account);return {status:'paused'};}
+ if(path==='rpc/icash_prospecting_progress'){assert.equal(body.p_account,account);return botProgress;}
  if(path==='rpc/icash_read_photo_cache'){assert.deepEqual(body,{p_account:account,p_screening:screen});return cachedPhoto;}
  assert.equal(method,'GET','Account inspection cannot send writes through arbitrary tables or RPCs');
  assert(path.includes('account_id=eq.'+account),'All nested records stay scoped to the selected account');
  if(path.startsWith('icash_screening_jobs?'))return validScreen?[{id:screen,result:{property:{propertyId:'prop_fixture1',images:null}}}]:[];
- if(path.startsWith('icash_automation_tickets?'))return [];
+ if(path.startsWith('icash_automation_tickets?'))return botTickets;
  if(path.startsWith('icash_live_conversations?'))return [{party:'seller',result:{transcript:[{role:'user',message:'Saved answer'}]}}];
  if(path.startsWith('icash_deal_files?'))return [{id:screen}];
  if(path.startsWith('icash_text_threads?'))return [{id:screen,recipient:'+12025550123',party:'seller'}];
@@ -74,6 +75,15 @@ assert.equal((await get('messages','?screeningId='+screen+'&threadId='+session))
 validScreen=false;assert.equal((await get('messages','?screeningId='+screen)).status,404);validScreen=true;
 response=await get('recording/audio','?id='+screen);assert.equal(response.status,206);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(media[0].a,account);
 for(const resource of ['activity','progress','bot-status','report','property-photo?screeningId='+screen]){const [name,query]=resource.split('?');assert.equal((await get(name,query?'?'+query:'')).status,200,resource);assert.equal((await get(name,'?accountId='+session)).status,400,'Cannot override inspected account');}
+botProgress={status:'ready',health:{status:'blocked',reason:'pending_work'}};
+botTickets=[{kind:'contacts',state:'consumed',expires_at:new Date(Date.now()+60000).toISOString()}];
+let bot=await (await get('bot-status')).json();assert.equal(bot.label,'Paused');assert.equal(bot.active,false,'Inspected customer Pause wins over a current ticket');
+accountRow.paused=false;
+bot=await (await get('bot-status')).json();assert.equal(bot.label,'Finding property owners');assert.equal(bot.active,true);assert.equal(bot.pendingConfirmation,true);
+botTickets=[];bot=await (await get('bot-status')).json();assert.equal(bot.active,false);assert.equal(bot.pendingConfirmation,true);assert.equal(bot.label,'Earlier work is awaiting confirmation.');
+botProgress={status:'ready',health:{status:'blocked',reason:'no_completed_work'}};
+bot=await (await get('bot-status')).json();assert.equal(bot.blocked,true);assert.equal(bot.blockedReason,'no_completed_work');assert.equal(bot.label,'No recent completed task was recorded.');
+accountRow.paused=true;botProgress={status:'paused'};
 response=await get('property-photo','?screeningId='+screen);assert.deepEqual((await response.json()).photo,cachedPhoto,'Owner view reads the existing photo and aerial fallback');
 const cacheReads=calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length;validScreen=false;assert.equal((await get('property-photo','?screeningId='+screen)).status,404);validScreen=true;assert.equal(calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length,cacheReads,'A foreign screening cannot read photo cache');
 assert.equal((await get('report','?timezone=Invalid')).status,400);
