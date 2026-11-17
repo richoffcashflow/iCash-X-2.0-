@@ -1,5 +1,17 @@
 # Continuous reliability
 
+## November 16 bounded transport and conversation recovery
+
+The [conversation and receipt repair](https://github.com/richoffcashflow/iCash-X-2.0-/pull/809)
+adds reproduced contact-panel timeout, original text-receipt cleanup and
+seller question/name regressions without changing the approved layout.
+The connected [provider recovery repair](provider-recovery-cleanup-2026-11-16.md)
+covers original research, lead intake and signing-document cleanup. A settled
+read or write outcome must not wait indefinitely for transport cleanup, and a
+cleanup error must not replace that outcome or cause another provider operation.
+These candidates require their normal exact-release checks; this entry is not
+evidence that production account findings or all possible faults are resolved.
+
 ## November 16 collector deadline scan candidate
 
 The [deadline-plan candidate](collector-preflight-deadline-plan.md) addresses a

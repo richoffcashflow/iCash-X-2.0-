@@ -58,4 +58,31 @@ try{
   }
   stream([new Uint8Array([1,2,3])]);assert.deepEqual(new Uint8Array(await service.completedSigningPdf('account','envelope',false,expected)),new Uint8Array([1,2,3]));assert.equal(requests.length,3);
  });
+ await test('PDF cleanup cannot block known rejection or change complete original bytes',async()=>{
+  const flush=()=>new Promise(resolve=>setImmediate(resolve));
+  for(const result of ['bad_type','declared_size','chunked_size','complete'])for(const cleanup of ['pending','rejected','synchronous']){
+   requests=[];let cancels=0,rejectCleanup,settled=false,error,value;
+   const bytes=new Uint8Array([37,80,68,70,45,0,128,255]),cleanupWait=new Promise((_,reject)=>{rejectCleanup=reject;});
+   pdfResponse=result==='complete'?new Response(bytes,{headers:{'Content-Type':'application/pdf'}}):new Response(new ReadableStream({
+    start(controller){controller.enqueue(new Uint8Array(result==='chunked_size'?20*1024*1024+1:1));},
+    cancel(){cancels++;return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;},
+   }),{headers:{'Content-Type':result==='bad_type'?'text/html':'application/pdf',...(result==='declared_size'?{'Content-Length':String(21*1024*1024)}:{})}});
+   if(result==='complete'||cleanup==='synchronous'){
+    const cancel=()=>{cancels++;if(cleanup==='synchronous')throw Error('private cleanup');return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;};
+    if(['bad_type','declared_size'].includes(result))pdfResponse.body.cancel=cancel;
+    else{const getReader=pdfResponse.body.getReader.bind(pdfResponse.body);pdfResponse.body.getReader=()=>{const reader=getReader();reader.cancel=cancel;return reader;};}
+   }
+   const pending=service.completedSigningPdf('account','envelope').then(output=>{value=output;settled=true;},failure=>{error=failure;settled=true;});
+   try{
+    await flush();await flush();assert.equal(settled,true,`${result}/${cleanup}: PDF outcome cannot await cleanup`);await pending;
+    assert.equal(cancels,1);assert.equal(pdfResponse.body.locked,false);
+    assert.deepEqual(requests,['https://api.docuseal.com/submissions/123','https://api.docuseal.com/submissions/123/documents?merge=true','https://docuseal.com/file/fixture.pdf'],'Read only the original submission, documents and PDF once');
+    if(result==='complete'){assert.equal(error,undefined);assert.deepEqual(new Uint8Array(value),bytes);}
+    else{assert.equal(value,undefined);assert.equal(error?.message,result==='bad_type'?'Signed PDF is not ready.':'PDF too large.');}
+   }finally{
+    if(cleanup==='pending')rejectCleanup(Error('private late cleanup'));
+    await flush();await pending;
+   }
+  }
+ });
 }finally{if(oldKey===undefined)delete process.env.DOCUSEAL_TEST_API_KEY;else process.env.DOCUSEAL_TEST_API_KEY=oldKey;}

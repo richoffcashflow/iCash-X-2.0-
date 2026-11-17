@@ -6,6 +6,7 @@ import {OwnerPreviewRateLimitError,OwnerExportCapacityBusyError} from '../lib/ow
 import {OwnerExportPreflightPendingError} from '../lib/owner-export-preflight.ts';
 import {ProspectingBudgetError} from '../lib/voice-budget-failure.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
+import {transportCleanupFixture,settleBeforeCleanup} from './helpers/transport-cleanup-fixture.mjs';
 const now=new Date().toISOString(),account='00000000-0000-4000-8000-000000000001';
 const owner=id=>({dm_person_id:id,contact_type:'owner',availability:{phones:3}});
 const snapshot=id=>({propertyId:id,propertyType:'house',fetchedAt:now,sellerCostReserveCents:100000,raw:{data:{dm_property_id:id,full_address:'Fixture',estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:50000}}});
@@ -256,6 +257,47 @@ try{
  }
  reset();const hugeRecovery=(url,options)=>String(url).includes('/exports/')?new Response('x'.repeat(131073)):transport(url,options);
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,hugeRecovery)).status,'export_receipt_held');assert.equal(paid,1);assert.equal(downloads,0);assert.equal(results,null);
+ // Original POST receipts, original-ID GETs and bounded downloads must finish
+ // their existing evidence path without waiting for transport cleanup. Never
+ // turn a cleanup failure into a repeat of the admitted export.
+ for(const stage of ['paid','recovery','download','download_http'])for(const bodyKind of stage==='download_http'?['http_error']:['complete','oversized'])for(const mode of ['pending','rejected','synchronous']){
+  reset();const observed=[],metrics=[];
+  const rawText=stage==='paid'?' '+JSON.stringify(receipt().raw)+'\n':stage==='recovery'?' '+JSON.stringify({data:{export_id:'export-fixture',status:'completed',record_count:2,download_urls:[{url:'https://storage.googleapis.com/fixture.csv.gz'}]}})+'\n':csv;
+  const stream=transportCleanupFixture({mode,body:rawText,status:stage==='download_http'?503:200,...(bodyKind==='oversized'?{size:stage==='paid'?524289:stage==='recovery'?131073:1048577}:stage==='download_http'?{size:1}:{})});
+  const cleanupDb=async(path,method,p)=>{
+   if(['rpc/icash_record_owner_export_receipt','rpc/icash_record_owner_export_recovery'].includes(path))observed.push({path,receipt:structuredClone(p.p_receipt)});
+   if(path==='rpc/icash_finish_dealmachine_request')metrics.push(p);
+   return db(path,method,p);
+  };
+  const cleanupTransport=async(url,options)=>{
+   const path=String(url);
+   if(stage==='paid'&&path.endsWith('/people/export')){assert.equal(options.method,'POST');assert(claimed);paid++;return stream.response;}
+   if(stage==='recovery'&&path.endsWith('/exports/export-fixture')){assert.equal(options.method,'GET');assert(saved.receipt);gets++;return stream.response;}
+   if(stage.startsWith('download')&&path==='https://storage.googleapis.com/fixture.csv.gz'){assert.equal(options.method,'GET');assert(!options.headers);downloads++;return stream.response;}
+   return transport(url,options);
+  };
+  const outcome=await settleBeforeCleanup(enrichActiveOwners(cleanupDb,account,candidates[0],config,250000,cleanupTransport),stream);
+  if(stage==='paid'&&bodyKind==='oversized'){
+   assert.equal(outcome.error?.message,'OWNER_EXPORT_RESPONSE_TOO_LARGE');assert.equal(saved.receipt,undefined);
+   assert.equal(metrics.at(-1).p_result.outcome,'unknown');
+  }else{
+   assert.equal(outcome.error,undefined);
+   assert.equal(outcome.value.status,bodyKind==='complete'?'contacts_saved':'export_receipt_held');
+  }
+  assert.equal(paid,1);
+  assert.equal(gets,stage==='paid'&&bodyKind==='oversized'?0:1);
+  assert.equal(downloads,bodyKind==='oversized'&&['paid','recovery'].includes(stage)?0:1);
+  if(bodyKind==='complete'){
+   assert(results);assert.deepEqual(results,allocated.map(item=>({...item,result:{...item.result,allocation:{...item.result.allocation,batchId:saved.id}}})));
+   if(stage==='paid'||stage==='recovery'){
+    const original=observed.find(x=>x.path===(stage==='paid'?'rpc/icash_record_owner_export_receipt':'rpc/icash_record_owner_export_recovery')).receipt;
+    assert.equal(original.rawText,rawText);assert.deepEqual(original.raw,JSON.parse(rawText));
+   }else assert.equal(saved.csv,csv,'Complete original artifact bytes remain unchanged');
+  }else assert.equal(results,null,'Unknown/truncated original evidence cannot settle contacts');
+  const counts={paid,gets,downloads};
+  assert.equal((await enrichActiveOwners(cleanupDb,account,candidates[0],config,250000,cleanupTransport)).status,'held');
+  assert.deepEqual({paid,gets,downloads},counts,'Uncertain/completed original cannot replay the export, GET or download');
+ }
  // A filtered-out issued primary cannot leave a sibling-only asynchronous
  // preflight with no ticket able to resume it. Save explicit empty evidence,
  // then let an eligible sibling receive its own ordinary ticket next time.

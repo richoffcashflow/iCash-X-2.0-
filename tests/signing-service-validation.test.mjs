@@ -140,6 +140,43 @@ try{
  await refreshSigning('account','envelope');assert.equal(cancelledWriteBodies,1,'Successful signature write releases its unused response before canonical readback');
  cancellationAfterSend=true;allowedReads=0;
  await sendForSignatures({...input,autoSignature:undefined});assert.equal(cancelledWriteBodies,2,'Late cancellation releases its unused expire response');
+ // Acknowledged signature/expiry writes retain one-write admission, then follow
+ // only the existing canonical readback or current cancellation check. Cleanup
+ // failure cannot delay that continuation or replace success with a new hold.
+ const flush=()=>new Promise(resolve=>setImmediate(resolve));
+ for(const scenario of ['signature','expiry'])for(const cleanup of ['pending','rejected','synchronous']){
+  cancellationAfterSend=scenario==='expiry';allowedReads=0;providerWrites=0;autoClaims=0;records=[];
+  let cancels=0,rejectCleanup,settled=false,value,error,originalBodyReads=0;const methods=[];
+  const cleanupWait=new Promise((_,reject)=>{rejectCleanup=reject;});
+  const response=new Response(new ReadableStream({
+   cancel(){cancels++;return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;},
+  },{highWaterMark:0}));
+  if(cleanup==='synchronous')response.body.cancel=()=>{cancels++;throw Error('private cleanup');};
+  globalThis.fetch=async(url,options)=>{
+   methods.push(options.method);
+   if(options.method==='PUT'){providerWrites++;return response;}
+   const original=await fixtureFetch(url,options),json=original.json.bind(original);
+   original.json=()=>{assert.equal(original.bodyUsed,false,'Shared request returns the original unconsumed success body');originalBodyReads++;return json();};
+   return original;
+  };
+  const pending=(scenario==='signature'?refreshSigning('account','envelope'):sendForSignatures({...input,autoSignature:undefined}))
+   .then(output=>{value=output;settled=true;},failure=>{error=failure;settled=true;});
+  try{
+   await flush();await flush();assert.equal(settled,true,`${scenario}/${cleanup}: acknowledged write cannot await cleanup`);await pending;
+   assert.equal(error,undefined);assert.equal(cancels,1);
+   assert.deepEqual(methods,scenario==='signature'?['GET','PUT','GET']:['POST','PUT'],'No provider write or original GET is replayed');
+   assert.equal(originalBodyReads,scenario==='signature'?2:1);
+   assert.equal(providerWrites,scenario==='signature'?1:2);assert.equal(autoClaims,scenario==='signature'?1:0);
+   assert(!records.some(r=>r.method==='PATCH'&&r.body.state==='needs_review'),'Cleanup alone cannot replace the original outcome');
+   if(scenario==='signature'){
+    assert.equal(value.status,'customer_signature_needed','The canonical original GET remains authoritative after the signature write');
+    assert(!records.some(r=>r.path==='rpc/icash_save_signing_status'&&r.body.p_state==='test_completed'));
+   }else assert.match(value.message,/held for cancellation/,'A successful expiry response never proves completed cancellation');
+  }finally{
+   if(cleanup==='pending')rejectCleanup(Error('private late cleanup'));
+   await flush();await pending;globalThis.fetch=fixtureFetch;
+  }
+ }
 }finally{
  globalThis.fetch=oldFetch;Date.now=oldNow;
  if(oldKey===undefined)delete process.env.DOCUSEAL_TEST_API_KEY;else process.env.DOCUSEAL_TEST_API_KEY=oldKey;

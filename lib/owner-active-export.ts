@@ -113,14 +113,21 @@ export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt
 async function boundedBody(response:Response,maximum:number){
  if(!response.body)throw Error('OWNER_EXPORT_RESPONSE_UNAVAILABLE');
  const reader=response.body.getReader(),parts:Buffer[]=[];let size=0;
- try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>maximum)throw Error('OWNER_EXPORT_RESPONSE_TOO_LARGE');parts.push(Buffer.from(value));}}finally{await reader.cancel().catch(()=>null);reader.releaseLock();}
+ try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>maximum)throw Error('OWNER_EXPORT_RESPONSE_TOO_LARGE');parts.push(Buffer.from(value));}}finally{
+  // Cleanup cannot delay or erase the original admitted request's receipt.
+  try{void reader.cancel().catch(()=>{});}catch{/* Preserve the read outcome. */}
+  reader.releaseLock();
+ }
  return Buffer.concat(parts);
 }
 async function downloadOriginal(url:unknown,transport:typeof fetch){
  if(typeof url!=='string')return invalid();const u=new URL(url);
  if(u.protocol!=='https:'||u.hostname!=='storage.googleapis.com'||u.username||u.password||u.hash||(u.port&&u.port!=='443'))return invalid();
  const response=await transport(u,{method:'GET',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
- if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('OWNER_EXPORT_DOWNLOAD_UNAVAILABLE');}
+ if(!response.ok){
+  try{void response.body?.cancel().catch(()=>{});}catch{/* Preserve the known download failure. */}
+  throw Error('OWNER_EXPORT_DOWNLOAD_UNAVAILABLE');
+ }
  const bytes=await boundedBody(response,1048576),plain=bytes[0]===0x1f&&bytes[1]===0x8b?gunzipSync(bytes,{maxOutputLength:1048576}):bytes;
  return new TextDecoder('utf-8',{fatal:true}).decode(plain);
 }
