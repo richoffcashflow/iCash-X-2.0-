@@ -1,8 +1,21 @@
+import {normalizeSigningPhone} from './signing-phone.ts';
 /** Provider observations, not permission, verified funds or a current DNC check. */
 export const emailVerificationStatuses=['undeliverable','deliverability_risk_low','deliverability_risk_medium','likely_deliverable_low','likely_deliverable_high','very_likely_deliverable'] as const;
 export type EmailVerificationStatus=typeof emailVerificationStatuses[number];
 export type BuyerPhoneObservation={number:string;doNotCall:boolean|null;matchConfidence:number|null;type:string|null};
 export type BuyerEmailObservation={address:string;matchConfidence:number|null;verificationStatus:EmailVerificationStatus|null};
+/** Preserve raw observations separately. Existing consumers check for ANY
+ * explicit false, so every representation of a conflicting number must retain
+ * the most restrictive DNC result. Never manufacture a cleared observation. */
+export function buyerEffectivePhones(observations:BuyerPhoneObservation[]):BuyerPhoneObservation[]{
+ const key=(number:string)=>normalizeSigningPhone(number)??'raw:'+number;
+ const states=new Map<string,boolean|null>();
+ for(const observation of observations){
+  const id=key(observation.number),prior=states.get(id);
+  states.set(id,prior===true||observation.doNotCall===true?true:prior===null||observation.doNotCall===null?null:observation.doNotCall);
+ }
+ return observations.map(observation=>({...observation,doNotCall:states.get(key(observation.number))??null}));
+}
 const record=(value:unknown):Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const confidence=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:null;
 export function buyerContactObservations(phones:unknown,emails:unknown){

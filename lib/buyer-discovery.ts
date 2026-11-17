@@ -1,4 +1,4 @@
-import {buyerContactObservations,type BuyerPhoneObservation,type BuyerEmailObservation} from './buyer-contact-quality.ts';
+import {buyerContactObservations,buyerEffectivePhones,type BuyerPhoneObservation,type BuyerEmailObservation} from './buyer-contact-quality.ts';
 export type BuyerSearchStrategy='recent_corporate'|'corporate_owners';
 export type BuyerSearch={zip:string;page:number;perPage:number;since:string;unitCostMicros:number;quotedCostMicros:number;strategy?:BuyerSearchStrategy};
 export type BuyerSearchReceipt={page:number;has_next_page:boolean;receipt?:{strategy?:string;providerPage?:number;learningVersion?:string;firstStrategy?:string}};
@@ -51,7 +51,7 @@ export function buyerSearchBody(i:BuyerSearch){
  if(i.strategy!==undefined&&!['recent_corporate','corporate_owners'].includes(i.strategy))throw Error('BUYER_SEARCH_CONFIG_REQUIRED');
  return {locations:[{type:'zip_code',code:i.zip}],anchor:'people',contact_audience:'owners',fields:['full_address'],filters:[{filter_id:'is_corporate_owned',value:true},...(i.strategy==='corporate_owners'?[]:[{filter_id:'num_mortgages',operator:'equals',value:0},{filter_id:'last_sale_date',operator:'is_after',value:i.since}])],page:i.page,per_page:i.perPage};
 }
-export type BuyerDiscoveryResult={creditsUsed:number;peopleCredits:number;propertyCredits:number;estimatedCredits:number;hasNextPage:boolean;fetchedAt:string;candidates:{personId:string;name:string;propertyId:string;propertyAddress:string;phones:BuyerPhoneObservation[];emails:string[];emailObservations:BuyerEmailObservation[];contactSource:'dealmachine';contactObservedAt:string;contactQualityVersion:'buyer-contacts-v1'}[]};
+export type BuyerDiscoveryResult={creditsUsed:number;peopleCredits:number;propertyCredits:number;estimatedCredits:number;hasNextPage:boolean;fetchedAt:string;candidates:{personId:string;name:string;propertyId:string;propertyAddress:string;phones:BuyerPhoneObservation[];phoneObservations:BuyerPhoneObservation[];emails:string[];emailObservations:BuyerEmailObservation[];contactSource:'dealmachine';contactObservedAt:string;contactQualityVersion:'buyer-contacts-v2'}[]};
 export async function discoverBuyerPage(i:BuyerSearch,d:{request:(body:object)=>Promise<unknown>;claim:()=>Promise<boolean>;persist:(result:BuyerDiscoveryResult)=>Promise<void>;empty?:()=>Promise<void>}){
  const body=buyerSearchBody(i);
  const estimate=await d.request({...body,estimate_cost:true}) as {estimated_credits?:{this_page?:unknown;breakdown?:{properties?:unknown;people?:unknown}}};
@@ -62,12 +62,24 @@ export async function discoverBuyerPage(i:BuyerSearch,d:{request:(body:object)=>
  if(!await d.claim())return {status:'held',canContinue:false};
  const r=await d.request({...body,estimate_cost:false}) as {data?:Record<string,unknown>[];credits?:{used?:number;people?:number;properties?:number};pagination?:{has_next_page?:boolean}};
  if(!Array.isArray(r?.data)||r.data.length>i.perPage||!integer(r.credits?.used)||!integer(r.credits?.people)||!integer(r.credits?.properties)||typeof r.pagination?.has_next_page!=='boolean')throw Error('BUYER_RECEIPT_NEEDS_RECONCILIATION');
- const seen=new Set<string>();const candidates:BuyerDiscoveryResult['candidates']=[],fetchedAt=new Date().toISOString();
+ const seen=new Map<string,BuyerDiscoveryResult['candidates'][number]>();const candidates:BuyerDiscoveryResult['candidates']=[],fetchedAt=new Date().toISOString();
  for(const row of r.data){
   const property=row?.property as Record<string,unknown>|undefined;
   if(typeof row?.dm_person_id!=='string'||!/^per_[A-Za-z0-9]+$/.test(row.dm_person_id)||typeof property?.dm_property_id!=='string'||!/^prop_[A-Za-z0-9]+$/.test(property.dm_property_id))throw Error('BUYER_RESPONSE_INVALID');
-  if(seen.has(row.dm_person_id))continue;seen.add(row.dm_person_id);
-  candidates.push({personId:row.dm_person_id,name:typeof row.full_name==='string'?row.full_name.slice(0,200):'Potential buyer',propertyId:property.dm_property_id,propertyAddress:typeof property.full_address==='string'?property.full_address.slice(0,300):'',...buyerContactObservations(row.phones,row.emails),contactSource:'dealmachine',contactObservedAt:fetchedAt,contactQualityVersion:'buyer-contacts-v1'});
+  const observations=buyerContactObservations(row.phones,row.emails),prior=seen.get(row.dm_person_id);
+  if(prior){
+   // One owner may occur on several property rows. Keep one prospect without
+   // throwing away the later row's contact evidence, including contradictions.
+   // Only identical observations collapse; a later DNC or delivery warning
+   // must never disappear behind an earlier positive observation.
+   for(const phone of observations.phones)if(!prior.phoneObservations.some(p=>p.number===phone.number&&p.doNotCall===phone.doNotCall&&p.matchConfidence===phone.matchConfidence&&p.type===phone.type))prior.phoneObservations.push(phone);
+   for(const email of observations.emailObservations)if(!prior.emailObservations.some(e=>e.address===email.address&&e.matchConfidence===email.matchConfidence&&e.verificationStatus===email.verificationStatus))prior.emailObservations.push(email);
+   prior.emails=[...new Set(prior.emailObservations.map(e=>e.address))];
+   prior.phones=buyerEffectivePhones(prior.phoneObservations);
+   continue;
+  }
+  const candidate={personId:row.dm_person_id,name:typeof row.full_name==='string'?row.full_name.slice(0,200):'Potential buyer',propertyId:property.dm_property_id,propertyAddress:typeof property.full_address==='string'?property.full_address.slice(0,300):'',...observations,phoneObservations:observations.phones,phones:buyerEffectivePhones(observations.phones),contactSource:'dealmachine' as const,contactObservedAt:fetchedAt,contactQualityVersion:'buyer-contacts-v2' as const};
+  seen.set(row.dm_person_id,candidate);candidates.push(candidate);
  }
  await d.persist({creditsUsed:r.credits.used,peopleCredits:r.credits.people,propertyCredits:r.credits.properties,estimatedCredits:c.this_page,hasNextPage:r.pagination.has_next_page,fetchedAt,candidates});
  return {status:r.credits.used>c.this_page||r.credits.properties>0?'needs_reconciliation':'buyers_saved',canContinue:r.pagination.has_next_page&&r.credits.used<=c.this_page&&r.credits.properties===0};
