@@ -19,15 +19,17 @@ export function ownerBatchAudience(raw:unknown,candidates:Candidate[],cap:number
  return candidates.map(c=>{
   const propertyId=object(c.snapshot).propertyId;if(typeof propertyId!=='string')throw Error('CONTACT_PREVIEW_INVALID');
   const row=byId.get(propertyId);if(!row)throw Error('CONTACT_PREVIEW_INVALID');
-  return {...c,propertyId,...previewAudience({data:row.found?row:{...row,contacts:[]},credits:zero},propertyId,cap)};
+  const noOwnerAudience=row.found===true&&Array.isArray(row.contacts)&&row.contacts.length===0
+   &&object(row.availability).owners===0&&object(row.availability).phones===0;
+  return {...c,propertyId,...(noOwnerAudience?{noOwnerAudience:true}:{}),...previewAudience({data:row.found?row:{...row,contacts:[]},credits:zero},propertyId,cap)};
  });
 }
-/** A free preview can prove only explicit absence of phones for the matching
- * owners. Missing availability or an ambiguous owner association is unknown. */
+/** Retain explicit zero-phone owners or a found property's explicit empty
+ * owner audience. Missing availability and ambiguous associations stay unknown. */
 export function phoneLessOwnerPreviews(audience:ReturnType<typeof ownerBatchAudience>){
  return audience.filter(a=>{
   const owners=[...a.owners.values()].filter(o=>o.likelyOwner);
-  return !a.ids.length&&owners.length>0&&owners.every(o=>o.availablePhones===0);
+  return !a.ids.length&&(a.noOwnerAudience||owners.length>0&&owners.every(o=>o.availablePhones===0));
  });
 }
 export async function savePhoneLessOwnerPreviews(db:ResearchDb,accountId:string,batchId:string,requestId:string,preview:unknown,candidates:Candidate[],audience:ReturnType<typeof ownerBatchAudience>){

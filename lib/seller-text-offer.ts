@@ -138,7 +138,7 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   }
   const attempts=c.messages.filter(m=>m.direction==='outgoing'&&m.action===action&&m.state==='delivered');
   const revised=sellerAnswerCopy[action];
-  if(attempts.filter(m=>m.body===body||(revised&&body===revised.current&&m.body===revised.previous)).length>=2)return review('seller_answer_unclear',`The seller has not answered: ${body} Review their exact answer or arrange an authorized call.`);
+  if((action==='answer_contact_purpose'?attempts.length:attempts.filter(m=>m.body===body||(revised&&body===revised.current&&m.body===revised.previous)).length)>=2)return review('seller_answer_unclear',`The seller has not answered: ${body} Review their exact answer or arrange an authorized call.`);
   return {kind:'message',action,body,state};
  };
  // Keep the deterministic offer lane aligned with the source-word contact
@@ -205,13 +205,36 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   state.acceptedPriceCents=null;
   return ask('seller_counterprice','What price did you have in mind?');
  }
+ const qualification=sellerOfferQualification(null,conversationHistory,'sms');
+ if(c.conversionEnabled&&(qualification.ready||!qualification.stop)){
+  if(intent==='purpose'){
+   const principal=c.principal.trim();
+   if(!principal||principal.length>80||/[\r\n]/.test(principal))return review('buyer_identity_required','Verify the saved buyer identity before answering.');
+   // Answer before qualification, without repeating an already bound address.
+   // Interest already on record is not a reason to start the pitch over; the
+   // question itself establishes no ownership, interest or agreement authority.
+   const purpose=state.acceptedPriceCents?'We are confirming the details for the proposed purchase agreement.':!qualification.ready&&qualification.missing.includes('interest')?'Would you consider selling the property for all cash?':'We are discussing a possible all-cash purchase of the property.';
+   // Only complete known first-party templates establish an introduction.
+   // A substring (Ann / Anna), quotation or a customer's reply does not.
+   const identityBodies=[
+    'Would you consider selling the property for all cash?',
+    'We are discussing a possible all-cash purchase of the property.',
+    'We are confirming the details for the proposed purchase agreement.',
+    'I am reaching out about a possible all cash purchase of the property.',
+    'Are you the owner of this property?',
+   ].flatMap(tail=>[`I am the AI assistant for ${principal}. ${tail}`,`I'm the AI assistant for ${principal}. ${tail}`]);
+   const introduced=c.messages.slice(0,c.messages.indexOf(source)).some(m=>m.direction==='outgoing'&&m.state==='delivered'&&m.providerId&&m.customerAuthored!==true&&identityBodies.includes(m.body));
+   const body=(introduced?'':`I am the AI assistant for ${principal}. `)+purpose;
+   if(body.length>160)return review('buyer_identity_copy_required','The full saved buyer identity and answer must fit the reviewed text rate.');
+   return ask('answer_contact_purpose',body);
+  }
+ }
  if(state.pendingAskingPriceCents)return ask('clarify_gross_price','Do you mean the purchase price before any mortgage payoff, liens or closing adjustments?');
  if(/^(?:why|how).*(?:price|offer)|\b(?:too low|lowball)\b/i.test(source.body)&&state.quotedPriceCents)return ask('explain_cash_price',sellerAnswerCopy.explain_cash_price.current);
  if(previous?.action==='explain_cash_price'&&/\b(?:renovated|new roof|repaired|repairs?|square feet|bedrooms?|bathrooms?)\b/i.test(source.body))return ask('repair_budget','What is your estimate of the total remaining repair budget?');
  if(/^(?:who pays (?:the )?closing costs|(?:are there|what about|what are|any) (?:the |any )?fees)[?! .]*$/i.test(source.body))return ask('explain_costs',sellerAnswerCopy.explain_costs.current);
  if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process',sellerAnswerCopy.explain_process.current);
  if(isDeliveredCallInvitation(previous)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
- const qualification=sellerOfferQualification(null,conversationHistory,'sms');
  // Answer the seller's actual question before resuming the missing fact. A
  // listing reference does not establish agent representation or accept its terms.
  if(c.conversionEnabled&&(qualification.ready||!qualification.stop)){

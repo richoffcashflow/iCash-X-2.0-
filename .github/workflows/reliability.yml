@@ -44,6 +44,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-learning-completion-lock-postgres.mjs
+      - name: Verify policy review never blocks canonical foreground decisions
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-policy-review-lock-postgres.mjs
       - name: Verify receipt-check cursors preserve learning source generations
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
@@ -52,6 +56,40 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-missing-receipt-settlement-postgres.mjs
+      - name: Verify unsent journey work resumes without replaying original dispatches
+        env:
+          JOURNEY_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node tests/journey-message-preflight-native.mjs
+      - name: Verify completed buyer calls retain one source-bound package delivery
+        env:
+          BUYER_CALL_PACKAGE_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node tests/buyer-call-package-native.mjs
+      - name: Verify title reply classification preserves concurrent manual holds
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-negated-review-postgres.mjs
+      - name: Verify immutable original title source and competing ingress
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-original-source-postgres.mjs
+      - name: Verify current agreement closing against original source and cancellation races
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-closing-original-source-postgres.mjs
+      - name: Verify initial title attachments and payout against concurrent source changes
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-delivery-snapshot-postgres.mjs
+      - name: Verify requested title copies preserve original sources and receipts
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-copy-postgres.mjs
+      - name: Verify original signing receipt discovery and unchanged cancellation authority
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-signing-receipt-discovery-postgres.mjs
       - name: Verify expired preflight cleanup and renewal under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
@@ -80,6 +118,8 @@ jobs:
         run: python3 scripts/test-sender-delay-opener-postgres.py
       - name: Verify shared Contiguity sender limits under concurrent dispatch
         run: python3 scripts/test-contiguity-sender-volume-postgres.py
+      - name: Verify deferred originals get a bounded turn before fresh introductions
+        run: python3 scripts/test-deferred-sender-fairness-postgres.py
       - name: Verify new-number daytime pacing under concurrent dispatch
         run: python3 scripts/test-november-sender-pacing-postgres.py
       - name: Verify independent targeting query receipts under concurrent admission
@@ -134,6 +174,21 @@ jobs:
         run: python3 scripts/test-outbound-stall-recovery-postgres.py
       - name: Verify eighty-percent voice capacity claim under contention
         run: python3 scripts/test-eighty-percent-voice-capacity-postgres.py
+      - name: Verify full Business capacity and exact original provider-write claims
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+          ICASH_FULL_VOICE_NATIVE: '1'
+          PGPASSWORD: isolated-fixture-only
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 55443 -U postgres -d postgres -c 'CREATE DATABASE icash_full_voice_capacity;'
+          node tests/full-business-voice-capacity-database.test.mjs
+      - name: Verify voice cooldown hints and mixed original one-use claims
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+          PGPASSWORD: isolated-fixture-only
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 55443 -U postgres -d postgres -c 'CREATE DATABASE icash_voice_cooldown;'
+          node tests/voice-cooldown-database.test.mjs
       - name: Verify urgent voice source filtering and concurrent fair issuance
         run: python3 scripts/test-urgent-voice-source-gate-postgres.py
       - name: Verify legacy voice history is excluded before native eligibility checks
@@ -313,6 +368,14 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-acquisition-account-yield-postgres.mjs
+      - name: Verify acquisition reuses one stable reserve calculation
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-acquisition-capacity-single-state-postgres.mjs
+      - name: Verify research report prechecks and late control changes
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-usage-context-research-precheck-postgres.mjs
       - name: Verify ranking stays independent of pending-cost reports
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
@@ -321,6 +384,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-collector-preflight-deadline-postgres.mjs
+      - name: Verify exact seller property lookups, migration locks and competing issuers
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-seller-opener-property-lookup-postgres.mjs
       - name: Verify continued original cohorts through the actual owner handler
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg

@@ -1,0 +1,60 @@
+[
+  {
+    "observed_at": "2026-11-17 04:36:51.23771+00",
+    "signature": "icash_seller_conversion_intent(text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_seller_conversion_intent(p_body text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\ndeclare b text:=lower(trim(regexp_replace(replace(replace(coalesce(p_body,''),'’',chr(39)),'‘',chr(39)),'[[:space:]]+',' ','g')));identity_question boolean;price_question boolean;\nbegin\n if b='' or length(b)>500 or public.icash_seller_response_disposition(b) is not null\n  or b ~ '[\"“”]' or b ~ '\\y(?:said|asked|wrote|example|ignore|instructions?|prompt|wire|bank account)\\y' then return null;end if;\n identity_question:=b ~ $pattern$(?:^|[.!?;,] +|\\yand +)(?:who (?:is this|are you)|who's this|what (?:is your name|company is this|business is this)|do you have a name)(?: exactly)?(?:[?!.,;]| +and\\y| *$)$pattern$;\n price_question:=b ~ $pattern$(?:^|[.!?;,] +|\\yand +)(?:what amount do you have in mind|what (?:price|amount) (?:are you offering|would you offer)|depen[dt]s (?:on|of) (?:the|your) (?:offer|price)|(?:it )?depen[dt]s (?:(?:on|of) )?(?:the|your) (?:offer|price))(?:[?!.,; ]|$)$pattern$\n  or identity_question and b ~ '\\y(?:how much|what.*offer|what.*pay)\\y';\n if identity_question then return case when price_question then 'identity_price' else 'identity' end;end if;\n if price_question then return 'price';end if;\n if b ~ '^(?:are you (?:looking to (?:buy|purchase)|(?:buying|purchasing)(?: (?:it|the (?:house|property)))?)|(?:buying|purchasing))[?! .]*$' then return 'buying';end if;\n if b ~ '^(?:the )?(?:price|terms)(?: are)? as (?:listed|advertised)[.! ]*$' then return 'listed_terms';end if;\n return null;\nend $function$\n",
+    "source_hash": "1f436e2035aa1663882c01c18d14ef99",
+    "metadata": {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "kind": "f",
+      "owner": "postgres",
+      "strict": false,
+      "returns": "text",
+      "argmodes": null,
+      "argnames": [
+        "p_body"
+      ],
+      "language": "plpgsql",
+      "parallel": "u",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "leakproof": false,
+      "volatility": "i",
+      "securityDefiner": false,
+      "defaultArguments": 0
+    }
+  },
+  {
+    "observed_at": "2026-11-17 04:36:51.23771+00",
+    "signature": "icash_seller_response_disposition(text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_seller_response_disposition(p_body text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\ndeclare b text:=trim(regexp_replace(lower(replace(replace(replace(replace(coalesce(p_body,''),'’',chr(39)),'‘',chr(39)),'“','\"'),'”','\"')),'[[:space:]]+',' ','g'));decline_body text;\nbegin\n if public.icash_seller_hard_stop(b) then return 'opt_out';end if;\n if public.icash_seller_direct_response_match(b,$pattern$\\y(?:do not|don't|dont) send (?:me|us) (?:any |more |any more )?(?:texts?|messages?|emails?)(?: again)?\\y|(?:^|[.!?;] +)(?:please )?stop(?: please)?[.! ,]*$|\\y(?:stop|quit) (?:asking|bothering|harassing) (?:me|us)\\y|\\yplease unsubscribe(?: me)?\\y|(?:^|[,;.!] +)(?:please )?(?:unsubscribe|dnc)(?: me)?[.! ,]*$|^(?:please )?(?:stop|stopall|unsubscribe|cancel|end|quit|revoke|opt out|dnc)(?: please)?(?:[.! ,]*$|\\s*[,;.!]\\s*(?:please\\y|call\\y|text\\y|but\\y))|\\y(?:(?:do not|don't|dont) want (?:you|your (?:company|business)) to (?:ever )?(?:call|text|email|contact)\\y|(?:do not|don't|dont|never) (?:ever )?(?:call|text|email|message|contact)(?:ing)?(?: (?:me|us))?\\y(?! (?:it|that|the house|the property)\\y)|(?:stop|quit) (?:(?:calling|texting|emailing|messaging|contacting)\\y|(?:call|text|email|message|contact)\\y(?! (?:it|that|the house|the property)\\y))|(?:unsubscribe|remove|delete) (?:me|us|(?:my|our|this) (?:phone )?number)\\y|take (?:me|us|(?:my|our|this) (?:phone )?number) off\\y|leave (?:me|us) alone\\y|(?:put|add|place) (?:me|us|(?:my|our|this) (?:phone )?number) (?:on|in) (?:your |the )?(?:dnc|do not call)(?: list)?\\y|(?:i am|i'm) (?:already )?on (?:the |your )?(?:dnc|do not call) list\\y)$pattern$) then return 'opt_out';end if;\n if public.icash_seller_direct_response_match(b,$pattern$(?:^|[.!?;] +)(?:please )?stop[.!;](?: +|$)$pattern$) then return 'opt_out';end if;\n if public.icash_seller_direct_response_match(b,$pattern$(?:^|[.!?;] +)(?:(?:ok(?:ay)?|yes)[, ]+)?(?:never mind|nevermind|forget it|go away|go to hell)(?: please)?[.! ,]*$$pattern$) then return 'declined';end if;\n decline_body:=case when b ~ '\\y(call|talk)\\y' then regexp_replace(b,$pattern$\\ynot (?:(?:super|very|really|that|at all) )?interested in (?:texting|emailing|emails|texts)\\y$pattern$,'','g') else b end;\n if public.icash_seller_direct_response_match(decline_body,$pattern$\\y(?:i|we)(?:'ve)? (?:(?:have|already) ){0,2}told (?:you|yall|y'all|you all) no\\y|\\y(?:i|we) (?:will not|won't|wont) (?:ever )?sell\\y|\\y(?:no thanks|no thank you|wrong (?:phone )?number|not (?:up )?for sale|(?:i am|i'm|we are|we're) not (?:the )?owner|(?:i|we) (?:do not|don't|dont) own (?:the |this |that |my |our )?(?:house|home|property)|not (?:(?:super|very|really|that|at all) )?interested|(?:do not|don't|dont) want to sell|not selling(?: (?:my|our|the) (?:house|home|property))?|no quiero vender|no me interesa vender)\\y$pattern$) then\n  return case when b ~ '\\y(unless|if|but)\\y|[$]|\\yprice\\y' then 'review' else 'declined' end;\n end if;\n if public.icash_seller_direct_response_match(b,$pattern$\\y(?:tired|sick) of (?:these|your|the) (?:texts|messages|calls)\\y|\\y(?:scam|scammer|scammers|fraud|fraudulent|suspicious|(?:i am|i'm|we are|we're) not (?:comfortable|ready)|need to think|never agreed|hold off|not for me|no interest|not looking to sell|(?:do not|don't|dont) trust|not now|not sure (?:about|i want)|stop bothering|waste of (?:my )?time)\\y|^(?:not comfortable|not ready)[.! ,]*$$pattern$) then\n  if strpos(b,'?')=0 and b ~ $pattern$\\y(?:not|isn't|is not|wasn't|was not) (?:a )?(?:scam|fraud)\\y$pattern$\n   and not public.icash_seller_direct_response_match(b,$pattern$\\y(?:tired|sick) of (?:these|your|the) (?:texts|messages|calls)\\y|\\y(?:suspicious|(?:i am|i'm|we are|we're) not (?:comfortable|ready)|need to think|never agreed|hold off|not for me|no interest|not looking to sell|(?:do not|don't|dont) trust|not now|not sure (?:about|i want)|stop bothering|waste of (?:my )?time)\\y|^(?:not comfortable|not ready)[.! ,]*$$pattern$) then return null;end if;\n  return 'review';\n end if;\n return null;\nend $function$\n",
+    "source_hash": "8e47d476f60a9e74fa6f2a6c460efdb8",
+    "metadata": {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "kind": "f",
+      "owner": "postgres",
+      "strict": false,
+      "returns": "text",
+      "argmodes": null,
+      "argnames": [
+        "p_body"
+      ],
+      "language": "plpgsql",
+      "parallel": "u",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "leakproof": false,
+      "volatility": "i",
+      "securityDefiner": false,
+      "defaultArguments": 0
+    }
+  }
+]

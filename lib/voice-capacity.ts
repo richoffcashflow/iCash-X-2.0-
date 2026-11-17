@@ -43,15 +43,17 @@ export function voiceQuotaEvidence(subscription:unknown,agents:unknown[]){
  const daily=finite.length?`${Math.min(...finite)}..${Math.max(...finite)}`:'none';
  return `units=${integer(s.character_count)}/${integer(s.character_limit)};extra=${extra};overage=${entitled};daily=${daily}${caps.includes(-1)?'+unlimited':''}${!caps.length||caps.some(v=>v!==-1&&integer(v)==='unknown')?'+unknown':''}`;
 }
-export function voiceCapacitySnapshot(subscription:unknown,agent:unknown){
+export function voiceCapacitySnapshot(subscription:unknown,agent:unknown,ceiling:32|40=32){
+ if(ceiling!==32&&ceiling!==40)return null;
  const s=object(subscription),a=object(agent),limits=object(object(a.platform_settings).call_limits);
  const workspace=voicePlanLimit(subscription);
  const limit=limits.agent_concurrency_limit;
  if(!workspace||!Number.isInteger(limit)||Number(limit)<-1||limit===0||limits.bursting_enabled!==false)return null;
- return {workspaceLimit:Math.min(32,workspace),agentLimit:limit===-1?Math.min(32,workspace):Math.min(32,workspace,Number(limit)),tier:s.tier};
+ return {workspaceLimit:Math.min(ceiling,workspace),agentLimit:limit===-1?Math.min(ceiling,workspace):Math.min(ceiling,workspace,Number(limit)),tier:s.tier};
 }
 /** Read-only provider checks. No calls, simulations, plan changes or burst mode. */
-export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:string;branchId:string}|null,onReviewedAgent?:(agent:unknown)=>Promise<void>){
+export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:string;branchId:string}|null,onReviewedAgent?:(agent:unknown)=>Promise<void>,ceiling:32|40=32){
+ if(ceiling!==32&&ceiling!==40)throw Error('VOICE_CAPACITY_CEILING_UNVERIFIED');
  const targets=await db<{agentId:string;branchId:string|null}[]>('rpc/icash_voice_capacity_targets','POST',{});
  if(!targets.length)return {status:'no_agents'};
  const subscription=await read('/v1/user/subscription');
@@ -63,14 +65,14 @@ export async function refreshVoiceCapacity(db:Db,read:Reader,review?:{agentId:st
   if(object(agent).agent_id!==target.agentId)throw Error('VOICE_CAPACITY_AGENT_MISMATCH');
   if(target.branchId===null&&review&&target.agentId===review.agentId&&object(agent).branch_id===review.branchId)reviewedAgent=agent;
   observedAgents.push(agent);
-  const snapshot=voiceCapacitySnapshot(subscription,agent);
+  const snapshot=voiceCapacitySnapshot(subscription,agent,ceiling);
   if(!snapshot)throw Error(voicePlanLimit(subscription)===undefined?'VOICE_CAPACITY_TIER_UNVERIFIED':'VOICE_CAPACITY_AGENT_LIMIT_UNVERIFIED');
   workspaceLimit=snapshot.workspaceLimit;tier=String(snapshot.tier);
   const existing=capacities.find(c=>c.agentId===target.agentId);
   if(existing)existing.limit=Math.min(existing.limit,snapshot.agentLimit);else capacities.push({agentId:target.agentId,limit:snapshot.agentLimit,creditState});
  }
  if(targets.length>12)throw Error('VOICE_CAPACITY_TARGET_LIMIT');
- await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; cap=32; in=2; ${voiceQuotaEvidence(subscription,observedAgents)}`});
+ await db('rpc/icash_save_voice_capacity','POST',{p_limit:workspaceLimit,p_agents:capacities,p_source:`provider subscription ${tier}; cap=${ceiling}; in=2; ${voiceQuotaEvidence(subscription,observedAgents)}`});
  if(creditState==='available'&&reviewedAgent&&onReviewedAgent)await onReviewedAgent(reviewedAgent);
  return {status:'verified',workspaceLimit,agents:capacities.length};
 }

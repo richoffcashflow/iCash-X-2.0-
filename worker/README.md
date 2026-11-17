@@ -17,6 +17,17 @@ by 250 milliseconds. Database locks, account fairness, provider capacity,
 recipient controls and atomic spending admission remain authoritative. Pure
 screening has its own lane. Unknown paid operations are never replayed.
 
+Voice polls use the separate `icash_poll_voice_ticket()` RPC. A confirmed recent
+one-second issuance cooldown returns only a bounded scheduling hint, without a
+ticket or automation HTTP call. A shared voice wait avoids polling each voice
+slot separately during that interval. Empty/held work, lock misses and failures
+retain their ordinary idle/error backoff; recurring failures remain visible.
+Install and verify the additive migration before this worker release. Old
+workers and rollback continue using the unchanged original lane RPC. There is
+no fallback request after an uncertain response. See
+[voice cooldown polling](../docs/voice-cooldown-poll.md) for the exact contract,
+offline load measurements and limits of the production evidence.
+
 Primary completion durably queues account reconciliation, then frees the worker.
 Dedicated recovery checks original receipts and existing pending notifications.
 Follow-up generations and leases survive restarts and reject stale completion.

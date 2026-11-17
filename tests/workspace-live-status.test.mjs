@@ -5,6 +5,7 @@ import {createRequire} from 'node:module';
 import ts from 'typescript';
 import * as workspaceProgress from '../lib/workspace-progress.ts';
 import {workspaceLeadPresence} from '../lib/workspace-lead-presence.ts';
+import {currentBotActivity} from '../lib/bot-activity.ts';
 const empty={loaded:true,loading:false,error:false,count:0,hasMore:false,page:0,query:'',focusedId:''};
 assert.equal(workspaceLeadPresence(empty),false);
 for(const change of [{query:'no match'},{page:2},{focusedId:'one-property'},{loaded:false},{loading:true},{error:true}])assert.equal(workspaceLeadPresence({...empty,...change}),undefined,'Partial or stale views must not report an empty account');
@@ -32,16 +33,52 @@ activity={...activity,checkedAt:new Date(Date.now()-60000).toISOString()};
 assert.equal(live(render()),false,'Expired activity is not live');
 activity={...activity,checkedAt:new Date().toISOString(),active:false,label:'Paused'};
 assert.equal(live(render()),false,'Server pause overrides cached account availability');
+// Pending original receipts and a current independent task are different facts.
+const pendingInput={paused:false,tickets:[],screening:[],progress:{health:{status:'blocked',reason:'pending_work'}}};
+activity={principalKey:'fixture',...currentBotActivity(pendingInput)};
+let pendingTree=render();
+assert.match(text(pendingTree),/Awaiting confirmation/);
+assert.match(text(pendingTree),/Earlier work is awaiting confirmation\./);
+assert.doesNotMatch(text(pendingTree),/Looking for a deal|Work needs attention/);
+assert.equal(live(pendingTree),false,'Pending receipts alone do not establish live work');
+assert(!pendingTree.props.className.includes('is-active'));
+const idlePendingCustomer=render({readOnly:false,enabled:true});
+assert.match(text(idlePendingCustomer),/Bot running/);assert.match(text(idlePendingCustomer),/Searching for a deal/);
+assert.doesNotMatch(text(idlePendingCustomer),/Earlier work is awaiting confirmation|Awaiting confirmation|Work needs attention/);
+activity={principalKey:'fixture',...currentBotActivity({...pendingInput,tickets:[{kind:'contacts',state:'consumed',expires_at:new Date(Date.now()+60000).toISOString()}]})};
+pendingTree=render();
+assert.match(text(pendingTree),/Bot working/);
+assert.match(text(pendingTree),/Finding property owners\. Earlier work is awaiting confirmation\./);
+assert.equal(live(pendingTree),true,'A valid independent task is live without clearing pending receipts');
+for(const change of [{stale:true},{stopped:true},{running:false},{principalKey:'another-account'}]){
+ const tree=render(change);assert.equal(live(tree),false);
+ assert.doesNotMatch(text(tree),/Finding property owners|Earlier work is awaiting confirmation|Awaiting confirmation/,'Stale, paused and foreign task details stay hidden');
+}
+const pendingCustomer=render({readOnly:false,enabled:true});
+assert.match(text(pendingCustomer),/Finding property owners/);
+assert.doesNotMatch(text(pendingCustomer),/Earlier work is awaiting confirmation|Awaiting confirmation|Work needs attention/,'The customer keeps the existing Run mode and task presentation');
 // A stale owner account read invalidates the cached health announcement before
 // the polling effect runs; fresh blocked health remains visible to the owner.
-activity={principalKey:'fixture',active:false,blocked:true,label:'No recent completed task was recorded.',checkedAt:new Date().toISOString()};
+activity={principalKey:'fixture',active:false,blocked:true,blockedReason:'no_completed_work',label:'No recent completed task was recorded.',checkedAt:new Date().toISOString()};
 for(const stale of [false,true,false]){
- const tree=render({stale}),expected=stale?'Checking status':'Work needs attention';
+ const tree=render({stale}),expected=stale?'Checking status':'No recent completed work';
  assert.equal(text(all(tree).find(n=>n.type==='h2')),expected,'The owner heading follows current account evidence');
  assert.equal(text(all(tree).find(n=>n.props?.role==='status')).trim(),expected,'The accessible status agrees with the owner heading before effects run');
  assert.equal(live(tree),false,'Neither blocked nor stale status claims healthy work');
- if(stale)assert.doesNotMatch(text(tree),/Work needs attention|No recent completed task/,'Cached blocked details cannot survive a stale account read');
+ if(stale)assert.doesNotMatch(text(tree),/No recent completed work|No recent completed task/,'Cached blocked details cannot survive a stale account read');
 }
+for(const [reason,expected] of [['no_completed_work','No recent completed work'],['configuration_expired','Research configuration expired'],['configuration_disabled','Research unavailable'],['system_paused','Automation paused'],['unknown','Work blocked'],[undefined,'Work blocked'],['toString','Work blocked'],[{},'Work blocked']]){
+ activity={principalKey:'fixture',active:false,blocked:true,blockedReason:reason,label:'Original blocker detail',checkedAt:new Date().toISOString()};
+ const tree=render();assert.equal(text(all(tree).find(n=>n.type==='h2')),expected);
+ assert.equal(text(all(tree).find(n=>n.props?.role==='status')).trim(),expected);
+ assert.match(text(tree),/Original blocker detail/);assert.equal(live(tree),false);
+ assert(!tree.props.className.includes('is-active'));
+ assert.doesNotMatch(text(tree),/Work needs attention|Work delayed/);
+ const customerTree=render({readOnly:false,enabled:true});assert.match(text(customerTree),/Bot running/);
+ assert.doesNotMatch(text(customerTree),/Original blocker detail|Work blocked|Research unavailable|Automation paused|No recent completed work|Research configuration expired/);
+}
+activity={principalKey:'fixture',active:false,blocked:true,label:'No recent completed task was recorded.',checkedAt:new Date().toISOString()};
+assert.equal(text(all(render()).find(n=>n.type==='h2')),'Work blocked','Legacy responses never derive typed reasons by matching prose');
 // Customer Run mode is independent of a temporary health/readiness failure.
 activity=null;
 const customer={readOnly:false,enabled:true};

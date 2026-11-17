@@ -69,11 +69,12 @@ async function maintenance(lane,run){
  const deps={
   authorizeOutboundBilling:()=>true,process:{env:{}},db:async()=>0,maintenanceBatch,
   refreshReliability:async(_db,value)=>{healthy=value;return true;},pruneUsageLoopObservations:async()=>{},
-  applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'already_verified'}),
+  applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'already_verified'}),
   refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:async()=>assert.fail('No live provider'),readRecordingReview:()=>null,recoverVoiceConfiguration:async()=>({status:'idle'}),
   refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),drainResearchExclusions:async()=>({status:'not_due'}),
   recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),
   cleanupOwnerPreflight:async()=>({status:'idle'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),retryVolumeDeferredText:async()=>({status:'idle'}),
+  processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
   recoverTextDeliveryReceipts:async()=>({status:'idle',errors:0}),processSupportCustomerNotifications:async()=>({failed:0}),recoverAccessHelpReplies:async()=>0,
   processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
   outbound:ok('outbound'),recording:ok('recording'),ownerRecording:ok('ownerRecording'),reception:ok('reception'),
