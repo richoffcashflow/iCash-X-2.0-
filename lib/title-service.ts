@@ -1,5 +1,5 @@
 import {closingPayoutNote} from './closing-setup';
-import {titleConfirmationInstructions} from './title-confirmation-instructions';
+import {titleConfirmationInstructionsFor} from './title-confirmation-instructions';
 import {db} from '@/lib/stripe-test';
 import {completedSigningPdf} from '@/lib/signing-service';
 type TitleJob={id:string;account_id:string;deal_id:string;purchase_envelope_id:string;recipient:string;rate_id:string;verified_until:string;state:string;property_address:string};
@@ -22,6 +22,7 @@ export async function dispatchTitleRequest(accountId:string,jobId:string){
  const [setup]=await db<{payout:unknown}[]>(`icash_closing_setup?account_id=eq.${accountId}&deal_id=eq.${j.deal_id}&select=payout&limit=1`);
  const payoutNote=closingPayoutNote(setup?.payout);
  const deliveredPayout=payoutNote&&setup?.payout&&typeof setup.payout==='object'?Object.fromEntries(Object.entries(setup.payout).filter(([key])=>key!=='detailsSharedWithTitle')):null;
+ const titleConfirmationInstructions=titleConfirmationInstructionsFor(assignments[0]?.id??j.purchase_envelope_id);
  // Compare the exact loaded delivery snapshot and reserve/claim in one transaction.
  // A closer correction during PDF loading must not authorize the stale recipient.
  if(!await db<boolean>('rpc/icash_claim_title_request_snapshot','POST',{p_id:j.id,p_expected:{accountId,dealId:j.deal_id,purchaseEnvelopeId:j.purchase_envelope_id,recipient:j.recipient,propertyAddress:j.property_address,rateId:j.rate_id,verifiedUntil:j.verified_until}}))return {status:'title_request_held'};

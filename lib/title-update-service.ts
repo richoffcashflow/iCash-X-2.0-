@@ -2,6 +2,7 @@ import {db} from '@/lib/stripe-test';
 import {completedSigningPdf} from '@/lib/signing-service';
 import {closingPayoutNote} from './closing-setup';
 import {titleEmailAddress} from './title-inbound-policy';
+import {titleConfirmationInstructionsFor} from './title-confirmation-instructions';
 type UpdateTask={id:string;deal_id:string;state:string;email_state:string;payload:{type?:string;envelopeId?:string;payout?:Record<string,unknown>}};
 /** Later documents and preferences use the original title thread and a single-use claim. */
 export async function dispatchTitleUpdate(accountId:string,taskId:string){
@@ -18,7 +19,7 @@ export async function dispatchTitleUpdate(accountId:string,taskId:string){
    const pdf=await completedSigningPdf(accountId,task.payload.envelopeId);
    if(pdf.byteLength>20*1024*1024)throw Error('Attachment requires review');
    attachments=[{filename:'executed-assignment-agreement.pdf',content:Buffer.from(pdf).toString('base64')}];
-   details='The buyer assignment is now signed. Please add the attached executed assignment to the file, confirm receipt, and let us know any remaining requirements. The executed agreements control the terms.';
+   details='The buyer assignment is now signed. Please add the attached executed assignment to the file, confirm receipt, and let us know any remaining requirements. The executed agreements control the terms.\n\n'+titleConfirmationInstructionsFor(task.payload.envelopeId);
   }else if(task.payload.type==='payout'&&task.payload.payout){
    details=closingPayoutNote({...task.payload.payout,detailsSharedWithTitle:false});
    if(!details)throw Error('Payment preference requires review');

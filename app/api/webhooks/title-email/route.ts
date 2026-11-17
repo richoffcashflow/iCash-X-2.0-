@@ -9,6 +9,7 @@ import {db} from '@/lib/stripe-test';
 import {verifyTitleWebhook,titleEmailAddress,titleReference} from '@/lib/title-inbound-policy';
 import {intakeVerifiedSupportEmail} from '@/lib/support-email-intake';
 import {recordCustomerUpdateDelivery} from '@/lib/customer-updates-service';
+import {titleReplyOriginalSource} from '@/lib/title-reply-source';
 export const runtime='nodejs';
 export async function POST(req:Request){
  const secret=process.env.RESEND_RECEIVING_WEBHOOK_SECRET,mailbox=titleEmailAddress(process.env.ICASH_TITLE_REPLY_EMAIL),supportMailbox=titleEmailAddress(process.env.ICASH_SUPPORT_EMAIL);
@@ -38,7 +39,7 @@ export async function POST(req:Request){
  const reference=signed??titleReference(email.subject);if(!reference)return NextResponse.json({received:true});
  const sender=titleEmailAddress(email.from);if(!sender)return new Response(null,{status:400});
  if(reference.kind==='M'){await db('rpc/icash_record_deal_email_reply','POST',{p_email:id,p_reference:reference.id,p_sender:sender,p_subject:String(email.subject).slice(0,180),p_text:typeof email.text==='string'?email.text.slice(0,20000):'No plain-text body. Review the original message in the receiving inbox.',p_authenticated:email.authentication?.dmarc==='pass'});return NextResponse.json({received:true});}
- await db('rpc/icash_record_title_reply','POST',{p_email:id,p_kind:reference.kind,p_reference:reference.id,p_sender:sender,p_subject:String(email.subject).slice(0,500),p_text:typeof email.text==='string'?email.text.slice(0,20000):'No plain-text body. Review the original message in the receiving inbox.',p_authenticated:email.authentication?.dmarc==='pass'});
+ await db('rpc/icash_record_title_reply_source','POST',{p_email:id,p_kind:reference.kind,p_reference:reference.id,p_sender:sender,p_subject:String(email.subject).slice(0,500),p_text:typeof email.text==='string'?email.text.slice(0,20000):'No plain-text body. Review the original message in the receiving inbox.',p_authenticated:email.authentication?.dmarc==='pass',p_source:titleReplyOriginalSource(email,req.headers.get('svix-id'))});
  return NextResponse.json({received:true});
  }catch{return NextResponse.json({error:'Retry required'},{status:503});}
 }
