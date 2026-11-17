@@ -10,9 +10,10 @@ do $patch$
 declare item record;actual record;wrapper text;shared text;shared_body text;needle text;
  before_policy jsonb;new_hash text;
 begin
- if not pg_try_advisory_xact_lock(726341927) then
-  raise exception 'Acquisition single-state scheduler busy';
- end if;
+ -- Ordinary lane selection uses this lock frequently. Join its existing
+ -- queue for at most lock_timeout, before taking any budget or policy lock.
+ -- The complete DO statement remains bounded by statement_timeout above.
+ perform pg_advisory_xact_lock(726341927);
  perform 1 from public.icash_operating_budget where id=1 for update nowait;
  if not found then raise exception 'Acquisition single-state budget unavailable';end if;
  for item in select * from (values

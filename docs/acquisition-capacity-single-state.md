@@ -45,7 +45,10 @@ private privileges, source/owner/ACL/metadata/result drift refusal, immutable
 policy fields and migration-ledger rollback.
 
 Native PostgreSQL 17.11 reproduces the 200-to-100 calculation count. Independent
-connections verify fail-fast refusal of busy scheduler, budget or policy locks;
+connections verify a successful bounded wait behind the captured ordinary lane
+entry, two-second refusal of a sustained scheduler holder, no budget row lock
+while waiting, immediate refusal of busy budget or policy rows, and atomic
+rollback when the ledger insert fails after a successful wait. They also verify
 fresh committed quota, Pause and disabled-policy observations within one reader
 transaction; and final atomic refusal after another caller consumes the quota.
 All databases and requests are synthetic local fixtures. No production selector,
@@ -55,11 +58,21 @@ provider call, contact, spend, replay or flag reset is performed by verification
 
 Apply `20261117040822_acquisition_capacity_single_state.sql` only after source
 review and the exact canonical checks. The normal migration runner owns the
-transaction and ledger. The migration uses nonwaiting locks and pins four full
+transaction and ledger. Ordinary general, recovery, messages, voice and research
+polls all acquire transaction lock `726341927`; a separate no-lock observation
+does not guarantee it is free when installation starts. The installer joins that
+same lock queue for at most the existing two-second `lock_timeout`, before taking
+any budget or policy lock. The complete migration DO statement retains its
+eight-second `statement_timeout`. Budget and policy row locks remain `NOWAIT`.
+Runtime polling, scheduler lock calls and timeout settings are unchanged.
+
+The migration pins four full
 definitions, their owner, execution ACLs, volatility, parallel safety, strictness,
 leakproof setting and empty search path before and after installation. It verifies
-the active headroom manifest against its existing selector definitions. A busy
-lock or any drift rejects the transaction without changing functions or policy.
+the active headroom manifest against its existing selector definitions. A lock
+that exceeds its bound or any drift rejects the transaction without changing
+functions or policy. Failed earlier installation attempts remain historical
+receipts; they do not authorize an unattended retry loop.
 
 The acquisition wrapper MD5 changes from
 `ef2ac533056a6e0be5bc450e191eaed2` to
