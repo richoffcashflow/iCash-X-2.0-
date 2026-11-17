@@ -1,13 +1,15 @@
 // Offline source-word fixtures. No provider calls or live records.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
-import {sellerResponseDisposition,sellerCallDisposition,sellerResponsePatterns} from '../lib/seller-response-policy.ts';
+import {sellerResponseDisposition,sellerCallDisposition,sellerResponsePatterns,sellerPausePattern} from '../lib/seller-response-policy.ts';
 import {sellerCallAnswerPatterns} from '../lib/seller-call-answer.ts';
 import {isContactOptOut} from '../lib/contact-intent.ts';
 import {validateTextAnalysis} from '../lib/text-ai-policy.ts';
 import {liveConversationResult} from '../lib/deal-conversation.ts';
 import {replyToInstantLeadText} from '../lib/meta-instant-text.ts';
+import {sellerPauseCases} from './helpers/seller-pause-cases.mjs';
 const fixtures=[
  ['STOP. Who are you?','opt_out'],['Please stop! What is your name?','opt_out'],['You said "STOP. Who are you?"',null],['Do not say stop. Who are you?',null],
  ['Yes. Never mind','declined'],['Nevermind!','declined'],['Forget it.','declined'],['Go away','declined'],['Go to hell','declined'],['Never mind the paint, I want to sell.',null],['I did not say never mind',null],['You said "forget it" yesterday',null],
@@ -64,6 +66,11 @@ try{
  assert.equal(withdrawal,readFileSync(new URL('../supabase/migrations/20261113163659_seller_soft_withdrawal.sql',import.meta.url),'utf8'));
  assert.equal((await pg.query("select icash_seller_response_disposition('Yes. Never mind') d")).rows[0].d,null,'reproduce soft withdrawal gap');
  await pg.exec(withdrawal);
+ assert.equal((await pg.query("select icash_seller_response_disposition('Pause') d")).rows[0].d,null,'reproduce offered pause response gap');
+ const pauseSql=readFileSync(new URL('../config/seller-pause-response.sql',import.meta.url),'utf8');
+ assert(pauseSql.includes(sellerPausePattern));
+ assert.equal(pauseSql,readFileSync(new URL('../supabase/migrations/20261117184809_seller_pause_response.sql',import.meta.url),'utf8'));
+
  for(const pattern of Object.values(sellerCallAnswerPatterns))assert((answerSql+priceSql+unmarkedSql).includes(pattern.replaceAll('\\b','\\y')),'context SQL/TS pattern parity');
  const runtimeSql=(await pg.query("select string_agg(pg_get_functiondef(p.oid),E'\\n') definitions from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('icash_seller_direct_response_match','icash_seller_response_disposition','icash_seller_call_disposition')")).rows[0].definitions;
  for(const pattern of Object.values(sellerResponsePatterns))assert(runtimeSql.includes(pattern.replaceAll('\\b','\\y')),'installed SQL contains the exact mirrored regex');
@@ -121,7 +128,7 @@ try{
  const callback={conversation_id:'fixture',agent_id:'fixture',status:'done',transcript:[{role:'user',message:'Call me tomorrow. Actually, I am not super interested.'}],analysis:{data_collection_results:{callback_requested:{value:true},callback_confirmed:{value:true},callback_at:{value:'2026-10-20T14:00:00+00:00'},callback_timezone:{value:'UTC'},callback_quote:{value:'Call me tomorrow.'}}}};
  const stoppedCallback=liveConversationResult(callback,{conversationId:'fixture',agentId:'fixture',party:'seller'},Date.parse('2026-10-19T18:00:00Z'));
  assert.equal(stoppedCallback.callbackStatus,'held_for_seller_response');assert.equal(stoppedCallback.callbackDueAt,null);assert.equal(stoppedCallback.optedOut,false);
- for(const body of ['not super interested','this is a scam','DNC','not a scam?']){
+ for(const body of ['not super interested','this is a scam','DNC','not a scam?','Pause']){
   let reads=0;
   const d={env:{META_INSTANT_LEADS_ENABLED:'true'},db:async(path)=>{reads++;assert.equal(path,'rpc/icash_meta_text_context');return {body,complete:false,paused:false,declined:false};},sms:async()=>assert.fail('no SMS'),voice:async()=>assert.fail('no call')};
   assert.equal(await replyToInstantLeadText(d,'fixture'),true);assert.equal(reads,1,'negative contact-only reply cannot request another address prompt');
@@ -130,5 +137,23 @@ try{
  for(const role of ['anon','authenticated'])assert.equal((await pg.query("select has_function_privilege($1,'icash_seller_call_answer_disposition(text,text)','execute') allowed",[role])).rows[0].allowed,false);
  assert.equal((await pg.query("select has_function_privilege('service_role','icash_seller_response_disposition(text)','execute') allowed")).rows[0].allowed,true);
  await assert.rejects(pg.exec(forward),/Seller opt-out base-verb prerequisite changed/);await pg.exec('rollback');
- console.log(`Seller response policy: ${fixtures.length} text cases, ${callCases.length} call cases, SQL/TS parity, guarded forward migration, ingestion, analysis, live-result and Meta no-send guards passed offline.`);
+ // Production has the separately installed hard-stop predecessor. Preserve it
+ // while adding Pause; baseline cases above intentionally test current main.
+ const predecessor=readFileSync(new URL('./fixtures/seller-pause-hard-stop-predecessor.sql',import.meta.url),'utf8');
+ assert.equal(createHash('sha256').update(predecessor).digest('hex'),'2ce69fff4c5ba9cd7372afeb0b633768577243d9f4fc2c83c4a28bd9f30b0fdd','exact PR765 predecessor bytes');
+ await pg.exec(predecessor);
+ await pg.exec('begin;'+pauseSql+'commit;');
+ for(const [body,expected] of sellerPauseCases){
+  const transcript=[{role:'agent',message:'Let me know if you would like to continue or pause here.'},{role:'user',message:body}];
+  const row=(await pg.query('select icash_seller_response_disposition($1) d,icash_seller_contact_stop($1) stopped,icash_seller_call_disposition($2) call',[body,{transcript}])).rows[0];
+  assert.equal(row.d,expected,'live-predecessor SQL: '+body);assert.equal(row.stopped,false,body);assert.equal(row.call,expected,body);
+  assert.equal(sellerResponseDisposition(body),expected,'TS pause: '+body);assert.equal(sellerCallDisposition(transcript),expected,body);
+  const analysis=validateTextAnalysis({action:'ask_price',reply:'price?',summary:'ignored',facts:[]},[body],'seller');
+  assert.equal(analysis.responseDisposition,expected,body);assert.equal(analysis.optedOut,false,body);
+  if(expected){assert.equal(analysis.action,'review');assert.equal(analysis.callRequested,false);}
+  const result=liveConversationResult({conversation_id:'fixture',agent_id:'fixture',status:'done',transcript,analysis:{data_collection_results:{interested:{value:true}}}},{conversationId:'fixture',agentId:'fixture',party:'seller'});
+  assert.equal(result.optedOut,false,body);if(expected){assert.equal(result.interested,false);assert.equal(result.callbackDueAt,null);}
+ }
+ assert.equal((await pg.query("select icash_seller_response_disposition('Go to hell') d")).rows[0].d,'opt_out','installed hard-stop behavior survives pause patch');
+ console.log(`Seller response policy: ${fixtures.length+sellerPauseCases.length} text cases, ${callCases.length+sellerPauseCases.length} call cases, SQL/TS parity, guarded forward migration, ingestion, analysis, live-result and Meta no-send guards passed offline.`);
 }finally{await pg.close();}
