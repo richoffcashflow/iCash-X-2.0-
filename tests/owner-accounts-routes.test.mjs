@@ -82,7 +82,7 @@ accountRow.paused=false;
 bot=await (await get('bot-status')).json();assert.equal(bot.label,'Finding property owners');assert.equal(bot.active,true);assert.equal(bot.pendingConfirmation,true);
 botTickets=[];bot=await (await get('bot-status')).json();assert.equal(bot.active,false);assert.equal(bot.pendingConfirmation,true);assert.equal(bot.label,'Earlier work is awaiting confirmation.');
 botProgress={status:'ready',health:{status:'blocked',reason:'no_completed_work'}};
-bot=await (await get('bot-status')).json();assert.equal(bot.blocked,true);assert.equal(bot.label,'No recent completed task was recorded.');
+bot=await (await get('bot-status')).json();assert.equal(bot.blocked,true);assert.equal(bot.blockedReason,'no_completed_work');assert.equal(bot.label,'No recent completed task was recorded.');
 accountRow.paused=true;botProgress={status:'paused'};
 response=await get('property-photo','?screeningId='+screen);assert.deepEqual((await response.json()).photo,cachedPhoto,'Owner view reads the existing photo and aerial fallback');
 const cacheReads=calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length;validScreen=false;assert.equal((await get('property-photo','?screeningId='+screen)).status,404);validScreen=true;assert.equal(calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length,cacheReads,'A foreign screening cannot read photo cache');

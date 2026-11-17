@@ -7,7 +7,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
  const audioBytes=Buffer.alloc(16044);audioBytes.write('RIFF');audioBytes.writeUInt32LE(16036,4);audioBytes.write('WAVEfmt ',8);audioBytes.writeUInt32LE(16,16);audioBytes.writeUInt16LE(1,20);audioBytes.writeUInt16LE(1,22);audioBytes.writeUInt32LE(8000,24);audioBytes.writeUInt32LE(16000,28);audioBytes.writeUInt16LE(2,32);audioBytes.writeUInt16LE(16,34);audioBytes.write('data',36);audioBytes.writeUInt32LE(16000,40);
  const now=new Date().toISOString(),account={id,name:'Example Customer',email:'customer@example.invalid',ownAccount:false,fundedCents:50000,balanceCents:12345,reservedCents:200,leadCount:27,paused:true,assistantName:'Alex',createdAt:now,billingModel:'membership_credits',vip:true,membership:{state:'active',paidThrough:'2099-01-01T00:00:00Z'}};
  const secondAccount={...account,id:secondId,name:'Another Customer',email:'another@example.invalid',balanceCents:4200,vip:false,paused:false,assistantName:'Taylor'};
- let expired=false,denied=false,inspecting=false,manualSent=false,twoContacts=false,secondBotStatus='blocked';const writes=[],reads=[],errors=[];
+ let expired=false,denied=false,inspecting=false,manualSent=false,twoContacts=false,secondBotStatus='blocked',secondBlockReason='configuration_disabled';const writes=[],reads=[],errors=[];
  const report=u=>({days:Number(u.searchParams.get('days')??1),timezone:u.searchParams.get('timezone')??'UTC',startAt:now,endAt:now,leads:27,calls:14,texts:22,contracts:1,vipSavingsCents:0});
  function customerWork(second){const data=makeWorkspaceFixture({count:1});data.properties[0].result.property.address=second?'456 Second Street, Austin, TX':'123 Example Street, Dallas, TX';data.contacts[0].contacts[0].name=second?'Another Seller':'Fixture Seller';data.conversations=[];data.textAttention=[];data.propertyAttentionIds=[];data.responseCounts={responded:1,total:27};if(second)data.instantLeads=[{leadId:uuid(2),screeningId:uuid(2),dealId:uuid(1002),name:'Saved Instant Seller',phone:'+12025550129',address:null,state:'awaiting_address',paused:true,declinedAt:null,submittedAt:now,firstOutreachAt:now,responseAt:now,addressConfirmedAt:null,formId:'fixture',campaignId:null,holdReason:null}];return data;}
  try{
@@ -32,7 +32,7 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
     if(path.startsWith(root)&&expired)return route.fulfill({status:410,json:{error:'This account view has ended. Open the account again from Accounts.'}});
     if(path===root){inspecting=true;return route.fulfill({json:{view:{id:activeView,expiresAt:new Date(Date.now()+1800000).toISOString(),account:second?secondAccount:account}}});}
     if(path===root+'/activity')return route.fulfill({json:customerWork(second)});
-    if(path===root+'/bot-status')return route.fulfill({json:second?{...(secondBotStatus==='blocked'?{active:false,blocked:true,label:'A service issue is blocking work on your account.'}:secondBotStatus==='pending'?{active:false,pendingConfirmation:true,label:'Earlier work is awaiting confirmation.'}:{active:true,pendingConfirmation:true,label:'Finding property owners'}),checkedAt:new Date().toISOString()}:{active:false,label:'Waiting for the next task',checkedAt:now}});
+    if(path===root+'/bot-status')return route.fulfill({json:second?{...(secondBotStatus==='blocked'?{active:false,blocked:true,blockedReason:secondBlockReason,label:'A service issue is blocking work on your account.'}:secondBotStatus==='pending'?{active:false,pendingConfirmation:true,label:'Earlier work is awaiting confirmation.'}:{active:true,pendingConfirmation:true,label:'Finding property owners'}),checkedAt:new Date().toISOString()}:{active:false,label:'Waiting for the next task',checkedAt:now}});
     if(path===root+'/progress')return route.fulfill({json:{progress:{days:Number(u.searchParams.get('days')??1),timezone:u.searchParams.get('timezone')??'UTC',startAt:now,endAt:now,queued:0,screened:27,eligible:12,contacted:14,responded:1,status:second?'ready':'paused'}}});
     if(path===root+'/report')return route.fulfill({json:report(u)});
     if(path===root+'/property-photo')return route.fulfill({json:{photo:{view:'street_view',source:'DealMachine',url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg'}}});
@@ -112,9 +112,16 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   await page.getByRole('button',{name:'Switch account',exact:true}).click();await page.getByRole('heading',{name:'Accounts',exact:true}).waitFor();expired=false;
   await page.getByRole('button',{name:'Open workspace for Another Customer'}).click();await page.getByText('Viewing Another Customer',{exact:true}).waitFor();await page.getByText('$42.00',{exact:true}).waitFor();await page.locator('.property-summary').getByText('456 Second Street',{exact:true}).waitFor();assert.equal(await page.getByText('123 Example Street',{exact:true}).count(),0,'Another customer cannot inherit the previous workspace');
   const instant=page.locator('#property-'+uuid(2));await instant.getByRole('button',{name:'Texts',exact:true}).click();await instant.getByText('What is your offer?',{exact:true}).waitFor();assert(await instant.getByRole('button',{name:'Resume follow-up',exact:true}).isDisabled());
-  await page.getByRole('heading',{name:'Work needs attention',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Research unavailable',exact:true}).waitFor();
   await page.getByText('A service issue is blocking work on your account.',{exact:true}).waitFor();
   assert.equal(await page.locator('.bot-live-status').getAttribute('data-live'),'false','a funded account needing work review cannot show a healthy live indicator');
+  for(const [reason,title] of [['no_completed_work','No recent completed work'],['configuration_expired','Research configuration expired'],['system_paused','Automation paused'],['unknown','Work blocked']]){
+   secondBlockReason=reason;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+   await page.getByRole('heading',{name:title,exact:true}).waitFor();
+   assert.equal((await page.locator('.bot-live-status').textContent()).trim(),title);
+   assert.equal(await page.locator('.bot-live-status').getAttribute('data-live'),'false');
+   assert.doesNotMatch(await page.locator('.bot-run-bar').textContent(),/Work needs attention|Work delayed/);
+  }
   secondBotStatus='pending';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   await page.getByRole('heading',{name:'Awaiting confirmation',exact:true}).waitFor();
   await page.getByText('Earlier work is awaiting confirmation.',{exact:true}).waitFor();

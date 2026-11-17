@@ -18,10 +18,12 @@ let authorized=true,failed=false,queries=[];
 for(const reason of ['configuration_expired','configuration_disabled','system_paused','no_completed_work']){
  const value=currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{status:'ready',health:{status:'blocked',reason}}},now);
  assert.equal(value.blocked,true);assert.equal(value.active,false,'a claimed ticket cannot prove account recovery');
+ assert.equal(value.blockedReason,reason,'Typed reason preserves the recorded blocker');
  assert(!value.label.includes('next task'));
  assert.doesNotMatch(value.label,/stalled|work is delayed|work delayed/i);
  if(reason==='no_completed_work')assert.equal(value.label,'No recent completed task was recorded.','Missing completion evidence remains explicit');
 }
+for(const reason of [undefined,'toString','unrecognized'])assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{health:{status:'blocked',reason}}},now).blockedReason,'unknown','Missing or unknown reasons cannot invent a specific blocker');
 const pendingInput={paused:false,tickets:[],screening:[],progress:{status:'ready',health:{status:'blocked',reason:'pending_work'}}};
 for(const activeInput of [{tickets:[ticket]},{screening:[{state:'running',lease_until:expires_at}]}]){
  const value=currentBotActivity({...pendingInput,...activeInput},now);

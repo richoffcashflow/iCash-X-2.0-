@@ -59,14 +59,26 @@ assert.match(text(pendingCustomer),/Finding property owners/);
 assert.doesNotMatch(text(pendingCustomer),/Earlier work is awaiting confirmation|Awaiting confirmation|Work needs attention/,'The customer keeps the existing Run mode and task presentation');
 // A stale owner account read invalidates the cached health announcement before
 // the polling effect runs; fresh blocked health remains visible to the owner.
-activity={principalKey:'fixture',active:false,blocked:true,label:'No recent completed task was recorded.',checkedAt:new Date().toISOString()};
+activity={principalKey:'fixture',active:false,blocked:true,blockedReason:'no_completed_work',label:'No recent completed task was recorded.',checkedAt:new Date().toISOString()};
 for(const stale of [false,true,false]){
- const tree=render({stale}),expected=stale?'Checking status':'Work needs attention';
+ const tree=render({stale}),expected=stale?'Checking status':'No recent completed work';
  assert.equal(text(all(tree).find(n=>n.type==='h2')),expected,'The owner heading follows current account evidence');
  assert.equal(text(all(tree).find(n=>n.props?.role==='status')).trim(),expected,'The accessible status agrees with the owner heading before effects run');
  assert.equal(live(tree),false,'Neither blocked nor stale status claims healthy work');
- if(stale)assert.doesNotMatch(text(tree),/Work needs attention|No recent completed task/,'Cached blocked details cannot survive a stale account read');
+ if(stale)assert.doesNotMatch(text(tree),/No recent completed work|No recent completed task/,'Cached blocked details cannot survive a stale account read');
 }
+for(const [reason,expected] of [['no_completed_work','No recent completed work'],['configuration_expired','Research configuration expired'],['configuration_disabled','Research unavailable'],['system_paused','Automation paused'],['unknown','Work blocked'],[undefined,'Work blocked'],['toString','Work blocked'],[{},'Work blocked']]){
+ activity={principalKey:'fixture',active:false,blocked:true,blockedReason:reason,label:'Original blocker detail',checkedAt:new Date().toISOString()};
+ const tree=render();assert.equal(text(all(tree).find(n=>n.type==='h2')),expected);
+ assert.equal(text(all(tree).find(n=>n.props?.role==='status')).trim(),expected);
+ assert.match(text(tree),/Original blocker detail/);assert.equal(live(tree),false);
+ assert(!tree.props.className.includes('is-active'));
+ assert.doesNotMatch(text(tree),/Work needs attention|Work delayed/);
+ const customerTree=render({readOnly:false,enabled:true});assert.match(text(customerTree),/Bot running/);
+ assert.doesNotMatch(text(customerTree),/Original blocker detail|Work blocked|Research unavailable|Automation paused|No recent completed work|Research configuration expired/);
+}
+activity={principalKey:'fixture',active:false,blocked:true,label:'No recent completed task was recorded.',checkedAt:new Date().toISOString()};
+assert.equal(text(all(render()).find(n=>n.type==='h2')),'Work blocked','Legacy responses never derive typed reasons by matching prose');
 // Customer Run mode is independent of a temporary health/readiness failure.
 activity=null;
 const customer={readOnly:false,enabled:true};

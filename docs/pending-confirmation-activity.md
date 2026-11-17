@@ -13,6 +13,12 @@ its saved Run/Pause presentation and existing task labels. Actual Pause, missing
 completion, configuration blocks, unavailable reads, stale data and account-view
 isolation retain their existing precedence.
 
+For true blocks, the owner preview names the typed recorded reason: no recent
+completed work, expired research configuration, unavailable research or paused
+automation. Missing or unknown reason codes use “Work blocked”; titles are never
+inferred from descriptive prose. All these states remain non-live and preserve
+their original explanatory detail.
+
 This presentation change does not clear monitoring findings, settle costs,
 release money, retry work or claim account recovery. Backend health observations
 and all original financial and provider evidence remain unchanged.

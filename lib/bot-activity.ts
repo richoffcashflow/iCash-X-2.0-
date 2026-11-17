@@ -5,7 +5,14 @@ export const botTaskLabels:Record<string,string>={
  voice_result:'Updating a conversation',signing_result:'Checking a signature',signing_receipt:'Checking a signature',fulfillment:'Preparing deal documents',
  title_followup:'Following up with title',customer_updates:'Sending an update',customer_attention:'Sending an update',
 };
-export type BotActivity={active:boolean;label:string;checkedAt:string;blocked?:boolean;unavailable?:boolean;pendingConfirmation?:boolean};
+export type BotBlockedReason='no_completed_work'|'configuration_expired'|'configuration_disabled'|'system_paused'|'unknown';
+export type BotActivity={active:boolean;label:string;checkedAt:string;blocked?:boolean;blockedReason?:BotBlockedReason;unavailable?:boolean;pendingConfirmation?:boolean};
+function blockedReason(reason:string|undefined):BotBlockedReason{
+ switch(reason){
+  case 'no_completed_work':case 'configuration_expired':case 'configuration_disabled':case 'system_paused':return reason;
+  default:return 'unknown';
+ }
+}
 export function currentBotActivity(input:{paused:boolean;tickets:{kind:string;state:string;expires_at:string}[];screening:{state:string;lease_until:string|null}[];progress?:{status?:string;callsBudgetHeld?:number;health?:{status:string;reason?:string}}|null},now=Date.now()):BotActivity{
  const checkedAt=new Date(now).toISOString();
  if(input.paused)return {active:false,label:'Paused',checkedAt};
@@ -14,7 +21,7 @@ export function currentBotActivity(input:{paused:boolean;tickets:{kind:string;st
  // An unresolved original does not establish whether another task is active.
  // Preserve that observation alongside actual task evidence, without clearing it.
  const pendingConfirmation=health?.status==='blocked'&&health.reason==='pending_work';
- if(health?.status==='blocked'&&!pendingConfirmation)return {active:false,blocked:true,checkedAt,label:health.reason==='no_completed_work'?'No recent completed task was recorded.':'A service issue is blocking work on your account.'};
+ if(health?.status==='blocked'&&!pendingConfirmation)return {active:false,blocked:true,blockedReason:blockedReason(health.reason),checkedAt,label:health.reason==='no_completed_work'?'No recent completed task was recorded.':'A service issue is blocking work on your account.'};
  const pending=pendingConfirmation?{pendingConfirmation:true}:{};
  const ticket=input.tickets.find(t=>t.state==='consumed'&&Date.parse(t.expires_at)>now&&Object.hasOwn(botTaskLabels,t.kind));
  if(ticket)return {active:true,label:botTaskLabels[ticket.kind],checkedAt,...pending};
