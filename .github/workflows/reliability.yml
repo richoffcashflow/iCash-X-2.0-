@@ -354,6 +354,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-research-capacity-isolation-postgres.mjs
+      - name: Verify empty contact sources skip global outreach inspection
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-owner-wait-local-gate-postgres.mjs
       - name: Verify acquisition yields budget contention to independent recovery
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
