@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {buyerCallPackageSource} from '../lib/buyer-call-package-source.ts';
+import {sellerCallSource} from '../lib/seller-call-source.ts';
 import {processBuyerCallPackages} from '../lib/buyer-call-package-service.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {source,started,ended,id,setup,apply,enable,api} from './helpers/buyer-call-package-fixture.mjs';
@@ -38,6 +39,8 @@ for(const outcome of ['recorded','source_conflict','write_failed']){
   if(name==='icash_save_buyer_inbound_history')return outcome!=='source_conflict';
   if(name==='icash_save_seller_memory_inbound_history')return true;
   if(name==='icash_save_seller_inbound_history')return false;
+  // Separate seller adapter ignores this fixture's buyer-only source.
+  if(name==='icash_capture_seller_call_source')return true;
   if(name==='icash_capture_buyer_call_package'){events.push('capture');assert.deepEqual(args.p_source,source);if(failed)throw Error('Fixture source write lost');return outcome;}
   if(name==='icash_finish_recorded_reception_work'){events.push(args.p_outcome);return current;}
   throw Error('Unexpected boundary '+name);
@@ -46,7 +49,7 @@ for(const outcome of ['recorded','source_conflict','write_failed']){
   recordingAuthorized:()=>true,object:x=>x&&typeof x==='object'?x:{},RecordingProviderError:class extends Error{},finalRecordingPayload:()=>assert.fail(),
   incomingCallIdentityMatches:()=>true,receptionRecordingMatches:()=>assert.fail(),receptionConversationMatches:()=>true,
   getRecordedReception:async()=>current,transitionRecordedReception:()=>assert.fail(),endRecordedReception:()=>assert.fail(),boundEndReceipt:()=>assert.fail(),bindRecordedReceptionCallStart:async()=>current,
-  settleRecordedReception:async()=>{events.push('settle');return {settled:true};},sellerMemoryInboundTurns:()=>[],buyerCallPackageSource,
+  settleRecordedReception:async()=>{events.push('settle');return {settled:true};},sellerMemoryInboundTurns:()=>[],buyerCallPackageSource,sellerCallSource,
  });
  const result=await maintainRecordedReception(rpc,{getCall:async()=>({status:'completed'}),conversation:async()=>conversation},{TWILIO_ACCOUNT_SID:'ACfixture'});
  assert.deepEqual(events,['capture','settle',failed?'retry':'checked']);assert.equal(result.settled,1);assert.equal(result.reconciled,failed?0:1);assert.equal(result.held,outcome==='recorded'?0:1);
@@ -72,6 +75,8 @@ try{
    const rpc=async(name,args)=>{
     if(name==='icash_claim_recorded_reception_work')return args.p_kind==='reconcile'?[current]:[];
     if(name==='icash_save_seller_inbound_history')return false;
+  // Separate seller adapter ignores this fixture's buyer-only source.
+  if(name==='icash_capture_seller_call_source')return true;
     if(name==='icash_save_seller_memory_inbound_history')return true;
     if(name==='icash_save_buyer_inbound_history')return (await db.one('select icash_save_buyer_inbound_history($1,$2,$3) value',[args.p_session,args.p_conversation,JSON.stringify(args.p_transcript)])).value;
     if(name==='icash_capture_buyer_call_package'){events.push('capture');return db.capture(args.p_source,args.p_session,args.p_conversation);}
@@ -82,7 +87,7 @@ try{
     recordingAuthorized:()=>true,object:x=>x&&typeof x==='object'?x:{},RecordingProviderError:class extends Error{},finalRecordingPayload:()=>assert.fail(),
     incomingCallIdentityMatches:()=>true,receptionRecordingMatches:()=>assert.fail(),receptionConversationMatches:()=>true,
     getRecordedReception:async()=>current,transitionRecordedReception:()=>assert.fail(),endRecordedReception:()=>assert.fail(),boundEndReceipt:()=>assert.fail(),bindRecordedReceptionCallStart:async()=>current,
-    settleRecordedReception:async()=>{events.push('settle');return {settled:true};},sellerMemoryInboundTurns:()=>[],buyerCallPackageSource,
+    settleRecordedReception:async()=>{events.push('settle');return {settled:true};},sellerMemoryInboundTurns:()=>[],buyerCallPackageSource,sellerCallSource,
    });
    const replay={...conversation};if(transcript===undefined)delete replay.transcript;else replay.transcript=transcript;
    const result=await maintainRecordedReception(rpc,{getCall:async()=>({status:'completed'}),conversation:async()=>replay},{TWILIO_ACCOUNT_SID:'ACfixture'});

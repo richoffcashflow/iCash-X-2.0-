@@ -9,6 +9,7 @@ type Dependencies={db:Database;dispatch:(account:string,id:string)=>Promise<{sta
 export async function processSellerTextOffer(context:TextOfferContext,d:Dependencies){
  const now=(d.now??Date.now)();
  const memory=await readSellerMemory(d.db,context);
+ if(memory?.sourceHold)return {status:'seller_memory_source_review_required'};
  if(memory&&!memory.complete)return {status:'seller_memory_reconciliation_required'};
  if(context.memoryFingerprint&&context.memoryFingerprint!==memory?.fingerprint)return {status:'text_ai_context_changed'};
  const calls=memory?[]:await d.db<unknown[]>('rpc/icash_seller_prior_call_context','POST',{p_account:context.accountId,p_screening:context.screeningId,p_phone:context.phone});

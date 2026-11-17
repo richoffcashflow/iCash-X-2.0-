@@ -1,5 +1,8 @@
+import {readSellerMemory} from './seller-memory.ts';
+import {boundSellerQualification,sellerQualificationHold} from './seller-offer-qualification.ts';
+import {sellerCallPrefix,sellerCallPrefixFromProvider} from './seller-agreement-memory-proof.ts';
 import {sellerAgreementInput,confirmedSellerTerms} from './seller-agreement-flow.ts';
-import {calculateAutomaticCallOffer,type CallOfferContext} from './automatic-call-offer.ts';
+import {calculateAutomaticCallOffer,offerPricePresentation,type CallOfferContext} from './automatic-call-offer.ts';
 import {runScreeningJob} from './screening-job.ts';
 import {dealTermsSchema} from './deal-documents.ts';
 import {signingReadiness} from './signing-policy.ts';
@@ -9,7 +12,7 @@ import {sellerAgreementIdentityEvidence,sellerAgreementIdentityHold} from './sel
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 export type SellerAgreementScope={callKey:string;accountId:string;ownerUserId:string;ownerEmail:string;dealId:string;screeningId:string;phone:string};
 type Envelope={id:string;state:string;test_mode:boolean;terms:unknown;recipients:{id:string;name:string;phone?:string}[]};
-type Dependencies={db:Database;history:(conversationId:string)=>Promise<unknown>;bind:(token:string,conversationId:string)=>Promise<void>;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms?:unknown})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string;instruction:string}>;refresh:(accountId:string,envelopeId:string)=>Promise<{status:string}>;now?:()=>number};
+type Dependencies={db:Database;history:(conversationId:string)=>Promise<unknown>;proofHistory?:(conversationId:string)=>Promise<unknown>;bind:(token:string,conversationId:string)=>Promise<void>;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms?:unknown})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string;instruction:string}>;refresh:(accountId:string,envelopeId:string)=>Promise<{status:string}>;now?:()=>number};
 const instructions:Record<string,string>={
  all_owners_required:'Another owner or decision maker must be included. Ask who else needs to agree and arrange their participation; do not omit a required signer.',
  confirmation_required:'Confirm the exact price and closing date, prepared terms, and whether they want the agreement texted now before sending.',
@@ -52,6 +55,16 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  const result=runScreeningJob(screening.snapshot,(d.now??Date.now)());
  const offerContext=await d.db<CallOfferContext|null>('rpc/icash_call_offer_context','POST',{p_hash:hash,p_conversation:i.conversationId});
  const callOffer=offerContext?calculateAutomaticCallOffer(offerContext,offerContext.offerState??{},(d.now??Date.now)()):null;
+ const history=await d.history(i.conversationId);
+ const memory=await readSellerMemory(d.db,scope);
+ if(memory){
+  const qualification=await boundSellerQualification(d.db,{...scope,conversationId:i.conversationId},history,()=>d.history(i.conversationId),memory);
+  if(!qualification.ready)return sellerQualificationHold(qualification);
+ }
+ if(offerContext?.offerState?.receiptPriceAuthority){
+  const price=offerContext.offerState.acceptedPriceCents;
+  return {sent:false,status:'confirmation_needed',reason:'price_confirmation_required',nextQuestion:price?`The original cash price is ${offerPricePresentation(price).displayPrice}. Does that exact price work for you?`:'The current cash price needs confirmation before an agreement.',instruction:'Read the original amount and obtain a fresh, unqualified answer. Save it through accept_offer before preparing an agreement; do not substitute a newly calculated price.'};
+ }
  const acceptedCallOffer=callOffer?.quoteAllowed&&'contractAllowed' in callOffer&&callOffer.contractAllowed===true&&'status' in callOffer&&['verbally_accepted','pending_agreement'].includes(callOffer.status)&&callOffer.priceCents===i.confirmation.agreedPriceCents;
  // A missing provider repair estimate can be completed by the existing,
  // source-bound seller repair calculation. Reuse only its exact accepted
@@ -62,7 +75,16 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  const ceilingCents=result.preliminarySellerCeilingCents??(currentAcceptedCalculation?callOffer!.priceCents:null);
  if(((!result.offerAuthorized||result.financialCheck.status!=='eligible')&&!acceptedCallOffer)||!ceilingCents)throw Error('updated_property_review_required');
  const current=dealTermsSchema.parse(deal.terms);
- const history=await d.history(i.conversationId);
+ const memoryFingerprint=memory?.fingerprint??null;
+ let callPrefix=memory?sellerCallPrefix(history,i.conversationId,(d.now??Date.now)()):null;
+ if(memory&&!callPrefix&&d.proofHistory){
+  let provider:unknown;try{provider=await d.proofHistory(i.conversationId);}catch{/* Missing original clocks cannot authorize deferred refresh. */}
+  if(provider!==undefined){
+   const proof=sellerCallPrefixFromProvider(history,provider,i.conversationId,(d.now??Date.now)());
+   if(proof.conflict)return {sent:false,status:'confirmation_needed',reason:'call_source_changed',instruction:'The saved call and live conversation differ. Wait for the original conversation source to reconcile before agreement delivery; do not repeat or reinterpret the seller confirmation.'};
+   callPrefix=proof.prefix;
+  }
+ }
  const identityHold=sellerAgreementIdentityHold(sellerAgreementIdentityEvidence(history,i.confirmation.sellerLegalName));
  if(identityHold)return identityHold;
  const terms=confirmedSellerTerms(current,i.confirmation,{address:result.property.address,principal:identity.principal,legalDescription:result.property.legalDescription??'',ceilingCents,now:(d.now??Date.now)(),supportedRenegotiation:!!acceptedCallOffer&&!existing});
@@ -75,7 +97,7 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
  if(!sellerAgreementEvidence(history,terms,(d.now??Date.now)()))return sellerAgreementConfirmationHold(terms);
  const deferDelivery=async()=>{
   try{
-   const deferred=await d.db<{queued:boolean;id?:string}|null>('rpc/icash_defer_seller_agreement','POST',{p_hash:hash,p_conversation:i.conversationId,p_confirmation:i.confirmation,p_expected_terms:deal.terms,p_terms:existing?deal.terms:terms});
+   const deferred=await d.db<{queued:boolean;id?:string}|null>('rpc/icash_defer_seller_agreement','POST',{p_hash:hash,p_conversation:i.conversationId,p_confirmation:i.confirmation,p_expected_terms:deal.terms,p_terms:existing?deal.terms:terms,p_memory_fingerprint:memoryFingerprint,p_call_prefix:callPrefix});
    if(deferred?.queued===true)return {sent:false,status:'delivery_queued',reason:'agreement_text_unavailable',deliveryScheduled:true,instruction:'The confirmed agreement is queued for automatic delivery. Explain that it will be texted when texting is available. Keep the confirmed price, date, name and other answers; do not repeat qualification, claim it has already been sent, or give an unverified delivery time. The seller does not need to repeat the request.'};
   }catch{/* Keep the original send failure or record a delivery gap below. */}
   return null;
@@ -91,7 +113,7 @@ export async function sellerAgreementAction(token:string,input:unknown,d:Depende
   try{await d.db('rpc/icash_record_seller_tool_gap','POST',{p_hash:hash,p_conversation:i.conversationId,p_reason:'agreement_text_unavailable'});}catch{console.warn('seller_gap_capture_pending',{action:i.action,reason:'agreement_text_unavailable'});}
   return {sent:false,status:'delivery_unavailable',reason:'agreement_text_unavailable',instruction:'The agreement details are confirmed, but text delivery for this property is currently unavailable. Explain the delivery problem once and keep the confirmed price, date, name and answers. Do not repeat qualification, claim the contract was sent, or immediately retry. The delivery setup needs review before the same confirmed agreement can be sent. No callback or delivery has been scheduled.'};
  }
- const claim=await d.db<{id:string;claimed:boolean;envelopeId:string|null}|null>('rpc/icash_claim_seller_agreement','POST',{p_hash:hash,p_conversation:i.conversationId,p_confirmation:i.confirmation,p_expected_terms:deal.terms,p_terms:existing?deal.terms:terms});
+ const claim=await d.db<{id:string;claimed:boolean;envelopeId:string|null}|null>('rpc/icash_claim_seller_agreement','POST',{p_hash:hash,p_conversation:i.conversationId,p_confirmation:i.confirmation,p_expected_terms:deal.terms,p_terms:existing?deal.terms:terms,p_memory_fingerprint:memoryFingerprint,p_call_prefix:callPrefix});
  if(!claim)throw Error('agreement_in_progress');
  let envelopeId=claim.envelopeId;
  if(!envelopeId){

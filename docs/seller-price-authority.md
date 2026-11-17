@@ -1,0 +1,11 @@
+# Original seller price through receipt uncertainty
+
+The text planner previously calculated an unchanged accepted $60,000 price, erased that acceptance when its source revision differed, then recalculated $90,000 from the ceiling on the seller's next Yes. The regression uses the real planner and current underwriting to reproduce that two-turn price drift.
+
+A pending `receiptPriceAuthority` marker now retains the original amount while withholding acceptance authority. An ambiguous original answer creates the same marker. Later qualification facts, repeated ambiguous answers, a channel switch or a current research ceiling do not restore acceptance. A fresh answer to the exact current, delivered cash-price question can clear the marker. An original late receipt may resolve only its own exact answer/question and current price revision. Rejection, counteroffers, material changes and contact restrictions continue invalidating their existing authority; the marker never restores an amount that was cleared.
+
+When complete shared memory is available, the planner requires one exact current source ID and whole answer, then uses its canonical original question for contextual interpretation. Raw delivery state alone cannot lend a later question to an earlier answer. Contract readback evidence uses canonical history too. This preserves the original price text for monetary evidence; contextual closing questions separately use the final actual question so earlier acknowledgments do not become new answers.
+
+`tests/seller-text-price-authority.test.mjs` covers source-revision drift, repeated uncertainty, original late receipts, mismatched prices/revisions, refusals and missing/duplicate/changed current sources. `tests/seller-text-offer.test.mjs` executes the actual SQL saver and proves the pending marker persists with the original accepted amount. Shared-memory routing and receipt-time suites remain green. Provider and financial boundaries in these fixtures retain their documented limits; no production message or paid operation is exercised.
+
+The shared voice calculator must honor the same marker when describing accepted status, and direct agreement admission must independently verify canonical qualification and the atomic memory fingerprint. This text change alone is not authorization to release the larger seller-memory candidate.

@@ -11,7 +11,8 @@ const deps={
  bind:async()=>{},history:forbidden,send:forbidden,text:forbidden,
  refresh:async()=>({status:signatureStatus}),
  db:async(path,method)=>{
-  if(path==='rpc/icash_seller_agreement_call_context')return scope;
+  if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_agreement_call_context')return scope;
   assert.equal(method,undefined,'Only the read-only call-context RPC uses POST');
   if(path.startsWith('icash_signing_envelopes?'))return [{...envelope,recipients:recipientMatches?envelope.recipients:[{...envelope.recipients[0],phone:'+12125550888'},envelope.recipients[1]]}];
   if(path.startsWith('icash_contract_text_deliveries?')){

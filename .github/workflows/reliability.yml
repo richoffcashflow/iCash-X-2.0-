@@ -323,6 +323,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install fixed local database driver outside the project
         run: npm install --prefix "$RUNNER_TEMP/outreach-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Verify shared seller memory uses original SMS receipts and serialized source changes
+        env:
+          SELLER_MEMORY_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node --experimental-strip-types tests/seller-memory-receipt-native.mjs
+      - name: Verify atomic seller agreement admission against concurrent original sources
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-seller-atomic-memory-postgres.mjs
+      - name: Verify complete original seller call evidence and immutable bindings
+        env:
+          SELLER_CALL_SOURCE_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node tests/seller-call-source-native.mjs
+      - name: Verify composed seller evidence and agreement source admission
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-seller-joint-memory-postgres.mjs
       - name: Verify source-bound preparation and original locks
         env:
           PREPARATION_NATIVE_TEST: '1'

@@ -71,7 +71,7 @@ export async function POST(request:Request){
    // Preserve the caller's changed-facts flag; the agreement validator must
    // still stop any unresolved change reported after this quote was calculated.
   }
-  return NextResponse.json(await sellerAgreementAction(token,agreement,{db,history:conversationId=>transcript({conversationId}),bind:bindSellerAgreementCall,send:sendForSignatures,text:textPendingContract,refresh:refreshSigning}),{headers});
+  return NextResponse.json(await sellerAgreementAction(token,agreement,{db,history:conversationId=>transcript({conversationId}),proofHistory:conversationId=>evidence??=createRecordedReceptionProviders(process.env).conversation(conversationId),bind:bindSellerAgreementCall,send:sendForSignatures,text:textPendingContract,refresh:refreshSigning}),{headers});
  }catch(error){
   const failure=sellerAgreementFailure(error),invalid=error instanceof Error&&error.name==='ZodError';
   // Durable, call-bound recovery. This is only a case; it cannot repeat a

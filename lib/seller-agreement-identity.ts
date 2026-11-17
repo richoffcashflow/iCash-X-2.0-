@@ -27,6 +27,8 @@ export function sellerAgreementIdentityEvidence(value:unknown,sellerLegalName:st
    pending={legal,readback:legal&&!!name&&(` ${normalized(text)} `).includes(` ${name} `),sole,others,decision,otherDecision};
    continue;
   }
+  if(turn.sourceClockUnverified===true){evidence.legalNameConfirmed=false;evidence.soleOwnerConfirmed=false;evidence.allDecisionMakersConfirmed=false;pending=null;continue;}
+  if(turn.questionUnverified===true)pending=null;
   const answer=text.replace(/^(?:(?:um|uh|well)\b[\s,.-]*)+/i,'');
   // A courtesy "yes" in a question about our purpose is not a new signer,
   // legal-name or sole-owner confirmation. Keep earlier genuine evidence.

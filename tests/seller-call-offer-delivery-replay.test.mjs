@@ -22,7 +22,8 @@ for(const direction of ['inbound','outbound'])for(const interrupted of [false,tr
    assert.equal(body.p_expected_version,current.offerVersion);assert.deepEqual(body.p_expected_snapshot,snapshot);
    current.offerState=structuredClone(body.p_state);current.offerVersion++;return true;
   }
-  if(path==='rpc/icash_seller_agreement_call_context')return {callKey:direction+':fixture',accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.invalid',dealId:'deal',screeningId:'screen',phone:'+12025550123'};
+  if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_agreement_call_context')return {callKey:direction+':fixture',accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.invalid',dealId:'deal',screeningId:'screen',phone:'+12025550123'};
   if(path.startsWith('icash_signing_envelopes?'))return envelopes;
   if(path.startsWith('icash_deal_files?'))return [{terms,stage:'draft'}];
   if(path.startsWith('icash_screening_jobs?'))return [{snapshot}];
@@ -77,6 +78,11 @@ for(const direction of ['inbound','outbound'])for(const interrupted of [false,tr
  }
  quote=await call({action:'report_change',sellerStatement:'No.'});
  assert.equal(quote.contractAllowed,true);assert.equal(quote.priceCents,8500000);assert.equal(quote.payoffVerified,false);
+ const exactQuoteEnd=history.transcript.length,versionBeforeReadback=current.offerVersion;
+ a('The old cash offer was $85,000, but now the purchase price is $60,000. Does that cash price work?');u('Yes.');
+ const mixedReadback=await call({action:'accept_offer',priceCents:quote.priceCents,quoteRevision:quote.quoteRevision});
+ assert.equal(mixedReadback.reason,'acceptance_confirmation_required');assert.equal(current.offerVersion,versionBeforeReadback,'ambiguous spoken price cannot save acceptance');assert.equal(current.offerState.acceptedPriceCents,null);
+ history.transcript.length=exactQuoteEnd;
  a('We can offer $85,000 cash, as is. Does that work?');u('Yes.');
  const accepted=await call({action:'accept_offer',priceCents:quote.priceCents,quoteRevision:quote.quoteRevision});
  assert.equal(accepted.status,'verbally_accepted');

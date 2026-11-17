@@ -1,6 +1,7 @@
 import {signingTermsHash} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
-type Job={id:string;accountId:string;userId:string;customerEmail:string;dealId:string;phone:string;sellerName:string;expectedTerms:unknown};
+import {reviewSellerAgreementMemory} from './seller-agreement-memory-proof.ts';
+type Job={id:string;accountId:string;userId:string;customerEmail:string;dealId:string;phone:string;sellerName:string;expectedTerms:unknown;memoryReviewRequired?:boolean};
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Dependencies={db:Database;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms:unknown})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string}>};
 /** One owner-authorized request, one provider creation. An uncertain send stays
@@ -15,6 +16,7 @@ export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,
  let textAttempted=false;
  let result:{sent:boolean;status:string};
  try{
+  if(job.memoryReviewRequired===true&&!await reviewSellerAgreementMemory(d.db,job))throw Error('seller_memory_review_required');
   const existing=await d.db<{id:string;state:string;terms:unknown;recipients:{name:string;phone?:string}[];provider_id:string|null}[]>(`icash_signing_envelopes?account_id=eq.${job.accountId}&deal_id=eq.${job.dealId}&kind=eq.purchase&test_mode=eq.false&select=id,state,terms,recipients,provider_id&limit=2`);
   if(existing.length){
    const e=existing[0];
@@ -27,6 +29,10 @@ export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,
    const sent=await d.send({accountId:job.accountId,userId:job.userId,customerEmail:job.customerEmail,dealId:job.dealId,kind:'purchase',signers:[{name:job.sellerName,phone:job.phone}],phoneLinkOnly:true,expectedTerms:job.expectedTerms});
    if(sent.testMode)throw Error('live_agreement_required');envelopeId=sent.id;
   }
+  // The original memory-backed confirmation must own this exact successful
+  // envelope before a contract message can use either financial admission path.
+  // SQL also holds rolling older workers that skip this binding step.
+  if(job.memoryReviewRequired===true&&await d.db<boolean>('rpc/icash_bind_agreement_delivery_envelope','POST',{p_account:job.accountId,p_recovery:job.id,p_envelope:envelopeId})!==true)throw Error('seller_original_agreement_binding_required');
   textAttempted=true;
   result=await d.text(job.accountId,envelopeId,job.phone);
  }catch(error){
