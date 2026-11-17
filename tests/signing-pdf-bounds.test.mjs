@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {isDeepStrictEqual} from 'node:util';
 import {z} from 'zod';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {normalizeDocuseal as normalize} from '../lib/docuseal-policy.ts';
@@ -10,7 +11,7 @@ process.env.DOCUSEAL_TEST_API_KEY='fixture-no-network';
 const recipients=[{id:'1',email:'seller@example.invalid'},{id:'2',email:'buyer@example.invalid'}];
 const envelope={id:'envelope',account_id:'account',provider_id:'123',terms_hash:'fixture-hash',state:'test_completed',test_mode:true,recipients};
 let reads,cancelled,pdfResponse,requests;
-const service=await loadService('lib/signing-service.ts',{z,normalize,verifiedSigningStatus,
+const service=await loadService('lib/signing-service.ts',{z,normalize,verifiedSigningStatus,isDeepStrictEqual,
  db:async path=>{assert(path.includes('account_id=eq.account'));return [envelope];},
  fetch:async(url,options)=>{
   requests.push(String(url));assert.equal(options.redirect,'error');
@@ -40,5 +41,21 @@ try{
   const bytes=await service.completedSigningPdf('account','envelope');
   assert(bytes instanceof ArrayBuffer);assert.deepEqual(Buffer.from(bytes),Buffer.concat(chunks));
   assert.equal(requests.length,3);assert.equal(pdfResponse.body.locked,false);
+ });
+ await test('empty successful PDF responses cannot become executed attachments',async()=>{
+  for(const headers of [{},{'Content-Length':'0'}]){
+   stream([],headers);
+   await assert.rejects(service.completedSigningPdf('account','envelope'),/PDF is empty/);
+   assert.equal(requests.length,3);assert.equal(pdfResponse.body.locked,false);
+  }
+ });
+ await test('loaded title PDF source must match before any provider read',async()=>{
+  Object.assign(envelope,{deal_id:'deal',kind:'purchase',terms:{address:'Fixture'},template_id:'template',created_at:'2026-01-01T00:00:00Z'});
+  const expected={id:envelope.id,accountId:envelope.account_id,dealId:envelope.deal_id,kind:envelope.kind,state:envelope.state,testMode:envelope.test_mode,
+   providerId:envelope.provider_id,terms:envelope.terms,termsHash:envelope.terms_hash,templateId:envelope.template_id,recipients:envelope.recipients,createdAt:'2025-12-31T18:00:00-06:00'};
+  for(const changed of [{providerId:'456'},{termsHash:'changed'},{recipients:[]},{state:'completed'},{terms:{address:'Different'}},{createdAt:'bad'}]){
+   stream([new Uint8Array([1])]);await assert.rejects(service.completedSigningPdf('account','envelope',false,{...expected,...changed}),/changed before PDF/);assert.equal(requests.length,0);
+  }
+  stream([new Uint8Array([1,2,3])]);assert.deepEqual(new Uint8Array(await service.completedSigningPdf('account','envelope',false,expected)),new Uint8Array([1,2,3]));assert.equal(requests.length,3);
  });
 }finally{if(oldKey===undefined)delete process.env.DOCUSEAL_TEST_API_KEY;else process.env.DOCUSEAL_TEST_API_KEY=oldKey;}

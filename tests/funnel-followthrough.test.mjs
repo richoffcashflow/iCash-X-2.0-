@@ -3,6 +3,7 @@ import {processDealJourneys} from '../lib/deal-journey-service.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {closingPayoutNote} from '../lib/closing-setup.ts';
 import {titleEmailAddress} from '../lib/title-inbound-policy.ts';
+import {titleConfirmationInstructionsFor} from '../lib/title-confirmation-instructions.ts';
 
 // Actual service bodies with isolated database/provider boundaries. No live sends.
 const env={VERCEL_ENV:'production',ICASH_LIVE_WORK_READY:'true',DOCUSEAL_MODE:'live'};
@@ -63,9 +64,9 @@ try{
     if(emailMatch&&emailMatch[1]!==email||stateMatch&&stateMatch[1]!==state)return [];
     if(data.email_state)email=data.email_state;if(data.state)state=data.state;return [];
    }
-   return [{id:'task',deal_id:'deal',state,email_state:email,payload:{type:'assignment',envelopeId:'signed'}}];
+   return [{id:'task',deal_id:'deal',state,email_state:email,payload:{type:'assignment',envelopeId:'22222222-2222-4222-8222-222222222222'}}];
   };
-  const {dispatchTitleUpdate}=await loadService('lib/title-update-service.ts',{db,closingPayoutNote,titleEmailAddress,completedSigningPdf:async()=>{if(point==='pdf'){state=newerState;throw Error('PRIVATE PDF details');}return new Uint8Array([1]).buffer;}});
+  const {dispatchTitleUpdate}=await loadService('lib/title-update-service.ts',{db,closingPayoutNote,titleEmailAddress,titleConfirmationInstructionsFor,completedSigningPdf:async()=>{if(point==='pdf'){state=newerState;throw Error('PRIVATE PDF details');}return new Uint8Array([1]).buffer;}});
   globalThis.fetch=async()=>{sends++;state=newerState;throw Error('PRIVATE provider details');};
   const result=await dispatchTitleUpdate('account','task');
   assert.equal(result.status,'title_followup_needs_reconciliation');

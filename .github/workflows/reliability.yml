@@ -66,6 +66,26 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-title-negated-review-postgres.mjs
+      - name: Verify immutable original title source and competing ingress
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-original-source-postgres.mjs
+      - name: Verify current agreement closing against original source and cancellation races
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-closing-original-source-postgres.mjs
+      - name: Verify initial title attachments and payout against concurrent source changes
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-delivery-snapshot-postgres.mjs
+      - name: Verify requested title copies preserve original sources and receipts
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-copy-postgres.mjs
+      - name: Verify original signing receipt discovery and unchanged cancellation authority
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-signing-receipt-discovery-postgres.mjs
       - name: Verify expired preflight cleanup and renewal under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
