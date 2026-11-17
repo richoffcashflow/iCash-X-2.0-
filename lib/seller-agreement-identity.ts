@@ -26,6 +26,8 @@ export function sellerAgreementIdentityEvidence(value:unknown,sellerLegalName:st
    pending={legal,readback:legal&&!!name&&(` ${normalized(text)} `).includes(` ${name} `),sole,others,decision,otherDecision};
    continue;
   }
+  if(turn.sourceClockUnverified===true){evidence.legalNameConfirmed=false;evidence.soleOwnerConfirmed=false;evidence.allDecisionMakersConfirmed=false;pending=null;continue;}
+  if(turn.questionUnverified===true)pending=null;
   const answer=text.replace(/^(?:(?:um|uh|well)\b[\s,.-]*)+/i,'');
   if(pending?.legal&&sellerIdentityInterruption(answer)){pending=null;continue;}
   if(/\b(?:i(?:'m| am) (?:his|her|their) (?:wife|husband|son|daughter|tenant)|this is (?:his|her|their) (?:wife|husband|son|daughter)|i(?:'m| am) (?:the |a )?tenant)\b/i.test(answer)){

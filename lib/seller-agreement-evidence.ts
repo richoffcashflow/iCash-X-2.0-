@@ -1,7 +1,9 @@
+import {sellerUnqualifiedAgreementAnswer} from './seller-answer-evidence.ts';
 import {object} from './required-call-recording.ts';
-import {agreementTextRequested,spokenMoneyAmounts} from './call-offer-evidence.ts';
+import {negatedPriceReadback,priceReadbackMention,spokenMoneyAmounts,spokenReadbackAmounts} from './call-offer-evidence.ts';
 import {offerPricePresentation} from './automatic-call-offer.ts';
 import type {DealTerms} from './deal-documents.ts';
+import {calendarReadbacks,durationReadbacks} from './seller-readback-time.ts';
 
 const words=(n:number)=>n===0?'zero':offerPricePresentation(n*100).spokenPrice.replace(/ dollars?$/,'');
 const pattern=(text:string)=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replaceAll('-','[ -]');
@@ -39,7 +41,17 @@ export function sellerAgreementEvidence(value:unknown,terms:DealTerms,now=Date.n
   const text=String(turn.message).trim();
   if(turn.role==='agent'){
    previousQuestion=text;
-   pending=spokenMoneyAmounts(text).includes(Number(terms.priceCents))&&dateSpoken(text,terms.closingDate,now)&&inspection.test(text)&&/\b(?:text|send)\b/i.test(text)&&!/\b(?:waive|waived|no inspection|without inspection)\b/i.test(text);
+   const prices=spokenReadbackAmounts(text),dates=calendarReadbacks(text),durations=durationReadbacks(text);
+   const negatedPrice=negatedPriceReadback(text);
+   const exactPrice=prices.length===1&&prices[0]===Number(terms.priceCents)&&!negatedPrice;
+   const changedDate=dates.some(date=>!dateSpoken(date,terms.closingDate,now));
+   const changedDuration=durations.some(duration=>!/^days?$/.test(duration.unit)||spokenMoneyAmounts(duration.number+' dollars')[0]!==terms.inspectionDays*100);
+   const waived=/\b(?:waive|waived|no inspection|without inspection)\b/i.test(text);
+   const negatedTiming=/\b(?:closing(?: date)?|inspection(?: period)?)\s+(?:(?:is|was|will be|would be|should be)\s+)?(?:not|never|isn['’]?t|wasn['’]?t|won['’]?t)\b/i.test(text);
+   // Mentioning the desired value anywhere is not an exact readback. Old and
+   // revised prices/dates/periods in one turn require one clear restatement.
+   pending=exactPrice&&dates.length>0&&!changedDate&&durations.length>0&&!changedDuration&&inspection.test(text)&&/\b(?:text|send)\b/i.test(text)&&!waived&&!negatedTiming;
+   if(negatedPrice||negatedTiming||prices.length>0&&!exactPrice&&priceReadbackMention(text)||changedDate&&/\b(?:closing|close|date)\b/i.test(text)||(changedDuration||waived)&&/\binspection\b/i.test(text))confirmed=false;
    if(!pending&&/\b(?:text|send)\b/i.test(text)&&/\b(?:price|closing|inspection)\b/i.test(text))confirmed=false;
    continue;
   }
@@ -47,9 +59,9 @@ export function sellerAgreementEvidence(value:unknown,terms:DealTerms,now=Date.n
   // "No other owners" answers an ownership question, not the agreement. Only
   // this complete, unambiguous answer is exempt; an added withdrawal still stops.
   const noOtherOwners=/\b(?:other|else|anyone|anybody)\b/i.test(previousQuestion)&&/\b(?:owners?|decision makers?|agree)\b/i.test(previousQuestion)&&/^no[,. ]+(?:(?:there are )?no other owners?(?: or decision makers?)?|(?:just|only) me|nobody else|no one else)[.!]?$/i.test(answer);
-  const objection=(!noOtherOwners&&/\b(?:no|not|don['’]?t|do not|but|if|unless|wait|stop|cancel|hold off|instead|changed|change|different|maybe|think|later|tomorrow|spouse|wife|husband|partner|attorney|lawyer)\b/i.test(answer))||spokenMoneyAmounts(answer).some(amount=>amount!==Number(terms.priceCents))||/\b(?:need|want|prefer)\b.{0,60}\b(?:closing|close|inspection|date|days?)\b/i.test(answer);
+  const objection=(!noOtherOwners&&/\b(?:no|not|don['’]?t|do not|but|if|unless|wait|stop|cancel|hold off|reject|refuse|withdraw|sold|fire|damage|mortgage|lien|instead|changed|change|different|maybe|think|later|tomorrow|spouse|wife|husband|partner|attorney|lawyer)\b/i.test(answer))||spokenMoneyAmounts(answer).some(amount=>amount!==Number(terms.priceCents))||/\b(?:need|want|prefer)\b.{0,60}\b(?:closing|close|inspection|date|days?)\b/i.test(answer);
   if(objection)confirmed=false;
-  if(pending)confirmed=!objection&&(/^(?:yes|yeah|yep|correct|sure|okay|ok|i agree|that works|sounds good|please (?:text|send)|(?:text|send)(?: me)? (?:the |that )?(?:agreement|contract))\b/i.test(answer)||agreementTextRequested(answer));
+  if(pending)confirmed=!objection&&sellerUnqualifiedAgreementAnswer(answer);
   pending=false;
  }
  return confirmed;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {TextClaimRefusedError} from '../lib/voice-budget-failure.ts';
 import {PGlite} from '@electric-sql/pglite';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 import {api,setup,reset,applyMigration,ids} from './helpers/journey-message-preflight-fixture.mjs';
@@ -32,7 +33,7 @@ try{
   const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{
    db,process:{env},instantLeadsEnabled:()=>false,smsWorkEnabled:()=>true,liveWorkReady:()=>true,
    sameBusinessNumber:(a,b)=>a===b,elevenRequest:async()=>{if(hold==='number_verification'&&!recovered)throw Error('Fixture verification unavailable');return {phone_number:'+12145550102'};},
-   textPayload:()=>{},SellerInventoryUnavailableError:class extends Error{},
+   textPayload:()=>{},SellerInventoryUnavailableError:class extends Error{},TextClaimRefusedError,
    sendContiguityText:async()=>{sends++;if(hold==='unknown_provider')throw Error('Fixture unknown provider response');return {messageId:'fixture-receipt'};},
    saveTextReceipt:async(_db,account,message,provider)=>{
     assert.equal(account,ids.account);assert.equal(message,ids.message);

@@ -1,3 +1,5 @@
+import {calendarReadbacks,durationReadbacks} from './seller-readback-time.ts';
+
 /** Narrow conversational evidence, never price, ownership or contact authority.
  * Preserve the original quote; normalization is for matching only. */
 export function sellerAnswerText(value:string){
@@ -7,6 +9,34 @@ export function sellerAffirmation(value:string){
  const text=sellerAnswerText(value);
  return /^(?:(?:um|uh|well)[, .]+)*(?:(?:yes|yeah|yep|yup|y|sure|correct|absolutely|i am|it is|that's right|that is right)\b|(?:i (?:said|already said)|i(?:'ve| have)? (?:already )?told you(?: once)?)(?:[, .]+(?:mr\.? ai[, .]+)?)?[, .]*(?:yes|yeah|sure|i (?:am|would|do|will))\b)/i.test(text)
   && !/\b(?:not|never|didn't|did not|if|unless|only if)\b/i.test(text);
+}
+/** Agreement authority requires the whole answer, not a leading yes followed
+ * by an unreviewed refusal, property change, or different instruction. */
+export function sellerUnqualifiedAgreementAnswer(value:string,requirePriceAffirmation=false){
+ let text=sellerAnswerText(value).replace(/^(?:(?:um|uh|hmm|well)\b[\s,.-]*)+/i,'').replace(/[.!]+$/,'').trim();
+ const numberWords='zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million';
+ const amount=`(?:\\$?\\d+(?:,\\d{3})*(?:\\.\\d{1,2})?(?:\\s*(?:k|thousand|million))?(?: dollars?)?|(?:${numberWords})(?:[ -]+(?:and[ -]+)?(?:${numberWords}))*(?: dollars?)?)(?: and (?:(?:${numberWords})(?:[ -]+(?:${numberWords}))*|\\d{1,2}) cents?)?`;
+ const priceAffirmation=`(?:(?:i (?:accept|agree to)(?: the)?(?: (?:cash )?(?:price|offer)(?: of)?)? ${amount})|${amount} (?:works(?: for me)?|is (?:fine|acceptable))|that (?:cash )?(?:price|offer|amount) works(?: for me)?)`;
+ const affirmation=`(?:yes|yeah|yep|yup|correct|sure|okay|ok|i agree|i accept|(?:that|it) works(?: for me)?|that fits(?: my needs)?|sounds good(?: to me)?|i'?m ready|i am ready|let'?s do it|${priceAffirmation})`;
+ const delivery="(?:(?:please|go ahead and|you can) )?(?:text|send)(?: me| us)?(?: the| that| my| an?)? (?:agreement|contract|it)(?: for review)?(?: now)?";
+ const acknowledgement="(?:please|thank you|thanks|that works(?: for me)?|that fits(?: my needs)?|sounds good(?: to me)?)";
+ if(requirePriceAffirmation){
+  // Price acceptance may be followed by a timing preference or a next-step
+  // question. Match the complete reply, never just its leading yes or a
+  // suffix with the conditions removed. This grants no closing/date or text
+  // authority: final agreement confirmation still uses the strict grammar.
+  text=text.replace(/(^|[,;.!?]\s*)(?:um|uh|hmm|well)\b[\s,.-]*/gi,'$1')
+   .replace(/\bthat fit,\s*(?=that fits\b)/gi,'')
+   .replace(/\bwhat I,\s*(?=what I had in mind\b)/gi,'');
+  const timePhrases=[...calendarReadbacks(text),...durationReadbacks(text).map(part=>part.text)];
+  const time=timePhrases.length?`(?:${timePhrases.map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')})`:'(?!)';
+  const timing=`(?:(?:i want (?:to close |the closing date to be )?(?:in |on )?|in )${time}(?: from now)?|can we close (?:in |on )?${time}(?: from now)?\\??)`;
+  const process="(?:what(?:'s| is) the next step|what happens next)\\??";
+  const priceAgreement=`(?:${affirmation}|that fits with what I had in mind)`;
+  return new RegExp(`^${priceAgreement}(?:[ ,;.!]+(?:${priceAgreement}|${delivery}|${acknowledgement}|${timing}|${process}))*$`,'i').test(text);
+ }
+ const initial=`(?:${affirmation}|(?:that looks(?: good|right)?[.! ]+)?${delivery})`;
+ return new RegExp(`^${initial}(?:[ ,;.!]+(?:${affirmation}|${delivery}|${acknowledgement}))*$`,'i').test(text);
 }
 export function sellerExplicitUnknown(value:string){
  return /\b(?:i (?:do not|don't) know|not sure|unknown|rather not (?:say|discuss|guess)|prefer not to (?:say|discuss)|haven't decided|have not decided)\b/i.test(sellerAnswerText(value));

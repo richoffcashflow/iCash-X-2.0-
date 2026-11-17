@@ -17,7 +17,8 @@ let threads=[],reviewCurrent=false,suppressed=false,claims=0,sends=0,texts=0,gap
 let deferMode='none',deferrals=0,queueRows=0,queued=false,sendError=null,uncertainProvider=false;
 const deps={now:()=>now,bind:async()=>{},history:async()=>history,refresh:async()=>assert.fail('Sending does not poll signatures'),
  db:async(path,method,body)=>{
-  if(path==='rpc/icash_seller_agreement_call_context')return scope;
+  if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_agreement_call_context')return scope;
   if(path==='rpc/icash_call_offer_context')return null;
   if(path.startsWith('icash_signing_envelopes?'))return envelopes;
   if(path.startsWith('icash_deal_files?'))return [{terms,stage:'draft'}];

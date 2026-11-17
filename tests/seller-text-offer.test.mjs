@@ -5,7 +5,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {processSellerTextOffer} from '../lib/seller-text-offer-service.ts';
 import {planSellerTextOffer} from '../lib/seller-text-offer.ts';
 import {calculateAutomaticCallOffer} from '../lib/automatic-call-offer.ts';
-import {callSellerPriceEvidence} from '../lib/call-offer-evidence.ts';
+import {callSellerPriceEvidence,spokenReadbackAmounts} from '../lib/call-offer-evidence.ts';
 import {qualifiedSellerTurns} from './helpers/seller-qualification-fixture.mjs';
 globalThis.fetch=async()=>{throw Error('NO NETWORK: offline fixtures only');};
 const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
@@ -65,7 +65,7 @@ async function run(c,body,extra={}){
 // not an invented acceptance of the customer's old $215k proposal.
 const c=await seed();let r=await run(c,'$210,000 works for me');
 assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.quotedPriceCents,9000000);assert.equal(r.plan.state.acceptedPriceCents,null);
-assert.match(r.plan.body,/You asked \$210,000/);assert.equal(r.progress.reason,'awaiting_seller_reply');
+assert.match(r.plan.body,/Your asking price is above our proposal/);assert.deepEqual(spokenReadbackAmounts(r.plan.body),[9000000],'one exact server-authorized price in the acceptance question');assert.equal(r.progress.reason,'awaiting_seller_reply');
 r=await run(c,'Yes');assert.equal(r.plan.action,'legal_name');assert.equal(r.plan.state.acceptedPriceCents,9000000);
 r=await run(c,'My full legal name is Jane Seller');assert.equal(r.plan.action,'owners');
 r=await run(c,'Yes, I am the only owner and decision maker');assert.equal(r.plan.action,'closing_date');
@@ -251,12 +251,13 @@ for(const role of ['anon','authenticated'])for(const f of ['icash_seller_text_of
 const unclearSeller=await seed();await run(unclearSeller,'I need $210k');
 const unclearSource=await incoming(unclearSeller,'Yes.'),unclearJob=await one('select * from icash_text_ai_jobs where message_id=$1',[unclearSource.id]);
 const unclearContext=(await rpc('icash_resume_seller_text_ai',[unclearSeller.a,unclearJob.id])).context;
-const unclearPlan=planSellerTextOffer({...unclearContext,offerState:{...unclearContext.offerState,acceptedPriceCents:9000000,quotedPriceCents:9000000,textThreadId:randomUUID(),processedSource:randomUUID()},historyComplete:true,history:[{transcript:qualifiedSellerTurns},{transcript:[{role:'agent',message:''},{role:'user',message:'Yes.',questionUnverified:true}]}]});
+const unclearPlan=planSellerTextOffer({...unclearContext,offerState:{...unclearContext.offerState,acceptedPriceCents:9000000,quotedPriceCents:9000000,textThreadId:randomUUID(),processedSource:randomUUID()},historyComplete:true,history:[{transcript:qualifiedSellerTurns},{transcript:[{role:'agent',message:''},{role:'user',message:'Yes.',sourceId:unclearSource.id,questionUnverified:true}]}]});
 assert.equal(unclearPlan.action,'clarify_source_answer');assert.equal(unclearPlan.state.processedSource,unclearSource.id);assert.equal(unclearPlan.state.textThreadId,unclearSeller.t);assert.equal(unclearPlan.state.acceptedPriceCents,9000000);
 const saveUnclear=plan=>rpc('icash_save_seller_text_offer',[unclearSeller.a,unclearJob.id,unclearContext.fingerprint,unclearContext.offerVersion,plan]);
 assert.equal(await saveUnclear({...unclearPlan,state:{...unclearPlan.state,processedSource:randomUUID()}}),null,'actual guard rejects old source');
 assert.equal(await saveUnclear({...unclearPlan,state:{...unclearPlan.state,textThreadId:randomUUID()}}),null,'actual guard rejects another thread');
 const unclearSaved=await saveUnclear(unclearPlan);assert(unclearSaved?.messageId,'actual SQL saver queues the bounded clarification');
+assert.deepEqual((await one('select state from icash_call_offer_private.offers where deal_id=$1',[unclearSeller.d])).state.receiptPriceAuthority,unclearPlan.state.receiptPriceAuthority,'actual SQL persists the original pending price authority without clearing evidence');
 assert.equal((await one('select body from icash_text_messages where id=$1',[unclearSaved.messageId])).body,unclearPlan.body);
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[unclearSeller.a])).n,0,'clarification cannot create signing authority');
 await dependencies.dispatch(unclearSeller.a,unclearSaved.messageId);

@@ -17,10 +17,13 @@ const address='45 Fixture Lane',now=Date.now();
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date(now).toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:address,legal_description:'Lot 1 block 2',estimated_value:280000,estimated_repair_cost:48185,is_free_and_clear:'Yes',total_estimated_loan_balance:0,estimated_equity_percentage:100}}};
 const context={party:'seller',address,offerState:{},offerVersion:0,snapshot},scope={callKey:'fixture',accountId:'account',ownerUserId:'owner',ownerEmail:'owner@example.test',dealId:'deal',screeningId:'screen',phone:'+12125550199'};
 let rejectAcceptance=false;const savedActions=[];
-let terms={address,buyer:'Fixture buyer',state:'TX'},claim,envelopes=[],sends=0,texts=0,expectedPrice=13700000;
+let terms={address,buyer:'Fixture buyer',state:'TX'},claim,envelopes=[],sends=0,texts=0,expectedPrice=13700000,memorySource=null,lastClaimBody;
+let readProvider=async()=>assert.fail('The live tool history must work even when a provider GET is stale');
 const db=async(path,method,b)=>{
  if(path==='rpc/icash_call_offer_context')return structuredClone(context);
  if(path==='rpc/icash_save_call_offer'){if(rejectAcceptance&&b.p_action==='accept_offer')return false;savedActions.push(b.p_action);assert.equal(b.p_expected_version,context.offerVersion);context.offerState=b.p_state;context.offerVersion++;return true;}
+ if(path==='rpc/icash_seller_memory_context')return memorySource;
+ if(path==='rpc/icash_save_seller_memory')return true;
  if(path==='rpc/icash_seller_agreement_call_context')return scope;
  if(path.startsWith('icash_signing_envelopes?'))return envelopes;
  if(path.startsWith('icash_deal_files?'))return [{terms,stage:'draft'}];
@@ -29,14 +32,14 @@ const db=async(path,method,b)=>{
  if(path.startsWith('icash_text_threads?'))return [{id:'thread'}];
  if(path.startsWith('icash_text_suppressions?'))return [];
  if(path==='rpc/icash_sms_thread_review_current')return true;
- if(path==='rpc/icash_claim_seller_agreement'){if(claim)return {...claim,claimed:false};terms=b.p_terms;claim={id:'claim',claimed:true,envelopeId:null};return claim;}
+ if(path==='rpc/icash_claim_seller_agreement'){lastClaimBody=b;if(claim)return {...claim,claimed:false};terms=b.p_terms;claim={id:'claim',claimed:true,envelopeId:null};return claim;}
  if(path==='rpc/icash_finish_seller_agreement'){claim.envelopeId=b.p_envelope;return true;}
  throw Error(path);
 };
 const route=await loadService('app/api/internal/voice/cash-offer/route.ts',{
  instantCallAddress,dispatchTextMessage:()=>assert.fail('Unexpected intake text'),dispatchLiveVoice:()=>assert.fail('Unexpected intake call'),
  liveToolHistory,boundSellerQualification,NextResponse:{json:Response.json},process:{env:{ICASH_LIVE_WORK_READY:'true',ICASH_RECORDING_RECEIPTS_READY:'true',DOCUSEAL_MODE:'live'}},db,
- bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async()=>assert.fail('The live tool history must work even when a provider GET is stale')}),
+ bindSellerAgreementCall:async()=>{},createRecordedReceptionProviders:()=>({conversation:async id=>readProvider(id)}),
  callOfferEvidence,callPayoffEvidence,callSellerStatement,callSellerPriceEvidence,sellerPayoffEvidence,sellerPayoffRecovery,sellerListingEvidence,sellerRoutineOwnershipAnswer,sellerRoutineTimingAnswer,automaticCallOffer,blockedOffer,buyerAgreementHandoff,sellerAgreementInput,object,sha,sellerAgreementFailure,sellerAgreementAction,
  sendForSignatures:async i=>{sends++;assert.equal(i.signers[0].phone,scope.phone);assert.equal(terms.priceCents,expectedPrice);assert.equal(terms.earnestCents,null);envelopes=[{id:'envelope',state:'awaiting_counterparty',test_mode:false,terms,recipients:[i.signers[0],{name:'Fixture buyer'}]}];return {id:'envelope',testMode:false};},
  textPendingContract:async(account,id,phone)=>{texts++;assert.deepEqual([account,id,phone],['account','envelope',scope.phone]);return {sent:true,status:'accepted'};},refreshSigning:async()=>({status:'awaiting_counterparty'}),
@@ -160,3 +163,16 @@ for(const skipAcceptance of [false,true]){
  assert.equal(sends,1);assert.equal(terms.priceCents,8500000);assert.equal(snapshot.raw.data.num_total_active_liens,1);
 }
 console.log('PASS omitted debt-report and omitted acceptance replay through real route, original/new quote receipts, specific missing terms, and exactly one simulated agreement.');
+
+// Provider-injected live history lacks start/turn clocks. The existing same-call
+// getter supplies proof once; its exact ordered speech must match the live turns.
+context.offerState={};context.offerVersion=0;claim=undefined;envelopes=[];sends=0;texts=0;
+terms={address,buyer:'Fixture buyer',state:'TX'};expectedPrice=13700000;
+snapshot.raw.data.estimated_value=280000;snapshot.raw.data.estimated_repair_cost=48185;delete snapshot.raw.data.num_total_active_liens;
+entries=[];memorySource={binding:{accountId:scope.accountId,dealId:scope.dealId,screeningId:scope.screeningId,phone:scope.phone},fingerprint:'b'.repeat(64),complete:true,conversations:[]};
+const proofQuote=await post({action:'get_offer'});
+entries=[observedReceipt(proofQuote),{role:'agent',message:'Our cash price is $137,000. Does that work?'},{role:'user',message:'Yes.'},{role:'agent',message:'What is your legal name?'},{role:'user',message:'Jane Seller.'},{role:'agent',message:'Are you the only owner and decision maker?'},{role:'user',message:'Yes, just me.'},{role:'agent',message:`The purchase price is $137,000 cash, closing ${confirmation.closingDate}, with a ten-day inspection period. May I text the agreement now?`},{role:'user',message:'Yes, please.'}];
+let proofReads=0;readProvider=async id=>{proofReads++;assert.equal(id,'conv_fixture');return {conversation_id:id,metadata:{start_time_unix_secs:Math.floor(Date.now()/1000)-120},transcript:[...qualificationEntries,...entries].filter(t=>t.role==='agent'||t.role==='user').map((t,index)=>({...t,time_in_call_secs:index}))};};
+assert.equal((await post({action:'confirm_and_send',confirmation})).sent,true);assert.equal(proofReads,1);assert.equal(lastClaimBody.p_call_prefix.version,'seller-call-prefix-v2');assert.equal(lastClaimBody.p_call_prefix.conversationId,'conv_fixture');assert.equal(sends,1);
+memorySource=null;
+console.log('PASS actual route obtains one exact same-conversation clocked proof for injected live history without clocks; no provider traffic.');

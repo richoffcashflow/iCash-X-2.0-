@@ -4,6 +4,7 @@ import {elevenRequest} from '@/lib/elevenlabs';
 import {readVoiceUsagePolicies,settleBoundVoiceUsage} from './voice-usage-service.ts';
 import {liveConversationResult} from './deal-conversation.ts';
 import type {VoiceConversation} from './voice-result.ts';
+import {sellerCallSource} from './seller-call-source.ts';
 export async function reconcileLiveConversation(accountId:string,callId:string,signal?:AbortSignal){
  const db:typeof database=(path,method,body)=>{signal?.throwIfAborted();return database(path,method,body,signal);};
  const [call]=await db<{conversation_id:string;agent_id:string;party:'seller'|'buyer';state:string;operation_key:string}[]>(`icash_live_conversations?id=eq.${callId}&account_id=eq.${accountId}&select=conversation_id,agent_id,party,state,operation_key`);
@@ -41,6 +42,18 @@ export async function reconcileLiveConversation(accountId:string,callId:string,s
  if(!result)return {status:'awaiting_conversation'};
  await recordUsage(result.durationSeconds,result.providerCostUsd);
  // Late usage evidence does not rewrite completed transcripts or callback decisions.
- if(call.state!=='complete'){await db('rpc/icash_save_live_result','POST',{p_call:callId,p_result:result});await prepare();}
+ if(call.state!=='complete'){
+  try{
+   if(call.party==='seller'&&call.operation_key.startsWith('voice:'))await db('rpc/icash_save_live_result_with_source','POST',{p_call:callId,p_result:result,p_evidence:sellerCallSource(c)});
+   else await db('rpc/icash_save_live_result','POST',{p_call:callId,p_result:result});
+  }catch(error){
+   // The already-saved original usage observations must still reach normal
+   // settlement. Capture failure cannot become zero-cost completion or hide
+   // the original error; the atomic saver kept this call retryable.
+   try{await settle();}catch{/* The original save error already reports failure. */}
+   throw error;
+  }
+  await prepare();
+ }
  return {status:'conversation_saved',billing:await settle()};
 }

@@ -57,10 +57,35 @@ jobs:
           JOURNEY_NATIVE_TEST: '1'
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node tests/journey-message-preflight-native.mjs
+      - name: Verify completed buyer calls retain one source-bound package delivery
+        env:
+          BUYER_CALL_PACKAGE_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node tests/buyer-call-package-native.mjs
       - name: Verify title reply classification preserves concurrent manual holds
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-title-negated-review-postgres.mjs
+      - name: Verify immutable original title source and competing ingress
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-original-source-postgres.mjs
+      - name: Verify current agreement closing against original source and cancellation races
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-closing-original-source-postgres.mjs
+      - name: Verify initial title attachments and payout against concurrent source changes
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-delivery-snapshot-postgres.mjs
+      - name: Verify requested title copies preserve original sources and receipts
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-copy-postgres.mjs
+      - name: Verify original signing receipt discovery and unchanged cancellation authority
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-signing-receipt-discovery-postgres.mjs
       - name: Verify expired preflight cleanup and renewal under concurrent claims
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
@@ -288,6 +313,19 @@ jobs:
           SELLER_MEMORY_NATIVE_TEST: '1'
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node --experimental-strip-types tests/seller-memory-receipt-native.mjs
+      - name: Verify atomic seller agreement admission against concurrent original sources
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-seller-atomic-memory-postgres.mjs
+      - name: Verify complete original seller call evidence and immutable bindings
+        env:
+          SELLER_CALL_SOURCE_NATIVE_TEST: '1'
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node tests/seller-call-source-native.mjs
+      - name: Verify composed seller evidence and agreement source admission
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-seller-joint-memory-postgres.mjs
       - name: Verify source-bound preparation and original locks
         env:
           PREPARATION_NATIVE_TEST: '1'

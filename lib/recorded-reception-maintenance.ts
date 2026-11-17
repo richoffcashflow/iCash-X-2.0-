@@ -7,6 +7,8 @@ import {getRecordedReception,transitionRecordedReception,endRecordedReception,bo
 import {settleRecordedReception} from './recorded-reception-settlement.ts';
 import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
 import {sellerMemoryInboundTurns} from './seller-memory.ts';
+import {sellerCallSource} from './seller-call-source.ts';
+import {buyerCallPackageSource} from './buyer-call-package-source.ts';
 
 /** Independent cleanup and termination worker. Launch/account/wallet gates never
  * control recovery or deletion. Provider deletion is verified before finalizing. */
@@ -116,15 +118,28 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
    // scheduling, terminal marking or identity recovery needed for deletion.
    stage='clock_binding';if(clockConflict)throw Error('CALL_START_CONFLICT');
    if(row.call_ended_at){
+    let buyerCaptureFailed=false;
     // Context is saved only from this exact completed provider conversation.
     // Tool payloads and model summaries never become future call instructions.
-    if(conversation?.status==='done'&&Array.isArray(conversation.transcript)){
-     const turns=conversation.transcript.map(object).filter(t=>['agent','user'].includes(String(t.role))&&typeof t.message==='string'&&t.message.length<=12000).map(t=>({role:t.role,message:t.message}));
-     const transcript=turns.length>80?[...turns.slice(0,40),...turns.slice(-40)]:turns;
-     if(transcript.length){
-      await rpc('icash_save_seller_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
-      if(await rpc('icash_save_seller_memory_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:sellerMemoryInboundTurns(conversation)})===false)throw Error('SELLER_MEMORY_HISTORY_REQUIRED');
-      await rpc('icash_save_buyer_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+    if(conversation?.status==='done'){
+     if(Array.isArray(conversation.transcript)){
+      const turns=conversation.transcript.map(object).filter(t=>['agent','user'].includes(String(t.role))&&typeof t.message==='string'&&t.message.length<=12000).map(t=>({role:t.role,message:t.message}));
+      const transcript=turns.length>80?[...turns.slice(0,40),...turns.slice(-40)]:turns;
+      if(transcript.length){
+       await rpc('icash_save_seller_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+       if(await rpc('icash_save_seller_memory_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:sellerMemoryInboundTurns(conversation)})===false)throw Error('SELLER_MEMORY_HISTORY_REQUIRED');
+       await rpc('icash_save_buyer_inbound_history',{p_session:row.id,p_conversation:row.conversation_id,p_transcript:transcript});
+      }
+     }
+     // A supplied empty, malformed or fully filtered transcript is still a
+     // changed observation. Record its conflict even without display history.
+     // Missing retained transcript data does not contradict a saved source.
+     if(conversation.transcript!==undefined&&conversation.transcript!==null){
+      try{
+       const captured=await rpc<string>('icash_capture_buyer_call_package',{p_session:row.id,p_conversation:row.conversation_id,p_source:buyerCallPackageSource(row,conversation)});
+       if(!['disabled','not_buyer','before_cutover','source_held','source_conflict','no_request','recorded'].includes(captured))throw Error('BUYER_PACKAGE_SOURCE_REQUIRED');
+       if(captured==='source_held'||captured==='source_conflict')result.held++;
+      }catch{buyerCaptureFailed=true;}
      }
     }
     stage='settlement';
@@ -135,6 +150,16 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
      carrierPricePending:freshCall.price===null,aiComplete:conversation?.status==='done',aiPricePresent:typeof object(conversation?.metadata).cost_fiat==='number',
     });
     if('reviewRequired' in settled&&settled.reviewRequired)result.held++;
+    // Capture only this already-fetched, identity-checked original. A malformed
+    // or oversized transcript records missing coverage after original usage
+    // settlement; no extra provider read, replay or new contact is introduced.
+    if(conversation?.status==='done'){
+     stage='seller_call_source';
+     if(await rpc('icash_capture_seller_call_source',{p_kind:'inbound',p_source:row.id,p_evidence:sellerCallSource(conversation)})!==true)throw Error('SELLER_CALL_SOURCE_NOT_SAVED');
+    }
+    // Preserve recording settlement even if the optional buyer source write
+    // failed. Retry only the exact source read/write on the existing lease.
+    if(buyerCaptureFailed){stage='buyer_package_source';throw Error('BUYER_PACKAGE_SOURCE_REQUIRED');}
    }
    await finish(initial,'reconcile','checked');result.reconciled++;
   }catch(error){
