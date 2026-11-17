@@ -95,6 +95,33 @@ const transport=async(url,options)=>{
 const reset=()=>{previews=0;capacity='ready';preflightStatus='disabled';paid=0;downloads=0;gets=0;claimed=false;saved=null;results=null;quota=true;busy=false;timeout=false;artifactFail=false;};
 const originalKey=process.env.DEALMACHINE_API_KEY,originalWarn=console.warn;process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';console.warn=()=>{};
 try{
+ for(const [lostAcknowledgments,saveOriginal] of [[1,true],[2,true],[2,false]]){
+  reset();let receiptWrites=0,refusalWrites=0;const metrics=[];
+  const refusalDb=async(path,method,p)=>{
+   if(path==='rpc/icash_record_owner_export_receipt'){
+    receiptWrites++;if(saveOriginal)await db(path,method,p);
+    if(receiptWrites<=lostAcknowledgments)throw Error('Saved original; acknowledgement lost');
+    return true;
+   }
+   if(path==='rpc/icash_finish_dealmachine_request'){metrics.push(p.p_result);return true;}
+   if(path==='rpc/icash_record_dealmachine_credit_refusal'){refusalWrites++;assert.equal(p.p_receipt.raw.error.code,'export_limit_exceeded');return 'provider_credit_exhausted';}
+   if(path==='rpc/icash_claim_owner_export_recovery')return null;
+   return db(path,method,p);
+  };
+  const refusalTransport=async(url,options)=>{
+   if(String(url).endsWith('/people/export')){paid++;return Response.json({error:{code:'export_limit_exceeded'},usage:{credits_used:109339}},{status:402});}
+   return transport(url,options);
+  };
+  const run=()=>enrichActiveOwners(refusalDb,account,candidates[0],config,250000,refusalTransport);
+  if(lostAcknowledgments===1){assert.equal((await run()).status,'export_receipt_held');assert.equal(refusalWrites,1);}
+  else{await assert.rejects(run,/OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED/);assert.equal(refusalWrites,1);}
+  assert.equal(metrics.at(-1).outcome,'http_error');assert.equal(metrics.at(-1).httpStatus,402,'Observed original response is not lost when a receipt write acknowledgement fails');
+  assert.equal(receiptWrites,2);assert.equal(paid,1,'A receipt acknowledgment failure never repeats the export');
+  if(saveOriginal)assert.equal(saved.receipt.httpStatus,402,'Durable original refusal remains available despite a lost acknowledgment');
+  else assert.equal(saved.receipt,undefined,'Refusal journaling never invents a successful original receipt save');
+  assert.equal(results,null);assert.equal(downloads,0);
+ }
+ reset();
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'contacts_saved');assert.equal(paid,1);assert.equal(downloads,1);assert.equal(results.length,3);
  assert.equal((await enrichActiveOwners(db,account,candidates[0],config,250000,transport)).status,'held');assert.equal(paid,1);
  // Known holds stop even the free preview; final admission still handles races.

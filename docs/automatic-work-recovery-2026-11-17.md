@@ -1,6 +1,6 @@
 # Automatic work recovery — November 17
 
-This coordinated release addresses distinct scheduling and reporting failures
+The core PR803 release addresses distinct scheduling and reporting failures
 observed during the owner's stalled-account investigation. It preserves the
 reviewed component commits as ancestors rather than deploying competing copies.
 
@@ -46,3 +46,30 @@ or bypasses final admission. The investigation still observed pending receipts
 and scheduler timeouts; this package is not evidence that every account is
 recovered. Verify ordinary completed work and recurrence after release without
 paid development demonstrations.
+
+## Combined follow-on after the core release
+
+PR803 ships independently. PR817 then carries the reviewed PR816 contact-source
+gate and corrected PR817 credit-wait change together, preserving their source
+commits and the finalized core release as ancestors. The source components are
+PR816 `2a3474af4a1db1c9c95881a6f7825daa064bb4fe` and corrected PR817
+`9f9b0ee0c4e223087db7496fa793b624ed94d87c`. They are incorporated once;
+component checks do not replace the combined follow-on's final checks.
+
+| Follow-on component | Behavior | Verified database prerequisite |
+| --- | --- | --- |
+| PR816 | Skip global outreach inspection when the necessary local contact source cannot exist | Installed once as `20261117185740_owner_wait_local_gate`; no separate activation |
+| PR817 | Detect replenished provider data credits through bounded free checks while retaining independent export-capacity proof | Installed once, disabled, as `20261117191836_provider_credit_wait`; activation requires the matching exact-main web and workers |
+
+The component documents record both installations, source digests, immutable
+originals and verified policy boundaries. Do not replay these prerequisites or
+the six core prerequisites. The corrected PR817 source passed all seven
+canonical jobs in run `44154406866`; require an independent review and all seven
+fresh canonical jobs for the complete follow-on head before its expected-head
+merge and exact-main release checks. Activate only the credit-wait policy after
+matching production hosts are verified. PR816 requires no activation.
+
+A confirmed provider credit wait is distinct from customer funding or an
+application failure. Its free checks do not buy credits, settle unknown money,
+repeat the original purchase or prove completed outreach. Preserve those
+distinctions in post-release progress and recurrence evidence.
