@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {sellerOfferQualification,boundSellerQualification} from '../lib/seller-offer-qualification.ts';
+import {sellerOfferQualification,sellerDialogueState,boundSellerQualification} from '../lib/seller-offer-qualification.ts';
 import {automaticCallOffer} from '../lib/automatic-call-offer.ts';
 import {callOfferEvidence} from '../lib/call-offer-evidence.ts';
 import {qualifiedSellerTurns} from './helpers/seller-qualification-fixture.mjs';
@@ -300,4 +300,40 @@ for(const completed_at of [undefined,'invalid',new Date(historyAt+120000).toISOS
 }
 legacyCalls=[];legacyRows=[historyRow(100,'incoming','Here is the paint color.')];freshReads=0;
 assert.equal((await boundSellerQualification(legacyRead,liveScope,timedCurrent,freshCurrent)).ready,true,'an ordinary incomplete informational text does not invalidate complete current qualification');assert.equal(freshReads,0);
+// Versioned source projection marks an answer whose delivered question is unknown.
+const savedQualified={sourceId:'completed-call',channel:'voice',transcript:qualifiedSellerTurns};
+const uncertainReply=(message,extra={})=>({sourceId:'original-sms',channel:'sms',transcript:[{role:'agent',message:''},{role:'user',message,sourceId:'original-sms',questionUnverified:true,...extra}]});
+const unclear=sellerDialogueState(null,[savedQualified,uncertainReply('No.')]);
+assert.equal(unclear.qualification.ready,false,'a source-bound bare no with unknown question cannot inherit all older positive answers');
+assert.equal(unclear.qualification.stop,true,'accepted-price continuity must not bypass unresolved contextual evidence');
+assert.deepEqual(unclear.facts,{},'unknown original question cannot be narrowed to only the latest unconfirmed question category');
+for(const answer of ['Yes.','Yeah.','Nope.','I would.','I do.','I will.',"I don't know.",'Not yet.','Not anymore.','Um, no.','It is.','I am.',"I'm not.","It's not.","I don't.",'Not currently.']){
+ const original=uncertainReply(answer),copy=structuredClone(original),state=sellerDialogueState(null,[savedQualified,original]);
+ assert.equal(state.qualification.ready,false,'unknown contextual answer: '+answer);assert.equal(state.qualification.stop,true);
+ assert.deepEqual(original,copy,'interpretation must preserve original source text and metadata');
+}
+for(const answer of ['Thank you.','The property is vacant.','I am the owner.','It is vacant.','No one lives there.','No rush.','Um, I am the owner.']){
+ assert.equal(sellerDialogueState(null,[savedQualified,uncertainReply(answer)]).qualification.ready,true,'neutral/self-contained text retains unrelated established facts: '+answer);
+}
+for(const marker of [undefined,false,'true',1])assert.equal(sellerDialogueState(null,[savedQualified,uncertainReply('No.',{questionUnverified:marker})]).qualification.ready,true,'only the typed source marker invokes the new boundary');
+const priorOwnerDenial={sourceId:'original-owner-denial',channel:'sms',transcript:[u('I no longer own the property.')]};
+let preserved=sellerDialogueState(null,[savedQualified,priorOwnerDenial,uncertainReply('Yes.')]);
+assert.equal(preserved.qualification.stop,true);assert.equal(preserved.facts.ownership.value,false);assert.equal(preserved.facts.ownership.quote,'I no longer own the property.');
+const priorInterestDenial={sourceId:'original-interest-denial',channel:'sms',transcript:[u('I do not want to sell the property.')]};
+preserved=sellerDialogueState(null,[savedQualified,priorInterestDenial,uncertainReply('No.')]);assert.equal(preserved.qualification.stop,true);assert.equal(preserved.facts.interest.value,false);
+const listedSource={sourceId:'original-listing',channel:'sms',transcript:[u('The property is listed with an agent.')]};
+preserved=sellerDialogueState(null,[savedQualified,listedSource,uncertainReply('No.')]);assert.equal(preserved.qualification.stop,true);assert.match(preserved.qualification.nextQuestion,/listed with an agent/);assert.equal(preserved.facts.listing.quote,'The property is listed with an agent.');
+const residualQuestion=uncertainReply('No.');residualQuestion.transcript[0].message='Is it listed with a real estate agent?';
+assert.equal(sellerDialogueState(null,[savedQualified,residualQuestion]).facts.listing,undefined,'an unverified question cannot recreate an unlisted fact through a secondary extractor');
+const explicitAfterUnknown=sellerDialogueState(null,[savedQualified,uncertainReply('No. I own the property.')]);
+assert.equal(explicitAfterUnknown.facts.ownership.value,true);assert.equal(explicitAfterUnknown.facts.ownership.quote,'No. I own the property.');assert.equal(explicitAfterUnknown.facts.listing,undefined);assert.equal(explicitAfterUnknown.qualification.stop,true);
+const priceFirstSource={transcript:[...qualifiedSellerTurns.filter(t=>!t.message.includes('thinking about selling')&&!t.message.includes('moving')),u('What is your cash offer?')]};
+const priceUnclear=sellerDialogueState(null,[priceFirstSource,uncertainReply('No.')]);assert.equal(priceUnclear.priceRequested,false);assert(priceUnclear.qualification.missing.includes('situation'));
+const restored=sellerDialogueState(null,[savedQualified,uncertainReply('No.'),{...savedQualified,sourceId:'later-verified-call'}]);
+assert.equal(restored.qualification.ready,true,'later verified answers restore facts after the actual uncertainty boundary');assert.equal(restored.facts.ownership.sourceId,'later-verified-call');assert.equal(restored.facts.ownership.quote,'Yes, I am the owner.');
+for(const continuity of [{offerState:{acceptedPriceCents:6000000}},{pendingAgreement:{priceCents:6000000,closingDate:'2026-12-01'}}]){
+ const blocked=await automaticCallOffer('a'.repeat(64),{action:'get_offer',conversationId:'conv_marker'},{...d,
+  db:async(path)=>{assert.equal(path,'rpc/icash_call_offer_context');return {party:'seller',address:'3614 FRANK ST',snapshot,...continuity};},verifyQualification:async()=>unclear.qualification,
+ });assert.equal(blocked.quoteAllowed,false);assert.equal(blocked.reason,'seller_qualification_required');
+}
 console.log('PASS fresh-call price hold, rapport progression, refusals, unknown answers, repair-save hold, completed qualification, acceptance continuity, buyer isolation and reset history boundaries. No external calls.');

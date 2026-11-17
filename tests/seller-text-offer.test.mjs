@@ -5,7 +5,8 @@ import {PGlite} from '@electric-sql/pglite';
 import {processSellerTextOffer} from '../lib/seller-text-offer-service.ts';
 import {planSellerTextOffer} from '../lib/seller-text-offer.ts';
 import {calculateAutomaticCallOffer} from '../lib/automatic-call-offer.ts';
-import {callSellerPriceEvidence} from '../lib/call-offer-evidence.ts';
+import {callSellerPriceEvidence,spokenReadbackAmounts} from '../lib/call-offer-evidence.ts';
+import {qualifiedSellerTurns} from './helpers/seller-qualification-fixture.mjs';
 globalThis.fetch=async()=>{throw Error('NO NETWORK: offline fixtures only');};
 const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
 const fixture=read('./helpers/seller-progress-fixture.sql'),split=fixture.indexOf('create function icash_queue_ai_reply(');
@@ -64,7 +65,7 @@ async function run(c,body,extra={}){
 // not an invented acceptance of the customer's old $215k proposal.
 const c=await seed();let r=await run(c,'$210,000 works for me');
 assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.quotedPriceCents,9000000);assert.equal(r.plan.state.acceptedPriceCents,null);
-assert.match(r.plan.body,/You asked \$210,000/);assert.equal(r.progress.reason,'awaiting_seller_reply');
+assert.match(r.plan.body,/Your asking price is above our proposal/);assert.deepEqual(spokenReadbackAmounts(r.plan.body),[9000000],'one exact server-authorized price in the acceptance question');assert.equal(r.progress.reason,'awaiting_seller_reply');
 r=await run(c,'Yes');assert.equal(r.plan.action,'legal_name');assert.equal(r.plan.state.acceptedPriceCents,9000000);
 r=await run(c,'My full legal name is Jane Seller');assert.equal(r.plan.action,'owners');
 r=await run(c,'Yes, I am the only owner and decision maker');assert.equal(r.plan.action,'closing_date');
@@ -99,6 +100,51 @@ cross=await run(returned,'Yes, send the agreement');assert.equal(cross.result.st
 assert.equal(await rpc('icash_claim_seller_text_agreement',[returned.a,cross.j.id]),null);
 
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
+// A corrected seller-reported debt changes the exact shortfall question. A
+// refusal of the old difference must not trap the new proposal in a review
+// loop; agreement authority still needs fresh coverage and price acceptance.
+const correctedDebt=await seed();
+r=await run(correctedDebt,'My mortgage payoff is $100,000.');assert.equal(r.plan.action,'payoff');assert.match(r.plan.body,/other loans/);
+r=await run(correctedDebt,'No.');assert.match(r.plan.body,/difference is \$10,000/);
+r=await run(correctedDebt,'No.');assert.match(r.plan.body,/person to review/);
+r=await run(correctedDebt,'My mortgage payoff is $100,000.');assert.match(r.plan.body,/person to review/,'an unchanged balance does not discard the seller refusal');
+assert.equal(r.plan.state.payoffReport.coverageDeclined,true);assert.equal(r.plan.state.payoffReport.coveredShortfallCents,0);
+r=await run(correctedDebt,'My mortgage payoff is $95,000.');
+assert.equal(r.plan.action,'payoff');assert.match(r.plan.body,/difference is \$5,000/,'a corrected debt must replace the declined old shortfall question');
+assert.equal(r.result.status,'message_delivered');
+let correctedState=(await one('select state from icash_call_offer_private.offers where deal_id=$1',[correctedDebt.d])).state;
+assert.equal(correctedState.payoffReport.mortgageCents,9500000);assert.equal(correctedState.payoffReport.otherDebtCents,0);
+assert.equal(correctedState.payoffReport.coverageDeclined,undefined);assert.equal(correctedState.payoffReport.coveredShortfallCents,undefined);
+assert.equal(correctedState.contractBlocked,true);assert.equal(correctedState.acceptedPriceCents,null);
+r=await run(correctedDebt,'Yes.');assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.payoffReport.coveredShortfallCents,500000);
+r=await run(correctedDebt,'Yes.');assert.equal(r.plan.action,'legal_name');assert.equal(r.plan.state.acceptedPriceCents,9000000);
+r=await run(correctedDebt,'Jane Seller.');assert.equal(r.plan.action,'owners');
+r=await run(correctedDebt,'Yes, I am the only owner and decision maker.');assert.equal(r.plan.action,'closing_date');
+r=await run(correctedDebt,close);assert.equal(r.plan.action,'inspection');
+r=await run(correctedDebt,'Yes.');assert.equal(r.plan.action,'confirm_terms');
+const correctedSends=sends;
+r=await run(correctedDebt,'Yes, please text the agreement.');assert.equal(r.result.status,'seller_agreement_sent');assert.equal(sends,correctedSends+1);
+assert.equal((await one('select terms from icash_deal_files where id=$1',[correctedDebt.d])).terms.priceCents,9000000);
+assert.equal(await rpc('icash_claim_seller_text_agreement',[correctedDebt.a,r.j.id]),null,'changed payoff still uses the original one-use agreement claim');
+const correctedMessages=(await q('select body from icash_text_messages where account_id=$1',[correctedDebt.a])).rows.map(m=>m.body);
+for(const original of ['My mortgage payoff is $100,000.','My mortgage payoff is $95,000.','No.'])assert(correctedMessages.includes(original),'original debt and refusal receipts remain intact');
+// The converse is also unsafe: earlier willingness to cover a larger gap is
+// not a fresh answer about the corrected debt. Keep the accepted lower price.
+const coveredDebt=await seed();
+r=await run(coveredDebt,'I am asking $60,000.');assert.equal(r.plan.state.quotedPriceCents,6000000);
+r=await run(coveredDebt,'Yes.');assert.equal(r.plan.state.acceptedPriceCents,6000000);
+r=await run(coveredDebt,'My mortgage payoff is $80,000.');assert.equal(r.plan.action,'payoff');
+r=await run(coveredDebt,'No.');assert.match(r.plan.body,/difference is \$20,000/);
+r=await run(coveredDebt,'Yes.');assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.payoffReport.coveredShortfallCents,2000000);
+const beforeDuplicate=dispatches;
+assert.equal((await processSellerTextOffer(r.context,dependencies)).status,'text_ai_context_changed');
+assert.equal(dispatches,beforeDuplicate,'same source cannot create another provider dispatch');
+assert.equal((await one('select state from icash_call_offer_private.offers where deal_id=$1',[coveredDebt.d])).state.payoffReport.coveredShortfallCents,2000000,'same-source replay keeps valid source-backed coverage');
+r=await run(coveredDebt,'My mortgage payoff is $75,000.');assert.match(r.plan.body,/difference is \$15,000/);
+const coveredState=(await one('select state from icash_call_offer_private.offers where deal_id=$1',[coveredDebt.d])).state;
+assert.equal(coveredState.payoffReport.coveredShortfallCents,undefined);assert.equal(coveredState.payoffReport.coverageDeclined,undefined);
+assert.equal(coveredState.contractBlocked,true);assert.equal(coveredState.acceptedPriceCents,6000000);assert.equal(coveredState.quotedPriceCents,6000000);
+assert.equal(coveredState.receiptPriceAuthority.priceCents,6000000);assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[coveredDebt.a])).n,0);
 // Continue a call's pending repair-budget question by SMS. A plainly stated
 // zero is a seller estimate; it does not erase the larger research allowance.
 const repairAnswer=await seed();
@@ -244,6 +290,23 @@ await q("update icash_screening_jobs set snapshot=jsonb_set(snapshot,'{raw,data,
 assert.equal(await rpc('icash_claim_text',[finalGate.a,gateSaved.messageId,'+15550000001']),null,'changed underwriting invalidates a queued proposal at final dispatch');
 const historical=await seed();const oldReply=await incoming(historical,'$210,000 works for me',{at:new Date(Date.now()-10*86400000).toISOString()});assert.equal(await rpc('icash_seller_text_offer_context',[historical.a,oldReply.id]),null,'historical negotiations are not replayed');
 for(const role of ['anon','authenticated'])for(const f of ['icash_seller_text_offer_context(uuid,uuid)','icash_save_seller_text_offer(uuid,uuid,text,bigint,jsonb)','icash_claim_seller_text_agreement(uuid,uuid)'])assert.equal((await one('select has_function_privilege($1,$2,\'execute\') ok',[role,'public.'+f])).ok,false);
+
+// Unknown source timing must produce a plan accepted by the actual SQL saver,
+// retaining its current message/thread identity without interpreting acceptance.
+const unclearSeller=await seed();await run(unclearSeller,'I need $210k');
+const unclearSource=await incoming(unclearSeller,'Yes.'),unclearJob=await one('select * from icash_text_ai_jobs where message_id=$1',[unclearSource.id]);
+const unclearContext=(await rpc('icash_resume_seller_text_ai',[unclearSeller.a,unclearJob.id])).context;
+const unclearPlan=planSellerTextOffer({...unclearContext,offerState:{...unclearContext.offerState,acceptedPriceCents:9000000,quotedPriceCents:9000000,textThreadId:randomUUID(),processedSource:randomUUID()},historyComplete:true,history:[{transcript:qualifiedSellerTurns},{transcript:[{role:'agent',message:''},{role:'user',message:'Yes.',sourceId:unclearSource.id,questionUnverified:true}]}]});
+assert.equal(unclearPlan.action,'clarify_source_answer');assert.equal(unclearPlan.state.processedSource,unclearSource.id);assert.equal(unclearPlan.state.textThreadId,unclearSeller.t);assert.equal(unclearPlan.state.acceptedPriceCents,9000000);
+const saveUnclear=plan=>rpc('icash_save_seller_text_offer',[unclearSeller.a,unclearJob.id,unclearContext.fingerprint,unclearContext.offerVersion,plan]);
+assert.equal(await saveUnclear({...unclearPlan,state:{...unclearPlan.state,processedSource:randomUUID()}}),null,'actual guard rejects old source');
+assert.equal(await saveUnclear({...unclearPlan,state:{...unclearPlan.state,textThreadId:randomUUID()}}),null,'actual guard rejects another thread');
+const unclearSaved=await saveUnclear(unclearPlan);assert(unclearSaved?.messageId,'actual SQL saver queues the bounded clarification');
+assert.deepEqual((await one('select state from icash_call_offer_private.offers where deal_id=$1',[unclearSeller.d])).state.receiptPriceAuthority,unclearPlan.state.receiptPriceAuthority,'actual SQL persists the original pending price authority without clearing evidence');
+assert.equal((await one('select body from icash_text_messages where id=$1',[unclearSaved.messageId])).body,unclearPlan.body);
+assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[unclearSeller.a])).n,0,'clarification cannot create signing authority');
+await dependencies.dispatch(unclearSeller.a,unclearSaved.messageId);
+assert.equal((await rpc('icash_finish_seller_text_progress',[unclearSeller.a,unclearJob.id,null])).reason,'awaiting_seller_reply');
 
 // Disposition uses the same source/dispatch loop, preserving the published buyer
 // price. A counteroffer gets an answer, and a later repeat is not a stranded draft.

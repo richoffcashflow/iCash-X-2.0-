@@ -1,0 +1,470 @@
+[
+  {
+    "signature": "icash_begin_signing(uuid,uuid,uuid,text,uuid,text,jsonb)",
+    "hash": "7ffc621ba4f68474622cd28886c9302e",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_bind_agreement_delivery_envelope(uuid,uuid,uuid)",
+    "hash": "cb5fa9a1e1facee5eb005c5b16f45dca",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_agreement_delivery_recovery()",
+    "hash": "f3e6103f13dda778780e33dab4069a4c",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_seller_agreement(text,text,jsonb,jsonb,jsonb)",
+    "hash": "067caa5b2c6fbe57cc988ceef40d2430",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_seller_agreement(text,text,jsonb,jsonb,jsonb,text)",
+    "hash": "e3e9f966f8e6a213deef43643b78ac01",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_seller_agreement(text,text,jsonb,jsonb,jsonb,text,jsonb)",
+    "hash": "11f85c6ef5cae298f5a8a7cc33d2135f",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_seller_agreement_before_memory(text,text,jsonb,jsonb,jsonb)",
+    "hash": "c4b1748fc26ce94a795fc218f56e7e58",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_seller_text_agreement(uuid,uuid)",
+    "hash": "142769dd2770623355cd4aca24b3ee92",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_text_before_owner_question(uuid,uuid,text)",
+    "hash": "fa1ad5bd705e2c7668eee0af1723a340",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_confirmed_seller_contract_text_current(uuid,uuid)",
+    "hash": "c13c2bd2a578a67ad18bd234fc37ed73",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_defer_seller_agreement(text,text,jsonb,jsonb,jsonb)",
+    "hash": "15ec165fffbcb5135e0da48f4ab750cb",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_defer_seller_agreement(text,text,jsonb,jsonb,jsonb,text)",
+    "hash": "31f2a421e7eab7dbcbe4961e5b7766ee",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_defer_seller_agreement(text,text,jsonb,jsonb,jsonb,text,jsonb)",
+    "hash": "72a1ee1b4a76ac67daf7b67134618176",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_finish_agreement_delivery_recovery(uuid,uuid,jsonb)",
+    "hash": "0b6ddd9a1210269482b7ab5f1226c68e",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_finish_recorded_reception_work(uuid,uuid,text,text,uuid,bigint,text,jsonb)",
+    "hash": "cd1cc13e60840806c48458e1f527497b",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_ingest_text_event(jsonb,boolean)",
+    "hash": "803a18e1b80d57c470440fb9b6e694f0",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_ingest_text_event_before_operational(jsonb,boolean)",
+    "hash": "299b21b220c28c7c0c96acfe3eb65c7e",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_refresh_seller_agreement_memory(uuid,uuid,text,text,jsonb)",
+    "hash": "b12b1cb42ad093486481176f4fa26b71",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_save_live_result(uuid,jsonb)",
+    "hash": "82af3a7c40a85cb346ad37f571b3fdca",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_save_seller_history_before_viewings(uuid,text,jsonb)",
+    "hash": "9d137e57f1e3c8c0f076316f73e00a56",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_save_seller_inbound_history(uuid,text,jsonb)",
+    "hash": "7963d02462db6613dc199101cf41f3e9",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_save_seller_memory(uuid,uuid,text,text,jsonb)",
+    "hash": "cb500322550548af5e5ec881ddce9457",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_save_seller_memory_inbound_history(uuid,text,jsonb)",
+    "hash": "9796f1591a0eda07b0bee1cbfd917e00",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_call_context(text,text)",
+    "hash": "7a8ff8331d8617f6692cbb8478259dd7",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_context(uuid,uuid)",
+    "hash": "029e3a8e9f27a3a3971859461be07d69",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.admit_purchase(uuid,uuid,uuid,jsonb)",
+    "hash": "47f2c051ca6158a8b6a8dadf2576c794",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.current(uuid)",
+    "hash": "8dac0c6ac25fb841587e4992fc181360",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.current_source(uuid,uuid,text,uuid)",
+    "hash": "72cbe7bb1261d3a1e975e1707953622f",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.immutable()",
+    "hash": "b80dccd1e11111decefe4843637bc78a",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.manifest(jsonb,text)",
+    "hash": "e7e8711d171d8551a9dde41c8a0effcb",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "i",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.original_call(icash_seller_agreement_memory_private.admissions,jsonb)",
+    "hash": "96972c4297ff2c152266b3b225b59ae9",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.original_source(text)",
+    "hash": "ab7604c2e79701bc2c63b66475dc288d",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "i",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.remember(uuid,jsonb,text,jsonb,jsonb)",
+    "hash": "a9091bc2ffbc0a18f29665dca2dbd43d",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_agreement_memory_private.review_ready(uuid)",
+    "hash": "844ababee52617fb7e161403e53d6324",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_memory_context(uuid,uuid,text)",
+    "hash": "7a680dae86359988c3f70c705a3369b0",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_seller_text_offer_context(uuid,uuid)",
+    "hash": "5f6e0a4049af7b8ca40b1bcb599f3547",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_signing_action_allowed(uuid,uuid)",
+    "hash": "0c8dd6053164498e0f2e400d8e55d3b7",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "s",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_sms_message_route()",
+    "hash": "f9d2f04ed7e0dfe2e14cf095c5eee0c0",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_transition_recorded_reception(uuid,uuid,text,bigint,text,jsonb)",
+    "hash": "e346ec2f5a1e948e818f0875b144bca4",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  }
+]

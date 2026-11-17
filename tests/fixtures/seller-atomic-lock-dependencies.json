@@ -1,0 +1,58 @@
+[
+  {
+    "signature": "icash_capture_seller_viewing(uuid,uuid,uuid,text,uuid,jsonb,timestamp with time zone)",
+    "name": "icash_capture_seller_viewing",
+    "source_hash": "4bfe292a52032b35539de486fbdf3fb2",
+    "source": "CREATE OR REPLACE FUNCTION public.icash_capture_seller_viewing(p_account uuid, p_deal uuid, p_thread uuid, p_source text, p_id uuid, p_turns jsonb, p_at timestamp with time zone)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare t public.icash_text_threads;d public.icash_deal_files;turn jsonb;previous text:='';answer text;quote text:='';slots jsonb:='[]';slot jsonb;slot_state text:='available';candidate boolean;correction boolean;has_schedule boolean;\nbegin\n select * into t from public.icash_text_threads where id=p_thread and account_id=p_account and deal_id=p_deal and party='seller' and retired_at is null;if not found then return;end if;\n select * into d from public.icash_deal_files where id=p_deal and account_id=p_account and stage in ('under_contract','buyer_selected','title_open','closing');\n if not found or coalesce(d.terms->>'practice','false')='true' or not exists(select 1 from public.icash_signing_envelopes where account_id=p_account and deal_id=p_deal and kind='purchase' and state='completed' and not test_mode) then return;end if;\n if jsonb_typeof(p_turns) is distinct from 'array' or jsonb_array_length(p_turns)>80 or p_at>now() or p_at<now()-interval '30 days' then return;end if;\n has_schedule:=exists(select 1 from public.icash_seller_viewing_availability where account_id=p_account and deal_id=p_deal and stated_at<=p_at);\n for turn in select value from jsonb_array_elements(p_turns) loop\n  answer:=btrim(turn->>'message');\n  if turn->>'role'='agent' then previous:=answer;continue;end if;\n  if turn->>'role'<>'user' or length(answer) not between 1 and 1500 then continue;end if;\n  correction:=(quote<>'' or has_schedule) and answer ~* '^((actually[, ]+)?make it|change (it|that) to|instead)\\M';\n  candidate:=correction or (previous ~* '\\m(viewing|viewings|showing|showings|visit|tour|access)\\M' and previous ~* '\\m(day|days|date|dates|time|times|when|available|availability|works|work|window|windows)\\M')\n   or (answer ~* '\\m(viewing|viewings|showing|showings|visit|tour)\\M' and answer ~* '\\m(available|cancel|cannot|can''t|works|work|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\M');\n  if not candidate or answer ~* '^(yes|yeah|yep|correct|that works|those work|ok|okay|thanks|thank you)[.! ]*$' then continue;end if;\n  if answer !~ '[[:alnum:]]' then continue;end if;\n  quote:=left(case when quote='' then answer else quote||E'\\n'||answer end,4000);\n  if correction then\n   -- Hold a changed time until the complete replacement is clarified. Never\n   -- keep advertising the old slot merely because the word viewing was omitted.\n   slots:='[]';slot_state:='needs_review';\n  elsif answer ~* '\\m(cancel|unavailable|cannot|can''t|not|don''t|do not|no longer|never)\\M' then\n   slots:='[]';slot_state:=case when answer ~* '\\m(cancel|no longer|unavailable)\\M' then 'withdrawn' else 'needs_review' end;\n  else\n   slot:=public.icash_parse_viewing_slot(answer,p_at);\n   if slot is null then slot_state:='needs_review';slots:='[]';\n   else\n    if slot_state<>'available' then slots:='[]';end if;\n    slot_state:='available';\n    if jsonb_array_length(slots)<8 then slots:=slots||jsonb_build_array(slot);end if;\n   end if;\n  end if;\n end loop;\n if quote='' then return;end if;\n if slot_state<>'available' then slots:='[]';end if;\n insert into public.icash_seller_viewing_availability(account_id,deal_id,screening_id,thread_id,source,source_id,quote,slots,state,timezone,stated_at)\n values(p_account,p_deal,d.screening_id,t.id,p_source,p_id,quote,slots,slot_state,t.timezone,p_at) on conflict do nothing;\nend $function$\n",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_claim_seller_agreement_before_offer(text,text,jsonb,jsonb,jsonb)",
+    "name": "icash_claim_seller_agreement_before_offer",
+    "source_hash": "c71458ca0786566187e00ebbfab7aa21",
+    "source": "CREATE OR REPLACE FUNCTION public.icash_claim_seller_agreement_before_offer(p_hash text, p_conversation text, p_confirmation jsonb, p_expected_terms jsonb, p_terms jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare c jsonb;d public.icash_deal_files;prior icash_seller_agreement_private.confirmations;e public.icash_signing_envelopes;new_id uuid;\nbegin\n c:=public.icash_seller_agreement_call_context(p_hash,p_conversation);if c is null then return null;end if;\n select * into d from public.icash_deal_files where id=(c->>'dealId')::uuid and account_id=(c->>'accountId')::uuid for update;\n select * into prior from icash_seller_agreement_private.confirmations where call_key=c->>'callKey';\n if found then\n  if prior.confirmation is distinct from p_confirmation then return null;end if;\n  return jsonb_build_object('id',prior.id,'claimed',false,'envelopeId',prior.envelope_id);\n end if;\n if d.stage<>'draft' or d.terms is distinct from p_expected_terms or jsonb_typeof(p_confirmation)<>'object' or jsonb_typeof(p_terms)<>'object'\n  or p_confirmation->'soleOwner' is distinct from 'true'::jsonb or p_confirmation->'allDecisionMakersAgree' is distinct from 'true'::jsonb\n  or p_confirmation->'priceAndDateConfirmed' is distinct from 'true'::jsonb or p_confirmation->'termsConfirmed' is distinct from 'true'::jsonb\n  or p_confirmation->'sendTextRequested' is distinct from 'true'::jsonb or p_confirmation->'materialFactsChanged' is distinct from 'false'::jsonb\n  or coalesce(p_confirmation->>'inspectionAccess','') not in ('yes','no')\n  or p_terms->'priceCents' is distinct from p_confirmation->'agreedPriceCents' or p_terms->>'seller' is distinct from p_confirmation->>'sellerLegalName'\n  or p_terms->>'closingDate' is distinct from p_confirmation->>'closingDate'\n  or row(p_terms->'address',p_terms->'buyer',p_terms->'state') is distinct from row(d.terms->'address',d.terms->'buyer',d.terms->'state') then return null;end if;\n select * into e from public.icash_signing_envelopes where account_id=d.account_id and deal_id=d.id and kind='purchase' and not test_mode;\n if found then\n  if e.state<>'awaiting_counterparty' or e.terms is distinct from p_terms or jsonb_array_length(e.recipients)<>2 or e.recipients->0->>'phone' is distinct from c->>'phone' then return null;end if;\n else\n  update public.icash_deal_files set terms=p_terms,updated_at=now() where id=d.id;\n end if;\n insert into icash_seller_agreement_private.confirmations(call_key,account_id,deal_id,confirmation,terms,envelope_id,state)\n values(c->>'callKey',d.account_id,d.id,p_confirmation,p_terms,e.id,case when e.id is null then 'preparing' else 'ready' end) returning id into new_id;\n return jsonb_build_object('id',new_id,'claimed',true,'envelopeId',e.id);\nend $function$\n",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "icash_membership_work_allowed(uuid)",
+    "name": "icash_membership_work_allowed",
+    "source_hash": "554669115ef58cb0da536bda361dcdca",
+    "source": "CREATE OR REPLACE FUNCTION public.icash_membership_work_allowed(p_account uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select exists(select 1 from public.icash_accounts a where a.id=p_account and (a.billing_model<>'membership_credits' or exists(select 1 from public.icash_memberships m where m.account_id=a.id and m.mode='live' and m.state='active' and m.paid_through>now())))\n$function$\n",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "s",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_open_handoff(uuid,text,text,text)",
+    "name": "icash_open_handoff",
+    "source_hash": "41109df08fcfeaca6c29aecc306e57fa",
+    "source": "CREATE OR REPLACE FUNCTION public.icash_open_handoff(p_call uuid, p_reason text, p_summary text, p_next text)\n RETURNS uuid\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare c public.icash_live_conversations; prop text; result uuid;\nbegin\n select * into strict c from public.icash_live_conversations where id=p_call for update;\n if length(p_reason) not between 1 and 1000 or length(p_summary)>6000 or length(p_next) not between 1 and 1000 then raise exception 'Invalid handoff';end if;\n select snapshot->>'propertyId' into strict prop from public.icash_screening_jobs where id=c.screening_id and account_id=c.account_id;\n insert into public.icash_property_controls(account_id,property_id,manual) values(c.account_id,prop,true)\n on conflict(account_id,property_id) do update set manual=true,updated_at=now();\n insert into public.icash_handoffs(conversation_id,account_id,screening_id,party,reason,summary,next_action)\n values(c.id,c.account_id,c.screening_id,c.party,p_reason,p_summary,p_next)\n on conflict(conversation_id) do update set summary=excluded.summary\n returning id into result;\n update public.icash_live_callbacks set state='held_for_human' where account_id=c.account_id and screening_id=c.screening_id and state='pending_dispatch_review';\n return result;\nend $function$\n",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  }
+]

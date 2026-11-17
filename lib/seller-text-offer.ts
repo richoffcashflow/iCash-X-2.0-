@@ -16,6 +16,7 @@ import {sellerConversionIntent} from './seller-conversion-intent.ts';
 import {sellerCommunicationIntent,sellerCommunicationReplies} from './seller-communication-intent.ts';
 import {sellerIdentityInterruption} from './seller-answer-evidence.ts';
 import {chronologicalSellerHistory} from './seller-memory.ts';
+import {sellerQuestion} from './seller-question-evidence.ts';
 
 type Message={id:string;direction:string;body:string;state:string;providerId:string|null;at?:string;updatedAt?:string;action?:string;quoteRevision?:string;priceCents?:number;customerAuthored?:boolean};
 type Closing={legalName?:string;date?:string;inspection?:'yes'|'no'};
@@ -48,12 +49,14 @@ function closingDateAnswer(body:string){
 function rememberedClosing(history:unknown[]):Closing{
  const closing:Closing={};
  for(const conversation of history){
-  const rows=(conversation as {transcript?:{role:string;message?:string}[]})?.transcript;
+  const rows=(conversation as {transcript?:{role:string;message?:string;questionUnverified?:boolean;sourceClockUnverified?:boolean}[]})?.transcript;
   if(!Array.isArray(rows))continue;let question='';
   for(const row of rows){
    if(typeof row.message!=='string')continue;
-   if(row.role==='agent'){question=row.message;continue;}
+   if(row.role==='agent'){question=sellerQuestion(row.message);continue;}
    if(row.role!=='user')continue;
+   if(row.sourceClockUnverified===true){delete closing.legalName;delete closing.date;delete closing.inspection;question='';continue;}
+   if(row.questionUnverified===true)question='';
    if(/\b(?:i(?:'m| am) (?:his|her|their) (?:wife|husband|son|daughter|tenant)|i(?:'m| am) (?:the |a )?tenant)\b/i.test(row.message)){closing.legalName=undefined;closing.inspection=undefined;}
    if(/\b(?:full|legal) name\b/i.test(question)&&question.includes('?')&&!sellerIdentityInterruption(row.message)&&!unqualifiedYes(row.message)){
     const name=row.message.trim().replace(/^(?:my (?:full |legal |full legal )?name is|I am|I'm)\s+/i,'').replace(/[.!]+$/,'');
@@ -124,6 +127,22 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   ?chronologicalSellerHistory([...c.history,{sourceId:'sms',channel:'sms',...transcript}])
   :[...(c.history??[]),transcript];
  const previous=c.messages.slice(0,c.messages.indexOf(source)).findLast(m=>m.direction==='outgoing');
+ // Complete memory carries the original received answer and its verified
+ // question. A later delivered flag must not lend a question that arrived
+ // after the answer; preserve the entire question for price/readback evidence.
+ const canonicalSources=(c.history??[]).flatMap(value=>{
+  const rows=(value as {transcript?:{role:string;message?:string;sourceId?:string;questionUnverified?:boolean}[]})?.transcript;
+  if(!Array.isArray(rows))return [];
+  return rows.flatMap((turn,index)=>turn.role==='user'&&turn.sourceId===source.id?[{turn,question:rows.slice(0,index).findLast(t=>t.role==='agent')?.message??''}]:[]);
+ });
+ const canonicalSource=canonicalSources.length===1&&canonicalSources[0].turn.message===source.body?canonicalSources[0]:null;
+ if(c.historyComplete&&!canonicalSource){
+  state.receiptPriceAuthority??={sourceId:c.sourceId,priceCents:state.acceptedPriceCents??null,...(state.quoteRevision?{quoteRevision:state.quoteRevision}:{})};
+  return review('seller_source_evidence_required','Reconcile the exact original current seller reply before interpreting its price or contract authority.');
+ }
+ const questionKnown=!c.historyComplete||!!canonicalSource&&canonicalSource.turn.questionUnverified!==true;
+ const questionPrevious=questionKnown&&(!c.historyComplete||canonicalSource!.question===previous?.body)?previous:undefined;
+ const sourceTranscript=c.historyComplete?{transcript:[{role:'agent',message:questionKnown?canonicalSource!.question:''},{role:'user',message:source.body}]}:transcript;
  if(previous&&(!previous.providerId||previous.state!=='delivered')){
   const result=review('offer_receipt_unresolved','Reconcile the original outgoing receipt before interpreting this answer; do not resend.');
   if(['ready','accepted','dispatching'].includes(previous.state)&&Date.parse(previous.updatedAt??'')>now-15*60000)return {...result,kind:'wait',reason:'offer_receipt_pending'};
@@ -153,34 +172,50 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  if(sold==='sold')return review('property_already_sold','The seller reports that the property sold. Stop the sale pitch and preserve their statement for review.');
  const input={action:'report_change',sellerStatement:source.body};
  const communication=sellerCommunicationIntent(source.body);
- if(previous?.action==='communication_language'&&communication!=='return_call')return review('seller_language_support_required','Continue in the seller-requested language through supported assistance; do not restart English qualification.');
- if(previous?.action==='communication_email'&&!communication)return review('seller_email_delivery_required','Use a verified, permitted email contact and supported delivery for the requested details or agreement. Do not substitute an SMS agreement or claim email delivery.');
+ if(questionPrevious?.action==='communication_language'&&communication!=='return_call')return review('seller_language_support_required','Continue in the seller-requested language through supported assistance; do not restart English qualification.');
+ if(questionPrevious?.action==='communication_email'&&!communication)return review('seller_email_delivery_required','Use a verified, permitted email contact and supported delivery for the requested details or agreement. Do not substitute an SMS agreement or claim email delivery.');
  if(communication)return ask('communication_'+communication,sellerCommunicationReplies[communication]);
- const sellerPrice=callSellerPriceEvidence(transcript,input);
+ const qualification=sellerOfferQualification(null,conversationHistory,'sms');
+ // Unknown question timing holds price/signing authority, but a verified
+ // current reply can still receive a bounded clarification through normal SMS
+ // admission. Refusals, listing restrictions and unresolved sends stay held.
+ if(!qualification.ready&&qualification.clarificationRequired===true){
+  state.textThreadId=c.threadId;state.processedSource=c.sourceId;
+  state.receiptPriceAuthority??={sourceId:c.sourceId,priceCents:state.acceptedPriceCents??null,...(state.quoteRevision?{quoteRevision:state.quoteRevision}:{})};
+  return ask('clarify_source_answer',qualification.nextQuestion);
+ }
+ if(!qualification.ready&&qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
+ const sellerPrice=callSellerPriceEvidence(sourceTranscript,input);
  // The server binds this shared ledger to the same account, deal and current
  // research. A channel switch is not a withdrawal or a new price.
  if(state.textThreadId!==c.threadId)state.textThreadId=c.threadId;
  const closing=state.closing={...state.closing,...rememberedClosing(conversationHistory)};
  if(state.processedSource!==c.sourceId){
-  const listing=sellerListingEvidence(transcript,input);if(listing!==null)state.listedWithAgent=listing;
-  const debt=sellerPayoffEvidence(transcript,input);
-  if(debt){state.payoffReport={...state.payoffReport,...debt};state.payoffPending=false;}
+  const listing=sellerListingEvidence(sourceTranscript,input);if(listing!==null)state.listedWithAgent=listing;
+  const debt=sellerPayoffEvidence(sourceTranscript,input);
+  if(debt){
+   const previous=state.payoffReport??{};
+   const debtChanged=debt.mortgageCents!==undefined&&debt.mortgageCents!==previous.mortgageCents||debt.otherDebtCents!==undefined&&debt.otherDebtCents!==previous.otherDebtCents;
+   // Coverage answers belong to the old debt amounts. As on calls, a changed
+   // balance needs its own exact shortfall question and fresh answer.
+   state.payoffReport={...previous,...(debtChanged?{coveredShortfallCents:undefined,coverageDeclined:undefined}:{}),...debt};state.payoffPending=false;
+  }
   if(sellerPrice!==null){state.proposedPriceCents=sellerPrice;if(sellerPrice!==state.quotedPriceCents)state.acceptedPriceCents=null;}
   if(sellerAskingPriceQuestion(source.body))state.acceptedPriceCents=null;
-  if(/\b(?:changed my mind|do not accept|don['’]?t accept|withdraw|cancel|hold off|wait|only if|but I need)\b/i.test(source.body))state.acceptedPriceCents=null;
+  if(/\b(?:changed my mind|do not accept|don['’]?t accept|(?:i|we) (?:reject|decline|refuse)|withdraw|cancel|hold off|wait|only if|but I need)\b/i.test(source.body))state.acceptedPriceCents=null;
   // Material changes invalidate acceptance; clear only with actual new evidence.
   if(/\b(?:wrong (?:property|address)|another owner|ownership changed|fire damage|foundation (?:damage|problem)|new (?:damage|repair))\b/i.test(source.body)){state.acceptedPriceCents=null;state.factsPending=true;}
   const amounts=spokenMoneyAmounts(source.body);
-  if(previous?.action==='clarify_gross_price'&&unqualifiedYes(source.body)&&state.pendingAskingPriceCents){state.proposedPriceCents=state.pendingAskingPriceCents;delete state.pendingAskingPriceCents;}
-  if(/\b(?:if|unless|provided|but|net|after fees)\b/i.test(source.body)&&!['payoff','owners'].includes(previous?.action??'')){
+  if(questionPrevious?.action==='clarify_gross_price'&&unqualifiedYes(source.body)&&state.pendingAskingPriceCents){state.proposedPriceCents=state.pendingAskingPriceCents;delete state.pendingAskingPriceCents;}
+  if(/\b(?:if|unless|provided|but|net|after fees)\b/i.test(source.body)&&!['payoff','owners'].includes(questionPrevious?.action??'')){
    state.acceptedPriceCents=null;
    if(amounts.length===1&&/\b(?:net|after fees|take home)\b/i.test(source.body))state.pendingAskingPriceCents=amounts[0];
   }
-  if(previous?.action==='repair_budget'&&amounts.length<=1){
+  if(questionPrevious?.action==='repair_budget'&&amounts.length<=1){
    // The amount parser omits a spoken "zero". The shared evidence guard may
    // accept it only as an exact answer to the delivered total-repair question.
    const repairBudget=amounts.length===1?amounts[0]:0;
-   if(callOfferEvidence(transcript,{action:'update_repairs',sellerStatement:source.body,repairEstimateCents:repairBudget})){state.repairEstimateCents=repairBudget;state.conditionPending=false;state.acceptedPriceCents=null;state.sellerStatement=source.body;}
+   if(callOfferEvidence(sourceTranscript,{action:'update_repairs',sellerStatement:source.body,repairEstimateCents:repairBudget})){state.repairEstimateCents=repairBudget;state.conditionPending=false;state.acceptedPriceCents=null;state.sellerStatement=source.body;}
    else if(amounts.length===0&&repairDescriptionWithoutBudget(source.body)){
     let researchRepairs:number|null=null;try{researchRepairs=runScreeningJob(c.snapshot,now).property.repairs.baselineCents;}catch{}
     if(researchRepairs!==null&&Number.isSafeInteger(researchRepairs)&&researchRepairs>=0){
@@ -190,22 +225,21 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
     }
    }
   }
-  if(previous?.action==='legal_name'&&intent===null&&!sellerIdentityInterruption(source.body)){
+  if(questionPrevious?.action==='legal_name'&&intent===null&&!sellerIdentityInterruption(source.body)){
    const name=source.body.trim().replace(/^(?:my (?:full |legal |full legal )?name is|I am|I'm)\s+/i,'').replace(/[.!]+$/,'');
    if(/^[\p{L}][\p{L} .’'-]{1,119}$/u.test(name)&&name.split(/\s+/).length>=2&&!/\b(?:unknown|not sure|no|yes|maybe|trust|llc|corporation)\b/i.test(name))closing.legalName=name;
   }
-  if(previous?.action==='closing_date'&&!sellerIdentityInterruption(source.body)){
+  if(questionPrevious?.action==='closing_date'&&!sellerIdentityInterruption(source.body)){
    closing.date=closingDateAnswer(source.body);
   }
-  if(previous?.action==='inspection'&&(unqualifiedYes(source.body)||no(source.body)))closing.inspection=no(source.body)?'no':'yes';
+  if(questionPrevious?.action==='inspection'&&(unqualifiedYes(source.body)||no(source.body)))closing.inspection=no(source.body)?'no':'yes';
  }
  state.processedSource=c.sourceId;
  if(sold==='unclear')return ask('clarify_sale_status','You mentioned it was sold. Are you still the owner, or has the sale already closed?');
- if(previous?.action==='cash_offer'&&no(source.body)){
+ if(questionPrevious?.action==='cash_offer'&&no(source.body)){
   state.acceptedPriceCents=null;
   return ask('seller_counterprice','What price did you have in mind?');
  }
- const qualification=sellerOfferQualification(null,conversationHistory,'sms');
  if(c.conversionEnabled&&(qualification.ready||!qualification.stop)){
   if(intent==='purpose'){
    const principal=c.principal.trim();
@@ -231,10 +265,10 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  }
  if(state.pendingAskingPriceCents)return ask('clarify_gross_price','Do you mean the purchase price before any mortgage payoff, liens or closing adjustments?');
  if(/^(?:why|how).*(?:price|offer)|\b(?:too low|lowball)\b/i.test(source.body)&&state.quotedPriceCents)return ask('explain_cash_price',sellerAnswerCopy.explain_cash_price.current);
- if(previous?.action==='explain_cash_price'&&/\b(?:renovated|new roof|repaired|repairs?|square feet|bedrooms?|bathrooms?)\b/i.test(source.body))return ask('repair_budget','What is your estimate of the total remaining repair budget?');
+ if(questionPrevious?.action==='explain_cash_price'&&/\b(?:renovated|new roof|repaired|repairs?|square feet|bedrooms?|bathrooms?)\b/i.test(source.body))return ask('repair_budget','What is your estimate of the total remaining repair budget?');
  if(/^(?:who pays (?:the )?closing costs|(?:are there|what about|what are|any) (?:the |any )?fees)[?! .]*$/i.test(source.body))return ask('explain_costs',sellerAnswerCopy.explain_costs.current);
  if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process',sellerAnswerCopy.explain_process.current);
- if(isDeliveredCallInvitation(previous)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
+ if(isDeliveredCallInvitation(questionPrevious)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
  // Answer the seller's actual question before resuming the missing fact. A
  // listing reference does not establish agent representation or accept its terms.
  if(c.conversionEnabled&&(qualification.ready||!qualification.stop)){
@@ -254,7 +288,6 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   }
  }
  if(!qualification.ready){
-  if(qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
   if(c.callInvitationAllowed===true&&intent!=='price'&&!sellerRequestsPrice(source.body)&&!source.body.includes('?')&&!qualification.missing.includes('ownership')&&!qualification.missing.includes('interest')
    &&!priorCallPreference(c.messages)&&!state.quotedPriceCents&&!state.acceptedPriceCents)
    return ask('invite_call',sellerCallInvitation);
@@ -268,24 +301,32 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  }
  const contractAllowed='contractAllowed' in offer&&offer.contractAllowed===true;
  const revision=sha(JSON.stringify(canonical({snapshot:c.snapshot,price:offer.priceCents,repairs:state.repairEstimateCents??null,payoff:state.payoffReport??null,contractAllowed})));
- const quotedBefore=previous?.action==='cash_offer'&&previous.priceCents===offer.priceCents&&previous.quoteRevision===revision;
+ const quotedBefore=questionPrevious?.action==='cash_offer'&&questionPrevious.priceCents===offer.priceCents&&questionPrevious.quoteRevision===revision;
  const exactPriceAnswer=sellerPrice===offer.priceCents&&/works for me/i.test(source.body);
- if(quotedBefore&&(callOfferEvidence({transcript:turns.slice(-2)},{action:'accept_offer',priceCents:offer.priceCents})||exactPriceAnswer)){
+ const freshlyAccepted=quotedBefore&&(callOfferEvidence(sourceTranscript,{action:'accept_offer',priceCents:offer.priceCents})||exactPriceAnswer);
+ if(freshlyAccepted){
   state.acceptedPriceCents=offer.priceCents;state.acceptanceConditional=!contractAllowed;
+  delete state.receiptPriceAuthority;
  }
- if(state.quoteRevision!==revision&&state.quoteRevision){state.acceptedPriceCents=null;state.acceptanceConditional=false;}
+ if(state.quoteRevision!==revision&&state.quoteRevision&&!freshlyAccepted){
+  // A changed source revision requires a fresh confirmation but must never
+  // replace the original agreed amount with a higher recomputed ceiling on
+  // the next reply. This marker preserves evidence, not agreement authority.
+  if(state.acceptedPriceCents)state.receiptPriceAuthority??={sourceId:c.sourceId,priceCents:state.acceptedPriceCents,quoteRevision:state.quoteRevision};
+  state.acceptanceConditional=false;
+ }
  state.quotedPriceCents=offer.priceCents;state.quoteRevision=revision;state.contractBlocked=!contractAllowed;state.snapshotHash=sha(JSON.stringify(canonical(c.snapshot)));
  if(!contractAllowed){
   const next='nextQuestion' in offer&&typeof offer.nextQuestion==='string'?offer.nextQuestion:'What is the current mortgage payoff balance?';
-  if(previous?.action==='payoff'&&/\b(?:don't know|do not know|not sure)\b/i.test(source.body))return review('payoff_evidence_required','Obtain the actual outstanding debt information before sending the agreement. The cash proposal remains conditional.');
+  if(questionPrevious?.action==='payoff'&&/\b(?:don't know|do not know|not sure)\b/i.test(source.body))return review('payoff_evidence_required','Obtain the actual outstanding debt information before sending the agreement. The cash proposal remains conditional.');
   return ask('payoff',`${!c.messages.some(m=>m.action==='payoff')?`As-is cash proposal: ${priceText(offer.priceCents)}, subject to payoff and liens. `:''}${next}`);
  }
- if(!state.acceptedPriceCents||state.acceptanceConditional){
-  const counter=sellerPrice!==null&&sellerPrice>offer.priceCents?`You asked ${priceText(sellerPrice)}. `:'';
+ if(!state.acceptedPriceCents||state.acceptanceConditional||state.receiptPriceAuthority){
+  const counter=sellerPrice!==null&&sellerPrice>offer.priceCents?'Your asking price is above our proposal. ':'';
   return ask('cash_offer',`${counter}Our as-is cash proposal is ${priceText(offer.priceCents)}, based on property value, repairs and holding costs. Does that work?`);
  }
  const identity=sellerAgreementIdentityEvidence({transcript:conversationHistory.flatMap(h=>{
-  const rows=(h as {transcript?:unknown[]})?.transcript;return Array.isArray(rows)?rows:[];
+  const rows=(h as {transcript?:unknown[]})?.transcript;return Array.isArray(rows)?[{role:'agent',message:''},...rows]:[];
  })},closing.legalName??'');
  const identityHold=sellerAgreementIdentityHold(identity);
  if(identityHold){
@@ -301,6 +342,6 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   const research=runScreeningJob(c.snapshot,now);
   terms=confirmedSellerTerms(dealTermsSchema.parse(c.terms),confirmation,{address:c.address,principal:c.principal,legalDescription:research.property.legalDescription??'',ceilingCents:offer.priceCents,now,supportedRenegotiation:true});
  }catch{return review('contract_terms_required','Resolve the specific missing or changed property/contract terms before preparing this accepted proposal.');}
- if(replyIntro||!sellerAgreementEvidence(transcript,terms,now))return ask('confirm_terms',`${priceText(terms.priceCents!)} cash; closing ${terms.closingDate}; ${terms.inspectionDays}-day inspection. Do these terms work, and may I text the agreement now?`);
+ if(replyIntro||!sellerAgreementEvidence(c.historyComplete?sourceTranscript:transcript,terms,now))return ask('confirm_terms',`${priceText(terms.priceCents!)} cash; closing ${terms.closingDate}; ${terms.inspectionDays}-day inspection. Do these terms work, and may I text the agreement now?`);
  return {kind:'agreement',action:'prepare_agreement',state,terms,confirmation};
 }
