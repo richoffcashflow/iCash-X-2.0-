@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 const db=await PGlite.create();
 const original=readFileSync('tests/fixtures/fresh-sender-capacity-before.sql','utf8');
-const patch=readFileSync('supabase/migrations/20261117144624_fresh_sender_capacity_preference.sql','utf8');
+const patch=readFileSync('supabase/migrations/20261117145243_fresh_sender_capacity_preference.sql','utf8');
 assert.equal(patch,readFileSync('config/fresh-sender-capacity-preference.sql','utf8'));
 const account='00000000-0000-4000-8000-000000000001',screen='00000000-0000-4000-8000-000000000002',deal='00000000-0000-4000-8000-000000000003',other='00000000-0000-4000-8000-000000000004';
 const recipient='+12025550101',phones=['+14243948384','+17208134296','+18623812530'];
