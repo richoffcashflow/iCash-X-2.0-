@@ -72,7 +72,7 @@ async function maintenance(lane,run){
   applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'already_verified'}),
   refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:async()=>assert.fail('No live provider'),readRecordingReview:()=>null,recoverVoiceConfiguration:async()=>({status:'idle'}),
   refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),drainResearchExclusions:async()=>({status:'not_due'}),
-  recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),
+  recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),refreshDealMachineCreditWait:async()=>({status:'credit_check_not_requested'}),
   cleanupOwnerPreflight:async()=>({status:'idle'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),retryVolumeDeferredText:async()=>({status:'idle'}),
   processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
   recoverTextDeliveryReceipts:async()=>({status:'idle',errors:0}),processSupportCustomerNotifications:async()=>({failed:0}),recoverAccessHelpReplies:async()=>0,

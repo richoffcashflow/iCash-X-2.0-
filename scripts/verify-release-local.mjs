@@ -2,6 +2,13 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'seller-listing-clarification',
+
+ 'deferred-sender-fairness',
+ 'policy-review-lock-isolation',
+ 'seller-opener-property-lookup',
+ 'owner-wait-local-gate',
+ 'dealmachine-credit-wait', 'provider-credit-wait-db',
  'owner-batch-pool-selection',
  'research-priority-cost-isolation',
  'seller-call-learning-planning',
@@ -36,7 +43,7 @@ const suites = [
  'http-response-lifecycle', 'database-response-cleanup', 'worker-diagnostic-cleanup', 'deferred-text-recovery', 'external-reliability-monitor',
  'automation-failure-isolation', 'acquisition-settlement-isolation', 'fulfillment-failure-isolation',
  'maintenance-failure-health', 'maintenance-recovery-accounting', 'journey-lane-concurrency', 'recorded-reception-maintenance-health',
- 'scheduler-reliability', 'workflow-stall-isolation', 'research-capacity-isolation', 'acquisition-budget-yield', 'acquisition-account-yield', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database', 'unanswered-seller-followups',
+ 'scheduler-reliability', 'workflow-stall-isolation', 'research-capacity-isolation', 'acquisition-budget-yield', 'acquisition-account-yield', 'acquisition-capacity-single-state', 'preflight-receipt-ranking', 'seller-text-health', 'seller-response-policy', 'seller-negative-response-database', 'unanswered-seller-followups',
  'dealmachine-list-quality', 'dealmachine-targeting', 'dealmachine-targeting-database', 'dealmachine-targeting-admin',
  'voice-configuration-recovery', 'voice-configuration-recovery-database',
  'owner-export-capacity-recovery', 'owner-export-capacity-recovery-database', 'owner-export-scheduling', 'owner-export-monitoring',
@@ -98,7 +105,7 @@ const suites = [
  'workspace-attention-readback', 'seller-default-conversation', 'workspace-panel-content', 'workspace-archived-attention', 'seller-recovery-route', 'workspace-attention-ui', 'production-release-gate', 'production-health',
  'workspace-experience', 'workspace-experience-database', 'reliability-alerts', 'reliability-stable-recovery', 'reliability-component-outages', 'reliability-email-reset', 'outbound-quota-wait-aging', 'operational-sms-candidate-fence',
  'workspace-request-recovery', 'server-request-deadlines', 'workspace-event-stream', 'scheduler-nonblocking-poll', 'durable-work-billing-stop',
- 'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database',
+ 'usage-loop-policy', 'usage-loop-route', 'usage-loop-context-database', 'usage-context-research-precheck',
  'usage-loop-tracking', 'usage-loop-tracking-routes', 'workspace-conversion-ui',
  'credit-refill-context', 'credit-refill-recommendation',
  'support-activity-confirmation',

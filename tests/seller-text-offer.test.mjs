@@ -23,8 +23,10 @@ const at=()=>new Date(Date.now()-3600000+(++tick)*1000).toISOString();
 const terms={seller:'',buyer:'Fixture Buyer',address:'45 Oak Road',legalDescription:'Lot 1, Fixture Subdivision',state:'TX',priceCents:21500000,priceSource:'proposed'};
 const snapshot={propertyId:'prop_123',propertyType:'house',fetchedAt:new Date().toISOString(),sellerCostReserveCents:0,raw:{data:{dm_property_id:'prop_123',full_address:terms.address,estimated_value:200000,estimated_repair_cost:40000,total_estimated_loan_balance:20000,estimated_equity_percentage:90}}};
 async function incoming(c,body,extra={}){return one("insert into icash_text_messages(account_id,thread_id,direction,state,body,event_id,created_at) values($1,$2,'incoming','received',$3,$4,$5) on conflict(event_id) do update set body=icash_text_messages.body returning *",[c.a,c.t,body,extra.event??randomUUID(),extra.at??at()]);}
+let nextFixtureContact=0;
 async function seed({qualified=true}={}){
- const c={a:randomUUID(),t:randomUUID(),d:randomUUID(),s:randomUUID(),u:randomUUID(),phone:'+1214'+Math.floor(Math.random()*9999999).toString().padStart(7,'0')};
+ const phone='+1214555'+String(100+(nextFixtureContact++)).padStart(4,'0');
+ const c={a:randomUUID(),t:randomUUID(),d:randomUUID(),s:randomUUID(),u:randomUUID(),phone};
  await q('insert into auth.users(id,email) values($1,$2)',[c.u,'owner@example.invalid']);await q('insert into icash_accounts(id,owner_user_id) values($1,$2)',[c.a,c.u]);
  await q('insert into icash_customer_identities values($1,$2)',[c.a,terms.buyer]);
  await q('insert into icash_screening_jobs(id,account_id,snapshot,result) values($1,$2,$3,$4)',[c.s,c.a,snapshot,{financialCheck:{status:'eligible'}}]);

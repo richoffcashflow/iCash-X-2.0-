@@ -12,12 +12,24 @@ export function supportVersionClarification(messages:Turn[]):string|null{
 
 export const supportLegacyOfferUrl='https://www.geticashx.com/legacy-offer';
 export const supportLegacyProofEmail='support@geticashx.com';
-export const supportLegacyStatus='iCash X 1.0 is no longer active and is being shut down. The current platform is iCash X 2.0.';
+export const supportLegacyStatus='iCash X 1.0 is no longer active. The current platform is iCash X 2.0.';
+const courseGuidance='iCash X 2.0 includes a training course. Once your 2.0 software access is active, open Training course in your workspace.';
 const proofStep=`Email your original iCash X 1.0 purchase receipt to ${supportLegacyProofEmail} with the subject “iCash X 1.0 purchase proof.” Once Support verifies the purchase, we can send you the link for two calendar months of 2.0 software access free.`;
 
 /** Only the authenticated operator review action may send this offer. Chat claims
  * and a matching visitor email never establish a verified original purchase. */
-export const supportVerifiedLegacyOfferReply=`We’ve verified your original iCash X 1.0 purchase. Here’s your link for two calendar months of iCash X 2.0 software access free: ${supportLegacyOfferUrl}\n\nA payment method is required. It’s $0 for those two calendar months, then $50/month unless you cancel. Work credits are separate. Review and accept the terms on that page; this message does not activate access.`;
+const originalVerifiedOfferReply=`We’ve verified your original iCash X 1.0 purchase. Here’s your link for two calendar months of iCash X 2.0 software access free: ${supportLegacyOfferUrl}\n\nA payment method is required. It’s $0 for those two calendar months, then $50/month unless you cancel. Work credits are separate. Review and accept the terms on that page; this message does not activate access.`;
+
+export const supportVerifiedLegacyOfferReply=originalVerifiedOfferReply+' '+courseGuidance;
+
+export function hasVerifiedLegacyOffer(messages:Turn[]){
+ const operator=messages.findLast(turn=>turn.role==='operator');
+ return operator?.content===originalVerifiedOfferReply||operator?.content===supportVerifiedLegacyOfferReply;
+}
+
+function courseInclusionQuestion(text:string){
+ return /^(?:does (?:it|that|this|2\.0|the (?:offer|software)) (?:also )?(?:include|come with) (?:a |the |any )?(?:training(?: course)?|course)|is (?:a |the |any )?(?:training(?: course)?|course) (?:also )?included)(?: in (?:it|this|the offer|2\.0))?[?!.\s]*$/i.test(text.trim());
+}
 
 export function supportLegacyQuestion(text:string){
  return /\b1\.0\b|\b(?:i[ -]?cash\s*x?|icashx)\s*(?:v(?:ersion)?\s*)?1\b|\b(?:original|old|previous|former|legacy|first)\s+(?:(?:version of|version|my|the)\s+)?(?:i[ -]?cash\s*x?|icashx|platform|software|app|version)\b|\b(?:i[ -]?cash\s*x?|icashx)\s+(?:original|old|legacy)\b|\b(?:move[ds]?|switch(?:ed)?)\b.{0,35}\b(?:another|different|new)\s+(?:platform|app)\b/i.test(text);
@@ -34,20 +46,23 @@ export function supportLegacyMigrationReply(messages:Turn[]):{reply:string;statu
   if(turn.role!=='user')continue;
   const text=turn.content;
   if(/\b(?:2\.0|new (?:platform|app|workspace))\b.{0,60}\b(?:code|log[ -]?in|sign[ -]?in|error|stuck|not working)\b/i.test(text)){active=false;proofSent=false;continue;}
+  if(active&&courseInclusionQuestion(text))continue;
   if(/\b(?:cancel|refund|money back|charged twice|duplicate charge|new card|bot|calls?|texts?|course|photos?)\b/i.test(text)&&!supportLegacyQuestion(text)){active=false;proofSent=false;continue;}
   active=supportLegacyQuestion(text)||(active&&(continuation(text)||submitted(text)));
   proofSent=active&&(proofSent||submitted(text));
  }
  if(!active)return null;
  const question=messages.filter(m=>m.role==='user').at(-1)?.content??'';
- const verified=messages.some(m=>m.role==='operator'&&m.content===supportVerifiedLegacyOfferReply);
+ const verified=hasVerifiedLegacyOffer(messages);
  const pendingProof='You’ve said you sent your receipt. I can’t confirm that it has been verified yet, so I can’t send the offer link. You don’t need to send the same receipt again; this conversation remains open.';
- if(/\bvip\b/i.test(question))return {reply:'VIP from iCash X 1.0 does not transfer to 2.0. The two-month migration offer covers Standard software access; 2.0 VIP is separate. If you paid specifically for 2.0 VIP and it is not showing, that purchase needs to be checked before you buy it again.',status:'open'};
+ if(/\bvip\b/i.test(question))return {reply:'VIP from iCash X 1.0 does not transfer to 2.0. The two-month migration offer includes Standard software access and its 2.0 training course. 2.0 VIP is separate. If you paid specifically for 2.0 VIP and it is not showing, that purchase needs to be checked before you buy it again.',status:'open'};
+ if(courseInclusionQuestion(question))return {reply:courseGuidance,status:proofSent?'open':'waiting_on_customer'};
+ if(supportLegacyQuestion(question)&&/\b(?:course|training)\b/i.test(question)&&/\b(?:transfer|carry over)\b/i.test(question))return {reply:courseGuidance+' Any separate course purchase would need its own access check.',status:'open'};
  if(/\b(?:data|leads|credits|transfer|carry over)\b/i.test(question))return {reply:'Your 1.0 account data does not transfer to 2.0. The two-month offer covers software access; work credits are separate.'+(verified?' Your verified offer link is in the earlier Support reply.':proofSent?' '+pendingProof:' '+proofStep),status:proofSent&&!verified?'open':'waiting_on_customer'};
  if(verified)return {reply:/^(?:thanks|thank you|ok(?:ay)?)[.!\s]*$/i.test(question.trim())?'You’re welcome. Your offer link is in the verified purchase reply above. Complete that page to activate access.':supportVerifiedLegacyOfferReply,status:'waiting_on_customer'};
  if(/\b(?:free|cost|price|how much|card|charge|billing|months?)\b/i.test(question)&&!supportLegacyQuestion(question))return {reply:'For verified 1.0 customers, the offer is two calendar months of 2.0 software access for $0, then $50/month unless cancelled. A payment method is required and work credits are separate. '+(proofSent?pendingProof:proofStep),status:proofSent?'open':'waiting_on_customer'};
  if(proofSent)return {reply:pendingProof,status:'open'};
  if(/\b(?:attached|here(?:’s|'s| is))\b.{0,35}\b(?:receipt|proof)/i.test(question))return {reply:'This chat doesn’t accept receipt attachments. '+proofStep,status:'waiting_on_customer'};
  if(/\b(?:don[’']?t|do not|can[’']?t|cannot|lost|no)\b.{0,30}\b(?:receipt|proof)|\b(?:receipt|proof)\b.{0,20}\b(?:lost|missing)\b/i.test(question))return {reply:`If you can’t find the receipt, email ${supportLegacyProofEmail} with the original purchase email and approximate purchase date and amount. Those details can help locate the purchase, but eligibility still needs verification before we send the offer.`,status:'waiting_on_customer'};
- return {reply:supportLegacyStatus+' '+proofStep,status:'waiting_on_customer'};
+ return {reply:supportLegacyStatus+' '+proofStep+' '+courseGuidance,status:'waiting_on_customer'};
 }
