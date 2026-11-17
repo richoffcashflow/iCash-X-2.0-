@@ -38,7 +38,7 @@ try{
    readVoiceCapacityProvider:async()=>assert.fail('No live provider'),
    recoverVoiceConfiguration:async()=>{stages.push('voice_recovery');if(failure==='voice_recovery')throw Error('private recovery');return {status:failure==='voice_review'?'review_required':'idle',requeued:0};},
    refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),drainResearchExclusions:async()=>({status:'not_due'}),
-   recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>({status:'not_due'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),
+   recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),refreshDealMachineCreditWait:async()=>({status:'credit_check_not_requested'}),cleanupOwnerPreflight:async()=>({status:'not_due'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),
    retryVolumeDeferredText:async()=>{stages.push('senderVolume');return {status:'idle'};},
    processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
    recoverTextDeliveryReceipts:async()=>({status:failure==='text_configuration'?'configuration_unavailable':'idle',errors:0}),

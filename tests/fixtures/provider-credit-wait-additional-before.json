@@ -1,0 +1,26 @@
+[
+  {
+    "signature": "icash_prune_research_requests()",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_prune_research_requests()\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare n integer;\nbegin\n delete from icash_research_private.estimates where operation_key in (\n  select operation_key from icash_research_private.estimates where updated_at<now()-interval '1 day'\n   and (lease_until is null or lease_until<=now()) order by updated_at limit 1000 for update skip locked);\n delete from icash_research_private.requests where id in (select request.id from icash_research_private.requests request where request.created_at<now()-interval '30 days' and not exists(select 1 from icash_research_private.owner_preflight_quota_deferrals proof where proof.request_id=request.id) and not exists(select 1 from icash_research_private.preview_rejection_recoveries proof where proof.request_id=request.id) and not exists(select 1 from icash_research_private.stalled_searches proof where proof.request_id=request.id) and not exists(select 1 from icash_research_private.owner_empty_preview_receipts proof where proof.request_id=request.id) and not exists(select 1 from icash_research_private.export_capacity_probes proof where proof.request_id=request.id) and not exists(select 1 from icash_research_private.owner_export_quota_requests proof where proof.request_id=request.id) order by request.created_at limit 10000);\n get diagnostics n=row_count;return n;\nend $function$\n",
+    "definition_md5": "9b8d5452c2db9d51ab67fe587dfbfd35",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "icash_research_private.capacity_probe_response_fresh(jsonb,timestamp with time zone,timestamp with time zone)",
+    "definition": "CREATE OR REPLACE FUNCTION icash_research_private.capacity_probe_response_fresh(p_receipt jsonb, p_started timestamp with time zone, p_received timestamp with time zone)\n RETURNS boolean\n LANGUAGE plpgsql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\ndeclare d text:=p_receipt#>>'{headers,date}';age jsonb:=p_receipt#>'{headers,age}';stamp timestamptz;\nbegin\n if d is null or d !~ '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT$'\n  or jsonb_typeof(p_receipt#>'{headers,date}') is distinct from 'string'\n  or age is null or (age is distinct from 'null'::jsonb and age is distinct from '\"0\"'::jsonb)\n  or p_started is null or p_received is null then return false;end if;\n stamp:=d::timestamptz;\n return stamp>=date_trunc('second',p_started)-interval '5 seconds'\n  and stamp<=p_received+interval '5 seconds' and p_received>=p_started;\nexception when others then return false;\nend $function$\n",
+    "definition_md5": "ac0c4bb2bc9dd714249dcfad8b6dd088",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "i",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres}"
+  }
+]

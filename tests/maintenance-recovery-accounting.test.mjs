@@ -6,15 +6,18 @@ import {continueExpiredOwnerPreflightTicket} from '../lib/owner-expired-prefligh
 const normal={
  inventory:{pages:[{status:'not_due'}]},researchExclusions:{status:'not_due'},
  ownerExports:{status:'export_recovery_idle'},ownerExportCapacity:{status:'capacity_review_idle'},
+ providerCredits:{status:'credit_check_not_requested'},
  ownerPreflightCleanup:{status:'idle'},ownerTicketContinuation:{status:'disabled'},
 };
 const legitimateWaits={
  inventory:{pages:[{status:'rate_limited'}]},researchExclusions:{status:'pending'},
  ownerExports:{status:'export_receipt_held'},ownerExportCapacity:{status:'capacity_review_held'},
+ providerCredits:{status:'provider_credit_exhausted'},
  ownerPreflightCleanup:{status:'pending'},ownerTicketContinuation:{status:'busy'},
 };
 const silentFailures={inventory:{pages:[{status:'metadata_unavailable'}]}};
 const services={inventory:'refreshInventoryGeographyBatch',researchExclusions:'drainResearchExclusions',
+ providerCredits:'refreshDealMachineCreditWait',
  ownerExports:'recoverOwnerActiveExports',ownerExportCapacity:'recoverOwnerExportCapacity',ownerPreflightCleanup:'cleanupOwnerPreflight',ownerTicketContinuation:'continueExpiredOwnerPreflightTicket'};
 const senderCases={
  sender_config:'messaging_configuration_required',sender_verification:'business_number_verification_required',sender_invitation:'inbound_invitation_not_ready',

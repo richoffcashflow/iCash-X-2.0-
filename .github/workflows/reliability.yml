@@ -312,6 +312,19 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # The credit fixture preserves its complete source/evidence schema.
+      credit-postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_PASSWORD: isolated-fixture-only
+          POSTGRES_DB: icash_reliability
+        ports:
+          - 55451:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -323,6 +336,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install fixed local database driver outside the project
         run: npm install --prefix "$RUNNER_TEMP/outreach-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Verify bounded credit checks and refusal races without replay
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-provider-credit-postgres.mjs
       - name: Verify source-bound preparation and original locks
         env:
           PREPARATION_NATIVE_TEST: '1'
