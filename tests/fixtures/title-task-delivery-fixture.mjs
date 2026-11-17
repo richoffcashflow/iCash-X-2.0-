@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {installTitleCopyFixture,installTitleCopyMigration,titleCopyCase} from './title-copy-fixture.mjs';
 export const titleTaskMigration=()=>readFileSync('config/title-task-delivery-source.sql','utf8');
 export async function installTitleTaskFixture(db){
- await installTitleCopyFixture(db);await installTitleCopyMigration(db);
+ await installTitleCopyFixture(db);await installTitleCopyMigration(db);await installTitleDeadlineSeed(db);
  const predecessor=JSON.parse(readFileSync('tests/fixtures/title-task-delivery-predecessors.json','utf8')).find(r=>r.signature==='icash_claim_title_followup(uuid,uuid)');
  await db.exec(predecessor.definition);
  await db.exec('revoke all on function public.icash_claim_title_followup(uuid,uuid) from public,anon,authenticated;grant execute on function public.icash_claim_title_followup(uuid,uuid) to service_role;');
@@ -23,3 +23,20 @@ export const claimTitleTask=(db,c)=>c.task.kind==='follow_up'
  ?db.query("select public.icash_claim_title_followup($1,$2,'title-task-delivery-v1') value",[c.account,c.task.id])
  :db.query('select public.icash_claim_title_update($1,$2,$3,$4) value',[c.account,c.task.id,c.task.payload,c.snapshot]);
 export const finishTitleTask=(db,c,receipt='fixture-original')=>db.query('select public.icash_finish_title_task_delivery($1,$2,$3) value',[c.account,c.task.id,receipt]);
+
+export async function installTitleDeadlineSeed(db){
+ const seed=JSON.parse(readFileSync('tests/fixtures/title-deadline-seed-predecessor.json','utf8'))[0];
+ await db.exec(seed.definition);
+ await db.exec('revoke all on function public.icash_seed_contract_deadlines(uuid) from public,anon,authenticated;grant execute on function public.icash_seed_contract_deadlines(uuid) to service_role;');
+}
+export async function cancelledTitleDeadlines(db){
+ const account=randomUUID(),deal=randomUUID(),purchase=randomUUID();
+ await db.query('insert into public.icash_accounts(id,owner_user_id) values($1,$2)',[account,randomUUID()]);
+ await db.query('insert into public.icash_screening_jobs values($1,$2,$3)',[deal,account,{propertyId:'fictional-deadline-property'}]);
+ await db.query("insert into public.icash_deal_files(id,account_id,screening_id,stage,terms) values($1,$2,$1,'under_contract',$3)",[deal,account,{address:'Fictional deadline property',closingDate:'2026-12-15'}]);
+ await db.query("insert into public.icash_signing_envelopes(id,account_id,deal_id,kind,state,provider_id) values($1,$2,$3,'purchase','completed','101')",[purchase,account,deal]);
+ await db.query('select public.icash_seed_contract_deadlines($1)',[purchase]);
+ await db.query("update public.icash_title_tasks set state='cancelled' where account_id=$1",[account]);
+ const tasks=(await db.query('select * from public.icash_title_tasks where account_id=$1 order by id',[account])).rows;
+ return {account,deal,purchase,tasks};
+}

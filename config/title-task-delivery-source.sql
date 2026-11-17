@@ -8,6 +8,7 @@ begin
  for e in select * from (values
   ('public.icash_claim_title_update(uuid,uuid,jsonb)','b5d5f5d7c15f592389db4505aa0ce343',false,'v'),
   ('public.icash_claim_title_followup(uuid,uuid)','f454ecbc344edfc87150f7bb0e9e2ab0',false,'v'),
+  ('public.icash_seed_contract_deadlines(uuid)','8b8da09a8c6f8e952c8804b2a6cae104',false,'v'),
   ('icash_title_copy_private.envelope_source(public.icash_signing_envelopes)','83b97c7e61fdd547cced6df8c79ceb56',false,'i')
  ) expected(signature,hash,definer,volatility) loop
   select md5(pg_get_functiondef(oid)) hash,pg_get_userbyid(proowner) owner,prosecdef,provolatile,proparallel,proconfig,proacl::text acl
@@ -21,15 +22,26 @@ begin
 end $pins$;
 
 -- First rollout only. Older in-flight workers cannot retroactively acquire an
--- original snapshot. Hold writers and fail closed if any title lifecycle exists.
+-- original snapshot. Hold writers and fail closed if any title delivery exists.
+-- Exact cancelled contract deadlines are non-delivery records: both pinned
+-- legacy claims reject their kind before reservation. Preserve them unchanged.
 do $empty_cutover$
 begin
  perform 1 from public.icash_operating_budget where id=1 for update nowait;
  if not found then raise exception 'Title task delivery operating budget missing';end if;
  lock table public.icash_title_requests,public.icash_title_tasks in share mode nowait;
- if exists(select 1 from public.icash_title_requests) or exists(select 1 from public.icash_title_tasks)
+ perform e.id from public.icash_signing_envelopes e join public.icash_title_tasks t on t.payload->>'envelopeId'=e.id::text for share of e nowait;
+ if exists(select 1 from public.icash_title_requests)
+  or exists(select 1 from public.icash_title_tasks t where (
+   t.kind='deadline' and t.state='cancelled' and t.email_state='waiting' and t.email_provider_id is null
+   and t.request_id is null and t.reply_id is null and t.payload->>'deadline' in ('closing','inspection')
+   and exists(select 1 from public.icash_signing_envelopes e where e.id::text=t.payload->>'envelopeId'
+    and e.account_id=t.account_id and e.deal_id=t.deal_id and e.kind='purchase' and e.state='completed' and not e.test_mode
+    and t.payload=jsonb_build_object('envelopeId',e.id,'deadline',t.payload->>'deadline')
+    and t.source_key='contract-'||(t.payload->>'deadline')||':'||e.id::text)
+  ) is distinct from true)
   or exists(select 1 from public.icash_operation_spend where operation_key like 'title-followup:%')
- then raise exception 'Title task delivery requires an empty title lifecycle; existing originals need separate cutover review';end if;
+ then raise exception 'Title task delivery requires an empty title lifecycle except exact cancelled contract deadlines; existing originals need separate cutover review';end if;
 end $empty_cutover$;
 
 create schema icash_title_task_delivery_private;

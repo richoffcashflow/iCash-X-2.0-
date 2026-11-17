@@ -12,6 +12,7 @@ import {titleEmailAddress} from '../lib/title-inbound-policy.ts';
 import {titleConfirmationInstructions,titleConfirmationInstructionsFor} from '../lib/title-confirmation-instructions.ts';
 import {closingPayoutNote} from '../lib/closing-setup.ts';
 import {installTitleCopyFixture,installTitleCopyMigration,titleCopyCase} from './fixtures/title-copy-fixture.mjs';
+import {installTitleDeadlineSeed} from './fixtures/title-task-delivery-fixture.mjs';
 
 // Provider and financial boundaries are offline sentinels. The actual title
 // claim, PDF reader, service and task mutations execute over the real SQL.
@@ -67,7 +68,7 @@ async function assignment(){
  return current;
 }
 try{
- await installTitleCopyFixture(pg);await installTitleCopyMigration(pg);
+ await installTitleCopyFixture(pg);await installTitleCopyMigration(pg);await installTitleDeadlineSeed(pg);
  const followupPredecessor=JSON.parse(readFileSync('tests/fixtures/title-task-delivery-predecessors.json','utf8')).find(x=>x.signature==='icash_claim_title_followup(uuid,uuid)');
  await pg.exec(followupPredecessor.definition??followupPredecessor.source);
  await pg.exec('revoke all on function public.icash_claim_title_followup(uuid,uuid) from public,anon,authenticated;grant execute on function public.icash_claim_title_followup(uuid,uuid) to service_role;');
