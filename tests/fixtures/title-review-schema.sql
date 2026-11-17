@@ -1,0 +1,11 @@
+do $$begin create role anon;exception when duplicate_object then null;end$$;
+do $$begin create role authenticated;exception when duplicate_object then null;end$$;
+do $$begin create role service_role bypassrls;exception when duplicate_object then null;end$$;
+create table public.icash_accounts(id uuid primary key);
+create table public.icash_screening_jobs(id uuid primary key,account_id uuid,snapshot jsonb);
+create table public.icash_deal_files(id uuid primary key,account_id uuid,screening_id uuid,stage text);
+create table public.icash_title_requests(id uuid primary key,account_id uuid,deal_id uuid,recipient text,state text);
+create table public.icash_title_directory(id uuid primary key,public_email text);
+create table public.icash_title_qualification_jobs(id uuid primary key,account_id uuid,company_id uuid,state text);
+create table public.icash_closing_setup(account_id uuid,deal_id uuid primary key,screening_id uuid,state text,review_reason text,reply_id uuid,updated_at timestamptz default now());
+create table public.icash_property_controls(account_id uuid,property_id text,manual boolean,updated_at timestamptz default now(),primary key(account_id,property_id));

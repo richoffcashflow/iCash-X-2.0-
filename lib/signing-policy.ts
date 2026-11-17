@@ -6,6 +6,15 @@ import {calendarDaysAfter,deadlineDateStatus} from './document-dates.ts';
 export const signerSchema=z.object({name:z.string().trim().min(2).max(200),email:z.string().trim().email().max(254).optional(),phone:z.string().regex(/^\+1[2-9][0-9]{9}$/).optional()}).strict().refine(s=>!!s.email||!!s.phone,'A signing phone number is required');
 export type Signer=z.infer<typeof signerSchema>;
 export type SigningKind='purchase'|'assignment';
+/** A verified pending receipt can be saved even when its deadline forbids a new signature. */
+export class SigningDeadlineReviewError extends Error{
+ readonly code:'SIGNING_DEADLINE_PAST'|'SIGNING_DEADLINE_TIMEZONE_REVIEW';
+ constructor(status:'past'|'timezone_review'){
+  super(status==='past'?'The closing deadline has passed. Review the agreement and any required amendment before signing.':'The closing deadline may be today or already past. Confirm the contract timezone and deadline before signing.');
+  this.name='SigningDeadlineReviewError';
+  this.code=status==='past'?'SIGNING_DEADLINE_PAST':'SIGNING_DEADLINE_TIMEZONE_REVIEW';
+ }
+}
 export function signingTermsHash(terms:unknown){const t=dealTermsSchema.parse(terms);return createHash('sha256').update(JSON.stringify(t)).digest('hex');}
 /** Enforce objective completeness again at the final send/sign step; never supply missing legal terms. */
 export function signingDocumentReadiness(kind:SigningKind,input:DealTerms,now=Date.now(),profile='legacy'){
@@ -17,8 +26,7 @@ export function signingDocumentReadiness(kind:SigningKind,input:DealTerms,now=Da
  const deadline=t.closingDate||(profile!==originalContractProfile&&t.effectiveDate?calendarDaysAfter(t.effectiveDate,30):null);
  if(deadline){
   const status=deadlineDateStatus(deadline,now);
-  if(status==='past')throw new Error('The closing deadline has passed. Review the agreement and any required amendment before signing.');
-  if(status==='timezone_review')throw new Error('The closing deadline may be today or already past. Confirm the contract timezone and deadline before signing.');
+  if(status==='past'||status==='timezone_review')throw new SigningDeadlineReviewError(status);
  }
  return true;
 }

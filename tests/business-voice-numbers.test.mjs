@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {voiceOnlyBusinessPhones,novemberBusinessPhones} from '../lib/business-phone-policy.ts';
-import {businessVoiceProviders,inspectBusinessPhone,connectBusinessPhone,selectBusinessCaller,secondaryCallingReady,primaryBusinessPhone as first,secondaryBusinessPhone as second,businessVoiceIngress as ingress} from '../lib/business-voice-numbers.ts';
+import {BusinessPhoneError,businessVoiceProviders,inspectBusinessPhone,connectBusinessPhone,selectBusinessCaller,secondaryCallingReady,primaryBusinessPhone as first,secondaryBusinessPhone as second,businessVoiceIngress as ingress} from '../lib/business-voice-numbers.ts';
 const ac='AC'+'a'.repeat(32),pn='PN'+'b'.repeat(32);
 const env={CONTIGUITY_API_KEY:'test-only-contiguity',TWILIO_ACCOUNT_SID:ac,TWILIO_AUTH_TOKEN:'test-only-carrier-token',VERCEL_ENV:'production'};
 let target=second;
@@ -112,3 +112,45 @@ assert.equal((await connectBusinessPhone(db,env,slowSetup,target)).incoming,true
 assert.equal(writes.length,1);assert.equal(writes[0].body.p_forwarding,true);
 assert.equal(requests.filter(r=>r.method==='POST').length,1);
 console.log('PASS slow forwarding setup: finishes beyond eight seconds, verifies the result and saves once without a second POST.');
+
+// Production diagnostics expose only fixed check stages, never provider text,
+// URLs, identities or credentials, and leave the original readiness untouched.
+target=second;
+const diagnostics=[];
+const report=value=>diagnostics.push(value);
+const ready=()=>{reset();verified=true;f={enabled:true,to:ingress,status:'active',estimated_completion:null};diagnostics.length=0;};
+ready();assert.equal(await secondaryCallingReady(readyDb,env,fetcher,target,report),true);assert.deepEqual(diagnostics,[]);assert.equal(requests.length,4);
+for(const [stage,mutate] of [['lease',()=>lease=false],['caller_id',()=>verified=false],['forwarding',()=>f.enabled=false],['ingress',()=>route=false]]){
+ ready();mutate();assert.equal(await secondaryCallingReady(readyDb,env,fetcher,target,report),false);
+ assert.deepEqual(diagnostics,[{stage,reason:'not_ready'}]);assert.equal(requests.length,4);assert(requests.every(r=>r.method==='GET'));
+}
+const stages=[['lease','/numbers/leased'],['caller_id','OutgoingCallerIds'],['forwarding','call_forwarding'],['ingress','IncomingPhoneNumbers']];
+for(const [stage,match] of stages){
+ for(const kind of ['transport','http','mime','malformed']){
+  ready();
+  const failing=async(url,init)=>{
+   const normal=await fetcher(url,init);if(!url.includes(match))return normal;
+   if(kind==='transport')throw new Error(`private ${target} ${env.TWILIO_AUTH_TOKEN} ${url}`);
+   if(kind==='http')return Response.json({data:{error:`private ${target} ${env.TWILIO_AUTH_TOKEN} ${url}`}},{status:503});
+   if(kind==='mime')return new Response('private '+env.CONTIGUITY_API_KEY,{headers:{'Content-Type':'text/plain'}});
+   return new Response('{private '+env.TWILIO_AUTH_TOKEN,{headers:{'Content-Type':'application/json'}});
+  };
+  await assert.rejects(secondaryCallingReady(readyDb,env,failing,target,report));
+  assert.deepEqual(diagnostics,[{stage,reason:kind==='transport'?'unreachable':kind==='http'?'http_error':kind==='mime'?'unexpected_response':'invalid_response',...(kind==='http'?{httpStatus:503}:{})}]);
+  const emitted=JSON.stringify(diagnostics);for(const privateValue of [target,env.TWILIO_ACCOUNT_SID,env.TWILIO_AUTH_TOKEN,env.CONTIGUITY_API_KEY,'http:','https:','private'])assert(!emitted.includes(privateValue));
+  assert.equal(requests.length,4,'A diagnostic never repeats any provider read');assert(requests.every(r=>r.method==='GET'));
+ }
+}
+ready();await assert.rejects(secondaryCallingReady(async()=>{throw new Error('private database detail');},env,fetcher,target,report));assert.deepEqual(diagnostics,[{stage:'stored_readiness',reason:'read_failed'}]);assert.equal(requests.length,0);
+ready();assert.equal(await secondaryCallingReady(async()=>[],env,fetcher,target,report),false);assert.deepEqual(diagnostics,[{stage:'stored_readiness',reason:'not_ready'}]);assert.equal(requests.length,0);
+ready();await assert.rejects(secondaryCallingReady(readyDb,{...env,CONTIGUITY_API_KEY:undefined},fetcher,target,report));assert.deepEqual(diagnostics,[{stage:'configuration',reason:'invalid_response'}]);assert.equal(requests.length,0);
+ready();f.enabled=false;assert.equal(await secondaryCallingReady(readyDb,env,fetcher,target,()=>{throw Error('logger unavailable');}),false,'Logger failure cannot change held admission');
+console.log('PASS business calling diagnostics: exact failed stage, no extra reads, immutable readiness, private-data exclusion and logging-failure isolation.');
+
+ready();const originalTimeout=AbortSignal.timeout;
+try{
+ AbortSignal.timeout=()=>AbortSignal.abort(new Error('private aborted request'));
+ await assert.rejects(secondaryCallingReady(readyDb,env,async(url,init)=>{if(url.includes('call_forwarding'))throw Error('private timed out request');return fetcher(url,init);},target,report));
+ assert.deepEqual(diagnostics,[{stage:'forwarding',reason:'timeout'}]);
+}finally{AbortSignal.timeout=originalTimeout;}
+ready();await assert.rejects(secondaryCallingReady(async()=>{throw new BusinessPhoneError('private error','private reason',99999);},env,fetcher,target,report));assert.deepEqual(diagnostics,[{stage:'stored_readiness',reason:'read_failed'}],'Unexpected diagnostic fields cannot leak through a typed provider error');

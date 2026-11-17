@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+const pg=await PGlite.create();
+await pg.exec(`create schema icash_seller_memory_private;
+create table icash_seller_memory_private.settings(id integer,enabled boolean);insert into icash_seller_memory_private.settings values(1,false);
+create function icash_seller_memory_enabled(uuid) returns boolean language sql stable as $$select enabled from icash_seller_memory_private.settings where id=1$$;
+create table icash_deal_supervisor_settings(id integer,enabled boolean);insert into icash_deal_supervisor_settings values(1,true);
+create table icash_deal_supervisor(account_id uuid,deal_id uuid primary key,state text,milestone text,reason text,next_step text,last_error text,next_check_at timestamptz,checked_at timestamptz);
+create table icash_deal_supervisor_events(id bigint,account_id uuid,deal_id uuid);
+create table fixture_checks(deal_id uuid);
+create function icash_supervise_deal(uuid,uuid) returns jsonb language plpgsql as $$begin insert into public.fixture_checks values($2);return '{"repaired":0}'::jsonb;end$$;
+insert into icash_deal_supervisor(account_id,deal_id,state,milestone,next_check_at)
+ select md5('account'||g)::uuid,md5('deal'||g)::uuid,'waiting',case when g>15 then 'buyer' else 'seller' end,now()-make_interval(mins=>100-g) from generate_series(1,25) g;
+insert into icash_deal_supervisor_events select g,md5('fresh-account'||g)::uuid,md5('fresh-deal'||g)::uuid from generate_series(1,15) g;`);
+await pg.exec(readFileSync(new URL('./fixtures/seller-memory-supervisor-original.sql',import.meta.url),'utf8'));
+await pg.exec(readFileSync(new URL('../config/seller-memory-priority.sql',import.meta.url),'utf8'));
+const run=async()=>{await pg.exec('truncate fixture_checks');return (await pg.query('select public.icash_run_deal_supervisor() result')).rows[0].result;};
+let result=await run();assert.equal(result.processed,25);assert.equal(result.repaired,0);assert.equal(result.errors,0);
+assert.equal((await pg.query("select count(*)::int n from fixture_checks where deal_id in(select md5('deal'||g)::uuid from generate_series(1,10) g)")).rows[0].n,10,'inactive selection preserves ten oldest');
+await pg.exec('update icash_seller_memory_private.settings set enabled=true');
+result=await run();assert.equal(result.processed,10);
+assert.equal((await pg.query("select count(*)::int n from fixture_checks where deal_id in(select md5('deal'||g)::uuid from generate_series(1,5) g)")).rows[0].n,5,'five oldest checks survive active-deal load');
+assert.equal((await pg.query("select count(*)::int n from fixture_checks c join icash_deal_supervisor s using(deal_id) where s.milestone='buyer'")).rows[0].n,5);
+assert.equal((await pg.query('select count(distinct deal_id)::int n from fixture_checks')).rows[0].n,10,'one check per deal');
+assert.equal((await pg.query('select count(*)::int n from icash_deal_supervisor')).rows[0].n,25,'no holds, original work or due times are cleared');
+await pg.close();console.log('PASS active deal priority, five oldest fair slots, fifteen fresh slots, bounded checks and no replay.');

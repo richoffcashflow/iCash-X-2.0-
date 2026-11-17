@@ -62,7 +62,9 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  // Seller interest requires the complete source question-and-answer evidence.
  const interested=!followupHeld&&!!(expected.party==='seller'?sourceInterest:providerInterest);
  const interestQuote=expected.party==='seller'?sourceInterest:providerInterest||quote('interest_quote');
- return {summary:humanResponse?r.summary:contactEvidence==='automated_answer'?'Automated answering or call-screening audio; no verified seller response.':'No intelligible caller response was captured.',transcript:r.transcript,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,contactEvidence,
+ const start=c.metadata?.start_time_unix_secs;
+ const startedAt=typeof start==='number'&&Number.isFinite(start)&&start>0&&start*1000<=now?new Date(start*1000).toISOString():null;
+ return {summary:humanResponse?r.summary:contactEvidence==='automated_answer'?'Automated answering or call-screening audio; no verified seller response.':'No intelligible caller response was captured.',transcript:r.transcript,startedAt,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,contactEvidence,
   humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote,party:expected.party,
   callbackStatus:optedOut?'blocked_opt_out':!humanResponse?'not_requested':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
   callbackDueAt:optedOut||followupHeld||!humanResponse?null:r.dueAt,callbackTimezone:optedOut||followupHeld||!humanResponse?null:r.timezone,callbackQuote:humanResponse?r.callbackQuote:null,callbackEvidence:humanResponse?r.callbackEvidence:null,

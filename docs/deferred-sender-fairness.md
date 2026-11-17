@@ -58,3 +58,30 @@ access and concurrent queue/selection/claim races. Production verification is
 read-only observation of ordinary work; no paid demonstration or replay is
 authorized. A successful retry or a lower health count does not prove delivery,
 a human answer, a closed deal or zero stalled accounts.
+
+## November 17 installation
+
+Installed once as `20261117182800_deferred_sender_fairness` after the original
+head `2d9ea57c2dc7c6bc3a7fda9d2883440520b62060` passed all seven canonical jobs
+in run `43954947635`, independent source review, and fresh focused regression.
+The source SQL SHA256 is
+`4cf85099a32ef29a3dc660c54070a451a5cfad097c20b1cbdde84656250d0d54`.
+Do not reinstall, replay historical messages or reset waiting rows.
+
+Readback at `2026-11-17T18:28:03.956235Z` confirmed these function MD5s:
+
+- `icash_queue_seller_opener`: `b03410d6c985b43f33f16b3600f89bca`
+- `icash_seller_opener_candidate_body`: `956ad1becf415caf4bf29e66b25f9fdd`
+- `icash_next_sender_volume_retry`: `019ca6f6bf5d3461f1d940ffc481a3ef`
+- `icash_sender_private.waiting_turn`: `65c91d315ba5b232d86cfe748368a849`
+
+Postgres ownership, service-only execution and empty search paths were retained;
+the waiting-number index was valid and ready. The private progress table had
+its sole singleton row, with a null timestamp before ordinary retry activity.
+The repository filename now matches the hosted ledger version.
+
+The current-main composition passes the focused fairness, deferred four-text
+batch, fresh-sender preference, sender volume/pacing, original receipt recovery
+and text-claim refusal regressions. Fresh exact-head checks and serialized
+exact-main deployment verification still apply. This installation establishes
+scheduling fairness, not successful delivery or recovery of every account.

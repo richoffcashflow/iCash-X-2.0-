@@ -41,6 +41,7 @@ async function seed({qualified=true}={}){
 }
 const db=async(path,method,body)=>{
  if(path==='rpc/icash_outreach_voice_current')return false;
+ if(path==='rpc/icash_seller_memory_context')return null;
  if(path==='rpc/icash_seller_prior_call_context')return [];
  if(path==='rpc/icash_finish_seller_agreement'){await q('update icash_seller_agreement_private.confirmations set envelope_id=$1,state=\'ready\' where id=$2',[body.p_envelope,body.p_id]);return true;}
  if(path==='rpc/icash_fail_seller_agreement'){await q("update icash_seller_agreement_private.confirmations set state='needs_review' where id=$1",[body.p_id]);return true;}
@@ -203,7 +204,8 @@ for(const target of ['legal_name','closing_date','inspection','cash_offer','conf
  if(!answerPatchInstalled){
   const m=await incoming(c,answer),j=await one('select * from icash_text_ai_jobs where message_id=$1',[m.id]);
   let context=(await rpc('icash_resume_seller_text_ai',[c.a,j.id])).context;
-  assert.equal(planSellerTextOffer(context).action,target,'reproduce the lost reminder action before patch');
+  assert.equal(context.messages.find(m=>m.id===mid).action,null,'the historical reminder is missing its structured action');
+  assert.equal(planSellerTextOffer(context).action,'owners','source-backed name answers also survive a historical missing reminder action');
   const patch=read('../config/seller-recovery-answer-continuity.sql');assert.equal(patch,read('../supabase/migrations/20261113170111_seller_recovery_answer_continuity.sql'));await pg.exec(patch);answerPatchInstalled=true;
   context=(await rpc('icash_resume_seller_text_ai',[c.a,j.id])).context;
   assert.equal(planSellerTextOffer(context).action,'owners');

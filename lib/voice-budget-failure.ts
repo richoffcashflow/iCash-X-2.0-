@@ -11,11 +11,17 @@ export class ProspectingBudgetError extends Error {
 export class SellerInventoryUnavailableError extends Error {
  constructor(){super('Seller inventory unavailable');this.name='SellerInventoryUnavailableError';}
 }
+/** The final operation gate refused this atomic SMS attempt. Its legacy SQL
+ * message does not establish an earlier provider send or authorize a retry. */
+export class TextClaimRefusedError extends Error {
+ constructor(){super('Text claim refused');this.name='TextClaimRefusedError';}
+}
 export async function voiceReservationFailure(path:string,status:number,response:Response):Promise<Error>{
  const voice=['rpc/icash_reserve_paced_voice','rpc/icash_reserve_flexible_voice'].includes(path);
  if(status===400&&(voice||['rpc/icash_reserve_operation','rpc/icash_reserve_and_claim_property_discovery','rpc/icash_reserve_and_claim_filtered_discovery','rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path))){
   try{const body=await response.json();
    if(['rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path)&&body?.code==='P0001'&&body?.message==='Seller inventory assigned or suppressed')return new SellerInventoryUnavailableError();
+   if(['rpc/icash_claim_text','rpc/icash_claim_customer_text'].includes(path)&&body?.code==='P0001'&&body?.message==='Text already dispatched')return new TextClaimRefusedError();
    if(voice&&body?.code==='P0001'&&body?.message==='Activation spending cap reached')return new VoiceActivationBudgetError();
    if(body?.code==='P0001'&&body?.message==='Prospecting budget reached'){
     const detail=JSON.parse(body.details??'null');

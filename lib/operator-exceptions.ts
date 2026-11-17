@@ -14,7 +14,7 @@ const schemas:Record<ExceptionSource,z.ZodType<any>>={
  voice_jobs:z.object({...base,state:z.enum(['ready','issued','dispatching','dispatched','held','canceled']),updated_at:stamp}),
  call_results:z.object({...base,state:z.enum(['waiting','complete','review'])}),
  property_checks:z.object({...base,state:z.literal('failed')}),
- title_tasks:z.object({...base,state:z.enum(['scheduled','needs_review','done','dismissed','cancelled']),kind:z.enum(['follow_up','reply_review','deadline']),due_date:z.string().nullable(),email_state:z.enum(['waiting','issued','dispatching','sent','needs_review']),updated_at:stamp}),
+ title_tasks:z.object({...base,state:z.enum(['scheduled','needs_review','done','dismissed','cancelled']),kind:z.enum(['follow_up','reply_review','deadline','document_update']),due_date:z.string().nullable(),email_state:z.enum(['waiting','issued','dispatching','sent','needs_review']),updated_at:stamp}),
  attention_emails:z.object({...base,state:z.enum(['claimed','accepted','delivered','needs_review','cancelled','bounced','complained','failed','suppressed'])}),
  support:z.object({...base,status:z.enum(['open','escalated','waiting_on_customer','resolved']),updated_at:stamp}),
 };
