@@ -218,7 +218,9 @@ export function recordedReceptionService(env:RecordedReceptionEnv,deps:{rpc:Reco
     const token=request.headers.get('authorization')?.replace(/^Bearer /,'');if(!token||!/^[a-f0-9]{64}$/.test(token))return Response.json({stopped:false},{status:401,headers:privateHeaders});
     const b=object(JSON.parse((await boundedBytes(request,2048)).toString('utf8')));if(Object.keys(b).length!==1||!uuid(b.recordingId))return Response.json({stopped:false},{status:400,headers:privateHeaders});
     let row=await getRecordedReception(rpc,b.recordingId);if(!row||row.stop_token_hash!==sha(token)||!recordingAuthorized(row)||!row.start_claimed_at||now()-Date.parse(row.created_at)>20*60000)return Response.json({stopped:false},{status:401,headers:privateHeaders});
-    const next=await transition(row,'stop',{stopTokenHash:sha(token)});if(next)row=next;
+    // The validated exact-call stop must still reach the carrier when saving
+    // its intent fails. endRecordedReception preserves the durable retry path.
+    const next=await transition(row,'stop',{stopTokenHash:sha(token)}).catch(()=>null);if(next)row=next;
     const ended=await endRecordedReception(rpc,provider,row,'permission_withdrawn');row=ended.row;let stopped=ended.ended;
     if(!ended.ended&&row.recording_sid)try{const p=await provider.stop(row.call_sid,row.recording_sid);stopped=receptionRecordingMatches(row,p)&&['stopped','completed','processing'].includes(String(p.status));}catch{/* Durable termination remains due. */}
     return Response.json({stopped,callEnded:ended.ended,instruction:'End this call now. Recording permission was withdrawn; do not continue talking.'},{status:ended.ended?200:503,headers:privateHeaders});

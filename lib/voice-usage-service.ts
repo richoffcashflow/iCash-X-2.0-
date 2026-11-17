@@ -73,6 +73,7 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
   return hold('provider_receipt_missing');
  }
  let manifest:ReturnType<typeof voiceCostManifest>;let costStage='components';
+ let recordingSubitems:Record<string,number>|undefined;
  try{
   if(!policy.components||Object.keys(policy.components).length!==costCategories.length-1)throw Error('Incomplete policy');
   const inputs={} as VoiceCostInputs;
@@ -87,7 +88,8 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
     const records=await db<RecordingRow[]>(`icash_call_recordings?account_id=eq.${eq(accountId)}&operation_key=eq.${eq(call.operation_key)}&conversation_id=eq.${eq(call.conversation_id)}&select=*`);
     if(records.length!==1||records[0].rate_id!==spend.rate_id||!completedRecordingReceipt(records[0]))throw Error('Recording receipt required');
     const r=records[0],add=recordingAddonCosts(r);
-    inputs[category]={kind:'fixed_estimate',amountMicros:add.total,evidenceRef:`Twilio ${r.recording_sid}; recording ${add.recording} micros ${add.recordingObserved?'observed':'estimated'}; storage ${add.storage} micros ESTIMATED; speech ${add.speech} micros ESTIMATED; ${rule.evidenceRef}`};
+    if(add.answerDetection)recordingSubitems={recordingMicros:add.recording,storageMicros:add.storage,speechGatherMicros:add.speech,answerDetectionMicros:add.answerDetection};
+    inputs[category]={kind:'fixed_estimate',amountMicros:add.total,evidenceRef:`Twilio ${r.recording_sid}; recording ${add.recording} micros ${add.recordingObserved?'observed':'estimated'}; storage ${add.storage} micros ESTIMATED; speech ${add.speech} micros ESTIMATED; ${add.answerDetection?'AMD '+add.answerDetection+' micros ESTIMATED; ':''}${rule.evidenceRef}`};
    }else if(rule.kind==='outbound_carrier_estimate'){
     if(category!=='twilio'||!carrier||!['seller_call','buyer_call'].includes(policy.operation))throw Error('Carrier collector unavailable');
     inputs[category]=await outboundCarrierInput(db,accountId,call,rule,carrier.env,carrier.fetcher,carrier.signal);
@@ -97,6 +99,7 @@ export async function settleBoundVoiceUsage(db:VoiceUsageDb,accountId:string,cal
    else throw Error('Unsupported usage source');
   }
   manifest=voiceCostManifest(inputs);
+  if(recordingSubitems)Object.assign(manifest.components.other,{subitems:recordingSubitems});
  }catch(error){
   const reason=error instanceof CarrierUsageUnavailable?'carrier_usage_unavailable':'cost_evidence_incomplete';
   try{console.warn('voice_cost_evidence_held',{stage:costStage,reason});}catch{/* Preserve the original financial hold if logging fails. */}

@@ -1,5 +1,6 @@
 import {recordingAuthorized,directRecordedInstructions,recordedVoicemailInstructions,outboundRecordedInstructions,sellerCallRecoveryInstructions,recordedMailboxInstructions,recordedAnswerPriority} from './direct-call-entry.ts';
 import {object,sid,type RecordingRow,type RecordingReview} from './required-call-recording.ts';
+import {carrierAnswerPolicy} from './call-answer-detection.ts';
 export type RecordingEnv={[key:string]:string|undefined;ICASH_RECORDED_OUTBOUND_READY?:string;RECORDED_OUTBOUND_REVIEW_JSON?:string;TWILIO_ACCOUNT_SID?:string;TWILIO_AUTH_TOKEN?:string;ELEVENLABS_API_KEY?:string};
 export class RecordingProviderError extends Error{status:number;constructor(status:number){super('RECORDING_PROVIDER_UNAVAILABLE');this.status=status;}}
 export async function boundedBytes(response:Response|Request,max:number){
@@ -50,7 +51,17 @@ export function createRecordingProviders(env:RecordingEnv,fetcher:typeof fetch=f
    const query=new URLSearchParams({PageSize:'100',Page:String(page)});if(pageToken!==undefined)query.set('PageToken',pageToken);
    return json(callPath(id)+'/Events.json?'+query.toString());
   },
-  dial:(from:string,to:string,twiml:string,statusCallback:string,maxSeconds=600)=>{if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');return json('/Calls.json','POST',new URLSearchParams({From:from,To:to,Twiml:twiml,Record:'false',TimeLimit:String(maxSeconds),Timeout:'20',StatusCallback:statusCallback,StatusCallbackMethod:'POST',StatusCallbackEvent:'completed'}));},
+  dial:(from:string,to:string,twiml:string,statusCallback:string,maxSeconds=600,answerPolicy?:string,answerUrl?:string)=>{
+   if(!Number.isInteger(maxSeconds)||maxSeconds<120||maxSeconds>600||maxSeconds%60!==0)throw Error('CALL_CAP_REQUIRED');
+   if(answerPolicy!==undefined&&answerPolicy!==carrierAnswerPolicy)throw Error('CALL_ANSWER_POLICY_REQUIRED');
+   if(answerPolicy===carrierAnswerPolicy){
+    if(!answerUrl||!/^https:\/\/www\.geticashx\.com\/api\/internal\/voice\/recording\/connect\?id=[a-f0-9-]{36}&nonce=[a-f0-9]{64}$/.test(answerUrl))throw Error('CALL_ANSWER_URL_REQUIRED');
+   }else if(answerUrl!==undefined)throw Error('CALL_ANSWER_POLICY_REQUIRED');
+   // URL receives Twilio's signed AnsweredBy verdict directly. A TwiML
+   // Redirect is not a documented transport for the initial AMD decision.
+   return json('/Calls.json','POST',new URLSearchParams({From:from,To:to,Record:'false',TimeLimit:String(maxSeconds),Timeout:'20',StatusCallback:statusCallback,StatusCallbackMethod:'POST',StatusCallbackEvent:'completed',
+    ...(answerPolicy===carrierAnswerPolicy?{Url:answerUrl!,Method:'POST',MachineDetection:'Enable',AsyncAmd:'false',MachineDetectionTimeout:'8'}:{Twiml:twiml})}));
+  },
   start:(call:string,callback:string)=>json(callPath(call)+'/Recordings.json','POST',new URLSearchParams({RecordingChannels:'dual',RecordingTrack:'both',Trim:'do-not-trim',RecordingStatusCallback:callback,RecordingStatusCallbackMethod:'POST',RecordingStatusCallbackEvent:'in-progress completed absent'})),
   stop:(call:string,recording:string)=>{recordPath(recording);return json(callPath(call)+`/Recordings/${recording}.json`,'POST',new URLSearchParams({Status:'stopped'}));},
   end:(call:string)=>json(callPath(call)+'.json','POST',new URLSearchParams({Status:'completed'}),true),
