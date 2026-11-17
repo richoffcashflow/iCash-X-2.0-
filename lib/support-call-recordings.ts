@@ -11,6 +11,10 @@ const guide='iCash X supports call recording. Open the property’s conversation
  * complaint. Keep follow-ups bounded to that subject, including guest help. */
 export function supportCallRecordingReply(context:SupportContext):SupportReply|null{
  const q=context.messages.findLast(turn=>turn.role==='user')?.content??'';
+ const turnTaking=/\b(?:bot|ai agent|ai assistant)\b/i.test(q)&&/\bcalls?\b/i.test(q)
+  &&/\b(?:talk(?:s|ing)?|speak(?:s|ing)?) (?:to itself|over (?:the |a )?seller)\b/i.test(q)
+  &&!/\b(?:not|never|doesn[’']?t|didn[’']?t) (?:keep |start )?(?:talk|talking|speak|speaking)\b|\b(?:if|hypothetically|refund|cancel|unsubscribe|delete|billing|charged|sign[ -]?in)\b/i.test(q);
+ if(turnTaking)return {reply:'You’re reporting a call conversation problem, not a question about outreach hours. Which property and call time should be reviewed? The original recording and transcript need to be checked for turn-taking and unwanted speech. I haven’t verified the cause or a repair; earlier unresolved issues stay open.',status:'open',managementReview:true,ai:false};
  // A new introduction complaint must not disappear behind an older audio
  // handoff. The report alone establishes neither the cause nor a voice repair.
  const introduction=/\b(?:seller|sellers|homeowner|homeowners)\b/i.test(q)&&/\b(?:hang(?:s|ing)? up|hung up)\b/i.test(q)

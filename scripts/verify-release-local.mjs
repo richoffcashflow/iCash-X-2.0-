@@ -17,7 +17,7 @@ const suites = [
  'support-waiting-deal',
  'seller-intake-start', 'seller-voice-turn-policy', 'stage-seller-voice-turns', 'recording-review-transition', 'seller-call-offer-delivery-replay', 'seller-timing-answer', 'seller-ownership-answer',
  'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
- 'support-specific-property', 'support-seller-capability', 'support-empty-review', 'support-current-intent-regressions', 'support-sale-workflow-boundaries',
+ 'support-specific-property', 'support-seller-capability', 'support-empty-review', 'support-current-intent-regressions', 'support-call-turn-taking', 'support-sale-workflow-boundaries',
  'support-contact-privacy',
  'automatic-outreach-bottlenecks', 'work-cohort', 'work-cohort-query',
  'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
