@@ -1,21 +1,23 @@
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
+import {TextClaimRefusedError} from '../lib/voice-budget-failure.ts';
 
 // Exercise the actual selector consumer and dispatch function. Only transport,
 // persistence and original admission are replaced with offline fixtures.
 class InventoryHeld extends Error {}
 const sender='+14155550100';
 const item=(id,mode='held',claimKind='automatic')=>({accountId:'account-'+id,messageId:id,claimKind,mode});
-async function run(items,{enabled=true,selectionError=false,voiceVerificationFailure=false,inboundUnavailable=false,receiptReview=false}={}){
- let current,index=0;
+async function run(items,{enabled=true,selectionError=false,voiceVerificationFailure=false,inboundUnavailable=false,receiptReview=false,selectionDelayMs=0,transportDelayMs=0,receiptDelayMs=0}={}){
+ let current,index=0,elapsed=0;
  const seen={selections:0,claims:[],transports:[],receipts:[],reviews:[]};
  const api=await loadService('lib/text-message-service.ts',{
+  Date:class extends Date {static now(){return elapsed;}},
   instantLeadsEnabled:()=>true,smsWorkEnabled:()=>enabled,liveWorkReady:()=>!inboundUnavailable,
   elevenRequest:async()=>{throw Error('Number verification unavailable');},
-  sameBusinessNumber:(a,b)=>a===b,textPayload:()=>({}),SellerInventoryUnavailableError:InventoryHeld,
+  sameBusinessNumber:(a,b)=>a===b,textPayload:()=>({}),SellerInventoryUnavailableError:InventoryHeld,TextClaimRefusedError,
   db:async(path,method,body)=>{
    if(path==='rpc/icash_next_sender_volume_retry'){
-    seen.selections++;if(selectionError)throw Error('selection unavailable');
+    seen.selections++;elapsed+=selectionDelayMs;if(selectionError)throw Error('selection unavailable');
     current=items[index++];return current?{accountId:current.accountId,messageId:current.messageId,claimKind:current.claimKind}:null;
    }
    if(path.startsWith('icash_text_messages?')){
@@ -38,11 +40,13 @@ async function run(items,{enabled=true,selectionError=false,voiceVerificationFai
    throw Error('Unexpected database path '+path);
   },
   sendContiguityText:async()=>{
+   elapsed+=transportDelayMs;
    seen.transports.push(current.messageId);
    if(current.mode==='provider-error')throw Error('transport outcome unknown');
    return {messageId:'provider-'+current.messageId};
   },
   saveTextReceipt:async(_db,account,message,provider)=>{
+   elapsed+=receiptDelayMs;
    seen.receipts.push({account,message,provider});
    if(current.mode==='receipt-error')throw Error('receipt outcome unknown');
    return {status:receiptReview?'message_delivery_needs_review':'message_accepted'};
@@ -57,9 +61,9 @@ try{
  Object.assign(process.env,{CONTIGUITY_API_KEY:'offline-fixture',CONTIGUITY_WEBHOOK_SECRET:'offline-fixture'});
  let r=await run([item('stale'),item('valid','send'),item('later','send')]);
  assert.equal(r.result.status,'message_accepted','A known pre-send hold must not consume the whole recovery pass');
- assert.deepEqual(r.seen.claims.map(x=>x.id),['stale','valid']);
- assert.deepEqual(r.seen.transports,['valid'],'Stop after the first provider attempt');
- assert.equal(r.seen.selections,2);
+ assert.deepEqual(r.seen.claims.map(x=>x.id),['stale','valid','later']);
+ assert.deepEqual(r.seen.transports,['valid','later'],'A saved receipt allows the next original through its own final claim');
+ assert.equal(r.seen.selections,4);assert.equal(r.result.accepted,2);
  r=await run([item('stale'),item('disabled','disabled'),item('inventory','inventory'),item('fourth','send'),item('later','send')]);
  assert.equal(r.result.status,'message_accepted');assert.equal(r.seen.selections,4);assert.deepEqual(r.seen.transports,['fourth']);
  for(const mode of ['disabled','inventory','changed-kind']){
@@ -72,6 +76,9 @@ try{
   assert.equal(r.result.status,'message_delivery_needs_review');
   assert.deepEqual(r.seen.transports,['attempt']);assert.deepEqual(r.seen.reviews,['attempt']);
   assert.equal(r.seen.selections,2,'An uncertain outcome never continues to another provider attempt');
+  r=await run([item('accepted','send'),item('attempt',mode),item('later','send')]);
+  assert.equal(r.result.status,'message_delivery_needs_review');assert.equal(r.result.accepted,1);
+  assert.deepEqual(r.seen.transports,['accepted','attempt'],'An earlier success cannot hide the next uncertain result');
  }
  r=await run([item('unknown','claim-error'),item('later','send')]);
  assert.match(r.error.message,/claim outcome unknown/);assert.equal(r.seen.selections,1);assert.deepEqual(r.seen.transports,[]);
@@ -80,6 +87,17 @@ try{
  assert.equal(r.result.status,'message_held');assert.equal(r.seen.selections,4);assert.equal(r.seen.claims.length,4);assert.deepEqual(r.seen.transports,[]);
  r=await run([item('same'),item('same'),item('later','send')]);
  assert.equal(r.result.status,'message_held');assert.equal(r.seen.selections,2);assert.equal(r.seen.claims.length,1);assert.deepEqual(r.seen.transports,[]);
+ r=await run([item('same','send'),item('same','send'),item('later','send')]);
+ assert.equal(r.result.accepted,1);assert.deepEqual(r.seen.transports,['same'],'One original is never attempted twice in a pass');
+ r=await run(Array.from({length:5},(_,i)=>item('send-'+i,'send')));
+ assert.equal(r.result.accepted,4);assert.equal(r.result.checked,4);assert.equal(r.seen.selections,4);
+ assert.deepEqual(r.seen.transports,['send-0','send-1','send-2','send-3'],'At most four originals enter final dispatch');
+ r=await run([item('slow','send'),item('later','send')],{transportDelayMs:21000});
+ assert.equal(r.result.accepted,1);assert.equal(r.seen.selections,1);assert.equal(r.seen.receipts.length,1,'A slow original still saves its receipt');
+ r=await run([item('slow','send'),item('later','send')],{receiptDelayMs:21000});
+ assert.equal(r.result.accepted,1);assert.equal(r.seen.selections,1,'A slow receipt stops additional original work');
+ r=await run([item('slow-select','send')],{selectionDelayMs:20000});
+ assert.equal(r.result.accepted,0);assert.equal(r.result.checked,0);assert.deepEqual(r.seen.transports,[],'Expired start budget never begins a provider operation');
  for(const kind of ['manual','meta']){
   r=await run([item('held'),item(kind,'send',kind)]);
   assert.equal(r.result.status,'message_accepted');
@@ -98,7 +116,7 @@ try{
  process.env.CONTIGUITY_API_KEY='offline-fixture';
  r=await run([]);assert.equal(r.result.status,'idle');assert.equal(r.seen.selections,1);
  r=await run([item('held')]);assert.equal(r.result.status,'message_held');assert.equal(r.seen.selections,2);
- console.log('PASS bounded deferred text recovery, original claim paths, pre-send holds, repeated bindings and unknown provider outcomes');
+ console.log('PASS bounded deferred text recovery: four distinct originals, saved receipts before continuation, twenty-second start budget, original claim paths, pre-send holds, no duplicate and immediate stop on unknown outcomes');
 }finally{
  Object.assign(process.env,old);for(const key of Object.keys(process.env))if(!(key in old))delete process.env[key];
 }

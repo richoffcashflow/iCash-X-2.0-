@@ -3,6 +3,11 @@ type Check = 'ok' | 'unavailable' | 'degraded';
 export type ServiceHealth = {status:'ok'|'degraded';checkedAt:string;checks:{database:Check;authentication:Check;workflows:Check}};
 let cached:{expiresAt:number;value:ServiceHealth}|undefined;
 let pending:Promise<ServiceHealth>|undefined;
+// Once the probe's HTTP result is known, optional response disposal must not
+// retain the shared pending probe or change that result. Never retry a probe.
+function discardBody(response:Response){
+ try{void response.body?.cancel().catch(()=>{});}catch{/* Preserve the known probe result. */}
+}
 
 /** Shared probes prevent a monitoring burst from adding a database request per caller. */
 export async function serviceHealth():Promise<ServiceHealth>{
@@ -14,16 +19,16 @@ export async function serviceHealth():Promise<ServiceHealth>{
    if(!url||!key)return 'unavailable';
    try{
     const response=await fetch(`${url}${path}`,{headers:{apikey:key,...(database?{Authorization:`Bearer ${key}`}:{})},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});
-    if(!response.ok){await response.body?.cancel();return 'unavailable';}
+    if(!response.ok){discardBody(response);return 'unavailable';}
     if(database){const rows:unknown=await response.json();return Array.isArray(rows)&&rows.some(row=>row?.id===1)?'ok':'unavailable';}
-    await response.body?.cancel();return 'ok';
+    discardBody(response);return 'ok';
    }catch{return 'unavailable';}
   };
   const workflowProbe=async():Promise<Check>=>{
    if(!url||!key)return 'unavailable';
    try{
     const response=await fetch(`${url}/rest/v1/rpc/icash_reliability_status`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:'{}',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});
-    if(!response.ok){await response.body?.cancel();return 'unavailable';}
+    if(!response.ok){discardBody(response);return 'unavailable';}
     const report=reliabilitySchema.parse(await response.json());
     return report.fresh&&report.status==='ok'?'ok':'degraded';
    }catch{return 'unavailable';}

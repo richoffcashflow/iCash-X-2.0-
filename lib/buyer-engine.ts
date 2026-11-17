@@ -11,7 +11,11 @@ export function planBuyerOutreach(deal: BuyerDeal, buyers: Buyer[], now: number,
     ...b, ready: fresh(b.proofOfFundsVerifiedAt)&&b.authorityVerified,
     score: (b.completedDeals===null||b.failedDeals===null?30:Math.round(60*((b.completedDeals+1)/(b.completedDeals+b.failedDeals+2))))+(fresh(b.proofOfFundsVerifiedAt)?25:0)+(b.authorityVerified?15:0),
   }));
-  const byScore=(a:typeof candidates[number],b:typeof candidates[number])=>b.score-a.score||a.id.localeCompare(b.id);
+  // Prefer verified readiness, then closing history. Among equally qualified
+  // buyers, current price/repair headroom beats an arbitrary database ID.
+  const fit=(b:typeof candidates[number])=>Math.min(1,(b.maxPriceCents-deal.askingPriceCents)/Math.max(1,deal.askingPriceCents))
+   +Math.min(1,(b.maxRepairCents-deal.repairsCents)/Math.max(1,deal.repairsCents));
+  const byScore=(a:typeof candidates[number],b:typeof candidates[number])=>Number(b.ready)-Number(a.ready)||b.score-a.score||fit(b)-fit(a)||a.id.localeCompare(b.id);
   const entities=new Map<string,typeof candidates>();
   for(const b of candidates.sort(byScore)){const contacts=entities.get(b.entityId)??[];contacts.push(b);entities.set(b.entityId,contacts);}
   // Deduplicate after checking each contact's own permission and cost. A higher
@@ -24,5 +28,9 @@ export function planBuyerOutreach(deal: BuyerDeal, buyers: Buyer[], now: number,
     if(contact){outreach.push(contact.id);remaining-=contact.estimatedContactChargeCents;}
     return contact??representative;
   }).sort(byScore);
-  return { matches:ranked.map(b=>({id:b.id,score:b.score,ready:b.ready})),outreach,backupBuyerIds:ranked.slice(1).map(b=>b.id),reservedContactCents:Math.max(0,availableCents-reserveCents)-remaining,canSendDeal };
+  const primary=outreach[0]??ranked.find(b=>b.ready&&b.permitted)?.id;
+  return { matches:ranked.map(b=>({id:b.id,score:b.score,ready:b.ready})),outreach,
+    backupBuyerIds:ranked.filter(b=>b.id!==primary&&b.ready&&b.permitted).map(b=>b.id),
+    qualificationNeededIds:ranked.filter(b=>!b.ready).map(b=>b.id),
+    reservedContactCents:Math.max(0,availableCents-reserveCents)-remaining,canSendDeal };
 }

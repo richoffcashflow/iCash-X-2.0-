@@ -17,6 +17,7 @@ await pg.exec(fixture.slice(0,split)+read('./fixtures/seller-progress-original-f
  'create trigger icash_text_ai_incoming after insert on icash_text_messages for each row execute function icash_enqueue_text_ai();'+read('../config/seller-reply-progress.sql')+read('../config/seller-dialogue.sql')+
  read('./helpers/seller-text-offer-fixture.sql')+read('./fixtures/seller-text-offer-original-functions.sql')+read('../config/seller-text-offer.sql')+read('../config/seller-offer-receipt-wait.sql')+read('../config/seller-offer-source-prices.sql')+read('./helpers/seller-call-terminal-fixture.sql')+read('../config/seller-call-terminal-progress.sql'));
 await pg.exec("update icash_seller_progress_settings set enabled=true,dialogue_enabled=true,offer_enabled=true,offer_enabled_at=now()-interval '2 hours'");
+const callHistory=new Map();
 let tick=0,sends=0,texts=0,dispatches=0,providerFailure=false,deliver=true;
 const at=()=>new Date(Date.now()-3600000+(++tick)*1000).toISOString();
 const terms={seller:'',buyer:'Fixture Buyer',address:'45 Oak Road',legalDescription:'Lot 1, Fixture Subdivision',state:'TX',priceCents:21500000,priceSource:'proposed'};
@@ -37,7 +38,8 @@ async function seed({qualified=true}={}){
 }
 const db=async(path,method,body)=>{
  if(path==='rpc/icash_outreach_voice_current')return false;
- if(path==='rpc/icash_seller_prior_call_context')return [];
+ if(path==='rpc/icash_seller_memory_context')return null;
+ if(path==='rpc/icash_seller_prior_call_context')return callHistory.get(body.p_account)??[];
  if(path==='rpc/icash_finish_seller_agreement'){await q('update icash_seller_agreement_private.confirmations set envelope_id=$1,state=\'ready\' where id=$2',[body.p_envelope,body.p_id]);return true;}
  if(path==='rpc/icash_fail_seller_agreement'){await q("update icash_seller_agreement_private.confirmations set state='needs_review' where id=$1",[body.p_id]);return true;}
  assert(path.startsWith('rpc/'));return rpc(path.slice(4),Object.values(body));
@@ -54,7 +56,7 @@ const dependencies={db,dispatch:async(a,id)=>{
 async function run(c,body,extra={}){
  const source=await incoming(c,body,extra),j=await one('select * from icash_text_ai_jobs where message_id=$1',[source.id]);
  const resume=await rpc('icash_resume_seller_text_ai',[c.a,j.id]);assert.equal(resume.mode,'seller_offer',JSON.stringify({body,resume}));
- const plan=planSellerTextOffer(resume.context);const result=await processSellerTextOffer(resume.context,dependencies);
+ const plan=planSellerTextOffer({...resume.context,history:(callHistory.get(c.a)??[]).map(h=>h.result)});const result=await processSellerTextOffer(resume.context,dependencies);
  const progress=await rpc('icash_finish_seller_text_progress',[c.a,j.id,['message_delivered','message_accepted','text_ai_waiting','seller_agreement_sent'].includes(result.status)?null:result.status]);
  return {source,j,plan,result,progress,context:resume.context};
 }
@@ -80,6 +82,21 @@ r=await run(c,'Yes, send the agreement');assert.equal(r.plan.kind,'agreement');a
 assert.equal((await one('select terms from icash_deal_files where id=$1',[c.d])).terms.priceCents,9000000);
 assert.equal(await rpc('icash_claim_seller_text_agreement',[c.a,r.j.id]),null,'one-use signing claim');
 assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[c.a])).n,1);
+
+// A returning SMS uses completed call closing answers, then one fresh exact
+// text readback and the existing single-use signing/delivery operation.
+const returned=await seed();let cross=await run(returned,'How much can you offer?');cross=await run(returned,'Yes');
+callHistory.set(returned.a,[{completed_at:new Date().toISOString(),result:{transcript:[
+ {role:'agent',message:'What is your full legal name for the agreement?'},{role:'user',message:'Robin Fixture.'},
+ {role:'agent',message:'Are you the only owner and decision maker?'},{role:'user',message:'Yes, just me.'},
+ {role:'agent',message:'What exact closing date works for you?'},{role:'user',message:close},
+ {role:'agent',message:'May we inspect the property before closing?'},{role:'user',message:'Yes.'},
+]}}]);
+const beforeSends=sends;
+cross=await run(returned,'Please send the agreement.');assert.equal(cross.plan.action,'confirm_terms');
+assert.equal(cross.plan.state.closing.legalName,'Robin Fixture');
+cross=await run(returned,'Yes, send the agreement');assert.equal(cross.result.status,'seller_agreement_sent');assert.equal(sends,beforeSends+1);
+assert.equal(await rpc('icash_claim_seller_text_agreement',[returned.a,cross.j.id]),null);
 
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
 // Continue a call's pending repair-budget question by SMS. A plainly stated

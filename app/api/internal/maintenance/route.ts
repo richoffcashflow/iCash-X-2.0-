@@ -1,10 +1,12 @@
-import {retryVolumeDeferredText} from '@/lib/text-message-service';
+import {retryVolumeDeferredText,dispatchTextMessage} from '@/lib/text-message-service';
+import {processBuyerCallPackages} from '@/lib/buyer-call-package-service';
 import {recoverTextDeliveryReceipts} from '@/lib/text-delivery-recovery';
 import {processSupportCustomerNotifications} from '@/lib/support-customer-notifications';
 import {refreshVoiceCapacity,readVoiceCapacityProvider} from '@/lib/voice-capacity';
 import {recoverVoiceConfiguration} from '@/lib/voice-configuration-recovery';
 import {applyApprovedProVoiceCapacity} from '@/lib/approved-pro-voice-capacity';
 import {applyApprovedEightyPercentVoiceCapacity} from '@/lib/approved-eighty-percent-voice-capacity';
+import {applyApprovedFullBusinessVoiceCapacity} from '@/lib/approved-full-business-voice-capacity';
 import {refreshInventoryGeographyBatch} from '@/lib/inventory-geographies';
 import {readRecordingReview} from '@/lib/required-call-recording';
 import {processPurchaseAccessEmails} from '@/lib/purchase-access-email';
@@ -35,14 +37,15 @@ export async function GET(request:Request){
  const capacity=(async()=>{
   const change=await applyApprovedProVoiceCapacity(db).catch(error=>{capacityOk=false;console.error('Approved Pro voice capacity unavailable',error instanceof Error&&/^PRO_VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'verification_unavailable');return {status:'verification_unavailable'};});
   const eightyPercentChange=await applyApprovedEightyPercentVoiceCapacity(db).catch(error=>{capacityOk=false;console.error('Approved eighty-percent voice capacity unavailable',error instanceof Error&&/^EIGHTY_VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'verification_unavailable');return {status:'verification_unavailable'};});
+  const fullBusinessChange=await applyApprovedFullBusinessVoiceCapacity(db).catch(error=>{capacityOk=false;console.error('Approved full Business voice capacity unavailable',error instanceof Error&&/^FULL_VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'verification_unavailable');return {status:'verification_unavailable'};});
   // Fresh capacity reads still run when the one-time change is held.
   let recovery:{status:string;requeued:number}={status:'not_checked',requeued:0};
   const verified=await refreshVoiceCapacity(db,readVoiceCapacityProvider,readRecordingReview(process.env.RECORDED_OUTBOUND_REVIEW_JSON),async agent=>{
    recovery=await recoverVoiceConfiguration(db,agent).catch(()=>({status:'recovery_unavailable',requeued:0}));
    if(recovery.status==='recovery_unavailable'){capacityOk=false;console.error('Voice configuration recovery unavailable');}
    if(recovery.status==='review_required'){capacityOk=false;console.error('Voice configuration does not match its approved setup');}
-  });
-  return {...verified,change,eightyPercentChange,recovery};
+  },['verified','already_verified'].includes(fullBusinessChange.status)?40:32);
+  return {...verified,change,eightyPercentChange,fullBusinessChange,recovery};
  })().catch(error=>{capacityOk=false;console.error('Voice capacity verification unavailable',error instanceof Error&&/^VOICE_CAPACITY_[A-Z0-9_]+$/.test(error.message)?error.message:'read_unavailable');return {status:'verification_unavailable'};});
  const inventory=refreshInventoryGeographyBatch(db).catch(()=>({status:'metadata_unavailable'}));
  const researchExclusions=drainResearchExclusions(db).catch(()=>({status:'sync_unavailable'}));
@@ -67,6 +70,7 @@ export async function GET(request:Request){
   ownerPreflightCleanup:async()=>{const result=await ownerPreflightCleanup;return Response.json(result,{status:result.status==='cleanup_unavailable'?503:200});},
   ownerTicketContinuation:async()=>{const result=await ownerTicketContinuation;return Response.json(result,{status:result.status==='continuation_unavailable'?503:200});},
   senderVolume:async()=>{const result=await retryVolumeDeferredText();return Response.json(result,{status:['messaging_configuration_required','business_number_verification_required','inbound_invitation_not_ready'].includes(result.status)?503:200});},
+  buyerCallPackages:async()=>{const result=await processBuyerCallPackages({db,dispatch:dispatchTextMessage});return Response.json(result,{status:result.errors===0?200:503});},
   textReceipts:async()=>{const result=await recoverTextDeliveryReceipts(db);return Response.json(result,{status:result.errors===0&&['idle','checked'].includes(result.status)?200:503});},
   supportCustomerEmail:async()=>{const result=await processSupportCustomerNotifications({db});return Response.json(result,{status:result.failed===0?200:503});},
   supportCopies:async()=>{const closed=await db('rpc/icash_close_inactive_support','POST',{}).catch(()=>null);const recovered=await recoverAccessHelpReplies(db).catch(()=>null);const result=await processSupportOwnerNotifications({db,monitorAccess:true});return Response.json({...result,recovered,closed},{status:result.failed===0&&recovered!==null&&closed!==null?200:503});},

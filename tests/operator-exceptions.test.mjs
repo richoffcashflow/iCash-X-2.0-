@@ -61,6 +61,24 @@ snapshot=await collectOperatorExceptions(async path=>{if(path.startsWith('icash_
 snapshot=await collectOperatorExceptions(async()=>{throw Error('source offline');},{source:'billing',page:0},now);assert(snapshot.partial);assert.equal(snapshot.sections[0].status,'unavailable');
 snapshot=await collectOperatorExceptions(async()=>[{...fixtures.billing,created_at:'bad'}],{source:'billing',page:0},now);assert(snapshot.partial);
 snapshot=await collectOperatorExceptions(async()=>({data:[]}),{source:'billing',page:0},now);assert(snapshot.partial,'Invalid responses cannot become healthy empty arrays');
+// Executed assignment and payment-preference updates use this existing task kind.
+// One uncertain document delivery must not hide every title exception on the page.
+const documentUpdate={...fixtures.title_tasks,id:id(90),kind:'document_update',state:'needs_review',email_state:'needs_review',
+ payload:{type:'assignment',envelopeId:'PRIVATE ENVELOPE'},evidence:'PRIVATE TITLE EVIDENCE'};
+snapshot=await collectOperatorExceptions(async(path,method,body)=>{
+ assert.equal(method,'GET');assert.equal(body,undefined);
+ if(path.startsWith('icash_accounts?'))return [{id:id(2)}];
+ return [documentUpdate,fixtures.title_tasks];
+},{source:'title_tasks',page:0},now);
+assert.equal(snapshot.partial,false,'A real document_update kind cannot invalidate the title source');
+assert.equal(snapshot.sections[0].status,'checked');assert.equal(snapshot.sections[0].items.length,2);
+assert.match(snapshot.sections[0].items.find(item=>item.recordId===id(90)).nextStep,/original send receipt/);
+assert(!JSON.stringify(snapshot).includes('PRIVATE'));
+for(const state of ['scheduled','needs_review','cancelled'])assert(projectException('title_tasks',{...documentUpdate,state},now),'Original uncertain delivery remains visible across task state changes');
+assert.equal(projectException('title_tasks',{...documentUpdate,state:'done',email_state:'sent'},now),null,'Completed document handoff is not an exception');
+assert.throws(()=>projectException('title_tasks',{...documentUpdate,kind:'arbitrary_document_send'},now),'Unknown kinds remain invalid');
+snapshot=await collectOperatorExceptions(async path=>path.startsWith('icash_accounts?')?[]:[documentUpdate],{source:'title_tasks',page:0},now);
+assert(snapshot.partial);assert.equal(snapshot.sections[0].items.length,0,'Document updates require the same known account binding');
 const canceled=new AbortController();canceled.abort();let attempted=0;snapshot=await collectOperatorExceptions(async()=>{attempted++;return [];},{source:'billing',page:0},now,canceled.signal);assert.equal(attempted,0);assert(snapshot.partial);
 assert.equal(exceptionPageSize,20);
 console.log('Operator exception projection and read-only collection passed: truthful states, Chicago deadlines, live/test separation, evidence minimization, bounded paging/concurrency, account verification and partial failures.');

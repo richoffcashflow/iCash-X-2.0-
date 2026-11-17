@@ -34,7 +34,7 @@ try{
  const zeroOwner=noOwnerRow(c.preview.data[0]);
  assert.equal(await v('select icash_research_private.owner_preview_has_no_phones($1)',[zeroOwner]),false,'Reproduce explicit zero-owner rows remaining selectable before the repair');
  const emptyAudience=read('config/owner-preview-empty-audience.sql');
- assert.equal(emptyAudience,read('supabase/migrations/20261116210229_owner_preview_empty_audience.sql'));
+ assert.equal(emptyAudience,read('supabase/migrations/20261116210706_owner_preview_empty_audience.sql'));
  const helperMetadata=()=>v("select jsonb_build_object('owner',proowner,'acl',proacl,'securityDefiner',prosecdef,'volatility',provolatile,'config',proconfig) from pg_proc where oid='icash_research_private.owner_preview_has_no_phones(jsonb)'::regprocedure");
  const originalHelper=await v("select pg_get_functiondef('icash_research_private.owner_preview_has_no_phones(jsonb)'::regprocedure)"),originalMetadata=await helperMetadata();
  await assert.rejects(pg.exec('begin;\n'+emptyAudience+'\nselect missing_empty_audience_history_write();'),/does not exist/);await pg.exec('rollback');

@@ -43,13 +43,16 @@ against the unchanged recorder. A later synthetic migration-history failure
 rolls back the helper replacement; function privilege/security metadata stays exact.
 These fixtures make no provider requests or customer financial writes.
 
-Apply `20261116210229_owner_preview_empty_audience.sql` only while its exact
-predecessor helper hash matches. It changes one immutable private helper, leaving
-the public recorder and every selection or admission function intact. Reapplying
-or applying after source drift fails. The function keeps its owner, ACL, security
-invoker mode, immutability and empty search path through `CREATE OR REPLACE`.
-The migration runner owns the transaction and its migration-history write; this
-new migration contains no internal `BEGIN` or `COMMIT`.
+The prerequisite is already installed once as
+`20261116210706_owner_preview_empty_audience`; do not reinstall it. The source
+filename now matches the hosted migration ledger. Its SQL SHA256 is
+`b649a55d950d8a118f7550b676497f979b04819e4ce6cf0b2833eddbd467573d`.
+A fresh readback on November 17 at 18:27:13 UTC verified helper MD5
+`132f13bccc16978d76cecda532bebf2e`, postgres ownership, owner-only execution,
+immutable invoker mode and an empty search path. It changes one private helper;
+the public recorder and every selection or admission function remain intact.
+Reapplying or applying after source drift fails. The migration runner owns the
+transaction and history write; this source has no internal `BEGIN` or `COMMIT`.
 
 Use the existing serialized release process with exact-head/main checks and
 matching production web/worker source. No separate activation is needed: older
@@ -57,3 +60,8 @@ code still submits its original phone-less cases; new code additionally submits
 explicit empty-owner audiences. Observe future normal immutable receipts and
 ordinary account progress. Do not trigger provider demonstrations, clear holds,
 rewrite old receipts or claim all stalled accounts are recovered from this fix.
+
+The original implementation head `49575a4edecb9084c58daf44982f604e142c3c84`
+passed canonical Reliability checks run `43956688531`. This source reconciliation
+with current main requires fresh exact-head checks before ordinary serialized
+release; the database installation alone is not an application release.
