@@ -76,6 +76,13 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const location=supportLocationGuidance(context);if(location)return location;
  const creditBalance=supportCreditBalanceReply(context);if(creditBalance)return creditBalance;
  const callHold=supportCallHoldReply(context);if(callHold)return callHold;
+ // A broad answer to the immediately preceding onboarding clarification keeps
+ // that topic, but never crosses an operator finding or another user subject.
+ const recentSetup=context.messages.slice(context.messages.findLastIndex(m=>m.role==='operator')+1).filter(m=>m.role==='user');
+ const setupPrevious=recentSetup.at(-2)?.content??'';
+ const setupEpisode=recentSetup.slice(-4,-1);
+ const setupBound=setupEpisode.some(m=>/\b(?:getting|get|to) started\b/i.test(m.content))&&setupEpisode.every(m=>/\b(?:confus\w*|comfus\w*|customer service|getting started|get started)\b/i.test(m.content)&&!/\b(?:payment|refund|cancel|subscription|sign[ -]?in|agreement|seller|buyer|code|credits?)\b/i.test(m.content));
+ if(setupBound&&/^(?:everything|everythimg|all of it)[.!?\s]*$/i.test(question.trim())&&/\b(?:confus\w*|comfus\w*)\b/i.test(setupPrevious)&&/\b(?:start\w*|step|help|look in\s?to)\b/i.test(setupPrevious))return result('Let’s take it one step at a time. Open Course in your workspace for the walkthrough. If you are already on that screen, tell me the first step that does not match what you see. We can work through that step here; this does not confirm your earlier issue is fixed.','open');
  const accountReview=supportAccountReviewReply(context);if(accountReview)return accountReview;
  const currentStep=supportCurrentStepReply(context);if(currentStep)return {...currentStep,reply:removeRepeatedSupportQuestions(currentStep.reply,context.messages),status:currentStep.status==='resolved'&&(earlierSupportProblem(context)||context.handedOff)?'open':currentStep.status};
  const inbox=supportInboxGuidance(context);if(inbox)return result(inbox.reply,inbox.status,inbox.routineGuidance);

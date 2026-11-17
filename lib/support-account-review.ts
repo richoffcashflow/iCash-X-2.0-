@@ -95,7 +95,11 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
  // A direct request for current account issues needs the latest checks, not
  // an old diagnosis or a generic handoff. Never inherit this across topics.
  const currentIssues=/\bwhat(?:[’']?s| are| is)?\b[^?!\n]{0,110}\b(?:issues?|problems?)\b/i.test(q)&&/\b(?:current|currently|right now|still)\b/i.test(q)&&/\b(?:my (?:account|bot)|the software|my side)\b/i.test(q)&&!/\b(?:seller|buyer|contract|agreement|sign[ -]?in|course|vip|subscription|membership|refund|cancel|payment|charged)\b/i.test(q);
- const volumeRequest=/\b(?:increase\b[^.!?\n]{0,35}\b(?:outreach|leads?|calls?|texts?)|more (?:leads|calls|texts|outreach)|volume of (?:leads|outreach|calls|texts))\b/i.test(q)&&!/\b(?:audio|recording|sound|speaker|microphone|seller asked|buyer|contract|agreement|refund|cancel|payment|charged|do not want|don.t want)\b/i.test(q);
+ const moreContact=(text:string)=>/^when (?:will|can|does) (?:they|it|(?:my |the )?(?:bot|ai)) (?:call and text|text and call|call|text) more[?.!\s]*$/i.test(text.trim());
+ const sinceOperator=context.messages.slice(context.messages.findLastIndex(m=>m.role==='operator')+1);
+ const previousUser=sinceOperator.filter(m=>m.role==='user').at(-2)?.content??'';
+ const moreContactQuestion=moreContact(q)||/^outreach[.!?\s]*$/i.test(q.trim())&&moreContact(previousUser);
+ const volumeRequest=(moreContactQuestion||/\b(?:increase\b[^.!?\n]{0,35}\b(?:outreach|leads?|calls?|texts?)|more (?:leads|calls|texts|outreach)|volume of (?:leads|outreach|calls|texts))\b/i.test(q))&&!/\b(?:audio|recording|sound|speaker|microphone|seller asked|buyer|contract|agreement|refund|cancel|payment|charged|do not want|don.t want)\b/i.test(q);
  if(volumeRequest){
   const guide='Eligible research and outreach run automatically, subject to available work credits, account controls and contact checks. More credits do not guarantee more leads or seller responses and are not a verified repair for delayed work. ';
   if(context.kind!=='account')return answer(guide+'I can’t verify your current activity from this guest chat. Are you asking about a delay or how automatic work is selected?');
@@ -168,7 +172,8 @@ export function supportAccountReviewReply(context:SupportContext):SupportReply|n
   if(progress.status==='budget_reached')return answer(explanation+' The latest check instead says available credits do not cover the next task. A quoted label alone is not a reason to pay again.',true);
   return answer(explanation+' '+(progress.status==='paced'?'The latest recorded status also shows that waiting state.':'The latest recorded status is different from the quoted label. Refresh the workspace once to see its current status.')+' Saved calls, texts and research results are the evidence of completed work; the label does not resolve the earlier problem.');
  }
- if(/^(?:so[, ]+)?(?:(?:i(?:[’']m| am)|am i) (?:just )?waiting (?:on|for) (?:you|the bot|my bot) to find (?:a|any) deals?)[.!?\s]*$/i.test(q.trim())){
+ const leaveRunning=/^(?:so[,]? )?(?:just )?leave (?:it|the bot|my bot) running(?: basically)? and let it find (?:the )?properties (?:itself|automatically)[.!?\s]*$/i.test(q.trim())&&sinceOperator.filter(m=>m.role==='user').slice(-4,-1).some(m=>/\bbot\b/i.test(m.content)&&/\b(?:find|properties)\b/i.test(m.content))&&sinceOperator.filter(m=>m.role==='user').slice(-4,-1).every(m=>/\b(?:find|properties|property)\b/i.test(m.content)&&!/\b(?:refund|payment|seller|buyer|agreement|cancel|fixed|not waiting)\b/i.test(m.content));
+ if(leaveRunning||/^(?:so[, ]+)?(?:(?:i(?:[’']m| am)|am i) (?:just )?waiting (?:on|for) (?:you|the bot|my bot) to find (?:a|any) deals?)[.!?\s]*$/i.test(q.trim())){
   const intro='The bot is designed to research eligible properties automatically, but a Run setting is not proof that a task is working or a guarantee of a deal. There is no guaranteed deal-arrival time.';
   if(context.kind!=='account')return answer(intro+' I cannot verify your account’s current work from this guest conversation.');
   const paused=context.evidence?.some(e=>e.key==='work'&&e.code==='paused');
