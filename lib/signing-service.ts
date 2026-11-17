@@ -1,4 +1,5 @@
 import {signatureRequestMessage} from './signing-invitation.ts';
+import {isDeepStrictEqual} from 'node:util';
 import {originalContractProfile,originalContractFieldsForRole} from './original-contracts.ts';
 import {dispatchAttentionNotification} from './attention-notifications-service';
 import {dispatchCustomerUpdate} from './customer-updates-service';
@@ -10,6 +11,7 @@ import {SigningDeadlineReviewError,signingReadiness,signingDocumentReadiness,sig
 import {dealTermsSchema} from './deal-documents.ts';
 type Template={form_profile?:string;max_legal_description_chars:number;customer_consent_field:string|null;provider:string;customer_signature_field:string|null;automated_signing_reviewed:boolean;id:string;provider_template_id:string;placeholder_names:string[];field_map:Record<string,string>;test_mode:boolean;rate_id:string|null;reviewed_until:string};
 type Envelope={id:string;account_id:string;deal_id:string;terms:unknown;kind:SigningKind;terms_hash:string;template_id:string;provider_id:string|null;state:string;test_mode:boolean;created_at:string;recipients:{id:string;email?:string|null;phone?:string|null;name:string;placeholder_name:string}[]};
+export type SigningPdfSource={id:string;accountId:string;dealId:string;terms:unknown;kind:SigningKind;termsHash:string;templateId:string;providerId:string|null;state:string;testMode:boolean;createdAt:string;recipients:unknown};
 async function request(path:string,body?:unknown,testMode=false,method='POST'){
  const key=testMode?process.env.DOCUSEAL_TEST_API_KEY:process.env.DOCUSEAL_API_KEY;if(!key)throw new Error('Signing setup is not finished.');
  const r=await fetch(`https://api.docuseal.com/${path}`,{method:body?method:'GET',headers:{'X-Auth-Token':key,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,cache:'no-store',redirect:'error',signal:AbortSignal.timeout(25000)});
@@ -182,9 +184,15 @@ export async function reconcileSigningReceipt(accountId:string,id:string){
  const evidence={id:d.id,status:d.status,test_mode:d.test_mode,metadata:d.metadata,apply_signing_order:d.apply_signing_order,recipients:d.recipients.map(r=>({id:r.id,email:r.email,phone:r.phone,status:r.status,signing_order:r.signing_order}))};
  return {status:'signing_receipt_checked',state:await db<string>('rpc/icash_record_signing_receipt','POST',{p_account:accountId,p_envelope:e.id,p_provider:e.provider_id,p_hash:e.terms_hash,p_state:state,p_evidence:evidence,p_terminal:terminal})};
 }
-export async function completedSigningPdf(accountId:string,id:string,audit=false){
+export async function completedSigningPdf(accountId:string,id:string,audit=false,expectedSource?:SigningPdfSource){
  const [e]=await db<Envelope[]>(`icash_signing_envelopes?id=eq.${id}&account_id=eq.${accountId}&select=*`);
  if(!e?.provider_id||!['completed','test_completed','cancellation_pending','cancelled'].includes(e.state))throw new Error('Completed signatures required.');
+ if(expectedSource){
+  const actual={id:e.id,accountId:e.account_id,dealId:e.deal_id,kind:e.kind,state:e.state,testMode:e.test_mode,providerId:e.provider_id,
+   terms:e.terms,termsHash:e.terms_hash,templateId:e.template_id,recipients:e.recipients};
+  const {createdAt,...expected}=expectedSource;
+  if(!isDeepStrictEqual(actual,expected)||!Number.isFinite(Date.parse(createdAt))||Date.parse(createdAt)!==Date.parse(e.created_at??''))throw new Error('The executed agreement changed before PDF retrieval.');
+ }
  const raw=await (await request(`submissions/${numericId(e.provider_id)}`,undefined,e.test_mode)).json() as Submission;
  const d=normalize(raw,e);const state=verifiedSigningStatus(d,{providerId:e.provider_id,id:e.id,termsHash:e.terms_hash,testMode:e.test_mode,recipients:e.recipients});
  if(!['completed','test_completed'].includes(state))throw new Error('Completed signatures required.');
@@ -199,6 +207,7 @@ export async function completedSigningPdf(accountId:string,id:string,audit=false
  try{
   while(true){const chunk=await reader.read();if(chunk.done)break;size+=chunk.value.byteLength;if(size>limit)throw new Error('PDF too large.');chunks.push(chunk.value);}
  }finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
+ if(size===0)throw new Error('Signed PDF is empty.');
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return bytes.buffer;
 }
 export async function customerSigningLink(accountId:string,id:string,email:string){
