@@ -11,6 +11,7 @@ const suites = [
  'journey-message-preflight-database', 'journey-message-preflight-service',
  'text-claim-refusal',
  'title-negated-review', 'operator-exceptions',
+ 'buyer-call-package-database', 'buyer-call-package-service',
  'title-reply-source', 'title-original-source-database', 'title-original-source-route', 'closing-original-source',
  'signing-receipt-discovery-database', 'signing-receipt-discovery-service',
  'title-delivery-snapshot-database', 'title-delivery-snapshot-service',

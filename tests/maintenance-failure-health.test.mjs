@@ -40,6 +40,7 @@ try{
    refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),drainResearchExclusions:async()=>({status:'not_due'}),
    recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>({status:'not_due'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),
    retryVolumeDeferredText:async()=>{stages.push('senderVolume');return {status:'idle'};},
+   processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
    recoverTextDeliveryReceipts:async()=>({status:failure==='text_configuration'?'configuration_unavailable':'idle',errors:0}),
    processSupportCustomerNotifications:async()=>({failed:0}),recoverAccessHelpReplies:async()=>0,processSupportOwnerNotifications:async()=>({failed:0}),
    processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),

@@ -32,6 +32,7 @@ assert.equal((await adminRoute.GET(adminReq)).status,503);assert.equal(reportRea
 let lanesRan=false,monitorRan=false,pruneTried=false,receiptRuns=0,volumeRuns=0;
 const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaintenanceTest',{
  retryVolumeDeferredText:async()=>{volumeRuns++;return {status:'idle'};},
+ processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
  recoverTextDeliveryReceipts:async()=>{receiptRuns++;return {status:'idle',errors:0};},
  recoverOwnerActiveExports:async()=>({status:'export_receipt_held'}),
  recoverOwnerExportCapacity:async()=>({status:'capacity_review_held'}),
@@ -40,7 +41,7 @@ const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaint
  refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
- maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','ownerPreflightCleanup','ownerTicketContinuation','senderVolume','textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);for(const name of ['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','ownerPreflightCleanup'])assert.equal((await lanes[name]()).status,200,name);assert.equal((await lanes.senderVolume()).status,200);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},
+ maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','ownerPreflightCleanup','ownerTicketContinuation','senderVolume','buyerCallPackages','textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);for(const name of ['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','ownerPreflightCleanup','buyerCallPackages'])assert.equal((await lanes[name]()).status,200,name);assert.equal((await lanes.senderVolume()).status,200);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},
  refreshReliability:async(_db,ok)=>{assert.equal(ok,true);monitorRan=true;return true;},
  outbound:async()=>{},recording:async()=>{},ownerRecording:async()=>{},reception:async()=>{},
 });
