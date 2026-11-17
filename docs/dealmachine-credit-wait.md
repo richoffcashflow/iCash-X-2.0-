@@ -41,12 +41,12 @@ exhaustion is separate from a failed maintenance process or customer Pause.
 
 ## Release and verification
 
-Install the source-pinned database prerequisite disabled, verify its complete
-function/privilege and existing-policy receipts, and release matching web and
-worker code through the usual exact-head/main checks. Activate the new policy
+The source-pinned database prerequisite is installed and remains disabled, as
+recorded below. Release matching web and worker code through the usual
+exact-head/main checks. Activate the new policy
 with `icash_research_private.activate_dealmachine_credit_wait(exact_main_sha)`
 only after the matching hosts are verified. The prerequisite is
-`supabase/migrations/20261117190000_provider_credit_wait.sql`; its source is
+`supabase/migrations/20261117191836_provider_credit_wait.sql`; its source is
 `config/provider-credit-wait.sql`. No historical receipt is rewritten
 and no paid provider demonstration is required.
 
@@ -78,3 +78,26 @@ describes the live usage balance, request-credit distinction and per-response
 documents HTTP 402 and `export_limit_exceeded`. The response and source checks
 remain authoritative for the specific request; general documentation does not
 authorize a zero-cost settlement.
+
+## Verified installation — November 17, 2026
+
+The corrected source head `9f9b0ee0c4e223087db7496fa793b624ed94d87c` passed
+all seven canonical jobs in run `44154406866`. The prerequisite was installed
+once, disabled, as `20261117191836_provider_credit_wait`. Its migration and
+`config/provider-credit-wait.sql` are byte-for-byte identical. The single hosted
+ledger entry records SQL MD5 `8cd3ceb416bc60bffe7bd0664f89d429`; SQL SHA-256 is
+`e59191c64b6f1b0e52ae47f217a26490e0c4496ac2fabe71b12ef803204c6608`.
+
+The read-only pre-install verification at 19:18:31 UTC passed all twelve checks.
+The post-install verification at 19:18:41 UTC passed all twenty checks, including
+the twenty-one function definitions and security metadata, the exact twenty-entry
+manifest, and the disabled policy. One source-bound original seeded the credit
+wait; the free-check count remained zero, the original hold and cost were
+preserved, and no duplicate installation was found.
+
+Do not replay this prerequisite. Installation does not authorize activation or
+prove restored customer work. PR817 carries this change together with PR816's
+contact-source gate after the separate core PR803 release. Require fresh checks
+for the combined follow-on, then the matching exact-main web and worker releases
+before the single policy activation described above. Keep the original unknown
+operation and all final admission checks intact.
