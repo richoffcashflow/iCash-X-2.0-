@@ -9,7 +9,7 @@ const suites = [
  'learning-estimate-bookkeeping',
  'missing-receipt-settlement-yield',
  'journey-message-preflight-database', 'journey-message-preflight-service',
- 'text-claim-refusal',
+ 'text-claim-refusal', 'seller-contact-purpose', 'seller-purpose-agreement-authority', 'seller-purpose-authority',
  'title-negated-review', 'operator-exceptions',
  'buyer-call-package-database', 'buyer-call-package-service',
  'title-reply-source', 'title-original-source-database', 'title-original-source-route', 'closing-original-source',

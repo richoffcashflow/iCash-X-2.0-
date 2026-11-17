@@ -2,6 +2,7 @@ import {object} from './required-call-recording.ts';
 import {agreementTextRequested,spokenMoneyAmounts} from './call-offer-evidence.ts';
 import {offerPricePresentation} from './automatic-call-offer.ts';
 import type {DealTerms} from './deal-documents.ts';
+import {sellerContactPurposeQuestion} from './seller-contact-purpose.ts';
 
 const words=(n:number)=>n===0?'zero':offerPricePresentation(n*100).spokenPrice.replace(/ dollars?$/,'');
 const pattern=(text:string)=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replaceAll('-','[ -]');
@@ -44,6 +45,9 @@ export function sellerAgreementEvidence(value:unknown,terms:DealTerms,now=Date.n
    continue;
   }
   const answer=text.replace(/^(?:(?:um|uh|hmm|well)\b[\s,.-]*)+/i,'');
+  // Break the unanswered readback association without manufacturing approval
+  // from a courtesy "yes" or erasing an earlier real confirmation.
+  if(sellerContactPurposeQuestion(answer)){pending=false;continue;}
   // "No other owners" answers an ownership question, not the agreement. Only
   // this complete, unambiguous answer is exempt; an added withdrawal still stops.
   const noOtherOwners=/\b(?:other|else|anyone|anybody)\b/i.test(previousQuestion)&&/\b(?:owners?|decision makers?|agree)\b/i.test(previousQuestion)&&/^no[,. ]+(?:(?:there are )?no other owners?(?: or decision makers?)?|(?:just|only) me|nobody else|no one else)[.!]?$/i.test(answer);
