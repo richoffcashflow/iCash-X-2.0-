@@ -1,0 +1,15 @@
+[
+  {
+    "signature": "icash_seed_contract_deadlines(uuid)",
+    "source_md5": "8b8da09a8c6f8e952c8804b2a6cae104",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_seed_contract_deadlines(p_envelope uuid)\n RETURNS void\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare e public.icash_signing_envelopes;due date;\nbegin\n select * into e from public.icash_signing_envelopes where id=p_envelope and kind='purchase' and state='completed' and not test_mode;\n if not found or not exists(select 1 from public.icash_deal_files where id=e.deal_id and account_id=e.account_id and stage in ('under_contract','buyer_selected','title_open','closing')) then return;end if;\n begin due:=nullif(e.terms->>'closingDate','')::date;exception when others then due:=null;end;\n insert into public.icash_title_tasks(account_id,deal_id,source_key,kind,label,due_date,state,evidence,payload)\n values(e.account_id,e.deal_id,'contract-closing:'||e.id,'deadline','Confirm the signed contract closing deadline',due,'needs_review','Check the executed purchase agreement and any amendments. A blank date is not a confirmed 30-day deadline.',jsonb_build_object('envelopeId',e.id,'deadline','closing')) on conflict(source_key) do nothing;\n insert into public.icash_title_tasks(account_id,deal_id,source_key,kind,label,state,evidence,payload)\n values(e.account_id,e.deal_id,'contract-inspection:'||e.id,'deadline','Confirm inspection deadline or mark not applicable','needs_review','Check the executed agreement for the effective date, inspection period and how days are counted. Draft inspection-day settings may not be part of the signed form. Dismiss if the agreement has no inspection deadline.',jsonb_build_object('envelopeId',e.id,'deadline','inspection')) on conflict(source_key) do nothing;\nend $function$\n",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  }
+]

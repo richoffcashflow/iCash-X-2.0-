@@ -16,6 +16,7 @@ const suites = [
  'signing-receipt-discovery-database', 'signing-receipt-discovery-service',
  'title-delivery-snapshot-database', 'title-delivery-snapshot-service',
  'title-copy-source-database', 'title-copy-delivery', 'title-copy-service', 'title-copy-receipt-service', 'title-copy-closing-composition', 'title-copy-document-source',
+ 'title-update-original-source', 'title-task-delivery-database', 'title-task-cutover',
  'support-waiting-deal',
  'seller-intake-start', 'seller-voice-turn-policy', 'stage-seller-voice-turns', 'recording-review-transition', 'seller-call-offer-delivery-replay', 'seller-timing-answer', 'seller-ownership-answer',
  'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
