@@ -12,7 +12,7 @@ const suites = [
  'text-claim-refusal', 'seller-contact-purpose', 'seller-purpose-agreement-authority', 'seller-purpose-authority',
  'title-negated-review', 'operator-exceptions',
  'seller-memory-receipt-time',
- 'seller-memory-authority', 'seller-text-price-authority', 'seller-raw-memory-consumers',
+ 'seller-memory-authority', 'seller-text-price-authority', 'seller-text-payoff-revision', 'seller-raw-memory-consumers',
  'seller-call-source-completeness', 'seller-call-source-maintenance', 'seller-atomic-memory-database',
  'seller-joint-memory', 'seller-recovery-binding', 'seller-readback-price', 'agreement-acceptance-interruption',
  'buyer-call-package-database', 'buyer-call-package-service',

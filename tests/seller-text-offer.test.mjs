@@ -100,6 +100,51 @@ cross=await run(returned,'Yes, send the agreement');assert.equal(cross.result.st
 assert.equal(await rpc('icash_claim_seller_text_agreement',[returned.a,cross.j.id]),null);
 
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
+// A corrected seller-reported debt changes the exact shortfall question. A
+// refusal of the old difference must not trap the new proposal in a review
+// loop; agreement authority still needs fresh coverage and price acceptance.
+const correctedDebt=await seed();
+r=await run(correctedDebt,'My mortgage payoff is $100,000.');assert.equal(r.plan.action,'payoff');assert.match(r.plan.body,/other loans/);
+r=await run(correctedDebt,'No.');assert.match(r.plan.body,/difference is \$10,000/);
+r=await run(correctedDebt,'No.');assert.match(r.plan.body,/person to review/);
+r=await run(correctedDebt,'My mortgage payoff is $100,000.');assert.match(r.plan.body,/person to review/,'an unchanged balance does not discard the seller refusal');
+assert.equal(r.plan.state.payoffReport.coverageDeclined,true);assert.equal(r.plan.state.payoffReport.coveredShortfallCents,0);
+r=await run(correctedDebt,'My mortgage payoff is $95,000.');
+assert.equal(r.plan.action,'payoff');assert.match(r.plan.body,/difference is \$5,000/,'a corrected debt must replace the declined old shortfall question');
+assert.equal(r.result.status,'message_delivered');
+let correctedState=(await one('select state from icash_call_offer_private.offers where deal_id=$1',[correctedDebt.d])).state;
+assert.equal(correctedState.payoffReport.mortgageCents,9500000);assert.equal(correctedState.payoffReport.otherDebtCents,0);
+assert.equal(correctedState.payoffReport.coverageDeclined,undefined);assert.equal(correctedState.payoffReport.coveredShortfallCents,undefined);
+assert.equal(correctedState.contractBlocked,true);assert.equal(correctedState.acceptedPriceCents,null);
+r=await run(correctedDebt,'Yes.');assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.payoffReport.coveredShortfallCents,500000);
+r=await run(correctedDebt,'Yes.');assert.equal(r.plan.action,'legal_name');assert.equal(r.plan.state.acceptedPriceCents,9000000);
+r=await run(correctedDebt,'Jane Seller.');assert.equal(r.plan.action,'owners');
+r=await run(correctedDebt,'Yes, I am the only owner and decision maker.');assert.equal(r.plan.action,'closing_date');
+r=await run(correctedDebt,close);assert.equal(r.plan.action,'inspection');
+r=await run(correctedDebt,'Yes.');assert.equal(r.plan.action,'confirm_terms');
+const correctedSends=sends;
+r=await run(correctedDebt,'Yes, please text the agreement.');assert.equal(r.result.status,'seller_agreement_sent');assert.equal(sends,correctedSends+1);
+assert.equal((await one('select terms from icash_deal_files where id=$1',[correctedDebt.d])).terms.priceCents,9000000);
+assert.equal(await rpc('icash_claim_seller_text_agreement',[correctedDebt.a,r.j.id]),null,'changed payoff still uses the original one-use agreement claim');
+const correctedMessages=(await q('select body from icash_text_messages where account_id=$1',[correctedDebt.a])).rows.map(m=>m.body);
+for(const original of ['My mortgage payoff is $100,000.','My mortgage payoff is $95,000.','No.'])assert(correctedMessages.includes(original),'original debt and refusal receipts remain intact');
+// The converse is also unsafe: earlier willingness to cover a larger gap is
+// not a fresh answer about the corrected debt. Keep the accepted lower price.
+const coveredDebt=await seed();
+r=await run(coveredDebt,'I am asking $60,000.');assert.equal(r.plan.state.quotedPriceCents,6000000);
+r=await run(coveredDebt,'Yes.');assert.equal(r.plan.state.acceptedPriceCents,6000000);
+r=await run(coveredDebt,'My mortgage payoff is $80,000.');assert.equal(r.plan.action,'payoff');
+r=await run(coveredDebt,'No.');assert.match(r.plan.body,/difference is \$20,000/);
+r=await run(coveredDebt,'Yes.');assert.equal(r.plan.action,'cash_offer');assert.equal(r.plan.state.payoffReport.coveredShortfallCents,2000000);
+const beforeDuplicate=dispatches;
+assert.equal((await processSellerTextOffer(r.context,dependencies)).status,'text_ai_context_changed');
+assert.equal(dispatches,beforeDuplicate,'same source cannot create another provider dispatch');
+assert.equal((await one('select state from icash_call_offer_private.offers where deal_id=$1',[coveredDebt.d])).state.payoffReport.coveredShortfallCents,2000000,'same-source replay keeps valid source-backed coverage');
+r=await run(coveredDebt,'My mortgage payoff is $75,000.');assert.match(r.plan.body,/difference is \$15,000/);
+const coveredState=(await one('select state from icash_call_offer_private.offers where deal_id=$1',[coveredDebt.d])).state;
+assert.equal(coveredState.payoffReport.coveredShortfallCents,undefined);assert.equal(coveredState.payoffReport.coverageDeclined,undefined);
+assert.equal(coveredState.contractBlocked,true);assert.equal(coveredState.acceptedPriceCents,6000000);assert.equal(coveredState.quotedPriceCents,6000000);
+assert.equal(coveredState.receiptPriceAuthority.priceCents,6000000);assert.equal((await one('select count(*)::int n from icash_seller_agreement_private.confirmations where account_id=$1',[coveredDebt.a])).n,0);
 // Continue a call's pending repair-budget question by SMS. A plainly stated
 // zero is a seller estimate; it does not erase the larger research allowance.
 const repairAnswer=await seed();

@@ -193,7 +193,13 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  if(state.processedSource!==c.sourceId){
   const listing=sellerListingEvidence(sourceTranscript,input);if(listing!==null)state.listedWithAgent=listing;
   const debt=sellerPayoffEvidence(sourceTranscript,input);
-  if(debt){state.payoffReport={...state.payoffReport,...debt};state.payoffPending=false;}
+  if(debt){
+   const previous=state.payoffReport??{};
+   const debtChanged=debt.mortgageCents!==undefined&&debt.mortgageCents!==previous.mortgageCents||debt.otherDebtCents!==undefined&&debt.otherDebtCents!==previous.otherDebtCents;
+   // Coverage answers belong to the old debt amounts. As on calls, a changed
+   // balance needs its own exact shortfall question and fresh answer.
+   state.payoffReport={...previous,...(debtChanged?{coveredShortfallCents:undefined,coverageDeclined:undefined}:{}),...debt};state.payoffPending=false;
+  }
   if(sellerPrice!==null){state.proposedPriceCents=sellerPrice;if(sellerPrice!==state.quotedPriceCents)state.acceptedPriceCents=null;}
   if(sellerAskingPriceQuestion(source.body))state.acceptedPriceCents=null;
   if(/\b(?:changed my mind|do not accept|don['’]?t accept|(?:i|we) (?:reject|decline|refuse)|withdraw|cancel|hold off|wait|only if|but I need)\b/i.test(source.body))state.acceptedPriceCents=null;
