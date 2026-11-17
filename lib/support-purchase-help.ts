@@ -1,7 +1,7 @@
 import {supportLegacyProofEmail} from './support-legacy-migration.ts';
 import {supportRenewalCancellationRequested,type SupportEvidence} from './support-policy.ts';
 type Turn={role:string;content:string};
-type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[]};
+type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[];handedOff?:boolean};
 
 /** A reply to the latest operator's evidence request is a submission claim,
  * not a receipt, authenticated identity or a completed account change. */
@@ -124,7 +124,7 @@ export function supportCheckoutOwnershipReply(context:PurchaseContext){
  if(missingReceipt)return {reply:'The purchase still needs an ownership check before its checkout email can be corrected. Since you did not receive a receipt, the purchase date and amount can come from your bank or card statement. Keep any proof already supplied in this review; don’t send it again, pay again or share card numbers. This chat has not changed the email or restored access.',status:'open' as const,managementReview:true,ai:false};
  // Reuse direct purchase guidance, including its no-repeat proof handling.
  const direct=supportPurchaseHelp(context.messages);
- if(direct)return {...direct,ai:false};
+ if(direct)return {...direct,...(context.handedOff?{status:'open' as const,managementReview:true}:{}),ai:false};
  const submission=supportProofSubmissionClaim(q);
  if(submission==='unconfirmed_recipient')return clarifyReceiptDestination();
  const sent=submission==='support';
@@ -202,7 +202,13 @@ export function supportVipPurchaseReply(context:PurchaseContext){
 
 /** A checkout-email correction needs ownership review, not another code request. */
 export function supportPurchaseEmailCorrection(text:string){
- return /\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|correct|change|update)\b.{0,35}\b(?:checkout |purchase |sign[ -]?in )?email\b|\bemail\b.{0,35}\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|corrected)\b/i.test(text)&&!/\b(?:seller|buyer|bot|contact|settings)\b/i.test(text);
+ if(/\b(?:seller|buyer|bot|contact|settings)\b/i.test(text))return false;
+ const explicit=/\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|correct|change|update)\b.{0,35}\b(?:checkout |purchase |sign[ -]?in )?email\b|\bemail\b.{0,35}\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|corrected)\b/i.test(text);
+ // Missing mail/code delivery alone is not a missing character in an address.
+ const omitted=/\b(?:[a-z]|(?:a|one|the) (?:letter|character)) (?:is )?(?:(?:probably|possibly) )?(?:missing|omitted|left out)\b.{0,100}\bemail\b|\b(?:left|missed|omitted|forgot) (?:a|one|the) (?:letter|character)(?: out)?\b.{0,50}\bemail\b|\bemail\b.{0,30}\b(?:missing|omitted) (?:a|one|the) (?:letter|character)\b/i.test(text);
+ const denied=/\bno (?:letter|character)\b.{0,20}\bmissing\b|\b(?:letter|character) (?:is|was) not missing\b|\b(?:isn[’']t|wasn[’']t|not) missing\b|\b(?:never|not) (?:left|missed|omitted|forgot)\b|\bemail(?: address)? (?:is|was) (?:correct|right|complete)\b/i.test(text);
+ const messageCopy=/\bemail (?:message|body|subject)\b|\b(?:in|from) (?:its |the (?:email[’']s? )?)(?:subject|body)\b/i.test(text);
+ return explicit||omitted&&!denied&&!messageCopy;
 }
 
 /** Purchase and checkout problems are not proof that a sign-in code arrived. */
@@ -221,8 +227,11 @@ export function supportPurchaseHelp(messages:Turn[]){
   const submitted=supportProofSubmissionClaim(q);
   if(submitted==='unconfirmed_recipient')return clarifyReceiptDestination();
   if(submitted==='support')return {reply:'You’ve said you already sent the purchase proof to support. You do not need to send the same proof again. What subject and date did you use for that email? That can help locate it; receipt and ownership verification are still unconfirmed. This chat has not changed the checkout email or restored access. Don’t pay again or share sign-in codes.',status:'open' as const,managementReview:true};
-  const requested=messages.some(m=>m.role!=='user'&&/\b(?:receipt|purchase)\b.{0,100}\b(?:email|correction|correct|verify|match)\b/i.test(m.content));
-  return {reply:requested?'The purchase needs to be matched and ownership verified before its checkout email can be corrected. Follow the earlier proof-submission instructions only for details you have not already supplied. I haven’t confirmed an email change or restored access; repeating code requests won’t correct a wrong email.':`A wrong checkout email needs a purchase-ownership check before it can be corrected. Email your merchant receipt to ${supportLegacyProofEmail} with the purchase date, amount, order reference if available, and the email you intended to use. This chat has not changed the email; don’t pay again or share sign-in codes.`,status:requested?'open' as const:'waiting_on_customer' as const};
+  const requested=messages.some(m=>(m.role==='assistant'||m.role==='operator')&&/\b(?:email|send|forward)\s+(?:(?:your|the|an?|original|merchant|purchase|payment|a copy of|us)\s+){0,5}(?:receipt|proof)\b/i.test(m.content));
+  // Keep the existing unresolved review status, independently of whether the
+  // earlier answer actually gave the customer a proof-submission step.
+  const earlierPurchaseContext=messages.some(m=>m.role!=='user'&&/\b(?:receipt|purchase)\b.{0,100}\b(?:email|correction|correct|verify|match)\b/i.test(m.content));
+  return {reply:requested?'The purchase needs to be matched and ownership verified before its checkout email can be corrected. Follow the earlier proof-submission instructions only for details you have not already supplied. I haven’t confirmed an email change or restored access; repeating code requests won’t correct a wrong email.':`A wrong checkout email needs a purchase-ownership check before it can be corrected. Email your merchant receipt to ${supportLegacyProofEmail} with the purchase date, amount, order reference if available, and the email you intended to use. This chat has not changed the email; don’t pay again or share sign-in codes.`,status:earlierPurchaseContext?'open' as const:'waiting_on_customer' as const};
  }
  return null;
 }
