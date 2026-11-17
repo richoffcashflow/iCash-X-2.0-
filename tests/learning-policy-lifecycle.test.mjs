@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
+import {before as deployed,migration as isolationMigration} from './helpers/policy-review-lock-fixture.mjs';
+for(const isolated of [false,true]){
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8'),db=new PGlite(),q=(s,a=[])=>db.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',sha='a'.repeat(40),nextSha='b'.repeat(40);
 const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,bucket=(text,mod)=>parseInt(createHash('md5').update(text).digest('hex').slice(0,8),16)%mod;
@@ -25,6 +27,12 @@ try{
  create table fixture_sms_plans(account_id uuid,thread_id uuid,plan jsonb,primary key(account_id,thread_id));
  create function public.icash_seller_sms_learning_plan(a uuid,t uuid) returns jsonb language sql stable as $$select plan from public.fixture_sms_plans where account_id=a and thread_id=t$$;`);
  await db.exec(read('config/learning-policy-lifecycle.sql'));
+ if(isolated){
+  await db.exec('create function public.icash_seller_cash_question_plan(a uuid,t uuid) returns jsonb language sql stable as $$select plan from public.fixture_sms_plans where account_id=a and thread_id=t$$;');
+  await db.exec(deployed.functions.map(f=>f.definition+';').join('\n'));
+  await db.exec('begin;'+isolationMigration+'commit;');
+ }
+ const cursor=isolated?'icash_learning_private.policy_cohort_reviews':'icash_learning_private.policy_cohorts';
  assert.equal(read('config/learning-policy-lifecycle.sql'),read('supabase/migrations/20261109184429_learning_policy_lifecycle.sql'));
  const activate=(release=sha)=>v('select icash_activate_learning_policy($1,$2,true)',[owner,release]);
  const release=async(releaseSha,run)=>q("insert into icash_learning_private.policy_releases(release_sha,ci_run_id,ci_run_attempt,repository,workflow,branch,event,conclusion,completed_at) values($1,$2,1,'richoffcashflow/iCash-X-2.0-','.github/workflows/reliability.yml','main','push','success',now()-interval '4 days')",[releaseSha,run]);
@@ -72,7 +80,7 @@ try{
  assert.equal(await v('select count(*)::int from icash_learning_private.policy_applications'),3);
  assert.equal((await review()).reviewed,3);assert.equal((await review()).reviewed,0,'Hourly cadence per cohort');
  for(let i=0;i<2;i++){
-  await q("update icash_learning_private.policy_cohorts set last_reviewed_at=now()-interval '61 minutes'");
+  await q(`update ${cursor} set last_reviewed_at=now()-interval '61 minutes'`);
   await q("update icash_learning_private.improvement_proposals set first_observed_at=now()-interval '3 hours',last_observed_at=now()-interval '61 minutes' where category='learning_policy'");await review();
  }
  let ps=(await q("select id,cohort_key,policy_domain,policy_market,status from icash_learning_private.improvement_proposals where category='learning_policy' order by id")).rows;
@@ -101,7 +109,7 @@ try{
  // A new verified release gets a successor; immutable old evidence remains valid history.
  const cutover=await decision('buyer_search','order-v1','10003');await assign(cutover);const oldProposal=await candidate(cutover);await advance(oldProposal);assert.equal(await status(oldProposal),'offline_validated');
  await release(nextSha,124);await q('update icash_learning_policy_private.settings set enabled=false,evidence_after=now()');await activate(nextSha);
- const newDecision=await decision('buyer_search','order-v1','10003');await assign(newDecision);await q("update icash_learning_private.policy_cohorts set last_reviewed_at=now()-interval '61 minutes'");await review();
+ const newDecision=await decision('buyer_search','order-v1','10003');await assign(newDecision);await q(`update ${cursor} set last_reviewed_at=now()-interval '61 minutes'`);await review();
  const versions=(await q("select id,version,release_sha,status from icash_learning_private.improvement_proposals where policy_market='10003' order by version")).rows;
  assert.equal(versions.length,2);assert.equal(versions[0].release_sha,sha);assert.equal(versions[0].status,'offline_validated');assert.equal(versions[1].release_sha,nextSha);assert(versions[1].version>versions[0].version);
  await q("update icash_learning_private.improvement_proposals set status='candidate' where id=$1",[versions[1].id]);await advance(versions[1].id);await advance(versions[1].id);assert.equal(await status(versions[1].id),'limited_experiment','New release has its own CI lineage');
@@ -116,3 +124,5 @@ try{
  await assert.rejects(v('select icash_activate_learning_policy($1,$2,true)',[uuid(1),sha]),/Owner required/);
  console.log('Policy lifecycle: deterministic application proof, cohort isolation, canonical release, 72-hour adoption, honest outcome labels, challenger/control handling, newer holds and release successors passed.');
 }finally{await db.close();}
+
+}
