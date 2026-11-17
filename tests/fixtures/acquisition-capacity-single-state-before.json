@@ -1,0 +1,50 @@
+[
+  {
+    "signature": "icash_research_private.request_reserve_state(timestamp with time zone)",
+    "md5": "383bbfa915185d9aa33662c84647c450",
+    "definition": "CREATE OR REPLACE FUNCTION icash_research_private.request_reserve_state(p_at timestamp with time zone DEFAULT now())\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare b public.icash_dealmachine_request_budget;p icash_research_private.request_reserve_policy;\n used integer;protected_used integer;remaining integer;pace icash_research_private.request_pacing_policy;maintenance_used integer:=0;maintenance_remaining integer:=0;\n raw_remaining integer;next_pace timestamptz;ordinary_budget integer;ordinary_used integer;ordinary_remaining integer;released integer;window_start timestamptz;active boolean:=false;\nbegin\n select * into b from public.icash_dealmachine_request_budget where id=1;\n select * into p from icash_research_private.request_reserve_policy where id=1;\n if b.id is null or p.id is null or p_at is null or b.day_start is null or b.day_start>p_at\n  or b.day_limit is null or b.day_limit<=0 or b.day_used is null or b.day_used<0 then return null;end if;\n used:=case when b.day_start<=p_at-interval '24 hours' then 0 else b.day_used end;\n select count(*)::integer into protected_used from icash_research_private.request_reserve_admissions\n  where day_start=b.day_start and b.day_start>p_at-interval '24 hours';\n remaining:=case when p.enabled then greatest(0,least(p.reserve_requests-protected_used,b.day_limit-used)) else 0 end;\n select * into pace from icash_research_private.request_pacing_policy where id=1;\n -- An expired bucket is only projected here; the original admitted request\n -- advances the real window, under the existing global quota lock.\n window_start:=case when b.day_start<=p_at-interval '24 hours' then p_at else b.day_start end;\n active:=coalesce(pace.enabled and pace.activate_after is not null and window_start>=pace.activate_after,false);\n ordinary_remaining:=greatest(0,b.day_limit-used-remaining);\n raw_remaining:=ordinary_remaining;\n if active then\n  select count(*)::integer into maintenance_used from icash_research_private.maintenance_request_admissions\n   where protected and day_start=b.day_start and b.day_start>p_at-interval '24 hours';\n  maintenance_remaining:=greatest(0,least(pace.maintenance_requests-maintenance_used,ordinary_remaining));\n  ordinary_budget:=greatest(0,b.day_limit-case when p.enabled then p.reserve_requests else 0 end-pace.maintenance_requests);\n  ordinary_used:=greatest(0,used-protected_used-maintenance_used);\n  released:=least(ordinary_budget,floor(ordinary_budget * least(86400::numeric,\n   greatest(0::numeric,extract(epoch from p_at-window_start))+pace.burst_seconds)/86400)::integer);\n  raw_remaining:=greatest(0,ordinary_remaining-maintenance_remaining);\n  ordinary_remaining:=least(raw_remaining,greatest(0,released-ordinary_used));\n  if ordinary_remaining<2 and raw_remaining>=2 and ordinary_budget>0 then\n   next_pace:=greatest(p_at,window_start+make_interval(secs=>ceil((ordinary_used+2)::numeric*86400/ordinary_budget)::double precision-pace.burst_seconds));\n  end if;\n end if;\n return jsonb_build_object('enabled',p.enabled,'reserveRequests',p.reserve_requests,'accountRequests',p.account_requests,\n  'reserveUsed',protected_used,'reserveRemaining',remaining,'ordinaryRemaining',ordinary_remaining,'pacingActive',active,'ordinaryUnpacedRemaining',raw_remaining,'nextPacedAvailableAt',next_pace,'maintenanceUsed',maintenance_used,\n  'maintenanceRemaining',maintenance_remaining,'nextResetAt',window_start+interval '24 hours');\nend $function$\n",
+    "provolatile": "s",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres}",
+    "owner": "postgres"
+  },
+  {
+    "signature": "icash_acquisition_capacity_available(uuid)",
+    "md5": "ef2ac533056a6e0be5bc450e191eaed2",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_acquisition_capacity_available(p_account uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare s jsonb;protected integer;\nbegin\n if not public.icash_dealmachine_capacity_available(2,p_account) then return false;end if;\n if not exists(select 1 from icash_research_private.acquisition_headroom_policy where id=1 and enabled) then return true;end if;\n s:=icash_research_private.request_reserve_state();\n if s is null then return false;end if;\n if (s->>'ordinaryRemaining')::integer=2 and s->>'pacingActive'='true'\n  and (s->>'ordinaryUnpacedRemaining')::integer>=3 then\n  protected:=least((s->>'reserveRemaining')::integer,icash_research_private.starter_request_allowance(p_account));\n  return protected>0;\n end if;\n return true;\nend $function$\n",
+    "provolatile": "s",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+    "owner": "postgres"
+  },
+  {
+    "signature": "icash_research_private.starter_request_allowance(uuid,timestamp with time zone)",
+    "md5": "5d27cf61ed1c2af8e9d30ab31b4c9a9e",
+    "definition": "CREATE OR REPLACE FUNCTION icash_research_private.starter_request_allowance(p_account uuid, p_at timestamp with time zone DEFAULT now())\n RETURNS integer\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare p icash_research_private.request_reserve_policy;first_funded timestamptz;used integer;\nbegin\n select * into p from icash_research_private.request_reserve_policy where id=1 and enabled;\n if not found or p_account is null or p_at is null then return 0;end if;\n -- Use the first verified live credit, never account creation or the latest\n -- top-up. Another payment cannot restart this 24-hour starter allowance.\n select credited_at into first_funded from public.icash_funding_orders\n  where account_id=p_account and mode='live' and state='paid' and credited_at is not null\n  order by credited_at limit 1;\n if first_funded is null or first_funded>p_at or first_funded<=p_at-interval '24 hours' then return 0;end if;\n if not exists(select 1 from public.icash_accounts a join public.icash_wallets w on w.account_id=a.id\n  where a.id=p_account and not a.bot_paused and a.workspace_ack_version is not null\n   and w.balance_cents>w.reserved_cents and public.icash_membership_work_allowed(a.id))\n  or exists(select 1 from public.icash_billing_reviews where account_id=p_account and resolved_at is null)\n  or exists(select 1 from public.icash_support_cancel_requests c where c.account_id=p_account and c.confirmed_at is not null\n   and c.confirmed_at>coalesce((select e.created_at from public.icash_control_events e\n    where e.account_id=p_account and e.property_id is null order by e.created_at desc,e.id desc limit 1),'-infinity'::timestamptz)) then return 0;end if;\n -- Count the complete first-funding window, including a rolling-quota reset.\n select count(*)::integer into used from icash_research_private.request_reserve_admissions\n  where account_id=p_account and created_at>=first_funded;\n return greatest(0,p.account_requests-used);\nend $function$\n",
+    "provolatile": "s",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres}",
+    "owner": "postgres"
+  },
+  {
+    "signature": "icash_dealmachine_capacity_available(integer,uuid)",
+    "md5": "14c36dd47e50e3e1cfd0a2e5f58696ef",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_dealmachine_capacity_available(p_requests integer, p_account uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare b public.icash_dealmachine_request_budget;s jsonb;ordinary integer;protected integer;\nbegin\n if p_requests is null or p_requests not between 1 and 60 or not public.icash_dealmachine_provider_available() then return false;end if;\n select * into b from public.icash_dealmachine_request_budget where id=1;\n if b.id is null or b.minute_start is null or b.minute_start>now() or b.minute_used is null or b.minute_used<0\n  or b.minute_limit is null or b.minute_limit<=0\n  or (case when b.minute_start<=now()-interval '1 minute' then 0 else b.minute_used end)+p_requests>b.minute_limit\n  or (case when b.day_start<=now()-interval '24 hours' then 0 else b.day_used end)+p_requests>b.day_limit then return false;end if;\n s:=icash_research_private.request_reserve_state();\n if s is null then return false;end if;\n ordinary:=(s->>'ordinaryRemaining')::integer;\n if ordinary>=p_requests then return true;end if;\n protected:=least((s->>'reserveRemaining')::integer,icash_research_private.starter_request_allowance(p_account));\n return ordinary+protected>=p_requests;\nend $function$\n",
+    "provolatile": "s",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+    "owner": "postgres"
+  }
+]

@@ -347,6 +347,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-acquisition-account-yield-postgres.mjs
+      - name: Verify acquisition reuses one stable reserve calculation
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-acquisition-capacity-single-state-postgres.mjs
       - name: Verify ranking stays independent of pending-cost reports
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
