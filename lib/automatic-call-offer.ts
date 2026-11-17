@@ -1,3 +1,4 @@
+import {sellerListingClarificationQuestion} from './seller-listing-clarification.ts';
 import {buyerSpeakingPolicy} from './buyer-speaking-policy.ts';
 import {buyerValidatedPolicy} from './buyer-validated-policy.ts';
 import {buyerAnswerPolicy} from './buyer-answer-policy.ts';
@@ -139,7 +140,7 @@ const financial=sellerCallFinancialGate(base.property.financialScreening,{seller
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
-type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>,continuity?:{previousQuoteRevision:string})=>Promise<boolean>;recoverPayoffFacts?:(input:Record<string,unknown>,mortgageCents:number,priceCents:number)=>Promise<SellerPayoffRecovery|null>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifyRoutineTimingAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
+type Dependencies={db:Db;bind:(token:string,conversationId:string)=>Promise<void>;verifyQualification?:(input:Record<string,unknown>,context:CallOfferContext)=>Promise<SellerQualification>;resolveStatement?:(input:Record<string,unknown>)=>Promise<string|null>;verifyInput:(input:Record<string,unknown>,continuity?:{previousQuoteRevision:string})=>Promise<boolean>;recoverPayoffFacts?:(input:Record<string,unknown>,mortgageCents:number,priceCents:number)=>Promise<SellerPayoffRecovery|null>;verifyPayoffChange?:(input:Record<string,unknown>)=>Promise<boolean>;verifyListingStatus?:(input:Record<string,unknown>)=>Promise<boolean|null>;verifyListingClarification?:(input:Record<string,unknown>)=>Promise<'ask'|'unresolved'|null>;verifyRoutineOwnershipAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifyRoutineTimingAnswer?:(input:Record<string,unknown>)=>Promise<boolean>;verifySellerPrice?:(input:Record<string,unknown>)=>Promise<number|null>;verifyPayoffFacts?:(input:Record<string,unknown>)=>Promise<SellerPayoffUpdate|null>;now?:()=>number};
 export async function automaticCallOffer(token:string,input:unknown,d:Dependencies){
  const i=automaticOfferInput.parse(input),hash=sha(token);
  // The context RPC independently checks the exact capability, bound conversation,
@@ -177,10 +178,18 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(i.action==='accept_offer'&&!await d.verifyInput(i,continuity))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
  if(i.action==='update_repairs'||i.action==='report_change'){
   const actual=await d.resolveStatement?.(i);if(actual)i.sellerStatement=actual;
+  const verified=await d.verifyInput(i);
+  // A source-bound prospective listing reply is a request for clarification,
+  // not a material property change. Leave all saved facts and holds untouched.
+  const listingClarification=i.action==='report_change'&&verified&&state.listedWithAgent!==true&&!qualification.ready&&!qualification.stop&&qualification.missing.includes('listing')?await d.verifyListingClarification?.(i):null;
+  if(listingClarification)return {
+   ...blockedOffer(listingClarification==='ask'?'listing_clarification_required':'listing_status_unconfirmed',listingClarification==='ask'?`Current listing status is still unknown. Ask exactly: "${sellerListingClarificationQuestion}" Then wait. Do not claim it is listed or that a listing status was saved, end the call for listing, or quote a price.`:'Current listing status is still unclear after one clarification. Say: "I cannot confirm the current listing status, so I cannot quote an offer yet." Then wait. Do not repeat the listing question, assert it is listed, end for a confirmed listing, or promise a callback or review.'),
+   nextQuestion:listingClarification==='ask'?sellerListingClarificationQuestion:null,listingStatus:'unknown',contractAllowed:false,sent:false,
+  };
   if(context.pendingAgreement)state.agreementRevisionRequired=true;
   const acceptedBeforeUpdate=state.acceptedPriceCents,continuityBeforeUpdate=state.acceptanceEvidenceQuoteRevision;
   delete state.acceptanceEvidenceQuoteRevision;
-  const verified=await d.verifyInput(i);state.sellerStatement=verified?i.sellerStatement:'Statement confirmation required';state.acceptedPriceCents=null;
+  state.sellerStatement=verified?i.sellerStatement:'Statement confirmation required';state.acceptedPriceCents=null;
   if(i.action==='report_change'){
    const sellerPrice=verified?await d.verifySellerPrice?.(i):null;
    if(sellerPrice!=null){
