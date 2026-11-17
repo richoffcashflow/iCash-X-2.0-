@@ -77,6 +77,14 @@ const freshInput={action:'accept_offer',priceCents:6000000,quoteRevision:voiceQu
 const markerReceipt={role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify(voiceQuote)}]};
 const freshAccepted=[markerReceipt,a('The original cash price is $60,000. Does that work?'),u('Yes, that price works for me.')];
 for(const later of [[a('What is your legal name?'),u('Jane Seller.')],[a('What closing date works?'),u('December 15.')],[markerReceipt,a('What is your legal name?'),u('Jane Seller.')]])assert(callOfferEvidence({transcript:[...freshAccepted,...later]},freshInput),'fresh marker-bound acceptance survives ordinary later details and identical echoes');
+for(const purpose of ['Yes, how can I help?','Um-yes, what is this for?']){
+ const interrupted=[markerReceipt,a('The original cash price is $60,000. Does that work?'),u(purpose)];
+ assert(!callOfferEvidence({transcript:interrupted},freshInput),'purpose cannot accept even after the exact source-marker receipt');
+ assert(!callOfferEvidence({transcript:[...interrupted,u('Yes.')]},freshInput),'a source marker cannot restore a question displaced by purpose');
+ assert(callOfferEvidence({transcript:[...interrupted,a('The original cash price is $60,000. Does that work?'),u('Yes, that price works for me.')]},freshInput),'a fresh actual price question and answer remain valid inside the marker boundary');
+ assert(callOfferEvidence({transcript:[...freshAccepted,a('Do you have a question?'),u(purpose)]},freshInput),'purpose preserves earlier genuine marker-bound acceptance');
+ assert(!callOfferEvidence({transcript:[...freshAccepted,a('Do you have a question?'),u(purpose),u('Wait, I have another mortgage.')]},freshInput),'purpose cannot hide a later material source hold');
+}
 assert(!callOfferEvidence({transcript:[a('The original cash price is $60,000. Does that work?'),u('Yes.'),markerReceipt,a('What is your legal name?'),u('Jane Seller.')]},freshInput),'pre-marker Yes stays stale');
 assert(!callOfferEvidence({transcript:[...freshAccepted,a('Anything else?'),u('Wait, I have another mortgage.')]},freshInput));
 const changedReceipt={role:'tool',tool_results:[{tool_name:'icash_offer_and_contract',result_value:JSON.stringify({...voiceQuote,priceCents:6100000,quoteRevision:'changed'})}]};
@@ -117,17 +125,43 @@ assert(await reviewSellerAgreementMemory(reviewDb,job,now));assert.equal(refresh
 for(const change of [()=>{fresh.admission.callPrefix=null;},()=>{fresh.originalCall=suffix('I have another mortgage.');},()=>{fresh.originalCall=inserted;},()=>{fresh.admission.confirmation={...confirmation,agreedPriceCents:9100000};}]){
  fresh={confirmationId:'confirmation',admission:{phone,conversationId,fingerprint:'old',callPrefix:prefix,confirmation,terms:job.expectedTerms},current:source,originalCall:suffix('Thanks.')};change();assert.equal(await reviewSellerAgreementMemory(reviewDb,job,now),false);assert.equal(refreshes,1,'invalid recovery never renews original admission');
 }
-let recoverySends=0,recoveryTexts=0,finished=null;
+let recoverySends=0,recoveryTexts=0,recoveryBindings=0,finished=null,recoveryPending=false,bindingOutcome=true,boundEnvelope=null;
+let recoveryOrder=[];
+const beginRecoveryCase=(outcome=true)=>{recoverySends=0;recoveryTexts=0;recoveryBindings=0;finished=null;recoveryPending=true;bindingOutcome=outcome;boundEnvelope=null;recoveryOrder=[];};
 const recoveryDb=async(path,method,args)=>{
  if(path==='rpc/icash_reconcile_agreement_delivery_receipts')return 0;
- if(path==='rpc/icash_claim_agreement_delivery_recovery')return {...job,userId:'owner',customerEmail:'owner@example.test',memoryReviewRequired:true};
+ if(path==='rpc/icash_claim_agreement_delivery_recovery'){if(!recoveryPending)return null;recoveryPending=false;return {...job,userId:'owner',customerEmail:'owner@example.test',memoryReviewRequired:true};}
+ if(path==='rpc/icash_bind_agreement_delivery_envelope'){
+  recoveryBindings++;recoveryOrder.push('bind');assert.equal(method,'POST');
+  assert.deepEqual(args,{p_account:job.accountId,p_recovery:job.id,p_envelope:'original-envelope'},'bind the original successful envelope to this exact account and recovery');
+  if(bindingOutcome instanceof Error)throw bindingOutcome;
+  if(bindingOutcome===true)boundEnvelope=args.p_envelope;
+  return bindingOutcome;
+ }
  if(path==='rpc/icash_finish_agreement_delivery_recovery'){finished=args;return true;}
  if(path.startsWith('icash_signing_envelopes?'))return [];
  return reviewDb(path,method,args);
 };
-const recovery={db:recoveryDb,send:async()=>{recoverySends++;return {id:'original-envelope',testMode:false};},text:async()=>{recoveryTexts++;return {sent:true,status:'accepted'};}};
+const recovery={db:recoveryDb,send:async input=>{
+ recoverySends++;recoveryOrder.push('create');
+ assert.deepEqual(input,{accountId:job.accountId,userId:'owner',customerEmail:'owner@example.test',dealId:job.dealId,kind:'purchase',signers:[{name:job.sellerName,phone:job.phone}],phoneLinkOnly:true,expectedTerms:job.expectedTerms});
+ return {id:'original-envelope',testMode:false};
+},text:async(accountId,envelopeId,recipient)=>{
+ recoveryTexts++;recoveryOrder.push('text');assert.equal(boundEnvelope,envelopeId,'text requires acknowledged binding first');
+ assert.deepEqual([accountId,envelopeId,recipient],[job.accountId,'original-envelope',job.phone]);return {sent:true,status:'accepted'};
+}};
 const env={VERCEL_ENV:'production',DOCUSEAL_MODE:'live',ICASH_LIVE_WORK_READY:'true'};
 fresh={confirmationId:'confirmation',admission:{phone,conversationId,fingerprint:'old',callPrefix:prefix,confirmation,terms:job.expectedTerms},current:source,originalCall:suffix('The house burned down.')};
-assert.equal((await recoverAgreementDelivery(recovery,env)).status,'agreement_recovery_needs_review');assert.equal(recoverySends,0);assert.equal(recoveryTexts,0);assert.equal(finished.p_result.reason,'seller_memory_review_required');
-fresh.originalCall=suffix('Thank you.');assert.equal((await recoverAgreementDelivery(recovery,env)).status,'agreement_text_accepted');assert.equal(recoverySends,1);assert.equal(recoveryTexts,1);
-console.log('PASS canonical contextual answers, persistent whole-source holds across voice/text/direct agreement, exact atomic claim fingerprint, immutable live prefix and neutral-only deferred review. No provider calls.');
+beginRecoveryCase();assert.equal((await recoverAgreementDelivery(recovery,env)).status,'agreement_recovery_needs_review');assert.equal(recoverySends,0);assert.equal(recoveryBindings,0);assert.equal(recoveryTexts,0);assert.equal(finished.p_result.reason,'seller_memory_review_required');
+fresh.originalCall=suffix('Thank you.');beginRecoveryCase();assert.equal((await recoverAgreementDelivery(recovery,env)).status,'agreement_text_accepted');assert.equal(recoverySends,1);assert.equal(recoveryBindings,1);assert.equal(recoveryTexts,1);
+assert.deepEqual(recoveryOrder,['create','bind','text']);assert.deepEqual(finished,{p_id:job.id,p_envelope:'original-envelope',p_result:{sent:true,status:'accepted'}});
+for(const outcome of [false,null,'true',new Error('fixture binding unavailable')]){
+ beginRecoveryCase(outcome);
+ assert.equal((await recoverAgreementDelivery(recovery,env)).status,'agreement_recovery_needs_review');
+ assert.equal(recoverySends,1);assert.equal(recoveryBindings,1);assert.equal(recoveryTexts,0,'refused or unknown binding cannot text an agreement');
+ assert.deepEqual(recoveryOrder,['create','bind']);assert.equal(boundEnvelope,null);
+ assert.deepEqual(finished,{p_id:job.id,p_envelope:'original-envelope',p_result:{sent:false,status:'needs_review',reason:outcome instanceof Error?outcome.message:'seller_original_agreement_binding_required'}});
+ assert.equal((await recoverAgreementDelivery(recovery,env)).status,'idle','a consumed recovery cannot recreate or text the held original');
+ assert.equal(recoverySends,1);assert.equal(recoveryBindings,1);assert.equal(recoveryTexts,0);
+}
+console.log('PASS canonical contextual answers, persistent whole-source holds, exact claim fingerprint, immutable live prefix, original-envelope binding before text and one-shot binding refusal/unknown holds. No provider calls.');

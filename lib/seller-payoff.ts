@@ -1,6 +1,7 @@
 import {sellerQuestion} from './seller-question-evidence.ts';
 import {object} from './required-call-recording.ts';
 import {callOfferEvidence,spokenMoneyAmounts} from './call-offer-evidence.ts';
+import {sellerContactPurposeQuestion} from './seller-contact-purpose.ts';
 
 /** Seller statements support a proposed contract, never verified title or proceeds. */
 export type SellerPayoffReport={mortgageCents?:number;otherDebtCents?:number;coveredShortfallCents?:number;coverageDeclined?:boolean};
@@ -58,6 +59,8 @@ export function sellerPayoffEvidence(value:unknown,input:Record<string,unknown>)
  const rows=object(value).transcript;if(!Array.isArray(rows))return null;
  const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');
+ const questionIndex=turns.slice(0,index).findLastIndex(t=>t.role==='agent');
+ if(turns.slice(questionIndex+1,index).some(t=>t.role==='user'&&sellerContactPurposeQuestion(String(t.message))))return null;
  const latest=String(turns[index]?.message??'').trim(),previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
  const actual=extractPayoff(latest,previous),requested=extractPayoff(input.sellerStatement,previous);
  if(!actual||!requested||JSON.stringify(actual)!==JSON.stringify(requested))return null;
@@ -78,6 +81,7 @@ export function sellerPayoffEvidence(value:unknown,input:Record<string,unknown>)
 }
 function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
  const originalQuestion=previous;previous=sellerQuestion(previous);
+ if(sellerContactPurposeQuestion(latest))return null;
  if(/\b(another owner|other owner|not the owner|ownership|deed|inherited|divorce|wrong (?:property|address)|new (?:roof|foundation)|fire damage)\b/i.test(latest))return null;
  // A single unqualified "no" can answer the complete debt inventory. Keep it
  // tied to that exact final question: a mortgage-only or additional-debt

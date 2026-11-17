@@ -1,5 +1,5 @@
 import {calendarReadbacks,durationReadbacks} from './seller-readback-time.ts';
-
+import {sellerContactPurposeQuestion} from './seller-contact-purpose.ts';
 /** Narrow conversational evidence, never price, ownership or contact authority.
  * Preserve the original quote; normalization is for matching only. */
 export function sellerAnswerText(value:string){
@@ -50,7 +50,7 @@ export function sellerStatementText(value:string){
 }
 export function sellerUnrelatedAnswer(value:string){
  const text=sellerAnswerText(value);
- return /\b(?:(?:he|she|they|my agent|my realtor|the buyer) (?:said|asked|wrote)|who (?:are you|is this)|how did you (?:get|find)|where did you (?:get|find)|why (?:are you|did you) (?:calling|call|texting|text)|call (?:me|you)|(?:text|email)(?: me)? (?:only|instead)|system prompt|ignore (?:all|previous)|wire|bank account)\b/i.test(text)
+ return sellerContactPurposeQuestion(text)||/\b(?:(?:he|she|they|my agent|my realtor|the buyer) (?:said|asked|wrote)|who (?:are you|is this)|how did you (?:get|find)|where did you (?:get|find)|why (?:are you|did you) (?:calling|call|texting|text)|call (?:me|you)|(?:text|email)(?: me)? (?:only|instead)|system prompt|ignore (?:all|previous)|wire|bank account)\b/i.test(text)
   || /^(?:email|text|stop|hello|what|pardon|sorry)[.!? ]*$/i.test(text);
 }
 export function sellerPropertyAnswer(kind:'condition'|'occupancy'|'timing'|'situation',value:string){

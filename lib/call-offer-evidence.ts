@@ -3,6 +3,8 @@ import {sellerQuestion} from './seller-question-evidence.ts';
 import {object} from './required-call-recording.ts';
 import {withoutReadbackTiming} from './seller-readback-time.ts';
 import {sellerPersistentSourceHold} from './seller-source-hold.ts';
+import {sellerContactPurposeQuestion} from './seller-contact-purpose.ts';
+const purposeQuestion=(text:string)=>sellerContactPurposeQuestion(text.replace(/^(?:(?:um|uh|hmm|well)\b[\s,.-]*)+/i,''));
 const units:Record<string,number>={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
 export function spokenMoneyAmounts(text:string){
  const found:number[]=[];
@@ -130,7 +132,7 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>,con
    &&/\b(?:offer|cash|purchase|price|proceed|work|fit|accept|agree|sound|look right|text|send)\b/i.test(sellerQuestion(text));
   // A later name/date answer must not erase an earlier explicit price answer.
   // A counteroffer, condition or withdrawal after it does invalidate it.
-  let accepted=false,changedProperty=false;
+  let accepted=false,changedProperty=false,purposeBoundary=-1;
   for(let n=0;n<turns.length;n++){
    const turn=turns[n],text=String(turn.message).trim();
    if(turn.role==='agent'){
@@ -142,11 +144,15 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>,con
    }
    if(turn.role!=='user')continue;
    if(accepted&&changedAcceptedProperty(text))changedProperty=true;
+   // A conversational "yes" before a complete purpose question does not
+   // accept a quote. Preserve earlier acceptance, but do not bind a later
+   // free-standing yes to the question that this interruption displaced.
+   if(purposeQuestion(text)){purposeBoundary=n;continue;}
    let agent=turns.slice(0,n).findLast(t=>t.role==='agent');
    if(agent&&/are you still there|can you hear me/i.test(String(agent.message))&&/\b(?:let['’]?s do it|i accept|i agree|that works)\b/i.test(text)){
     const last=turns.lastIndexOf(agent);agent=turns.slice(0,last).findLast(t=>t.role==='agent');
    }
-   if(agent&&priceQuestion(String(agent.message))){
+   if(agent&&turns.lastIndexOf(agent)>purposeBoundary&&priceQuestion(String(agent.message))){
     const repeatRequest:boolean=accepted&&agreementTextRequested(text)&&sellerUnqualifiedAgreementAnswer(text);
     accepted=(yes(text)||repeatRequest)&&!acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents));
    }
@@ -156,7 +162,7 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>,con
   // ordinary name/date answers and unchanged quote echoes do not erase it.
   return accepted&&!changedProperty;
  }
- if(latest!==String(input.sellerStatement??'').trim())return false;
+ if(purposeQuestion(latest)||latest!==String(input.sellerStatement??'').trim())return false;
  if(input.repairEstimateCents===undefined)return true;
  if(/\b(?:not|no idea|don['’]?t know|between|or|under|over|instead|maybe)\b/i.test(latest))return false;
  const amounts=spokenMoneyAmounts(latest),previous=turns.slice(0,index).findLast(t=>t.role==='agent');
@@ -191,7 +197,7 @@ export function callSellerStatement(value:unknown,input:Record<string,unknown>):
  const rows=object(value).transcript;if(!Array.isArray(rows))return null;
  const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');if(index<0)return null;
- const latest=String(turns[index].message).trim();if(!latest||latest.length>1000)return null;
+ const latest=String(turns[index].message).trim();if(!latest||latest.length>1000||purposeQuestion(latest))return null;
  if(input.action==='update_repairs'){
   const previous=sellerQuestion(String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??''));
   if(!/\b(repair|repairs|roof|foundation|renovation|rehab|ac|air condition|hvac|plumbing|electrical|damage|condition|fix|budget)\b/i.test(latest+' '+previous))return null;
