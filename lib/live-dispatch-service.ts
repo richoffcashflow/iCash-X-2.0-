@@ -1,3 +1,4 @@
+import {readSellerMemory,sellerMemoryPrompt} from './seller-memory.ts';
 import {outboundSellerCadencePrompt} from './seller-call-cadence.ts';
 import {instantLeadPrompt} from './meta-instant-leads.ts';
 import {opportunityConversationInstructions} from './outreach-conversation.ts';
@@ -124,11 +125,11 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  if(!businessNumber||(threads.length&&businessNumber!==threadNumber)||(!isAdditionalBusinessPhone(businessNumber)&&businessNumber!==primaryNumber))return hold('business_number_mismatch');
  if(isAdditionalBusinessPhone(businessNumber)){
   const [secondary]=await db<{outbound_enabled:boolean}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(businessNumber)}&select=outbound_enabled`);
-  if(!secondary?.outbound_enabled)return hold('business_number_verification_required');
+  if(!secondary?.outbound_enabled){try{console.warn('business_calling_preflight_held',{phase:'dispatch_preflight',stage:'stored_readiness',reason:'not_ready'});}catch{}return hold('business_number_verification_required');}
  }
  if(!isAdditionalBusinessPhone(businessNumber)&&!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
  const readCaller=async()=>{
-  if(isAdditionalBusinessPhone(businessNumber))return await secondaryCallingReady(db,process.env,fetch,businessNumber)?null:'business_number_verification_required';
+  if(isAdditionalBusinessPhone(businessNumber))return await secondaryCallingReady(db,process.env,fetch,businessNumber,diagnostic=>console.warn('business_calling_preflight_held',{phase:'dispatch_preflight',...diagnostic}))?null:'business_number_verification_required';
   const phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);
   return sameBusinessNumber(businessNumber,phone.phone_number)?null:'business_number_mismatch';
  };
@@ -177,24 +178,26 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  const ceiling=cashOfferPrice;
  const buyerKind=identity.company_name?.trim()?'company' as const:'individual' as const;
  const agreementToolsEnabled=!intake&&!cancellation&&!!recordedReview.contractToolId&&recordedReview.contractToolId!==sellerContractToolId;
- const [rawSmsContext,priorCalls,request,closing,[purchaseDraft],greetingContacts]=await Promise.all([
+ const [rawSmsContext,priorCalls,request,closing,[purchaseDraft],greetingContacts,sharedMemory]=await Promise.all([
   p.party==='seller'&&!cancellation?db<unknown>('rpc/icash_voice_sms_context','POST',{p_account:accountId,p_permission:p.id}):null,
   p.party==='seller'&&!cancellation?db<unknown>('rpc/icash_seller_prior_call_context','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):[],
   !cancellation&&p.party==='seller'&&object(snapshot.snapshot).sellerRequest?db<SellerRequestContext|null>('rpc/icash_seller_call_request','POST',{p_account:accountId,p_screening:p.screening_id,p_phone:p.phone}):null,
   !intake&&!cancellation&&!limited&&p.party==='seller'&&recordedReview.contractToolId?loadSellerClosingContext(db,accountId,p.screening_id,p.phone,ceiling):null,
   agreementToolsEnabled&&p.party==='seller'?db<{terms:Record<string,unknown>}[]>(`icash_deal_files?account_id=eq.${accountId}&screening_id=eq.${p.screening_id}&stage=eq.draft&select=terms&limit=1`):[],
   !intake&&!cancellation&&p.party==='seller'?db<unknown>('rpc/icash_manual_contacts','POST',{p_account:accountId,p_screening:p.screening_id}).catch(()=>null):null,
+  !intake&&!cancellation&&p.party==='seller'?readSellerMemory(db,{accountId,screeningId:p.screening_id,phone:p.phone}):null,
  ]);
  const smsContext=p.party==='seller'&&!cancellation?boundedVoiceSmsContext(rawSmsContext):null;
  const purchaseTerms=purchaseDraft?{inspectionDays:purchaseDraft.terms.inspectionDays??10,closingDate:purchaseDraft.terms.closingDate??'',escrowAgent:purchaseDraft.terms.escrowAgent??''}:null;
- const sellerContext={buyerKind,priorCalls,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined,callbackRequestedNow:!!j.sms_source_message_id,contactName:sellerGreetingName(greetingContacts,p.phone)};
+ const sellerContext={buyerKind,priorCalls,memory:sharedMemory,address,principal:identity.principal,assistantName:account.assistant_name,history:smsContext,request:request??undefined,callbackRequestedNow:!!j.sms_source_message_id,contactName:sellerGreetingName(greetingContacts,p.phone)};
  // Validate the complete opening/context before reserving credits or dialing.
  let sellerGreeting:string|undefined,sellerPrompt:string|undefined;
  if(intake){sellerGreeting=`Hi, this is ${account.assistant_name}, HomeOffer Network's AI assistant calling for ${identity.principal}. ${intake.address?"Thanks for sending the address. Let's check that property together.":"You requested a cash offer. What's the address of the property you'd like to sell?"}`;sellerPrompt=instantLeadPrompt(identity.principal,account.assistant_name)+(intake.address?' The address already submitted is '+JSON.stringify(intake.address)+'. Confirm it rather than asking from the beginning.':'');}
  else if(p.party==='seller'&&!cancellation){try{sellerGreeting=sellerFirstMessage(sellerContext,true);sellerPrompt=limited?limitedSellerPrompt(address,identity.principal,account.assistant_name):sellerCallPrompt(sellerContext,ceiling,closing,!!recordedReview.contractToolId,cashOfferPrice,sellerOfferPresentation(snapshot.snapshot,address),agreementToolsEnabled,purchaseTerms);}catch{return hold('property_context_required');}}
- const sellerProgress=intake?{history:null,priorCalls:[]}:sellerCallContext(sellerContext);
- const {history:fullSms,priorCalls:fullCalls,...sellerData}=sellerProgress;
- const automaticContext=intake||cancellation||!automaticOfferPolicy(recordedReview.offerPolicy)?null:buyerContext?{status:'buyer',address:buyerContext.address,returningName:buyerContext.firstName,buyerPaysClosingCosts:buyerContext.buyerPaysClosingCosts,repairsCents:buyerContext.repairsCents,packageUrl:buyerContext.packageUrl}:{...sellerData,...compactSellerProgress({history:fullSms,priorCalls:fullCalls},0),status:'matched',purchaseTerms,today:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(Date.now()),timeZone:'America/Chicago'};
+ const sellerProgress=intake?{history:null,priorCalls:[],memory:null}:sellerCallContext(sellerContext);
+ const {history:fullSms,priorCalls:fullCalls,memory:_promptMemory,...sellerData}=sellerProgress;
+ const rememberedFacts=sellerMemoryPrompt(sharedMemory);
+ const automaticContext=intake||cancellation||!automaticOfferPolicy(recordedReview.offerPolicy)?null:buyerContext?{status:'buyer',address:buyerContext.address,returningName:buyerContext.firstName,buyerPaysClosingCosts:buyerContext.buyerPaysClosingCosts,repairsCents:buyerContext.repairsCents,packageUrl:buyerContext.packageUrl}:{...sellerData,sellerMemory:rememberedFacts,...compactSellerProgress({history:fullSms,priorCalls:fullCalls},0),status:'matched',purchaseTerms,today:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(Date.now()),timeZone:'America/Chicago'};
  const basePrompt=()=>intake?sellerPrompt!:cancellation?cancellationCallPrompt(cancellation,identity.principal,account.assistant_name):(automaticOfferPolicy(recordedReview.offerPolicy)
   ?(recordedReview.offerPolicy==='automatic_offer_v5'?legacyAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v6'?streamingAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v7'?payoffAutomaticOfferReceptionPrompt:recordedReview.offerPolicy==='automatic_offer_v8'?progressAutomaticOfferReceptionPrompt:automaticOfferReceptionPrompt).replace('{{icash_property_context}}',JSON.stringify({...automaticContext,...conversationAddressFields(address),principal:identity.principal,companyName:identity.company_name?.trim()||null,assistantName:account.assistant_name}))+'\nOUTBOUND CAPABILITIES: Use the callback tool only for an explicitly agreed date, time and timezone; use the handoff tool when requested. Claim either action only after its successful result. Do not claim an immediate transfer unless the tool confirms one.'
   :buyerContext?buyerCallInstructions(buyerContext,identity.principal,account.assistant_name):sellerPrompt!)+ '\n'+conversationAddressInstructions;

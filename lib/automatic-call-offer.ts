@@ -153,7 +153,8 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(context.party==='buyer'){const result=i.action==='get_offer'?calculateAutomaticCallOffer(context,{},(d.now??Date.now)()):buyerAgreementHandoff();return (context.contextPolicy===buyerConversationPolicy||context.contextPolicy===buyerAnswerPolicy||context.contextPolicy===buyerValidatedPolicy||context.contextPolicy===buyerSpeakingPolicy)?buyerConversationResult(result):result;}
  if(context.party!=='seller'||context.sellerContractSigned===true)return calculateAutomaticCallOffer(context,{},(d.now??Date.now)());
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
- const qualification=context.pendingAgreement||state.acceptedPriceCents?{ready:true as const}:d.verifyQualification?await d.verifyQualification(i,context):sellerOfferQualification(null);
+ const observedQualification=d.verifyQualification?await d.verifyQualification(i,context):sellerOfferQualification(null);
+ const qualification=(context.pendingAgreement||state.acceptedPriceCents)&&!(!observedQualification.ready&&observedQualification.stop)?{ready:true as const}:observedQualification;
  if(qualification&&!qualification.ready&&(i.action==='get_offer'||i.action==='accept_offer'))return sellerQualificationHold(qualification);
  const originalRevision=state.quoteRevision;
  let recoveredPayoff=false;

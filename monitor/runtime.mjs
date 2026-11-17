@@ -1,4 +1,4 @@
-import {dispatchReliabilityAlerts} from '../lib/reliability-alerts-service.ts';
+import {dispatchReliabilityAlerts,reliabilityEmailTime} from '../lib/reliability-alerts-service.ts';
 import {externalReliabilityRuntime} from '../lib/reliability-monitor-runtime.ts';
 import {ownerInboundTarget} from '../lib/owner-inbound-acceptance.ts';
 import {healthyProductionResponse,PRODUCTION_HEALTH_URL} from '../scripts/check-production-health.mjs';
@@ -53,8 +53,10 @@ export function createExternalMonitor({env=process.env,transport=fetch,now=Date.
   if(failures<3||!owner||now()-ownerCheckedAt>6*3600000||now()<ownerCheckedAt||lastEmergencyHour===hour)return 'not_due';
   lastEmergencyHour=hour; // Consume before transport; uncertain sends are not replayed.
   const period=new Date(hour*3600000).toISOString();
-  const payload={from:'iCash X <noreply@geticashx.com>',to:[owner],subject:'iCash X · external monitor needs attention',
-   text:`The independent monitor observed repeated application or incident-observation failures during the hour beginning ${period}. Current customer impact and recovery are unverified. Inspect the production services and original receipts before repeating any operation. This is a bounded outage alert, not a claim that all accounts are stopped.\n\nhttps://www.geticashx.com/admin`};
+  // Keep the complete payload hour-bound: replicas must use identical content
+  // with the existing idempotency key, even when their latest probes differ.
+  const payload={from:'iCash X <noreply@geticashx.com>',to:[owner],subject:'iCash X · Availability checks failing — impact unverified',
+   text:`Scope: unknown. A whole-platform outage is not confirmed.\nWhat needs attention: the independent monitor repeatedly failed to verify the public application, incident monitoring, or both. Failed, timed-out or invalid checks cannot establish which customer features have stopped.\nWhat works: unverified in this fallback alert.\nEvidence window: the monitoring hour beginning ${reliabilityEmailTime(period)}. This is not the confirmed outage start time.\nRecovery status: unverified.\nNext action: inspect the website, sign-in, database and background services to establish the affected scope, then verify fresh checks and completed work. Check original provider receipts before repeating any send or payment.\n\nhttps://www.geticashx.com/admin`};
   try{
    const response=await transport('https://api.resend.com/emails',{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`icash-external-monitor-${hour}`},body:JSON.stringify(payload),signal:AbortSignal.timeout(8000)});
    if(!response.ok){await response.body?.cancel();return 'needs_review';}

@@ -1,4 +1,5 @@
 import {sellerResponseDisposition} from './seller-response-policy.ts';
+import {sellerContactPurposeQuestion} from './seller-contact-purpose.ts';
 
 /** Informational intent only. No ownership, acceptance, price or call authority.
  * Keep the SQL classifier and its parity tests aligned. */
@@ -8,11 +9,12 @@ export const sellerConversionPatterns={
  buying:"^(?:are you (?:looking to (?:buy|purchase)|(?:buying|purchasing)(?: (?:it|the (?:house|property)))?)|(?:buying|purchasing))[?! .]*$",
  listedTerms:"^(?:the )?(?:price|terms)(?: are)? as (?:listed|advertised)[.! ]*$",
 };
-export type SellerConversionIntent='identity'|'identity_price'|'price'|'buying'|'listed_terms';
+export type SellerConversionIntent='identity'|'identity_price'|'price'|'buying'|'listed_terms'|'purpose';
 export function sellerConversionIntent(source:string):SellerConversionIntent|null{
- const body=source.toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim();
+ const body=source.toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().replace(/\bdepen[dt]s (?:on|of) (the|your) (?=offer|price)/g,'depends on $1 ');
  if(!body||body.length>500||sellerResponseDisposition(body)!==null
   ||/["“”]/.test(body)||/\b(?:said|asked|wrote|example|ignore|instructions?|prompt|wire|bank account)\b/.test(body))return null;
+ if(sellerContactPurposeQuestion(body))return 'purpose';
  const identity=new RegExp(sellerConversionPatterns.identity).test(body);
  const price=new RegExp(sellerConversionPatterns.price).test(body)
   ||identity&&/\b(?:how much|what.*offer|what.*pay)\b/.test(body);

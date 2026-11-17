@@ -1,0 +1,17 @@
+# Seller purpose and address clarity
+
+The owner reported that sellers asking how they could help or what the call was about did not get a clear all-cash purchase explanation, and that the assistant kept repeating the property address. The previous runtime policy said to answer who/why questions but emphasized ownership before interest without an explicit purpose-answer exception.
+
+At the opening, a seller's purpose question now gets a concise explanation before another verification question: “I'm calling to see if you'd consider selling your property for all cash.” Incoming callers get wording appropriate to their call. The actual buyer and AI identity are stated if asked or not already introduced. A claimed prior inquiry still requires its bound source; a question proves neither ownership nor selling interest. Later questions concern the current step rather than restarting the pitch. Refusals, human requests and actual answering machines retain priority.
+
+Use the bound street once to establish which property is involved, then say “the property” or “your property.” Repeat an address when requested, when a correction or ambiguity requires it, or when a required exact terms readback needs it. This does not change property bindings, confirmation requirements, written addresses or agreement terms.
+
+## Runtime paths and verification
+
+`lib/seller-call-cadence.ts` supplies the guidance through the existing full-seller outgoing dispatch, matched-seller incoming role and instant-lead incoming/outgoing paths. Limited-contact, cancellation, buyer and unknown roles keep their existing scope. `lib/seller-conversation-efficiency.ts` compacts equivalent runtime wording so the additional instructions fit the unchanged 24,000-character outgoing limit while retaining whole recent answers. Frozen provider policy strings, review hashes, selected voices and acoustic settings are unchanged; there is no provider configuration or database migration for this phone change.
+
+`tests/seller-purpose-clarity.test.mjs` exercises actual runtime assembly and source classification for seven purpose questions, preserving quoted source text, separate ownership/interest, opt-outs, answering machines and role boundaries. `tests/live-dispatch.test.mjs` checks the prompt that reaches the recording transport, including automatic-offer v6/v9, long whole saved answers, ordinary seller calls, intake and shared-learning assignments. Adjacent cadence, identity, price, qualification, address and provider-policy tests remain required.
+
+The new purpose test fails against the pre-fix runtime at the missing purpose-before-verification instruction. A direct composition comparison found each of the five supported automatic-offer instruction variants twenty characters shorter after the repair; the ordinary seller fixture is 206 characters shorter. The added clarity therefore does not consume the previous instruction allowance. The initial additive-only draft failed the real dispatch limit and was not retained.
+
+These are offline instruction, source and transport tests. They do not establish model compliance or perceived live audio quality. No paid call, text, model evaluation or historical replay is part of this repair. Verify the exact application web/worker release before describing the runtime wording as live. The accompanying text reply correction has its own source-bound database prerequisite; do not infer it is installed from the phone deployment alone.

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {SellerInventoryUnavailableError,ProspectingBudgetError,voiceReservationFailure} from '../lib/voice-budget-failure.ts';
+import {SellerInventoryUnavailableError,TextClaimRefusedError,ProspectingBudgetError,voiceReservationFailure} from '../lib/voice-budget-failure.ts';
 import {automationWorkReady,newLiveWorkKinds,deferUnstartedAutomation} from '../lib/live-work-admission.ts';
 import {automationChanged} from '../lib/automation-outcome.ts';
 import {automationTick,WorkerOperationError} from '../worker/runner.mjs';
@@ -31,7 +31,7 @@ try{
   throw Error('Unexpected fixture operation: '+path);
  };
  const {dispatchTextMessage}=await loadService('lib/text-message-service.ts',{
-  SellerInventoryUnavailableError,instantLeadsEnabled:()=>false,smsWorkEnabled:()=>true,liveWorkReady:()=>true,db,
+  SellerInventoryUnavailableError,TextClaimRefusedError,instantLeadsEnabled:()=>false,smsWorkEnabled:()=>true,liveWorkReady:()=>true,db,
   sameBusinessNumber:(a,b)=>a===b,textPayload:()=>{},
   sendContiguityText:async()=>{sends++;if(afterSend)throw new SellerInventoryUnavailableError();return {messageId:'fixture-receipt'};},
   saveTextReceipt:()=>({status:'message_accepted'}),

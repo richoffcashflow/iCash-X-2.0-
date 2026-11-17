@@ -1,10 +1,11 @@
+import {dealCohortStarts,summarizeDealCohorts,type CohortText,type CohortThread,type CohortSupplement} from './deal-cohort-report.ts';
 import {verifiedSigningStatus,type ProviderDocument} from './signing-policy.ts';
 import {summarizeBuyerFunnel,type BuyerFunnelDeposit,type BuyerFunnelProceeds,type BuyerFunnelJourney} from './buyer-funnel-evidence.ts';
 
 /** Observation only. Trusted server reads; no provider calls, writes or policy promotion. */
 export type LearningReportDb=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Owned={account_id:string};
-export type ObservedCall=Owned&{id:string;screening_id:string;party:string;strategy_key:string;conversation_id:string;operation_key:string;state:string;created_at:string;completed_at:string|null};
+export type ObservedCall=Owned&{id:string;screening_id:string;party:string;strategy_key:string;conversation_id:string;operation_key:string;state:string;created_at:string;completed_at:string|null;contact_evidence?:string|null};
 export type ObservedDeal=Owned&{id:string;screening_id:string;practice:string|null};
 export type ObservedSpend=Owned&{operation_key:string;state:string;actual_micros:number|null;cost_basis:string;settlement_evidence:string|null;dispatched_at:string|null;settled_at:string|null};
 export type ObservedEnvelope=Owned&{id:string;deal_id:string;kind:string;state:string;test_mode:boolean;provider_id:string|null;terms_hash:string;deposit_cents?:number|null;recipients:{id:string;email?:string|null;phone?:string|null}[];provider_evidence:ProviderDocument|null;updated_at:string};
@@ -17,8 +18,9 @@ function unique<T>(rows:T[],key:(row:T)=>string){
  for(const row of rows){const id=key(row);if(!id)throw Error('Missing evidence key');const prior=found.get(id);if(prior&&JSON.stringify(prior)!==JSON.stringify(row))throw Error('Conflicting evidence');found.set(id,row);}
  return [...found.values()];
 }
-export function summarizeDealLearningEvidence(accountId:string,records:LearningReportRecords,now:number,complete=true){
+export function summarizeDealLearningEvidence(accountId:string,records:LearningReportRecords,now:number,complete=true,cohort?:{texts:CohortText[];threads:CohortThread[];supplement:CohortSupplement|null}){
  if(!accountId||!Number.isFinite(now))throw Error('Invalid report scope');
+ if(cohort&&[...cohort.texts,...cohort.threads].some(r=>r.account_id!==accountId))throw Error('Mixed tenant cohort evidence');
  for(const rows of Object.values(records))if(rows?.some(r=>r.account_id!==accountId))throw Error('Mixed tenant evidence');
  const deals=unique(records.deals,r=>r.id).filter(d=>d.practice!== 'true');
  const dealIds=new Set(deals.map(d=>d.id)),screenings=new Set(deals.map(d=>d.screening_id));
@@ -55,6 +57,7 @@ export function summarizeDealLearningEvidence(accountId:string,records:LearningR
  }
  const funnel=summarizeBuyerFunnel(dealIds,verifiedSignings,records,now);
  return {version:'deal-evidence-v3',asOf:new Date(now).toISOString(),mode:'observation_only',scope:'current_persisted_records',complete,automaticPromotion:false,
+  cohorts:cohort?summarizeDealCohorts(records,verifiedSignings,cohort.texts,cohort.threads,cohort.supplement,now,complete):null,
   strategyObservations:[...groups.values()].sort((a,b)=>a.party.localeCompare(b.party)||a.strategy.localeCompare(b.strategy)),
   signedPurchaseDeals:purchases.size,signedAssignmentDeals:assignments.size,...funnel,
   excludedOrUnboundCalls,unverifiedCompletedSignings,
@@ -74,8 +77,8 @@ export async function readDealLearningReport(db:LearningReportDb,accountId:strin
   }
   complete=false;return rows;
  }
- const [calls,deals,spend,envelopes,closings,titleReplies,deposits,proceeds,journeys]=await Promise.all([
-  read<ObservedCall>('icash_live_conversations','id,account_id,screening_id,party,strategy_key,conversation_id,operation_key,state,created_at,completed_at','id'),
+ const [calls,deals,spend,envelopes,closings,titleReplies,deposits,proceeds,texts,threads,journeys]=await Promise.all([
+  read<ObservedCall>('icash_live_conversations','id,account_id,screening_id,party,strategy_key,conversation_id,operation_key,state,created_at,completed_at,contact_evidence:result->>contactEvidence','id'),
   read<ObservedDeal>('icash_deal_files','id,account_id,screening_id,practice:terms->>practice','id'),
   read<ObservedSpend>('icash_operation_spend','account_id,operation_key,state,actual_micros,cost_basis,settlement_evidence,dispatched_at,settled_at','operation_key'),
   read<ObservedEnvelope>('icash_signing_envelopes','id,account_id,deal_id,kind,state,test_mode,provider_id,terms_hash,deposit_cents:terms->assignmentDepositCents,recipients,provider_evidence,updated_at','id'),
@@ -83,7 +86,13 @@ export async function readDealLearningReport(db:LearningReportDb,accountId:strin
   read<ObservedTitleReply>('icash_title_replies','id,account_id,deal_id,sender_verified,received_at','id'),
   read<BuyerFunnelDeposit>('icash_buyer_deposit_receipts','id,account_id,deal_id,envelope_id,terms_hash,amount_cents,method,confirmed_by,created_at','id'),
   read<BuyerFunnelProceeds>('icash_proceeds_receipts','id,account_id,deal_id,closing_update_id,amount_cents,received_date,confirmed_by,created_at','id'),
+  read<CohortText>('icash_text_messages','id,account_id,thread_id,direction,state,provider_id,created_at','id'),
+  read<CohortThread>('icash_text_threads','id,account_id,deal_id,party','id'),
   read<BuyerFunnelJourney>('icash_deal_journeys','id,account_id,deal_id,wants_assignment,accepted_price_cents:buyer_details->askingPriceCents,funds_ready:buyer_details->fundsReady,authorized:buyer_details->authorized,created_at,updated_at','id'),
  ]);
- return summarizeDealLearningEvidence(accountId,{calls,deals,spend,envelopes,closings,titleReplies,deposits,proceeds,journeys},now,complete);
+ const records={calls,deals,spend,envelopes,closings,titleReplies,deposits,proceeds,journeys};
+ const starts=dealCohortStarts(records,texts,threads,now);
+ let supplement:CohortSupplement|null=starts.length?null:{complete:true,offers:[],costs:[]};
+ if(starts.length)try{supplement=await db<CohortSupplement|null>('rpc/icash_deal_cohort_supplement','POST',{p_account:accountId,p_trials:starts.slice(0,200)});if(starts.length>200)complete=false;}catch{/* Unknown cost/offer evidence remains explicit. */}
+ return summarizeDealLearningEvidence(accountId,records,now,complete,{texts,threads,supplement});
 }

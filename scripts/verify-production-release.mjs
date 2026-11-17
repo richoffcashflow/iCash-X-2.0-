@@ -125,7 +125,8 @@ export async function waitForReliabilityChecks(sha, {
   wallNow = () => Date.now(),
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   log = console.log,
-  maxWaitMs = 20 * 60 * 1000,
+  // Cover the complete 30-minute test job plus bounded workflow startup.
+  maxWaitMs = 35 * 60 * 1000,
   pollMs = 60 * 1000,
   requestTimeoutMs = 10 * 1000,
   maxApiErrors = 3,

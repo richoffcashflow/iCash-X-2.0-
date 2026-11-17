@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {db} from '../lib/stripe-test.ts';
 import {recoverOwnerActiveExports} from '../lib/owner-active-export.ts';
-import {ProspectingBudgetError,VoiceActivationBudgetError,SellerInventoryUnavailableError} from '../lib/voice-budget-failure.ts';
+import {ProspectingBudgetError,VoiceActivationBudgetError,SellerInventoryUnavailableError,TextClaimRefusedError} from '../lib/voice-budget-failure.ts';
 
 // Native streams and in-process fixtures only. No database or provider network.
 const nativeFetch=globalThis.fetch;
@@ -45,6 +45,7 @@ try{
    ['rpc/icash_reserve_operation',{code:'P0001',message:'Prospecting budget reached',details:JSON.stringify({quoteCents:977})},error=>error instanceof ProspectingBudgetError&&error.quoteCents===977],
    ['rpc/icash_reserve_paced_voice',{code:'P0001',message:'Activation spending cap reached'},error=>error instanceof VoiceActivationBudgetError],
    ['rpc/icash_claim_text',{code:'P0001',message:'Seller inventory assigned or suppressed'},error=>error instanceof SellerInventoryUnavailableError],
+   ['rpc/icash_claim_text',{code:'P0001',message:'Text already dispatched'},error=>error instanceof TextClaimRefusedError],
    ['rpc/fixture',{code:'P0001',message:'Prospecting budget reached',details:JSON.stringify({quoteCents:977})},error=>error.message==='Database request failed'&&!(error instanceof ProspectingBudgetError)],
   ];
   for(const [path,body,check] of cases){

@@ -41,24 +41,40 @@ export async function workspaceActivity(req:Request,accountId:string,{refreshOut
   // A literal address fragment, never a caller-supplied PostgREST expression or wildcard.
   if(query.length>100||/[^\p{L}\p{N}\s#.,'\-]/u.test(query))return NextResponse.json({error:'Search using a street, city or ZIP code.'},{status:400,headers});
   if(refreshOutcomes)await db('rpc/icash_refresh_opportunity_outcomes','POST',{p_account:accountId});
-  const [responseCounts,textReplyCounts]=await Promise.all([db<{responded:number;total:number}>('rpc/icash_workspace_response_counts','POST',{p_account:accountId}),db<TextReplyCounts>('rpc/icash_workspace_text_reply_counts','POST',{p_account:accountId})]);
   const textsOnly=['texts','unread'].includes(params.get('view')??'');
   const replyIds=textsOnly&&!screeningId?await db<{screening_id:string;state:string}[]>('rpc/icash_workspace_text_reply_ids','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_unread_only:params.get('view')==='unread'}):[];
   const replyPage=replyIds.slice(0,pageSize);
-  let properties:Property[];
-  if(screeningId){
-   properties=await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,state,result,completed_at&limit=1`);
-  }else if(textsOnly){
-   const completeIds=replyPage.filter(r=>r.state==='complete').map(r=>r.screening_id);
-   const rows=completeIds.length?await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${completeIds.join(',')})&state=eq.complete&select=id,state,result,completed_at`):[];
-   properties=completeIds.flatMap(id=>rows.filter(p=>p.id===id));
-  }else{
+  async function readProperties():Promise<Property[]>{
+   if(screeningId)return db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=eq.${screeningId}&state=eq.complete&select=id,state,result,completed_at&limit=1`);
+   if(textsOnly){
+    const completeIds=replyPage.filter(r=>r.state==='complete').map(r=>r.screening_id);
+    const rows=completeIds.length?await db<Property[]>(`icash_screening_jobs?account_id=eq.${accountId}&id=in.(${completeIds.join(',')})&state=eq.complete&select=id,state,result,completed_at`):[];
+    return completeIds.flatMap(id=>rows.filter(p=>p.id===id));
+   }
    // Rank actual seller responses across the account before paging.
-   properties=opportunitiesOnly
-    ?await db<Property[]>('rpc/icash_workspace_ready_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1})
-    :await db<Property[]>('rpc/icash_workspace_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_responses_only:responsesOnly});
+   return opportunitiesOnly
+    ?db<Property[]>('rpc/icash_workspace_ready_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1})
+    :db<Property[]>('rpc/icash_workspace_opportunities','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_responses_only:responsesOnly});
   }
-  const instantRows=instantLeadsEnabled(process.env)?textsOnly&&!screeningId?(await Promise.all(replyPage.filter(r=>r.state==='awaiting_address').map(r=>db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_screening:r.screening_id,p_offset:0,p_limit:1})))).flat():await db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null,p_responses_only:(responsesOnly||opportunitiesOnly)&&!screeningId}):[];
+  async function readInstantRows():Promise<InstantLeadCardData[]>{
+   if(!instantLeadsEnabled(process.env))return [];
+   if(textsOnly&&!screeningId){
+    const results=await Promise.allSettled(replyPage.filter(r=>r.state==='awaiting_address').map(r=>db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_screening:r.screening_id,p_offset:0,p_limit:1})));
+    if(results.some(r=>r.status==='rejected'))throw Error('WORK_UNAVAILABLE');
+    return results.flatMap(r=>r.status==='fulfilled'?r.value:[]);
+   }
+   return db<InstantLeadCardData[]>('rpc/icash_meta_workspace_response_leads','POST',{p_account:accountId,p_query:query,p_offset:page*pageSize,p_limit:pageSize+1,p_screening:screeningId??null,p_responses_only:(responsesOnly||opportunitiesOnly)&&!screeningId});
+  }
+  // Counts and both page sources are independent after the original refresh and
+  // reply-page prerequisites. Keep four ordinary reads (at most eight for texts)
+  // in one stage; observe every failure before using any partial result.
+  const [responseCountsRead,textReplyCountsRead,propertiesRead,instantRowsRead]=await Promise.allSettled([
+   db<{responded:number;total:number}>('rpc/icash_workspace_response_counts','POST',{p_account:accountId}),
+   db<TextReplyCounts>('rpc/icash_workspace_text_reply_counts','POST',{p_account:accountId}),
+   readProperties(),readInstantRows()
+  ]);
+  if(responseCountsRead.status==='rejected'||textReplyCountsRead.status==='rejected'||propertiesRead.status==='rejected'||instantRowsRead.status==='rejected')throw Error('WORK_UNAVAILABLE');
+  const responseCounts=responseCountsRead.value,textReplyCounts=textReplyCountsRead.value,properties=propertiesRead.value,instantRows=instantRowsRead.value;
   const instantLeads=instantRows.slice(0,pageSize);
   const visible=properties.slice(0,pageSize);
   const replyScreenings=[...visible.map(p=>p.id),...instantLeads.map(l=>l.screeningId)];

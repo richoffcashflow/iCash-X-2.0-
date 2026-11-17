@@ -3,7 +3,7 @@ import {automaticOfferGuardrailMatches,automaticOfferPolicy} from './automatic-o
 import {type NetworkBuyerKind} from './homeoffer-buyer-identity.ts';
 import {finalAffirmativeSpeech,recordingConsentEvidenceVersion,recordingContactOptOut} from './recording-consent-evidence.ts';
 import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
-import {outboundParallelApproval,outboundProApproval,outboundEightyPercentApproval} from './outbound-parallel-approval.ts';
+import {outboundParallelApproval,outboundProApproval,outboundEightyPercentApproval,outboundFullBusinessApproval} from './outbound-parallel-approval.ts';
 import {unversionedInertWorkflow} from './inert-workflow-serialization.ts';
 /** Default-off outbound foundation. Spoken-consent977-cent quote approved; activation still requires release review. */
 export const recordingPolicy=Object.freeze({version:'required-audio-30d-speech-v1',disclosureVersion:'required-audio-30d-speech-2026-10-03',retentionDays:30,maxTotalSeconds:600,consentWindowSeconds:45,recordingMicrosPerMinute:2500,storageMicrosPerMinuteMonth:500,speechGatherMicros:20000,recordingAllowanceMicros:31000,minimumHoldCents:977,previousApprovedHoldCents:965});
@@ -264,7 +264,13 @@ export function recordingAgentMatches(review:RecordingReview,raw:unknown){
     {...snapshot,platform_settings:{...platform,call_limits:{...limits,agent_concurrency_limit:previous,daily_limit:daily}}},edgesOnly));
  // Test the current/fully historical endpoints of every separately authorized
  // capacity representation before exploring a nonmatching capacity's interior.
- const matches=(edgesOnly:boolean)=>recordingConfigHashSearch(review.configHash,snapshot,edgesOnly)||approvedCapacity(edgesOnly)||approvedProCapacity(edgesOnly)||approvedEightyPercentCapacity(edgesOnly);
+ const full=outboundFullBusinessApproval;
+ const approvedFullBusinessCapacity=(edgesOnly:boolean)=>review.agentId===full.agentId&&review.branchId===full.branchId&&review.versionId===full.versionId
+  &&limits.agent_concurrency_limit===full.limit&&limits.daily_limit===full.dailyLimit&&limits.bursting_enabled===false
+  &&[[full.previousLimit,full.previousDailyLimit],[eighty.previousLimit,eighty.previousDailyLimit],[pro.previousLimit,pro.previousDailyLimit],[approval.previousLimit,pro.previousDailyLimit]]
+   .some(([previous,daily])=>recordingConfigHashSearch(review.configHash,
+    {...snapshot,platform_settings:{...platform,call_limits:{...limits,agent_concurrency_limit:previous,daily_limit:daily}}},edgesOnly));
+ const matches=(edgesOnly:boolean)=>recordingConfigHashSearch(review.configHash,snapshot,edgesOnly)||approvedCapacity(edgesOnly)||approvedProCapacity(edgesOnly)||approvedEightyPercentCapacity(edgesOnly)||approvedFullBusinessCapacity(edgesOnly);
  return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&limits.bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&(matches(true)||matches(false));
 }
 export function recordingDisclosure(principal:string,assistantName:string,buyerKind?:NetworkBuyerKind){
