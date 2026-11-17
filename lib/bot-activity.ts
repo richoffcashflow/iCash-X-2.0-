@@ -2,7 +2,7 @@
 export const botTaskLabels:Record<string,string>={
  discovery:'Finding eligible properties',market_research:'Checking property availability',contacts:'Finding property owners',
  seller_opener:'Contacting an owner',seller_recovery:'Following up with a seller',text_ai:'Preparing a reply',voice_dispatch:'Starting a call',
- voice_result:'Updating a conversation',signing_result:'Checking a signature',fulfillment:'Preparing deal documents',
+ voice_result:'Updating a conversation',signing_result:'Checking a signature',signing_receipt:'Checking a signature',fulfillment:'Preparing deal documents',
  title_followup:'Following up with title',customer_updates:'Sending an update',customer_attention:'Sending an update',
 };
 export type BotActivity={active:boolean;label:string;checkedAt:string;blocked?:boolean;unavailable?:boolean};

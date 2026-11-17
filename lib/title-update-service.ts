@@ -1,3 +1,4 @@
+import {prepareTitleCopyDelivery} from './title-copy-delivery';
 import {db} from '@/lib/stripe-test';
 import {completedSigningPdf} from '@/lib/signing-service';
 import {closingPayoutNote} from './closing-setup';
@@ -15,7 +16,12 @@ export async function dispatchTitleUpdate(accountId:string,taskId:string){
  }
  let attachments:{filename:string;content:string}[]=[];let details:string;
  try{
-  if(task.payload.type==='assignment'&&task.payload.envelopeId){
+  if(task.payload.type==='executed_copy'){
+   const prepared=await prepareTitleCopyDelivery(accountId,taskId,task.payload,{db,pdf:completedSigningPdf});
+   if(prepared.status==='held'||prepared.status==='retry'){await retry();return {status:prepared.status==='retry'?'title_followup_spending_held':'title_followup_held'};}
+   if(prepared.status==='covered')return {status:'title_copy_original_receipt_confirmed'};
+   attachments=prepared.attachments;details=prepared.details;
+  }else if(task.payload.type==='assignment'&&task.payload.envelopeId){
    const pdf=await completedSigningPdf(accountId,task.payload.envelopeId);
    if(pdf.byteLength>20*1024*1024)throw Error('Attachment requires review');
    attachments=[{filename:'executed-assignment-agreement.pdf',content:Buffer.from(pdf).toString('base64')}];
@@ -34,10 +40,14 @@ export async function dispatchTitleUpdate(accountId:string,taskId:string){
  catch{await retry();return {status:'title_followup_spending_held'};}
  if(!job){await retry();return {status:'title_followup_held'};}
  try{
-  const res=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`title-followup-${taskId}`},body:JSON.stringify({from:process.env.ICASH_TITLE_FROM_EMAIL,reply_to:process.env.ICASH_TITLE_REPLY_EMAIL,to:[job.recipient],subject:`[ICX-T:${job.requestId}] ${task.payload.type==='assignment'?'Signed buyer assignment':'Updated payment preference'}`,text:`Hello,\n\nThis is the automated iCash X coordination assistant for ${job.address.replace(/[\r\n]/g,' ').slice(0,300)}.\n\n${details}\n\nPlease reply with confirmation or any questions. This update does not confirm title acceptance, deposit receipt, closing or disbursement. Payment details must be collected through your secure process and independently verified; do not rely on emailed wire changes.`,...(attachments.length?{attachments}:{})}),signal:AbortSignal.timeout(15000)});
+  const res=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`title-followup-${taskId}`},body:JSON.stringify({from:process.env.ICASH_TITLE_FROM_EMAIL,reply_to:process.env.ICASH_TITLE_REPLY_EMAIL,to:[job.recipient],subject:`[ICX-T:${job.requestId}] ${task.payload.type==='assignment'?'Signed buyer assignment':task.payload.type==='executed_copy'?'Requested executed agreements':'Updated payment preference'}`,text:`Hello,\n\nThis is the automated iCash X coordination assistant for ${job.address.replace(/[\r\n]/g,' ').slice(0,300)}.\n\n${details}\n\nPlease reply with confirmation or any questions. This update does not confirm title acceptance, deposit receipt, closing or disbursement. Payment details must be collected through your secure process and independently verified; do not rely on emailed wire changes.`,...(attachments.length?{attachments}:{})}),signal:AbortSignal.timeout(15000)});
   if(!res.ok){await res.body?.cancel().catch(()=>undefined);throw Error('Delivery requires review');}const result=await res.json();if(typeof result.id!=='string'||!result.id)throw Error('Receipt missing');
-  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.dispatching`,'PATCH',{email_state:'sent',email_provider_id:result.id,updated_at:new Date().toISOString()});
-  await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.sent&state=eq.scheduled`,'PATCH',{state:'done',updated_at:new Date().toISOString()});
+  if(task.payload.type==='executed_copy'){
+   if(await db('rpc/icash_finish_title_copy','POST',{p_account:accountId,p_task:taskId,p_provider:result.id})!==true)throw Error('Original copy receipt required');
+  }else{
+   await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.dispatching`,'PATCH',{email_state:'sent',email_provider_id:result.id,updated_at:new Date().toISOString()});
+   await db(`icash_title_tasks?id=eq.${taskId}&account_id=eq.${accountId}&email_state=eq.sent&state=eq.scheduled`,'PATCH',{state:'done',updated_at:new Date().toISOString()});
+  }
   return {status:'title_followup_sent'};
  }catch{
   // Never resend a possibly accepted email after a timeout or lost database response.
