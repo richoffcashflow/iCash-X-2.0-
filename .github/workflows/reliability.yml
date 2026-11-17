@@ -44,6 +44,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-learning-completion-lock-postgres.mjs
+      - name: Verify policy review never blocks canonical foreground decisions
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-policy-review-lock-postgres.mjs
       - name: Verify receipt-check cursors preserve learning source generations
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
@@ -114,6 +118,8 @@ jobs:
         run: python3 scripts/test-sender-delay-opener-postgres.py
       - name: Verify shared Contiguity sender limits under concurrent dispatch
         run: python3 scripts/test-contiguity-sender-volume-postgres.py
+      - name: Verify deferred originals get a bounded turn before fresh introductions
+        run: python3 scripts/test-deferred-sender-fairness-postgres.py
       - name: Verify new-number daytime pacing under concurrent dispatch
         run: python3 scripts/test-november-sender-pacing-postgres.py
       - name: Verify independent targeting query receipts under concurrent admission
@@ -366,6 +372,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-acquisition-capacity-single-state-postgres.mjs
+      - name: Verify research report prechecks and late control changes
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-usage-context-research-precheck-postgres.mjs
       - name: Verify ranking stays independent of pending-cost reports
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
@@ -374,6 +384,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
         run: node scripts/test-collector-preflight-deadline-postgres.mjs
+      - name: Verify exact seller property lookups, migration locks and competing issuers
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node scripts/test-seller-opener-property-lookup-postgres.mjs
       - name: Verify continued original cohorts through the actual owner handler
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg

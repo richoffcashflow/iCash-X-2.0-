@@ -15,14 +15,27 @@ for(const [progress,label] of [[{status:'budget_reached'},'Waiting for available
  assert.equal(currentBotActivity({...input,paused:true},now).label,'Paused');
 }
 let authorized=true,failed=false,queries=[];
-for(const reason of ['configuration_expired','configuration_disabled','system_paused','no_completed_work','pending_work']){
+for(const reason of ['configuration_expired','configuration_disabled','system_paused','no_completed_work']){
  const value=currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{status:'ready',health:{status:'blocked',reason}}},now);
  assert.equal(value.blocked,true);assert.equal(value.active,false,'a claimed ticket cannot prove account recovery');
  assert(!value.label.includes('next task'));
  assert.doesNotMatch(value.label,/stalled|work is delayed|work delayed/i);
- if(reason==='pending_work')assert.equal(value.label,'Earlier work is awaiting confirmation.','A pending original does not prove every workflow is delayed');
  if(reason==='no_completed_work')assert.equal(value.label,'No recent completed task was recorded.','Missing completion evidence remains explicit');
 }
+const pendingInput={paused:false,tickets:[],screening:[],progress:{status:'ready',health:{status:'blocked',reason:'pending_work'}}};
+for(const activeInput of [{tickets:[ticket]},{screening:[{state:'running',lease_until:expires_at}]}]){
+ const value=currentBotActivity({...pendingInput,...activeInput},now);
+ assert.equal(value.active,true,'Independent current work remains visible beside pending originals');
+ assert.equal(value.pendingConfirmation,true,'Current work never clears the original confirmation gap');
+ assert.notEqual(value.blocked,true,'A pending original does not prove all work is blocked');
+}
+for(const inactiveInput of [{},{tickets:[{...ticket,state:'issued'}]},{tickets:[{...ticket,expires_at:new Date(now-1).toISOString()}]},{screening:[{state:'running',lease_until:new Date(now-1).toISOString()}]}]){
+ const value=currentBotActivity({...pendingInput,...inactiveInput},now);
+ assert.equal(value.active,false);assert.equal(value.pendingConfirmation,true);
+ assert.equal(value.label,'Earlier work is awaiting confirmation.');
+}
+assert.equal(currentBotActivity({...pendingInput,paused:true,tickets:[ticket]},now).label,'Paused');
+assert.deepEqual(pendingInput.progress,{status:'ready',health:{status:'blocked',reason:'pending_work'}},'Presentation never changes the health observation');
 assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{health:{status:'unavailable'}}},now).unavailable,true);
 const account='00000000-0000-4000-8000-000000000001';
 const request=new Request('https://workspace.invalid/api/work/bot-status');
