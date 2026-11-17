@@ -125,11 +125,11 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
  if(!businessNumber||(threads.length&&businessNumber!==threadNumber)||(!isAdditionalBusinessPhone(businessNumber)&&businessNumber!==primaryNumber))return hold('business_number_mismatch');
  if(isAdditionalBusinessPhone(businessNumber)){
   const [secondary]=await db<{outbound_enabled:boolean}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(businessNumber)}&select=outbound_enabled`);
-  if(!secondary?.outbound_enabled)return hold('business_number_verification_required');
+  if(!secondary?.outbound_enabled){try{console.warn('business_calling_preflight_held',{phase:'dispatch_preflight',stage:'stored_readiness',reason:'not_ready'});}catch{}return hold('business_number_verification_required');}
  }
  if(!isAdditionalBusinessPhone(businessNumber)&&!consistentTextSenders(businessNumber,threads.filter(t=>!t.sender_pool_assigned)))return hold('business_number_mismatch');
  const readCaller=async()=>{
-  if(isAdditionalBusinessPhone(businessNumber))return await secondaryCallingReady(db,process.env,fetch,businessNumber)?null:'business_number_verification_required';
+  if(isAdditionalBusinessPhone(businessNumber))return await secondaryCallingReady(db,process.env,fetch,businessNumber,diagnostic=>console.warn('business_calling_preflight_held',{phase:'dispatch_preflight',...diagnostic}))?null:'business_number_verification_required';
   const phone=await elevenRequest<{phone_number:string}>(`/v1/convai/phone-numbers/${encodeURIComponent(c.phone_number_id)}`);
   return sameBusinessNumber(businessNumber,phone.phone_number)?null:'business_number_mismatch';
  };

@@ -64,7 +64,7 @@ const review={enabled:true,reviewedAt:new Date(now-1000).toISOString(),reviewedU
 const configTemplate={enabled:true,agent_id:review.agentId,phone_number_id:'number',agent_config_hash:review.configHash,reviewed_until:new Date(now+100000).toISOString(),seller_rate_id:'rate',buyer_rate_id:'buyer-rate',max_duration_seconds:600,required_tool_ids:review.toolIds,approved_voice_ids:[]};
 let resolvedSender=undefined;
 let textThreads=[{sender:'+14243948384'}],secondEnabled=false,secondVerified=false;
-const secondaryCallingReady=async()=>{await preflightRead?.('secondary_caller');return secondVerified;};
+const secondaryCallingReady=async(_db,_env,_fetch,_phone,onDiagnostic)=>{await preflightRead?.('secondary_caller');if(!secondVerified)onDiagnostic?.({stage:'forwarding',reason:'not_ready'});return secondVerified;};
 let reservationError=null,budgetHoldAccepted=true,flexibleFunding={maxSeconds:120};
 let metaClaimResult='claimed',spacingCurrent=true,spacingAfterReservation=true;
 let sellerConsentCurrent=true,activeConversation=false,outreachContextOverride=undefined,metaContext=null,cancellationCurrent=true;
@@ -340,7 +340,7 @@ reset();smsSource='seller-now';ackFails=true;assert.equal((await dispatchLiveVoi
 reset();smsSource='seller-now';timeout=true;assert.equal((await dispatchLiveVoice('account','job')).status,'provider_outcome_unknown_no_retry');assert(!records.some(r=>r.smsAck));
 reset();sellerConsentCurrent=true;textThreads=[{sender:newBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;secondVerified=true;customVoice='voice_custom_vip';assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.fromPhone,newBusinessPhone);assert.equal(outboundBody.voiceId,'voice_custom_vip');
 reset();sellerConsentCurrent=true;textThreads=[];resolvedSender=newBusinessPhone;secondEnabled=true;secondVerified=true;assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.equal(outboundBody.fromPhone,newBusinessPhone);resolvedSender=undefined;
-reset();sellerConsentCurrent=true;textThreads=[{sender:newBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;secondVerified=false;assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_verification_required');assert.equal(postCount,0);
+reset();sellerConsentCurrent=true;textThreads=[{sender:newBusinessPhone,sender_pool_assigned:true}];secondEnabled=true;secondVerified=false;assert.equal((await dispatchLiveVoice('account','job')).status,'business_number_verification_required');assert.equal(postCount,0);assert.deepEqual(preflightDiagnostics,[['business_calling_preflight_held',{phase:'dispatch_preflight',stage:'forwarding',reason:'not_ready'}]]);assert(!records.some(r=>r.reserve));
 
 // Fresh assignments from the shared resolver support either active number.
 for(const sender of ['+14243948384',newBusinessPhone,...voiceOnlyBusinessPhones]){
