@@ -97,3 +97,21 @@ for(const confirmation of ['Yes, that match.','It match','That matches.']){
  assert.equal(currentAccessConversation([user('No code arrives.'),assistant('Does the seller name match?'),user(confirmation)]).length,0);
 }
 console.log('PASS short receipt-email confirmations retain missing delivery without crossing topic or operator boundaries');
+
+// Fictional missing-delivery variants must not become code-entry instructions.
+for(const kind of ['account','access'])for(const text of [
+ 'I purchased access but the email code is not coming through.',
+ 'My login code is not coming thru.',
+ 'The verification code is not coming.',
+]){
+ const r=await replyToSupport({kind,messages:[user(text)],allowAI:false},noModel);
+ assert.doesNotMatch(r.reply,/enter the newest code/i);
+ assert.match(r.reply,/receipt|inbox|delivery/i);
+ assert.notEqual(r.status,'resolved');
+}
+const {supportCodeDelivery}=await import('../lib/support-code-delivery.ts');
+for(const text of ['The code came through.','The code is coming through.','I received the code.'])assert.notEqual(supportCodeDelivery([user(text)]),'missing');
+for(const tail of [[user('Where is the course?')],[{role:'operator',content:'The payment email needs ownership review.'},user('What is next?')],[user('I got in.')]]){
+ assert.equal(currentAccessConversation([user('My login code is not coming through.'),...tail]).length,0);
+}
+console.log('PASS missing-code present-progressive delivery variants and topic/operator/success boundaries');

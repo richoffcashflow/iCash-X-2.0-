@@ -1,3 +1,4 @@
+const sellerResearchIntentReply='The bot does not know that a researched owner wants to sell. Property and owner data help select prospects that meet the research criteria; those are potential opportunities, not confirmed interested sellers. Eligible outreach asks whether the owner wants to discuss selling, and the seller’s actual response supplies that evidence. Finding a property or attempting a call does not confirm interest, an offer acceptance or a deal.';
 import {supportLegacyQuestion,supportLegacyStatus} from './support-legacy-migration.ts';
 import {supportLeadImportPolicy,supportLeadImportQuestion,supportMissingSellerContactQuestion,supportSpecificPropertyQuestion} from './support-lead-policy.ts';
 import {cashOfferPolicy} from './cash-offer-math.ts';
@@ -23,6 +24,7 @@ function capabilityAnswer(question:string):string|null{
  // Keep actual faults and disputed charges in diagnostics, even when the same
  // message contains a familiar product term or dollar amount.
  if(/\b(?:refund|cancel|billed|charged|duplicate|declined|failed|error|broken|missing|stuck|blank|blocked|disabled|spinning|unavailable|unresponsive|greyed out|grayed out|not loading|not working|not calling|not texting|not sending|not received|no calls|no texts|no repl(?:y|ies)|no response|never calls|never sends)\b|\b(?:can[’']?t|cannot|won[’']?t|doesn[’']?t|didn[’']?t|haven[’']?t|will not|does not|did not|have not)\b.{0,30}\b(?:save|send|download|open|load|work|call|text|receive[ds]?|respond(?:ed)?)\b/i.test(q))return null;
+ if(/\bhow\b.{0,35}\b(?:ai|bot)\b.{0,20}\bknow\b/i.test(q)&&/\b(?:sell|selling)\b/i.test(q)&&/\b(?:owner|seller|they|home|house)\b/i.test(q))return sellerResearchIntentReply;
  if(!/\bvip\b/i.test(q)&&/\b(?:subscription|membership|monthly payment|monthly fee)\b/i.test(q)&&/\b(?:what(?:[’']s| is| does)|cover|include)\b/i.test(q)&&!/\b(?:my|charged|billed|ended|expired|inactive|cancelled|canceled|access|working)\b/i.test(q))return 'The software subscription pays for access to iCash X and its bot features. Property research, contact lookup, calls, texts and other paid AI work use separately purchased work credits; the subscription includes $0 in work credits. An account’s actual payment or access status needs its own recorded check.';
  if(/\b(?:company|business|name)\b/i.test(q)&&/\b(?:say|use|tell|coming from|introduce|represent)\b/i.test(q)&&/\b(?:leads?|sellers?|buyers?|talking|speaking|calling|introduce|represent)\b/i.test(q))return 'Use the individual or company name you saved in Settings. You’re representing yourself or your business as the buyer; iCash X is the software you use to work the deal.';
  const planPayment=/\b(?:subscription|membership|monthly|per month|vip|upgrade)\b/i.test(q)&&!/\b(?:credits?|usage|add money|adding money)\b/i.test(q);
@@ -95,7 +97,7 @@ export function supportProductClarification(messages:Turn[]){
   }
   return {reply:'Do you mean sharing the ARV estimate with the seller or with a cash buyer?',answered:false};
  }
- const capability=capabilityAnswer(q);if(capability)return {reply:capability,answered:true};
+ const capability=capabilityAnswer(q);if(capability)return {reply:capability,answered:capability!==sellerResearchIntentReply};
  if(supportLeadImportQuestion(q)){
   const missing=supportMissingSellerContactQuestion(q);
   const otherFailure=/\b(?:bot|calls?|texts?|payments?|contracts?)\b.{0,45}\b(?:not|stopped|missing|failed|broken)\b/i.test(q);

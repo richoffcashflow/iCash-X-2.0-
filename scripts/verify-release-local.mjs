@@ -2,6 +2,9 @@
 // Provider configuration/readback is a separate, explicit release operation.
 import {spawnSync} from 'node:child_process';
 const suites = [
+ 'support-seller-interest',
+ 'support-paid-portal',
+ 'support-code-plural-context', 'support-payment-detail-followup', 'support-proof-followup', 'support-proof-submission-boundaries',
  'deferred-sender-fairness',
  'policy-review-lock-isolation',
  'seller-opener-property-lookup',
@@ -55,7 +58,7 @@ const suites = [
  'voice-cooldown-worker', 'voice-cooldown-database',
  'seller-followup-window', 'seller-offer-qualification', 'seller-caller-identity', 'seller-call-cadence', 'seller-purpose-clarity', 'seller-voice-warmth', 'seller-helpful-text', 'seller-call-invitation', 'seller-initial-reply',
  'support-purchase-topic', 'support-work-repair-boundaries', 'support-pending-explanation',
- 'support-checkout-email', 'support-email-repurchase', 'support-seller-text-review', 'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
+ 'support-checkout-email', 'support-email-repurchase', 'support-seller-text-review', 'support-quality', 'support-improvement-loop', 'support-product-audit', 'support-followup-audit', 'support-paid-access-audit', 'support-paid-code-context', 'support-short-clarifications', 'support-product-conflicts', 'support-inbox-regressions', 'support-read-races', 'support-product-clarifications', 'support-checkout', 'support-checkout-database', 'legacy-checkout-recovery', 'legacy-trial-route', 'support-legacy-migration', 'support-natural-conversation', 'support-personal-tone', 'support-topic-focus', 'support-workflow-gaps', 'support-role-guidance', 'support-self-service',
  'daily-work-target', 'provider-quota-scheduling', 'stalled-voice-capacity',
  'collector-preflight-deadline-plan', 'collector-selector-equivalence', 'collector-complete-query',
  'validation-compatibility',

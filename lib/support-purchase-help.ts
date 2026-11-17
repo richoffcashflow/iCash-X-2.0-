@@ -1,11 +1,104 @@
 import {supportLegacyProofEmail} from './support-legacy-migration.ts';
 import {supportRenewalCancellationRequested,type SupportEvidence} from './support-policy.ts';
 type Turn={role:string;content:string};
-type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[]};
+type PurchaseContext={kind:'access'|'account';messages:Turn[];evidence?:SupportEvidence[];handedOff?:boolean};
+
+/** A reply to the latest operator's evidence request is a submission claim,
+ * not a receipt, authenticated identity or a completed account change. */
+export function supportProofSubmissionFollowup(messages:Turn[]){
+ const index=messages.findLastIndex(turn=>turn.role==='user');
+ const request=messages[index-1];
+ const q=messages[index]?.content.trim()??'';
+ const checkoutDetails=request?.role==='operator'
+  &&/\breply to (?:that|the same|this) email\b[^.!?]{0,100}\b(?:first and last name|checkout name)\b/i.test(request.content)
+  &&/\bcheckout email\b/i.test(request.content)
+  &&!/\b(?:do not|don[’']t|never) reply\b/i.test(request.content);
+ const detailsClaim=/^I (?:have )?already (?:did that|sent (?:it|those details))\b/i.test(q)&&q.length<=240
+  &&!/\b(?:seller|buyer|bot|property|house|contract|course|vip|credits?|delete|deletion|refund|cancel|not yet|never|haven[’']t|did not|didn[’']t|would|will|if|friend|not to you|working now|fixed|resolved|signed in)\b/i.test(q);
+ if(checkoutDetails&&detailsClaim&&supportProofSubmissionClaim(q,true)==='unconfirmed_recipient')return {reply:'The requested checkout details need to reach the original iCash X Support email. If they went to a different inbox, reply once to that original email with the requested details. If you already replied there, share the subject and date here so we can look for the message. Your purchase and access still need verification.',status:'open' as const,managementReview:true as const,ai:false as const};
+ if(checkoutDetails&&detailsClaim)return {reply:'You’re saying you sent the checkout details requested in the last support reply. That submission still needs to be checked against the purchase; you do not need to send those same details again. The earlier operator findings remain part of this review. This reply does not confirm any new email, subscription, refund or access change.',status:'open' as const,managementReview:true as const,ai:false as const};
+ if(!request||request.role!=='operator'||!request.content.includes(supportLegacyProofEmail)
+  ||!/\b(?:email|forward|send)\b[^.!?]{0,55}\b(?:purchase receipt|checkout (?:email|address)|original checkout address)\b/i.test(request.content)
+  ||/\b(?:not|never|don[’']?t|do not|no need to)\s+(?:email|forward|send)\b/i.test(request.content))return null;
+ if(!/^(?:(?:done|yes)[,.!\s]+)?I (?:(?:have )?already did(?: that)?|(?:have |already |just )?sent it(?: to (?:your email|you|support))?)[.!\s]*$/i.test(q))return null;
+ return {reply:'You’ve said you sent the requested purchase information. I have not confirmed that the email has been received or matched to the purchase. You do not need to send the same information again. What subject and date did you use for that email? That will help locate it. Your access and any cancellation or refund request remain unresolved; this reply has not changed your email, subscription or access.',status:'open' as const,managementReview:true as const,ai:false as const};
+}
+const suppliedPaymentLead='You’ve supplied the payment date and amount, so you don’t need to repeat them. These details alone do not verify a purchase or ownership. ';
+const paymentMerchantQuestion='What merchant name appears beside that payment on your statement? Share only the merchant name, not card numbers or codes.';
+const suppliedPaymentTail=' This reply does not confirm a cancellation, email correction or restored access. You don’t need to pay again or repeat sign-in attempts.';
+const asksPaymentDetails=(text:string)=>/\bdate and amount\b/i.test(text)&&/\b(?:payment|purchase|bank|card|statement)\b/i.test(text)&&/(?:\bwhat\b[^?]*\?|\breply\b.{0,90}\bdate and amount\b)/i.test(text);
+
+/** A direct answer to a source-bound payment-detail request is useful evidence
+ * for review, not a verified purchase or permission to change an account. */
+export function supportSubmittedPaymentDetails(context:PurchaseContext):{reply:string;status:'open';managementReview:true;ai:false}|null{
+ if(context.kind!=='access')return null;
+ const index=context.messages.findLastIndex(turn=>turn.role==='user');
+ const before=context.messages.slice(0,index);
+ const operator=before.findLastIndex(turn=>turn.role==='operator'||turn.role==='assistant');
+ if(index<0||operator<0||before.slice(operator+1).some(turn=>turn.role==='user'))return null;
+ const request=before[operator].content,question=context.messages[index].content;
+ const lastOperator=before.findLast(turn=>turn.role==='operator');
+ const generatedMerchantQuestion=before[operator].role==='assistant'&&request===suppliedPaymentLead+paymentMerchantQuestion+suppliedPaymentTail&&(!lastOperator||asksPaymentDetails(lastOperator.content))
+  &&supportSubmittedPaymentDetails({...context,messages:before.slice(0,operator)})?.reply===request;
+ const bankDescriptionRequest=before[operator].role==='operator'&&/\bShare only that business name or description, without card or account numbers\./i.test(request);
+ // A supplied description is a locating detail, never a verified merchant/payment.
+ if((generatedMerchantQuestion||bankDescriptionRequest||before[operator].role==='operator'&&/What merchant name appears beside that payment on your (?:statement|receipt or bank statement)\?/i.test(request))
+  &&(/^(?:it (?:says|shows)|(?:the )?merchant(?: name)? is) [\p{L}\p{N} &.'’-]{1,80}[.!]?$/iu.test(question)||bankDescriptionRequest&&/^[\p{L}\p{N} &.'’-]{1,80}[.!]?$/iu.test(question)&&!/^(?:what|where|when|how|can|please|i|my)\b/i.test(question))
+  &&!/[?]|\b(?:seller|buyer|property|house|deal|offer|closing|bot|leads?|credits?|contract|agreement|course|vip|refund|cancel|dispute|chargeback|not|no|never|if|fixed|working|resolved)\b|\b(?:signed|logged) in\b/i.test(question)){
+  if(bankDescriptionRequest&&/\bno receipt arrived\b/i.test(request))return {reply:'You’ve supplied the statement description, and the review still records that no receipt arrived. Is the email you entered when paying the same as the email you supplied for this conversation, or a different address? If different, share only that checkout email, not a password or code. The statement description alone does not verify a purchase or ownership. Your access and any refund or cancellation request remain unresolved; don’t pay again or repeat failed sign-in steps.',status:'open',managementReview:true,ai:false};
+  return {reply:`You’ve supplied the statement description; it does not by itself verify the purchase or ownership. If you already emailed the receipt, do not send the same receipt again; reply with that email’s subject and date. Otherwise, send the original purchase receipt to ${supportLegacyProofEmail} and mention this access conversation. If no receipt arrived, tell us that here instead. Your access and any cancellation or refund request remain unresolved. Don’t share card numbers or codes, pay again or repeat failed sign-in steps.`,status:'open' as const,managementReview:true,ai:false};
+ }
+ // Older assistant text is only a source-bound question, never policy or proof.
+ if(before[operator].role==='assistant'&&(before.some(turn=>turn.role==='operator')||!/^The code requests (?:haven[’']t|have not) restored access\. What are the payment date and amount on your receipt\? Leave out card details and codes; you (?:don[’']t|do not) need to pay again\.$/i.test(request)))return null;
+ if(!asksPaymentDetails(request))return null;
+ if(/\?|\b(?:seller|buyer|property|house|deal|offer|closing|bot|leads?|credits?|contract|agreement|course|vip|refund|duplicate|twice|unrecognized|unauthorized|dispute|chargeback|cancel(?:led|ed|lation)?|delet(?:e|ed|ion)|not|never|no|didn[’']?t|haven[’']?t|will|would|plan|hypothetically|if)\b/i.test(question))return null;
+ const date=/\b(?:today|yesterday)\b|\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/i.test(question);
+ const amount=/\$\s*\d+(?:\.\d{1,2})?\b|\b\d+(?:\.\d{1,2})?\s+(?:dollars?|USD)\b/i.test(question);
+ if(!date||!amount)return null;
+ const prior=before.slice(0,operator).findLast(turn=>turn.role==='user')?.content??'';
+ const merchant=/\bmerchant(?: name)? (?:is|was)\b|\bstatement (?:says|shows)\b/i.test(question+'\n'+prior)?'Those details remain in this conversation for the payment review.':paymentMerchantQuestion;
+ return {reply:suppliedPaymentLead+merchant+suppliedPaymentTail,status:'open' as const,managementReview:true,ai:false};
+}
 
 const accessProblem=(text:string)=>/\b(?:access|sign[ -]?in|log[ -]?in|locked|subscription|membership)\b/i.test(text)&&/\b(?:can[’']?t|cannot|unable|no|not|locked|cancelled|canceled|inactive|failed|needs attention|paid|charged)\b/i.test(text);
 const cancellationRequest=(text:string)=>supportRenewalCancellationRequested(text)||/\b(?:refund|money back|cancel|charged twice|duplicate charge)\b/i.test(text);
 const deniesVipPurchase=(text:string)=>/\b(?:not|never) (?:for |the |a )?vip\b|\b(?:didn[’']?t|did not|never) (?:buy|purchase|pay for) (?:the |a )?vip\b/i.test(text);
+
+const clarifyReceiptDestination=()=>({
+ reply:`Our receipt inbox is ${supportLegacyProofEmail}. If your receipt went to a different inbox, forward it to ours once with the checkout email you meant to use. If you already sent it to ours, just share the email subject and date here so we can look for it. Your purchase and access still need verification. Leave out passwords, card numbers and sign-in codes.`,
+ status:'open' as const,managementReview:true as const,ai:false as const
+});
+/** Recognize a completed proof-submission claim, never proof or ownership itself.
+ * Keep clause-local negation/hypotheticals separate from a later missing reply. */
+function supportProofSubmissionClaim(text:string,priorProofRequest=false):'support'|'unconfirmed_recipient'|null{
+ const proof='(?:(?:my|the|a|an|our|purchase|payment|merchant|vip|software)\\s+){0,4}(?:receipts?|proof|screenshots?)\\b';
+ const subject="(?:\\bi(?:[’']ve| have| had)?\\s+(?:(?:already|just)\\s+)*|\\band\\s+|^\\s*(?:(?:already|just)\\s+)?)";
+ const affirmative=new RegExp(subject+'(?:(?:sent|emailed|submitted)\\s+(?:(?:you|support)\\s+)?(?:(?:an? |the |my )?email\\s+with\\s+|with\\s+)?'+proof+'|contacted\\s+(?:support|you|the support team)(?:\\s+by email)?\\s+with\\s+'+proof+')','i');
+ // Resolve complete email addresses before sentence punctuation splits their domains.
+ // A receipt or checkout request supplies the referent for a short reply.
+ const claimText=priorProofRequest?text.replace(/\b(sent|emailed|submitted) (?:it|those details)\b/gi,'$1 my receipt'):text;
+ const recipients=claimText.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, address=>
+  address.toLowerCase()===supportLegacyProofEmail.toLowerCase()?'iCash X support':'a different inbox');
+ let submitted:'support'|'unconfirmed_recipient'|null=null;
+ for(const clause of recipients.split(/[.!?;,\n]+|\b(?:but|however|although|though)\b/iu)){
+  // Quoted examples and uncertain conditions are not the customer's completed act.
+  if(/["“”]/u.test(clause))continue;
+  const denied=/(?:\bi\s+|^\s*(?:actually\s+)?)(?:(?:did|have|had)\s+not|didn[’']?t|haven[’']?t|hadn[’']?t|never)\s+(?:send|sent|email|emailed|submit|submitted|attach|attached)\b/i.exec(clause)
+   ?? /\b(?:(?:the|my)\s+(?:email|receipt|proof)|it)\s+(?:(?:was|is|has been)\s+not|wasn[’']?t|isn[’']?t)\s+(?:sent|emailed|submitted|attached)\b/i.exec(clause);
+  if(denied&&!/\b(?:if|unless|whether|suppose|assuming|hypothetically|imagine)\b/i.test(clause.slice(0,denied.index))&&/\b(?:receipt|proof|screenshots?|it|email)\b/i.test(clause.slice(denied.index))){submitted=null;continue;}
+  const claim=affirmative.exec(clause);
+  if(!claim||/\b(?:if|unless|whether|suppose|assuming|hypothetically|imagine|said|says?|wrote|asked|claims?|claimed|told|thought|thinks?|believes?|believed)\b/i.test(clause.slice(0,claim.index)))continue;
+  const lead=clause.slice(0,claim.index).trim();
+  // Only a direct clause or a bounded first-person wrong-email lead-in is accepted.
+  // Arbitrary reported speech (including unnamed speakers) remains unconfirmed.
+  if(lead&&!/^i (?:(?:never|did not|didn[’']?t) received? (?:a |the )?confirmation because i )?(?:(?:mis[ -]?spelled|mis[ -]?spelt|mistyped) (?:my|the) (?:(?:checkout|purchase|sign[ -]?in) )?email|(?:typed|used|entered) (?:the |a |my )?(?:wrong|incorrect) (?:(?:checkout|purchase|sign[ -]?in) )?email)(?:\s+and)?$/i.test(lead))continue;
+  // An explicitly different recipient is not a claim of submission to support.
+  const destination=/^\s+to\s+(.+)/i.exec(clause.slice(claim.index+claim[0].length))?.[1].trim();
+  const ourSupport=/^(?:you|(?:(?:the|your) )?(?:icash x )?support(?: team| inbox)?)(?: (?:by email|today|yesterday|just now|last (?:night|week)|this (?:morning|afternoon|evening)))*$/i;
+  submitted=destination&&!ourSupport.test(destination)?'unconfirmed_recipient':'support';
+ }
+ return submitted;
+}
 
 /** Proof supplied for a wrong-email purchase stays in that review. A webinar
  * screenshot is not a VIP purchase, and a product correction must end VIP routing.
@@ -31,8 +124,10 @@ export function supportCheckoutOwnershipReply(context:PurchaseContext){
  if(missingReceipt)return {reply:'The purchase still needs an ownership check before its checkout email can be corrected. Since you did not receive a receipt, the purchase date and amount can come from your bank or card statement. Keep any proof already supplied in this review; don’t send it again, pay again or share card numbers. This chat has not changed the email or restored access.',status:'open' as const,managementReview:true,ai:false};
  // Reuse direct purchase guidance, including its no-repeat proof handling.
  const direct=supportPurchaseHelp(context.messages);
- if(direct)return {...direct,ai:false};
- const sent=/\b(?:sent|emailed|submitted)\b/i.test(q)&&!/\b(?:not|never|haven[’']?t|didn[’']?t)\b/i.test(q);
+ if(direct)return {...direct,...(context.handedOff?{status:'open' as const,managementReview:true}:{}),ai:false};
+ const submission=supportProofSubmissionClaim(q);
+ if(submission==='unconfirmed_recipient')return clarifyReceiptDestination();
+ const sent=submission==='support';
  const product=deniesVipPurchase(q)?'You’re describing regular software access. ':/\bvip\b/i.test(q)?'A VIP session screenshot does not establish a VIP software purchase. ':'';
  return {reply:product+(sent?'You’ve said you sent the proof. I haven’t confirmed that it has been matched; you do not need to send the same proof again. ':'')+'The purchase and its ownership still need verification before the checkout email can be corrected. This chat has not changed the email or restored access; don’t pay again to troubleshoot.',status:'open' as const,managementReview:true,ai:false};
 }
@@ -95,7 +190,11 @@ export function supportVipPurchaseReply(context:PurchaseContext){
  if(migration&&/\b(?:transfer|carry(?: over)?)\b/i.test(q)&&!/\b(?:not showing|missing|locked)\b/i.test(q))return {reply:policy+(vip?.code==='vip_active'?' Your current 2.0 account does have VIP active.':''),status:'resolved' as const,ai:false};
  if(vip?.code==='vip_active')return {reply:'Your current 2.0 account has VIP active, so you do not need to buy it again. Open Ask AI Bot beside Your leads. If it still shows an upgrade screen, that access mismatch remains unresolved here.',status:'open' as const,ai:false};
  const prefix=vip?.code==='vip_inactive'?'VIP is not active on this 2.0 account. ':'I haven’t confirmed 2.0 VIP access yet. ';
- const sent=activeUsers.some(receiptAcknowledged)||activeUsers.some(m=>/\b(?:sent|emailed|submitted)\b.{0,40}\b(?:vip|receipt)|\b(?:vip|receipt)\b.{0,35}\b(?:sent|emailed|submitted)\b|^(?:i (?:have |already |just )?)?(?:sent|emailed|submitted) it\b/i.test(m.content)&&!/\b(?:not|never|haven[’']t|didn[’']t)\b/i.test(m.content));
+ const sent=activeUsers.some(receiptAcknowledged)||activeUsers.some(m=>/\b(?:sent|emailed|submitted)\b.{0,40}\b(?:vip|receipt)|\b(?:vip|receipt)\b.{0,35}\b(?:sent|emailed|submitted)\b|^(?:i (?:have |already |just )?)?(?:sent|emailed|submitted) it\b/i.test(m.content)&&!/\b(?:not|never|haven[’']t|didn[’']t)\b/i.test(m.content)&&supportProofSubmissionClaim(m.content,true)!=='unconfirmed_recipient');
+ if(!sent&&supportProofSubmissionClaim(q,true)==='unconfirmed_recipient'){
+  const destination=clarifyReceiptDestination();
+  return {...destination,reply:prefix+(migration?policy+' ':'')+destination.reply};
+ }
  const asked=context.messages.slice(first).some(m=>m.role!=='user'&&/VIP purchase receipt/i.test(m.content));
  const next=sent?'You’ve said you sent the receipt. I haven’t confirmed that the VIP purchase has been matched yet; you do not need to send the same receipt again.':asked?'The receipt requested above is still needed to verify that VIP purchase.':`Email the VIP purchase receipt to ${supportLegacyProofEmail} so its product and account can be verified.`;
  return {reply:prefix+(migration?policy+' ':'')+'If your payment was specifically for 2.0 VIP, don’t buy it again before that purchase is verified. '+next,status:sent?'open' as const:'waiting_on_customer' as const,ai:false};
@@ -103,7 +202,13 @@ export function supportVipPurchaseReply(context:PurchaseContext){
 
 /** A checkout-email correction needs ownership review, not another code request. */
 export function supportPurchaseEmailCorrection(text:string){
- return /\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|correct|change|update)\b.{0,35}\b(?:checkout |purchase |sign[ -]?in )?email\b|\bemail\b.{0,35}\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|corrected)\b/i.test(text)&&!/\b(?:seller|buyer|bot|contact|settings)\b/i.test(text);
+ if(/\b(?:seller|buyer|bot|contact|settings)\b/i.test(text))return false;
+ const explicit=/\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|correct|change|update)\b.{0,35}\b(?:checkout |purchase |sign[ -]?in )?email\b|\bemail\b.{0,35}\b(?:wrong|incorrect|typo|mis[ -]?spelled|mis[ -]?spelt|corrected)\b/i.test(text);
+ // Missing mail/code delivery alone is not a missing character in an address.
+ const omitted=/\b(?:[a-z]|(?:a|one|the) (?:letter|character)) (?:is )?(?:(?:probably|possibly) )?(?:missing|omitted|left out)\b.{0,100}\bemail\b|\b(?:left|missed|omitted|forgot) (?:a|one|the) (?:letter|character)(?: out)?\b.{0,50}\bemail\b|\bemail\b.{0,30}\b(?:missing|omitted) (?:a|one|the) (?:letter|character)\b/i.test(text);
+ const denied=/\bno (?:letter|character)\b.{0,20}\bmissing\b|\b(?:letter|character) (?:is|was) not missing\b|\b(?:isn[’']t|wasn[’']t|not) missing\b|\b(?:never|not) (?:left|missed|omitted|forgot)\b|\bemail(?: address)? (?:is|was) (?:correct|right|complete)\b/i.test(text);
+ const messageCopy=/\bemail (?:message|body|subject)\b|\b(?:in|from) (?:its |the (?:email[’']s? )?)(?:subject|body)\b/i.test(text);
+ return explicit||omitted&&!denied&&!messageCopy;
 }
 
 /** Purchase and checkout problems are not proof that a sign-in code arrived. */
@@ -119,8 +224,14 @@ export function supportPurchaseHelp(messages:Turn[]){
   return {reply:asked?'The offer checkout has not been confirmed as complete. I can’t establish an active subscription or a code-delivery problem from that error. Your earlier details are saved; don’t submit another payment to troubleshoot this.':'The offer checkout needs to complete before it can grant software access. What exact message appears on the checkout page when it fails? Please leave out payment details; don’t submit another payment to troubleshoot this.',status:asked?'open' as const:'waiting_on_customer' as const};
  }
  if(supportPurchaseEmailCorrection(q)){
-  const requested=messages.some(m=>m.role!=='user'&&/\b(?:receipt|purchase)\b.{0,100}\b(?:email|correction|correct|verify|match)\b/i.test(m.content));
-  return {reply:requested?'The purchase needs to be matched and ownership verified before its checkout email can be corrected. Your earlier proof details are already in this conversation. I haven’t confirmed an email change or restored access; repeating code requests won’t correct a wrong email.':`A wrong checkout email needs a purchase-ownership check before it can be corrected. Email your merchant receipt to ${supportLegacyProofEmail} with the purchase date, amount, order reference if available, and the email you intended to use. This chat has not changed the email; don’t pay again or share sign-in codes.`,status:requested?'open' as const:'waiting_on_customer' as const};
+  const submitted=supportProofSubmissionClaim(q);
+  if(submitted==='unconfirmed_recipient')return clarifyReceiptDestination();
+  if(submitted==='support')return {reply:'You’ve said you already sent the purchase proof to support. You do not need to send the same proof again. What subject and date did you use for that email? That can help locate it; receipt and ownership verification are still unconfirmed. This chat has not changed the checkout email or restored access. Don’t pay again or share sign-in codes.',status:'open' as const,managementReview:true};
+  const requested=messages.some(m=>(m.role==='assistant'||m.role==='operator')&&/\b(?:email|send|forward)\s+(?:(?:your|the|an?|original|merchant|purchase|payment|a copy of|us)\s+){0,5}(?:receipt|proof)\b/i.test(m.content));
+  // Keep the existing unresolved review status, independently of whether the
+  // earlier answer actually gave the customer a proof-submission step.
+  const earlierPurchaseContext=messages.some(m=>m.role!=='user'&&/\b(?:receipt|purchase)\b.{0,100}\b(?:email|correction|correct|verify|match)\b/i.test(m.content));
+  return {reply:requested?'The purchase needs to be matched and ownership verified before its checkout email can be corrected. Follow the earlier proof-submission instructions only for details you have not already supplied. I haven’t confirmed an email change or restored access; repeating code requests won’t correct a wrong email.':`A wrong checkout email needs a purchase-ownership check before it can be corrected. Email your merchant receipt to ${supportLegacyProofEmail} with the purchase date, amount, order reference if available, and the email you intended to use. This chat has not changed the email; don’t pay again or share sign-in codes.`,status:earlierPurchaseContext?'open' as const:'waiting_on_customer' as const};
  }
  return null;
 }
@@ -135,4 +246,23 @@ export function supportRefundDisclosureReply(context:PurchaseContext){
  const disclosure=/\b(?:not|never|nobody|no one|didn[’']?t|wasn[’']?t)\b.{0,65}\b(?:explain|explained|mention|mentioned|disclose|disclosed|tell|told|clear)\b|\b(?:hidden|undisclosed) (?:cost|fee|charge)|\b(?:need to|make)\b.{0,35}\b(?:clear|explain|convey)\b/i.test(q);
  if(!disclosure)return null;
  return {reply:'You’re asking for a refund because you say the separate work-credit cost wasn’t explained before purchase. The refund policy is unchanged; this chat has not approved or issued a refund. That sales-disclosure concern needs management review. You don’t need to repeat receipt or sign-in troubleshooting.',status:'open' as const,managementReview:true,ai:false};
+}
+
+/** A reported payment without portal instructions is not a work-credit question.
+ * Keep only this unresolved episode; operator findings and new topics reset it. */
+export function supportPaidPortalReply(context:PurchaseContext){
+ let active=false;
+ for(const turn of context.messages){
+  if(turn.role==='operator'){active=false;continue;}
+  if(turn.role!=='user')continue;
+  const q=turn.content;
+  const negative=/\b(?:did not|didn[’']?t|never|not yet) (?:pay|paid|payed|purchase)|\b(?:if|hypothetically)\b|\b(?:refund|cancel|credits?|contracts?|seller|buyer|voice|signed in|got in|working now)\b/i.test(q);
+  const paid=/\b(?:paid|payed|purchased)\b/i.test(q);
+  const portal=/\b(?:get into|access|enter|open)\b.{0,35}\b(?:portal|workspace)\b/i.test(q);
+  const missing=/\b(?:no|not|nothing|never|haven[’']?t|do not know|don[’']?t know|cannot|can[’']?t)\b/i.test(q);
+  const follow=paid&&(missing&&/\b(?:nothing|information|instructions|started)\b/i.test(q)||/\bhow do i get started\b/i.test(q))&&!/\b(?:received|got) (?:the |my )?(?:information|instructions|access)\b/i.test(q);
+  active=!negative&&(paid&&portal&&missing||active&&follow);
+ }
+ if(!active)return null;
+ return {reply:'You’ve reported paying but still need the portal or session access information. The purchase and access remain unconfirmed; I should not assume that payment bought work credits or that you can open the workspace. What product or merchant name appears on your receipt or bank statement? If no receipt arrived, say that here. Leave out card numbers and codes, and do not pay again to troubleshoot.',status:'open' as const,ai:false as const};
 }
