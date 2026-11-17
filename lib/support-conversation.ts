@@ -1,3 +1,4 @@
+import {supportPaidCodeContext} from './support-paid-code-context.ts';
 import {supportRunControlsReply} from './support-run-controls.ts';
 import {supportReviewScreenReply} from './support-review-screen.ts';
 import {supportSellerCapabilityReply} from './support-seller-capability.ts';
@@ -63,6 +64,7 @@ function supportTechnicalFallback(context:SupportContext):SupportReply{
  const sellerCapability=supportSellerCapabilityReply(context);if(sellerCapability)return sellerCapability;
  const billingComplaint=supportBillingComplaintReply(context);if(billingComplaint)return billingComplaint;
  const emailRepurchase=supportEmailRepurchaseReply(question,context.messages.findLast(m=>m.role==='operator')?.content);if(emailRepurchase)return emailRepurchase;
+ const paidCode=supportPaidCodeContext(context);if(paidCode)return paidCode;
  const paidAccess=supportPaidAccessReply(context);if(paidAccess)return paidAccess;
  const paidPortal=supportPaidPortalReply(context);if(paidPortal)return paidPortal;
  const ownership=supportCheckoutOwnershipReply(context);if(ownership)return ownership;
