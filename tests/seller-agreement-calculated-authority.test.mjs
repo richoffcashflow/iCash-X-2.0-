@@ -19,6 +19,7 @@ function reset(){
  context={...scope,party:'seller',address:initial.address,snapshot:structuredClone(snapshot),terms:structuredClone(terms),offerState:{repairEstimateCents:4000000,payoffReport:{mortgageCents:2000000,otherDebtCents:0},acceptedPriceCents:9000000}};
 }
 const deps={now:()=>now,bind:async()=>{},history:async()=>history,refresh:async()=>assert.fail('No signature polling'),db:async(path,method,body)=>{
+ if(path==='rpc/icash_seller_memory_context')return null;
  if(path==='rpc/icash_seller_agreement_call_context')return scope;
  if(path==='rpc/icash_call_offer_context')return context;
  if(path.startsWith('icash_signing_envelopes?'))return envelopes;

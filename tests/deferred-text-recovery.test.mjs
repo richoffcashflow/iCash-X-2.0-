@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {loadService} from './helpers/simulated-journey-services.mjs';
+import {TextClaimRefusedError} from '../lib/voice-budget-failure.ts';
 
 // Exercise the actual selector consumer and dispatch function. Only transport,
 // persistence and original admission are replaced with offline fixtures.
@@ -12,7 +13,7 @@ async function run(items,{enabled=true,selectionError=false,voiceVerificationFai
  const api=await loadService('lib/text-message-service.ts',{
   instantLeadsEnabled:()=>true,smsWorkEnabled:()=>enabled,liveWorkReady:()=>!inboundUnavailable,
   elevenRequest:async()=>{throw Error('Number verification unavailable');},
-  sameBusinessNumber:(a,b)=>a===b,textPayload:()=>({}),SellerInventoryUnavailableError:InventoryHeld,
+  sameBusinessNumber:(a,b)=>a===b,textPayload:()=>({}),SellerInventoryUnavailableError:InventoryHeld,TextClaimRefusedError,
   db:async(path,method,body)=>{
    if(path==='rpc/icash_next_sender_volume_retry'){
     seen.selections++;if(selectionError)throw Error('selection unavailable');

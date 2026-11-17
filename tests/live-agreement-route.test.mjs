@@ -21,6 +21,7 @@ let terms={address,buyer:'Fixture buyer',state:'TX'},claim,envelopes=[],sends=0,
 const db=async(path,method,b)=>{
  if(path==='rpc/icash_call_offer_context')return structuredClone(context);
  if(path==='rpc/icash_save_call_offer'){if(rejectAcceptance&&b.p_action==='accept_offer')return false;savedActions.push(b.p_action);assert.equal(b.p_expected_version,context.offerVersion);context.offerState=b.p_state;context.offerVersion++;return true;}
+ if(path==='rpc/icash_seller_memory_context')return null;
  if(path==='rpc/icash_seller_agreement_call_context')return scope;
  if(path.startsWith('icash_signing_envelopes?'))return envelopes;
  if(path.startsWith('icash_deal_files?'))return [{terms,stage:'draft'}];

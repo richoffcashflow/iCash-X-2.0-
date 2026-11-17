@@ -8,6 +8,19 @@ export function sellerAffirmation(value:string){
  return /^(?:(?:um|uh|well)[, .]+)*(?:(?:yes|yeah|yep|yup|y|sure|correct|absolutely|i am|it is|that's right|that is right)\b|(?:i (?:said|already said)|i(?:'ve| have)? (?:already )?told you(?: once)?)(?:[, .]+(?:mr\.? ai[, .]+)?)?[, .]*(?:yes|yeah|sure|i (?:am|would|do|will))\b)/i.test(text)
   && !/\b(?:not|never|didn't|did not|if|unless|only if)\b/i.test(text);
 }
+/** Agreement authority requires the whole answer, not a leading yes followed
+ * by an unreviewed refusal, property change, or different instruction. */
+export function sellerUnqualifiedAgreementAnswer(value:string,requirePriceAffirmation=false){
+ const text=sellerAnswerText(value).replace(/^(?:(?:um|uh|hmm|well)\b[\s,.-]*)+/i,'').replace(/[.!]+$/,'').trim();
+ const numberWords='zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million';
+ const amount=`(?:\\$?\\d+(?:,\\d{3})*(?:\\.\\d{1,2})?(?:\\s*(?:k|thousand|million))?(?: dollars?)?|(?:${numberWords})(?:[ -]+(?:and[ -]+)?(?:${numberWords}))*(?: dollars?)?)(?: and (?:(?:${numberWords})(?:[ -]+(?:${numberWords}))*|\\d{1,2}) cents?)?`;
+ const priceAffirmation=`(?:(?:i (?:accept|agree to)(?: the)?(?: (?:cash )?(?:price|offer)(?: of)?)? ${amount})|${amount} (?:works(?: for me)?|is (?:fine|acceptable))|that (?:cash )?(?:price|offer|amount) works(?: for me)?)`;
+ const affirmation=`(?:yes|yeah|yep|yup|correct|sure|okay|ok|i agree|i accept|(?:that|it) works(?: for me)?|that fits(?: my needs)?|sounds good(?: to me)?|i'?m ready|i am ready|let'?s do it|${priceAffirmation})`;
+ const delivery="(?:(?:please|go ahead and|you can) )?(?:text|send)(?: me| us)?(?: the| that| my| an?)? (?:agreement|contract|it)(?: for review)?(?: now)?";
+ const acknowledgement="(?:please|thank you|thanks|that works(?: for me)?|that fits(?: my needs)?|sounds good(?: to me)?)";
+ const initial=requirePriceAffirmation?affirmation:`(?:${affirmation}|(?:that looks(?: good|right)?[.! ]+)?${delivery})`;
+ return new RegExp(`^${initial}(?:[ ,;.!]+(?:${affirmation}|${delivery}|${acknowledgement}))*$`,'i').test(text);
+}
 export function sellerExplicitUnknown(value:string){
  return /\b(?:i (?:do not|don't) know|not sure|unknown|rather not (?:say|discuss|guess)|prefer not to (?:say|discuss)|haven't decided|have not decided)\b/i.test(sellerAnswerText(value));
 }

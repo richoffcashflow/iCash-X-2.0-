@@ -23,7 +23,7 @@ export const automaticOfferInput=z.discriminatedUnion('action',[
  z.object({action:z.literal('update_repairs'),conversationId,sellerStatement:z.string().trim().min(3).max(1000),repairEstimateCents:cents.nullish().transform(v=>v??undefined)}).strict(),
  z.object({action:z.literal('report_change'),conversationId,sellerStatement:z.string().trim().min(1).max(1000)}).strict(),
 ]);
-export type AutomaticOfferState={proposedPriceCents?:number;listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;acceptanceEvidenceQuoteRevision?:string;snapshotHash?:string};
+export type AutomaticOfferState={receiptPriceAuthority?:{sourceId:string;priceCents:number|null;quoteRevision?:string};proposedPriceCents?:number;listedWithAgent?:boolean;listingStatement?:string;payoffReport?:SellerPayoffReport;repairEstimateCents?:number;conditionPending?:boolean;factsPending?:boolean;payoffPending?:boolean;payoffStatement?:string;contractBlocked?:boolean;acceptanceConditional?:boolean;agreementRevisionRequired?:boolean;sellerStatement?:string;acceptedPriceCents?:number|null;quotedPriceCents?:number|null;quoteRevision?:string;acceptanceEvidenceQuoteRevision?:string;snapshotHash?:string};
 export type CallOfferContext={party:'seller'|'buyer'|'unknown';contextPolicy?:string;sellerContractSigned?:boolean;viewingSlots?:unknown;accountId?:string;dealId?:string;screeningId?:string;phone?:string;address?:string;snapshot?:unknown;terms?:unknown;pendingAgreement?:{priceCents:number;closingDate:string}|null;buyer?:{propertyImages?:unknown;latitude?:unknown;longitude?:unknown;sellerPhotos?:unknown;arvCents?:number|null;repairsCents?:number|null;askingPriceCents:number;purchasePriceCents?:number;assignmentFeeCents?:number;closingDate?:string|null;address:string;depositCents?:number|null;viewingSlots?:unknown;reserved?:boolean;titleSelectionStatus?:'not_selected'|'selected'|'needs_confirmation'};offerState?:AutomaticOfferState|null;offerVersion?:number};
 export const blockedOffer=(reason:string,instruction:string)=>({quoteAllowed:false as const,priceCents:null,reason,instruction});
 export const currentCallUnavailableOffer=()=>({...blockedOffer('current_call_required','Current deal details could not be confirmed. Retry get_offer at most once for a technical failure; never keep retrying or guess a price. No agreement, payment, viewing or callback is authorized or scheduled. Say: "I cannot confirm the current deal details. They need team review; no callback has been scheduled." Do not agree when the caller assumes someone will reach out. Do not promise that the team will review, call, text, send or arrange anything. Answer briefly without generic closing questions.'),contractAllowed:false,sent:false,callbackScheduled:false,viewingFollowupRequired:false});
@@ -105,6 +105,7 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
  if(state.factsPending&&!state.payoffPending)return blockedOffer('property_facts_changed','The updated property or ownership information needs to be confirmed before I can quote a price.');
  if(state.conditionPending)return blockedOffer('repair_estimate_required','About how much do you estimate the total repairs will cost?');
  const pending=context.pendingAgreement;
+ if(pending&&state.receiptPriceAuthority)return {...blockedOffer('prepared_price_review_required','The original prepared agreement and its price need source review before delivery can continue. Preserve that agreement; do not create a replacement, ask the seller to sign it, or invent a new price.'),contractAllowed:false};
  if(pending&&Number.isSafeInteger(pending.priceCents)&&pending.priceCents>0&&state.repairEstimateCents===undefined){
   return {quoteAllowed:true as const,contractAllowed:true,party:'seller',priceCents:pending.priceCents,...offerPricePresentation(pending.priceCents),...conversationAddressFields(context.address),status:'pending_agreement',instruction:'Continue from this exact prepared agreement price and its saved terms. A verbal yes is not a signature.'};
  }
@@ -126,15 +127,15 @@ export function calculateAutomaticCallOffer(context:CallOfferContext,state:Autom
 const financial=sellerCallFinancialGate(base.property.financialScreening,{sellerOfferCents:price,sellerCostReserveCents:Number.isSafeInteger(object(context.snapshot).sellerCostReserveCents)?Number(object(context.snapshot).sellerCostReserveCents):null,checkedAt:now});
   const payoff=sellerPayoffPosition(state.payoffReport,price);
   const conditional=!!state.payoffPending||(payoff?(!payoff.complete||!payoff.canProceed):financial.status!=='eligible');
-  const accepted=!!agreed&&!state.acceptanceConditional;
+  const accepted=!!agreed&&!state.acceptanceConditional&&!state.receiptPriceAuthority;
   const common={quoteAllowed:true as const,party:'seller',priceCents:price,...offerPricePresentation(price),...conversationAddressFields(context.address),repairEstimateCents:repairs,repairSource:state.repairEstimateCents===undefined?'property_research':'seller_reported_total_budget',asIs:true,payment:'cash',sellerAskingPriceCents:proposed??null,counteroffer:proposed!==undefined&&proposed>price};
   if(payoff){
    const nextQuestion=state.payoffPending?'Can you confirm the current mortgage payoff balance?':!payoff.complete?'Are there any other loans, liens, unpaid taxes or HOA balances besides that mortgage?':payoff.shortfallCents>0&&!payoff.canProceed?state.payoffReport?.coverageDeclined?'Would you like a person to review any other options?':`The difference is ${offerPricePresentation(payoff.shortfallCents).displayPrice}. Would you be willing and able to bring that amount to closing to sell the property?`:null;
    return {...common,payoffVerified:false,titleVerificationRequiredBeforeClosing:true,payoffSource:'seller_reported',reportedPayoff:payoff,conditional,contractAllowed:!conditional,status:conditional?'conditional_proposal':accepted?'verbally_accepted':'calculated_proposal',nextQuestion,
     instruction:conditional?`Keep the exact cash offer unchanged. ${nextQuestion} Do not ask the seller to reconcile records or repeat a saved balance. Do not send the agreement until the reported debts and any shortfall are addressed. Never promise lender approval or ask for payment now.`:`The seller-reported debts ${payoff.complete&&payoff.shortfallCents>0?'exceed the cash price, and the seller explicitly agreed to cover the stated difference at closing':'fit within the cash offer'}. ${accepted?'Keep the accepted price; do not ask it again. Collect only missing closing details.':'Obtain acceptance of this exact price, then collect only missing closing details.'} Prepare/text only after the final terms readback and text permission. A mortgage is not a reason to stop. Title will obtain actual payoffs and confirm final proceeds before closing; do not call these figures verified or guarantee net proceeds.`};
   }
-  if(conditional)return {...common,conditional:true,contractAllowed:false,payoffVerified:false,status:agreed?'conditional_accepted':'conditional_proposal',conditions:['Mortgage payoff and any liens must be confirmed before a contract is sent.'],...conditionalInstruction(price,!!state.payoffStatement,!!agreed)};
-  return {...common,conditional:false,contractAllowed:true,status:accepted?'verbally_accepted':'calculated_proposal',instruction:accepted?'Keep this exact verbally accepted price and continue the remaining closing confirmations.':'Present this exact nonbinding as-is cash purchase price after qualification. Do not promise net proceeds or invent adjustments. Obtain acceptance again if a previous offer was conditional.'};
+  if(conditional)return {...common,conditional:true,contractAllowed:false,payoffVerified:false,status:agreed&&!state.receiptPriceAuthority?'conditional_accepted':'conditional_proposal',conditions:['Mortgage payoff and any liens must be confirmed before a contract is sent.'],...conditionalInstruction(price,!!state.payoffStatement,!!agreed&&!state.receiptPriceAuthority)};
+  return {...common,conditional:false,contractAllowed:true,status:accepted?'verbally_accepted':'calculated_proposal',instruction:accepted?'Keep this exact verbally accepted price and continue the remaining closing confirmations.':state.receiptPriceAuthority?`Read the original price aloud: ${offerPricePresentation(price).displayPrice} cash. Ask whether this exact price works and wait for a fresh unqualified answer. An older unclear reply is not price acceptance; do not start agreement delivery.`:'Present this exact nonbinding as-is cash purchase price after qualification. Do not promise net proceeds or invent adjustments. Obtain acceptance again if a previous offer was conditional.'};
  }catch{return blockedOffer('current_research_required','The property research needs updating before I can confirm a cash offer.');}
 }
 
@@ -154,7 +155,7 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(context.party!=='seller'||context.sellerContractSigned===true)return calculateAutomaticCallOffer(context,{},(d.now??Date.now)());
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
  const observedQualification=d.verifyQualification?await d.verifyQualification(i,context):sellerOfferQualification(null);
- const qualification=(context.pendingAgreement||state.acceptedPriceCents)&&!(!observedQualification.ready&&observedQualification.stop)?{ready:true as const}:observedQualification;
+ const qualification=(context.pendingAgreement||state.acceptedPriceCents&&!state.receiptPriceAuthority)&&!(!observedQualification.ready&&observedQualification.stop)?{ready:true as const}:observedQualification;
  if(qualification&&!qualification.ready&&(i.action==='get_offer'||i.action==='accept_offer'))return sellerQualificationHold(qualification);
  const originalRevision=state.quoteRevision;
  let recoveredPayoff=false;
@@ -174,7 +175,8 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
   }
  }else if(state.snapshotHash!==snapshotHash)delete state.acceptanceEvidenceQuoteRevision;
  const continuity=state.acceptanceEvidenceQuoteRevision?{previousQuoteRevision:state.acceptanceEvidenceQuoteRevision}:undefined;
- if(i.action==='accept_offer'&&!await d.verifyInput(i,continuity))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
+ const acceptanceInput=()=>state.receiptPriceAuthority?{...i,priceConfirmationSourceId:state.receiptPriceAuthority.sourceId}:i;
+ if(i.action==='accept_offer'&&!await d.verifyInput(acceptanceInput(),state.receiptPriceAuthority?undefined:continuity))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
  if(i.action==='update_repairs'||i.action==='report_change'){
   const actual=await d.resolveStatement?.(i);if(actual)i.sellerStatement=actual;
   if(context.pendingAgreement)state.agreementRevisionRequired=true;
@@ -233,11 +235,11 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
   const refreshed=await readContext();
   if(!refreshed||sha(JSON.stringify(canonical(refreshed.snapshot)))!==snapshotHash||sha(JSON.stringify(canonical(refreshed.offerState)))!==sha(JSON.stringify(canonical(state))))return blockedOffer('quote_changed','The property record changed while I checked. Let me get the current calculation.');
   context=refreshed;i.quoteRevision=revision;
-  if(!await d.verifyInput(i,continuity))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
+  if(!await d.verifyInput(acceptanceInput(),state.receiptPriceAuthority?undefined:continuity))return blockedOffer('acceptance_confirmation_required','Please confirm that the exact cash price we just discussed works for you.');
  }
  if(i.action==='accept_offer'){
   if(!offer.quoteAllowed||offer.party!=='seller'||i.priceCents!==offer.priceCents||i.quoteRevision!==revision||state.quoteRevision!==revision||state.quotedPriceCents!==i.priceCents)return blockedOffer('quote_changed','The saved quote changed. Let me confirm the current amount before we agree to it.');
-  state.acceptedPriceCents=i.priceCents;
+  state.acceptedPriceCents=i.priceCents;delete state.receiptPriceAuthority;
   state.acceptanceConditional=contractBlocked;
  }
  state.contractBlocked=contractBlocked;
@@ -246,5 +248,5 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(saved!==true)return blockedOffer('quote_changed','The property record changed while I checked. Let me get the current calculation.');
  // Recording condition/listing/debt answers must not reveal a premature price.
  if(offer.quoteAllowed&&qualification&&!qualification.ready)return {...sellerQualificationHold(qualification),factsSaved:true};
- return {...offer,quoteRevision:revision,...(state.acceptanceEvidenceQuoteRevision?{acceptanceEvidenceQuoteRevision:state.acceptanceEvidenceQuoteRevision}:{}),...(i.action==='accept_offer'?(contractBlocked?{status:'conditional_accepted',...(state.payoffReport?{instruction:offer.instruction}:conditionalInstruction(i.priceCents,!!state.payoffStatement,true))}:{status:'verbally_accepted',instruction:'Verbal acceptance saved at this exact price. Continue closing date, legal name, owners, inspection preference and prepared terms, then confirm_and_send. This is not a signature.'}):{})};
+ return {...offer,quoteRevision:revision,...(state.receiptPriceAuthority?{priceConfirmationSourceId:state.receiptPriceAuthority.sourceId}:{}),...(state.acceptanceEvidenceQuoteRevision?{acceptanceEvidenceQuoteRevision:state.acceptanceEvidenceQuoteRevision}:{}),...(i.action==='accept_offer'?(contractBlocked?{status:'conditional_accepted',...(state.payoffReport?{instruction:offer.instruction}:conditionalInstruction(i.priceCents,!!state.payoffStatement,true))}:{status:'verbally_accepted',instruction:'Verbal acceptance saved at this exact price. Continue closing date, legal name, owners, inspection preference and prepared terms, then confirm_and_send. This is not a signature.'}):{})};
 }

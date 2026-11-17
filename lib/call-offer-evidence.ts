@@ -1,3 +1,5 @@
+import {sellerUnqualifiedAgreementAnswer} from './seller-answer-evidence.ts';
+import {sellerQuestion} from './seller-question-evidence.ts';
 import {object} from './required-call-recording.ts';
 const units:Record<string,number>={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
 export function spokenMoneyAmounts(text:string){
@@ -57,12 +59,18 @@ export function agreementTextRequested(text:string){
 export function callOfferEvidence(value:unknown,input:Record<string,unknown>,continuity?:{previousQuoteRevision:string}){
  const rows=object(value).transcript;if(!Array.isArray(rows))return false;
  let applicable=rows;
+ const freshSource=typeof input.priceConfirmationSourceId==='string'?input.priceConfirmationSourceId:null;
  if(input.action==='accept_offer'&&typeof input.quoteRevision==='string'){
   let lastQuote=-1;
   for(let n=0;n<rows.length;n++)for(const result of Array.isArray(object(rows[n]).tool_results)?object(rows[n]).tool_results as unknown[]:[]){
    const r=object(result);if(r.tool_name!=='icash_offer_and_contract'||r.is_error===true||typeof r.result_value!=='string')continue;
    let quote:Record<string,unknown>;try{quote=object(JSON.parse(r.result_value));}catch{continue;}
    if(quote.quoteAllowed===true&&typeof quote.quoteRevision==='string'){
+    if(freshSource){
+     if(quote.quoteRevision===input.quoteRevision&&quote.priceCents===input.priceCents&&quote.priceConfirmationSourceId===freshSource)lastQuote=n;
+     else lastQuote=-2;
+     continue;
+    }
     if((quote.quoteRevision!==input.quoteRevision&&quote.quoteRevision!==continuity?.previousQuoteRevision)||quote.priceCents!==input.priceCents)lastQuote=-2;
     // The acceptance action and later reads echo the same quote. Keep the
     // original boundary so those receipts cannot erase the seller's answer.
@@ -71,7 +79,7 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>,con
     else if(lastQuote<0)lastQuote=n;
    }
   }
-  if(lastQuote===-2)return false;
+  if(lastQuote===-2||freshSource&&lastQuote<0)return false;
   if(lastQuote>=0){
    // A provider entry may contain both its receipt and the spoken quote. Keep
    // that agent message so the following seller answer retains its question.
@@ -80,15 +88,17 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>,con
    applicable=rows.slice(lastQuote+(spokenQuote?0:1));
   }
  }
+ if(freshSource&&typeof input.quoteRevision!=='string')return false;
  const turns=applicable.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');if(index<0)return false;
  const latest=String(turns[index].message).trim();
  if(input.action==='accept_offer'){
-  const yes=(text:string)=>/^(?:yes|yeah|yep|correct|i agree|i accept|that works|that fits|sounds good|i['’]?m ready|i am ready|let['’]?s do it)\b/i.test(text.replace(/^(?:(?:um|uh|hmm|well)\b[\s,.-]*)+/i,''))&&!/\b(?:not|but|unless|if|different|instead)\b/i.test(text);
-  const priceQuestion=(text:string)=>/\b(?:offer|cash|purchase|price|proceed)\b/i.test(text)&&spokenMoneyAmounts(text).includes(Number(input.priceCents));
+  const yes=(text:string)=>sellerUnqualifiedAgreementAnswer(text,true);
+  const priceQuestion=(text:string)=>/\b(?:offer|cash|purchase|price|proceed)\b/i.test(text)&&spokenMoneyAmounts(text).includes(Number(input.priceCents))
+   &&/\b(?:offer|cash|purchase|price|proceed|work|fit|accept|agree|sound|look right|text|send)\b/i.test(sellerQuestion(text));
   // A later name/date answer must not erase an earlier explicit price answer.
   // A counteroffer, condition or withdrawal after it does invalidate it.
-  let accepted=false;
+  let accepted=false,lastAcceptance=-1;
   for(let n=0;n<turns.length;n++){
    const turn=turns[n],text=String(turn.message).trim();if(turn.role!=='user')continue;
    let agent=turns.slice(0,n).findLast(t=>t.role==='agent');
@@ -96,20 +106,21 @@ export function callOfferEvidence(value:unknown,input:Record<string,unknown>,con
     const last=turns.lastIndexOf(agent);agent=turns.slice(0,last).findLast(t=>t.role==='agent');
    }
    if(agent&&priceQuestion(String(agent.message))){
-    const repeatRequest:boolean=accepted&&agreementTextRequested(text);
+    const repeatRequest:boolean=accepted&&agreementTextRequested(text)&&sellerUnqualifiedAgreementAnswer(text);
     accepted=(yes(text)||repeatRequest)&&!acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents));
+    if(accepted)lastAcceptance=n;
    }
-   else if(/\b(?:only if|changed my mind|do not accept|don['’]?t accept|not selling|don['’]?t want to sell|no longer interested|cancel|hold off|not ready|wait|need to think|never agreed|didn['’]?t agree|did not agree|not sure|let me think|do not send|don['’]?t send|do not text|don['’]?t text|stop sending|stop texting)\b/i.test(text)||/\b(?:need|want|have)\b.{0,60}\b(?:spouse|wife|husband|partner|co[- ]?owner|attorney|lawyer)\b.{0,40}\b(?:agree|approval|approve|review|first|permission)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;
+   else if(/\b(?:only if|changed my mind|do not accept|don['’]?t accept|reject|refuse|withdraw|sold|fire|foundation damage|new mortgage|another mortgage|not selling|don['’]?t want to sell|no longer interested|cancel|hold off|not ready|wait|need to think|never agreed|didn['’]?t agree|did not agree|not sure|let me think|do not send|don['’]?t send|do not text|don['’]?t text|stop sending|stop texting)\b/i.test(text)||/\b(?:need|want|have)\b.{0,60}\b(?:spouse|wife|husband|partner|co[- ]?owner|attorney|lawyer)\b.{0,40}\b(?:agree|approval|approve|review|first|permission)\b/i.test(text)||/\b(?:offer|price|instead|but|unless)\b/i.test(text)||acceptanceAmounts(text).some(amount=>amount!==Number(input.priceCents))&&/\b(?:could you|can you|need|want|at least|only accept)\b/i.test(text))accepted=false;
   }
-  return accepted;
+  return accepted&&(!freshSource||lastAcceptance===index);
  }
  if(latest!==String(input.sellerStatement??'').trim())return false;
  if(input.repairEstimateCents===undefined)return true;
  if(/\b(?:not|no idea|don['’]?t know|between|or|under|over|instead|maybe)\b/i.test(latest))return false;
  const amounts=spokenMoneyAmounts(latest),previous=turns.slice(0,index).findLast(t=>t.role==='agent');
- const repairs=/\b(?:repair|rehab|renovat|work|fix|budget)/i.test(latest+' '+String(previous?.message??''));
+ const repairs=/\b(?:repair|rehab|renovat|work|fix|budget)/i.test(latest+' '+sellerQuestion(String(previous?.message??'')));
  // A bare zero needs a total-budget question, not one repair item or price.
- const totalRepairBudget=/\b(?:total|overall) (?:repair|rehab|renovation) (?:cost|budget|estimate)\b|\b(?:total|overall) (?:cost|budget|estimate) (?:of|for) (?:the |all )?(?:repairs|rehab|renovation)\b/i.test(String(previous?.message??''));
+ const totalRepairBudget=/\b(?:total|overall) (?:repair|rehab|renovation) (?:cost|budget|estimate)\b|\b(?:total|overall) (?:cost|budget|estimate) (?:of|for) (?:the |all )?(?:repairs|rehab|renovation)\b/i.test(sellerQuestion(String(previous?.message??'')));
  if(input.repairEstimateCents===0&&(totalRepairBudget&&/^zero(?: dollars)?[.! ]*$/i.test(latest)||/^(?:the |my )?(?:total |overall )repair (?:cost|budget|estimate) (?:is|would be) zero(?: dollars)?[.! ]*$/i.test(latest)))return true;
  return repairs&&amounts.length===1&&amounts[0]===input.repairEstimateCents;
 }
@@ -121,7 +132,7 @@ export function callPayoffEvidence(value:unknown,input:Record<string,unknown>){
  const rows=object(value).transcript;if(!Array.isArray(rows))return false;
  const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');
- const latest=String(turns[index]?.message??''),previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
+ const latest=String(turns[index]?.message??''),previous=sellerQuestion(String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??''));
  const debtQuestion=/\b(mortgage|payoff|loan|heloc|debts?|liens?|taxes|hoa|owe)\b/i.test(previous);
  const coverageQuestion=/\b(cover|bring|pay)\b/i.test(previous)&&/\b(difference|shortfall|out of pocket|closing)\b/i.test(previous);
  if(!debtQuestion&&!coverageQuestion)return false;
@@ -140,7 +151,7 @@ export function callSellerStatement(value:unknown,input:Record<string,unknown>):
  const index=turns.findLastIndex(t=>t.role==='user');if(index<0)return null;
  const latest=String(turns[index].message).trim();if(!latest||latest.length>1000)return null;
  if(input.action==='update_repairs'){
-  const previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
+  const previous=sellerQuestion(String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??''));
   if(!/\b(repair|repairs|roof|foundation|renovation|rehab|ac|air condition|hvac|plumbing|electrical|damage|condition|fix|budget)\b/i.test(latest+' '+previous))return null;
  }
  return latest;
@@ -160,7 +171,7 @@ export function callSellerPriceEvidence(value:unknown,input:Record<string,unknow
  const prefix=counterQuestion??/^(?:my asking price is|i am asking|i['’]m asking|i (?:need|want)|i would (?:take|accept)|i['’]d (?:take|accept)|i can (?:take|accept)|i will (?:take|accept)|i['’]ll (?:take|accept))\s+/i.exec(text);
  const turns=(object(value).transcript as unknown[]).map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
  const index=turns.findLastIndex(t=>t.role==='user');
- const previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
+ const previous=sellerQuestion(String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??''));
  const question=previous.match(/[^.!?]+\?/g)?.at(-1)??previous;
  if(/\b(?:repairs?|mortgage|payoff|liens?|tax|deposit)\b/i.test(question)&&! /\basking(?: price)?\b/i.test(text))return null;
  const askedPrice=/\b(?:asking price|what price|how much.*(?:want|asking|sell)|price.*(?:mind|looking))\b/i.test(question);

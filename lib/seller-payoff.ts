@@ -1,3 +1,4 @@
+import {sellerQuestion} from './seller-question-evidence.ts';
 import {object} from './required-call-recording.ts';
 import {callOfferEvidence,spokenMoneyAmounts} from './call-offer-evidence.ts';
 
@@ -24,7 +25,7 @@ export function sellerPayoffRecovery(value:unknown,mortgageCents:number,priceCen
  if(!validCents(mortgageCents)||!validCents(priceCents)||priceCents<1)return null;
  const rows=object(value).transcript;if(!Array.isArray(rows)||rows.length>500)return null;
  const turns=rows.map(object).filter(t=>['user','agent'].includes(String(t.role))&&typeof t.message==='string');
- const lastQuestion=(text:string)=>(text.match(/[^.!?;\n]+[.!?;]?/g)??[]).map(s=>s.trim()).filter(Boolean).at(-1)??'';
+ const lastQuestion=sellerQuestion;
  const debt=/\b(?:mortgages?|payoff|loans?|heloc|debts?|liens?|tax(?:es)?|hoa|owe|owed|judgments?|balances?|financial obligations?)\b/i;
  let candidate=-1;
  for(let n=0;n<turns.length;n++){
@@ -76,12 +77,13 @@ export function sellerPayoffEvidence(value:unknown,input:Record<string,unknown>)
  return actual;
 }
 function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
+ const originalQuestion=previous;previous=sellerQuestion(previous);
  if(/\b(another owner|other owner|not the owner|ownership|deed|inherited|divorce|wrong (?:property|address)|new (?:roof|foundation)|fire damage)\b/i.test(latest))return null;
  // A single unqualified "no" can answer the complete debt inventory. Keep it
  // tied to that exact final question: a mortgage-only or additional-debt
  // question cannot establish both balances, and a mixed/corrected answer
  // cannot erase an unknown debt. These remain seller reports, not title proof.
- const question=(previous.match(/[^.!?;\n]+[.!?;]?/g)??[]).map(s=>s.trim()).filter(Boolean).at(-1)??'';
+ const question=previous;
  const inventory=/^(?:is there|are there|do you have|does (?:the|this|your) (?:property|house|home) have) (?:any )?(.+?)(?: on (?:the|this|your) (?:property|house|home))?(?: that (?:need|needs) to be paid(?: off)?(?: at closing)?)?\?$/i.exec(question)?.[1]??'';
  const wholeDebtQuestion=/\b(?:mortgages?|loans?)\b/i.test(inventory)&&/\bliens?\b/i.test(inventory)&&/\btaxes\b/i.test(inventory)&&/\bhoa (?:debts?|balances?)\b/i.test(inventory)
   &&inventory.replace(/\b(?:mortgages?|loans?|liens?|(?:unpaid )?taxes|hoa (?:debts?|balances?)|and|or)\b|[ ,]/gi,'')==='';
@@ -91,7 +93,7 @@ function extractPayoff(latest:string,previous:string):SellerPayoffUpdate|null{
  const uncertain=/\b(between|not sure|don['’]?t know|no idea|more than|less than|at least|at most|under|over|maybe|might|could|think|possibly|probably)\b/i.test(latest);
  const coverageQuestion=/\b(cover|bring|pay)\b/i.test(previous)&&/\b(difference|shortfall|out of pocket|closing)\b/i.test(previous);
  if(coverageQuestion){
-  const asked=spokenMoneyAmounts(previous);
+  const asked=spokenMoneyAmounts(originalQuestion);
   if(asked.length!==1||asked[0]<=0)return null;
   if(/^(?:no|nope)\b|\b(can['’]?t|cannot|won['’]?t|unable)\b/i.test(latest))return {coveredShortfallCents:0,coverageDeclined:true};
   if(!uncertain&&!/\b(not|but|unless|if|maybe)\b/i.test(latest)&&/^(?:yes|yeah|yep|correct|i can|i will|i['’]?ll|that works)\b/i.test(latest)&&(!amounts.length||amounts.length===1&&amounts[0]===asked[0]))return {coveredShortfallCents:asked[0],coverageDeclined:false};
