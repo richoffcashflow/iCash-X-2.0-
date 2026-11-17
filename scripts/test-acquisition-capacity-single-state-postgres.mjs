@@ -78,10 +78,10 @@ try{
   assert.equal(await value(reader,'select pg_try_advisory_xact_lock(726341927)'),false,'Migration retains scheduler authority until its runner commits');
  };
  await pendingInstall();
- await assert.rejects(admin.query("insert into public.fixture_migration_ledger values('20261117040822','wrong-ledger-content')"),error=>error.code==='23514');
+ await assert.rejects(admin.query("insert into public.fixture_migration_ledger values('20261117180236','wrong-ledger-content')"),error=>error.code==='23514');
  await admin.query('rollback');assert.equal(await definition(admin),beforeDefinition);assert.deepEqual(await policy(admin),beforePolicy);
  assert.equal(await value(admin,'select count(*)::int from public.fixture_migration_ledger'),0,'Failed ledger insertion rolls back the complete waited installation');
- await pendingInstall();await admin.query('insert into public.fixture_migration_ledger values($1,$2)',['20261117040822',migrationHash]);await admin.query('commit');
+ await pendingInstall();await admin.query('insert into public.fixture_migration_ledger values($1,$2)',['20261117180236',migrationHash]);await admin.query('commit');
  assert.equal(await value(admin,'select count(*)::int from public.fixture_migration_ledger'),1);
  assert.equal(await value(reader,'select pg_try_advisory_xact_lock(726341927)'),true,'Commit releases the migration lock for the next ordinary poll');
  await holder.query('reset role');

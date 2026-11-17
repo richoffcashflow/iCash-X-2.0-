@@ -26,3 +26,13 @@ export const outboundEightyPercentApproval=Object.freeze({
  previousLimit:18,limit:30,workspaceLimit:32,
  previousDailyLimit:1000,dailyLimit:1000,
 });
+
+/** November 17: use the existing Business plan's forty calls, retaining two
+ * incoming slots and the original daily allowance. Separate one-use activation. */
+export const outboundFullBusinessApproval=Object.freeze({
+ agentId:outboundParallelApproval.agentId,
+ branchId:outboundParallelApproval.branchId,
+ versionId:outboundParallelApproval.versionId,
+ previousLimit:30,limit:38,workspaceLimit:40,
+ previousDailyLimit:1000,dailyLimit:1000,
+});

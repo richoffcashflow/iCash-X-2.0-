@@ -60,7 +60,7 @@ async function maintenance(recover){
  const route=await loadService('app/api/internal/maintenance/route.ts',{
   authorizeOutboundBilling:()=>true,process:{env:{}},db:async()=>0,maintenanceBatch,
   refreshReliability:async(_db,value)=>{healthy=value;return true;},pruneUsageLoopObservations:async()=>{},
-  applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'already_verified'}),
+  applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'already_verified'}),
   refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:async()=>assert.fail('No live provider'),readRecordingReview:()=>null,recoverVoiceConfiguration:async()=>({status:'idle'}),
   refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),drainResearchExclusions:async()=>({status:'not_due'}),
   recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:recover,

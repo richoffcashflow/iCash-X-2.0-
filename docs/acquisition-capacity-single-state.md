@@ -56,7 +56,7 @@ provider call, contact, spend, replay or flag reset is performed by verification
 
 ## Release
 
-Apply `20261117040822_acquisition_capacity_single_state.sql` only after source
+Apply `20261117180236_acquisition_capacity_single_state.sql` only after source
 review and the exact canonical checks. The normal migration runner owns the
 transaction and ledger. Ordinary general, recovery, messages, voice and research
 polls all acquire transaction lock `726341927`; a separate no-lock observation
@@ -86,3 +86,7 @@ entry, then the exact web/worker production release. Observe ordinary scheduler
 and completion evidence afterward. Passing this narrow repair does not resolve
 historical pending work, explain the separate opportunity-score cancellation or
 justify clearing any workflow finding.
+
+## November 17 installation
+
+Installed once as `20261117180236_acquisition_capacity_single_state` after all seven canonical jobs passed for source head `30d735b4c4d7c4da152f1d94982e6887f4f32830` (run `44018877246`) and a fresh independent source review and focused regression. Readback at `2026-11-17T18:02:44Z` verified the target hash `c8549a105f353bc11b0dcb904bbd8e71`, unchanged shared capacity/reserve definitions, private ACLs, owner, and all non-target headroom policy fields. Do not reinstall or replay this migration. The source filename now matches the hosted ledger version. Production account recovery remains unverified; this only removes duplicate scheduling arithmetic.

@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {installHeadroomFixture} from './acquisition-headroom-fixture.mjs';
 export const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
 export const migration=read('config/acquisition-capacity-single-state.sql');
-export const migrationPath='supabase/migrations/20261117040822_acquisition_capacity_single_state.sql';
+export const migrationPath='supabase/migrations/20261117180236_acquisition_capacity_single_state.sql';
 export const sources=JSON.parse(read('tests/fixtures/acquisition-capacity-single-state-before.json'));
 export const value=async(db,s,a=[])=>Object.values((await db.query(s,a)).rows[0]??{})[0];
 export const signature='public.icash_acquisition_capacity_available(uuid)';
