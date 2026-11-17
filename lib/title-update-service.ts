@@ -41,7 +41,11 @@ export async function dispatchTitleUpdate(accountId:string,taskId:string){
  if(!job){await retry();return {status:'title_followup_held'};}
  try{
   const res=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`title-followup-${taskId}`},body:JSON.stringify({from:process.env.ICASH_TITLE_FROM_EMAIL,reply_to:process.env.ICASH_TITLE_REPLY_EMAIL,to:[job.recipient],subject:`[ICX-T:${job.requestId}] ${task.payload.type==='assignment'?'Signed buyer assignment':task.payload.type==='executed_copy'?'Requested executed agreements':'Updated payment preference'}`,text:`Hello,\n\nThis is the automated iCash X coordination assistant for ${job.address.replace(/[\r\n]/g,' ').slice(0,300)}.\n\n${details}\n\nPlease reply with confirmation or any questions. This update does not confirm title acceptance, deposit receipt, closing or disbursement. Payment details must be collected through your secure process and independently verified; do not rely on emailed wire changes.`,...(attachments.length?{attachments}:{})}),signal:AbortSignal.timeout(15000)});
-  if(!res.ok){await res.body?.cancel().catch(()=>undefined);throw Error('Delivery requires review');}const result=await res.json();if(typeof result.id!=='string'||!result.id)throw Error('Receipt missing');
+  if(!res.ok){
+   // Keep the original email outcome independent of response-body cleanup.
+   try{void res.body?.cancel().catch(()=>undefined);}catch{/* Preserve the original delivery failure. */}
+   throw Error('Delivery requires review');
+  }const result=await res.json();if(typeof result.id!=='string'||!result.id)throw Error('Receipt missing');
   if(task.payload.type==='executed_copy'){
    if(await db('rpc/icash_finish_title_copy','POST',{p_account:accountId,p_task:taskId,p_provider:result.id})!==true)throw Error('Original copy receipt required');
   }else{

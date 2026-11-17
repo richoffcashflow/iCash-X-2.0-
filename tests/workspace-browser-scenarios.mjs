@@ -16,6 +16,7 @@ export async function verifyWorkspace(browser,base,options,name){
  let instantVariant=null,inboundLead=false,callOutcome=null;
  let opportunityProgress=null;
  let fundingFixture=null;
+ let buyerProgressFixture=null;
  let scenario='lead',preview=true,emptySearch=false,fulfillmentMode='ok',intentionalCrash=false,callMode='unavailable';
  await context.addInitScript(()=>{Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.fixtureMicrophoneRequests=(window.fixtureMicrophoneRequests||0)+1;throw new DOMException('Fixture microphone denied','NotAllowedError');}},configurable:true});});
  const fulfillmentHolds=new Set();
@@ -116,7 +117,7 @@ export async function verifyWorkspace(browser,base,options,name){
   if(p==='/api/work/recording/audio')return route.fulfill({contentType:'audio/wav',body:fixtureAudio});
   if(p==='/api/buyer-qualifications')return route.fulfill({json:{requests:[],candidates:[],hasMore:false,notice:'Fixture'}});
   if(p==='/api/work/buyer-coordination')return route.fulfill({json:{availability:null,receipt:null,assignment:scenario==='deposit_due'?{id:'signed-buyer-assignment',buyer:'Cedar Ridge Homes',depositCents:200000}:null}});
-  if(p==='/api/work/journeys')return route.fulfill({json:{journeys:[],messages:[]}});
+  if(p==='/api/work/journeys')return route.fulfill({json:{journeys:buyerProgressFixture??[],messages:[]}});
   if(p==='/api/work/showings')return route.fulfill({json:{showings:[]}});
   if(p==='/api/work/buyer-demand')return route.fulfill({status:503,json:{error:'No demand fixture'}});
   return route.fulfill({status:401,json:{error:'Fixture only'}});
@@ -462,12 +463,28 @@ export async function verifyWorkspace(browser,base,options,name){
     assert.equal(await card.getByRole('dialog',{name:'Agreements',exact:true}).isVisible(),false,'required signature is visible without opening forms');
    }
    if(waitingStages[state]){
+    if(state==='deposit_due')buyerProgressFixture=work(new URL(base+'/api/work/activity')).journeys;
     const next=waitingStages[state],button=card.locator('.property-focus').getByRole('button',{name:next.label,exact:true});
     await button.waitFor();await button.click();
     const panel=page.getByRole('dialog',{name:next.dialog,exact:true});await panel.waitFor();
     if(state==='deposit_due'){
      const confirm=panel.getByRole('button',{name:'Confirm receipt & reserve property',exact:true});await confirm.waitFor();
      assert(await confirm.isDisabled(),'opening the deposit action never confirms funds without evidence');
+     const progress=panel.getByRole('region',{name:'Buyer next step',exact:true}),draft=panel.getByLabel('Where this deadline was agreed');
+     await progress.getByText(/The assignment is signed/).waitFor();await panel.getByText('Record an agreed deposit deadline',{exact:true}).click();await draft.fill('Unsent contract deadline source');
+     const original=buyerProgressFixture[0],beforeWrites=writes.length;
+     buyerProgressFixture=[{...original,state:'reserved',titleSelected:true}];
+     await panel.getByRole('button',{name:'Refresh buyer progress',exact:true}).click();
+     await progress.getByText(/The property is reserved/).waitFor();
+     buyerProgressFixture=[original];await panel.getByRole('button',{name:'Refresh buyer progress',exact:true}).click();
+     await panel.getByText('Record an agreed deposit deadline',{exact:true}).click();await draft.waitFor();assert.equal(await draft.inputValue(),'Unsent contract deadline source','refresh preserves the unsaved deadline source');
+     buyerProgressFixture=[{...original,state:'closed',messageReview:true,blocker:{kind:'human',note:'Earlier buyer question',revision:1,updatedAt:new Date().toISOString()}}];
+     await panel.getByRole('button',{name:'Refresh buyer progress',exact:true}).click();
+     await progress.getByText('Buyer request closed',{exact:true}).waitFor();
+     assert.match(await progress.innerText(),/earlier message still needs delivery review/);
+     assert.match(await progress.innerText(),/Saved buyer request: Earlier buyer question/);
+     assert.equal(writes.length,beforeWrites,'buyer refresh and history review only read saved records');
+     buyerProgressFixture=null;
     }
     await page.keyboard.press('Escape');
    }

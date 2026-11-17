@@ -10,11 +10,26 @@ export async function sellerMetaCostEnvironment(db:SellerDb,env:Env){
  return token?{...env,META_ADS_READ_ACCESS_TOKEN:token}:env;
 }
 export function metaCostConfigured(env:Env){return !!(env.META_ADS_READ_ACCESS_TOKEN||env.META_SELLER_ACCESS_TOKEN||env.META_CAPI_ACCESS_TOKEN)&&/^v\d{1,3}\.0$/.test(env.META_GRAPH_VERSION||'');}
+async function readCostReport(response:Response){
+ if(!response.body)throw new MetaCostError('invalid_report');
+ const reader=response.body.getReader(),decoder=new TextDecoder(),parts:string[]=[];let length=0;
+ const append=(part:string)=>{length+=part.length;if(length>500000)throw new MetaCostError('invalid_report');if(part)parts.push(part);};
+ try{
+  for(;;){const chunk=await reader.read();if(chunk.done)break;append(decoder.decode(chunk.value,{stream:true}));}
+  append(decoder.decode());
+ }finally{
+  // Enforce the original character cap during reading, preserving UTF-8 text
+  // semantics. Cleanup cannot delay the original cost claim's finalization.
+  try{void reader.cancel().catch(()=>{});}catch{/* Preserve the read outcome. */}
+  reader.releaseLock();
+ }
+ return parts.join('');
+}
 async function graph(path:string,params:Record<string,string>,env:Env,transport:typeof fetch){
  if(!metaCostConfigured(env))throw new MetaCostError('connection_required');
  const url=new URL(`https://graph.facebook.com/${env.META_GRAPH_VERSION}/${path}`);for(const [key,value]of Object.entries(params))url.searchParams.set(key,value);
  let response:Response;try{response=await transport(url,{method:'GET',headers:{Authorization:`Bearer ${env.META_ADS_READ_ACCESS_TOKEN||env.META_SELLER_ACCESS_TOKEN||env.META_CAPI_ACCESS_TOKEN}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});}catch{throw new MetaCostError('unavailable');}
- let data;try{const body=await response.text();if(body.length>500000)throw Error();data=JSON.parse(body);}catch{throw new MetaCostError('invalid_report');}
+ let data;try{data=JSON.parse(await readCostReport(response));}catch{throw new MetaCostError('invalid_report');}
  if(!response.ok||data.error)throw new MetaCostError([10,100,190,200].includes(Number(data.error?.code))||response.status===401||response.status===403?'connection_required':'unavailable');
  return data;
 }

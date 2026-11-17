@@ -476,3 +476,24 @@ two inactive defaults on the same reviewed version. The exact original full
 fingerprint and all independent active controls remain required. Synthetic
 reproduction and the actual metadata inspector are covered; closure requires
 the exact production release, fresh full comparison and ordinary call receipts.
+
+## November 17 progress and efficiency audit
+
+This batch reproduces and repairs bounded source-level failures. It is not proof
+of all-account recovery, verified closings, production savings or live deployment.
+The existing serialized release controller must still verify the exact checks and
+serving application. No migration, activation or historical replay is required.
+
+| Reproduced gap | Change and regression evidence |
+| --- | --- |
+| A cost report was fully buffered before its existing size limit was checked | [Streaming cost bounds](meta-cost-report-bounds.md) retain the same character and Unicode semantics while rejecting oversized reports during reading. Original unknown costs remain unknown. |
+| Rejected title-email cleanup could delay the original review hold and independent buyer work | [Title delivery cleanup](title-delivery-cleanup-2026-11-17.md) extends the known cleanup repair to three closing paths. Twenty-three native-stream/service scenarios cover one failure class, not 23 incidents. |
+| Update reads could hang, crash on malformed data, lose a pending refresh or overwrite edited preferences | [Update recovery](workspace-updates-recovery-2026-11-17.md) bounds and validates reads, retains saved history/drafts and requires fresh consent after metadata refresh. Nine component scenarios cover recovery without preference writes. |
+| Buyer next steps stayed stale after saved coordination changes, and closed requests received active guidance | [Buyer progress clarity](buyer-progress-clarity-2026-11-17.md) connects existing refreshes and preserves drafts, failed-action feedback and unresolved historical delivery evidence. Seven component scenarios and the existing desktop/mobile browser path cover the change. |
+
+All four scopes received independent source and regression review. Relevant
+component, service, API, stream and database fixtures passed offline; new suites
+are registered in release verification. Canonical whole-workflow checks and the
+matching production release remain the delivery authority. Existing learning
+policies, comparison cohorts, financial/contact controls and uncertain originals
+are unchanged. Preference and mark-read POST recovery are outside this batch.
