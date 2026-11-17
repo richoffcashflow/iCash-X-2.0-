@@ -14,7 +14,9 @@ declare before_definition text;after_definition text;actual record;
   where c.account_id=p_account and c.enabled and c.auto_enabled and c.contacts_enabled and c.data_rights_until>now()) then
   candidate:=public.icash_enrichment_candidate(p_account);$replacement$;
 begin
- if not pg_try_advisory_xact_lock(726341927) then raise exception 'Usage research precheck scheduler busy';end if;
+ -- Ordinary lane polls frequently own this transaction lock. Wait only within
+ -- the existing two-second lock and eight-second DO statement bounds above.
+ perform pg_advisory_xact_lock(726341927);
  select p.*,pg_get_functiondef(p.oid) definition into actual from pg_proc p
   where p.oid=to_regprocedure('public.icash_usage_loop_context(uuid,uuid)');
  if not found or md5(actual.definition) is distinct from '846e7e4dec84578b511ec69f62a23222'

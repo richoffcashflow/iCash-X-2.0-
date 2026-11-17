@@ -57,6 +57,13 @@ after selection, and later statements within the same reader transaction see
 newly committed controls. This controlled lock test is not evidence that the
 saved production cancellation was caused by a lock.
 
+The migration test also starts with wider session timeouts, then verifies its
+own two-second scheduler-lock bound and eight-second DO statement bound. A
+brief holder through the captured ordinary lane entry permits installation when
+released. A sustained holder causes complete rollback, as does a failed ledger
+insert after a successful wait. Successful commit records one ledger entry and
+releases the transaction lock.
+
 ## Release
 
 After review and exact canonical checks, install
@@ -64,7 +71,12 @@ After review and exact canonical checks, install
 ledger. It requires the captured invoker function, owner, service-only execution
 ACL, volatility, parallel setting, strictness, leakproof setting and empty search
 path. It changes exactly one entry condition and pins the complete resulting
-definition and metadata. A busy scheduler lock or any drift fails closed.
+definition and metadata. Every ordinary automation lane uses transaction lock
+`726341927`, so the migration joins that same queue for at most the existing
+two-second `lock_timeout`. Its complete DO statement retains the eight-second
+`statement_timeout`. A sustained lock or any drift fails closed. Runtime lock
+calls, polling cadence and timeouts remain unchanged; this is no unattended
+installation retry loop.
 
 The function MD5 changes from `846e7e4dec84578b511ec69f62a23222` to
 `fc24c125163489d40d275e0b158b6455`. No policy, table, historical migration,
