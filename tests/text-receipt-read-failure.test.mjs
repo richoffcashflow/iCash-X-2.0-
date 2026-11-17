@@ -82,4 +82,85 @@ try{
  },env,async url=>{deadlineReads++;return Response.json(url.endsWith('/numbers/leased')?{object:'response',data:{numbers:[{number:{e164:sender}}]}}:{object:'response',data:{status:'delivered'}});});
  assert.equal(deadlineWrites,1);assert.equal(deadlineReads,2);assert.equal(result.errors,1);assert.equal(result.status,'receipt_write_unavailable');
 }finally{AbortSignal.timeout=originalTimeout;}
+
+// Transport cleanup is not receipt evidence. Once a bounded read has failed,
+// canceling its unread body must not retain the original journal or suppress
+// independent message receipts. These fixtures use native unfinished streams.
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+for(const target of ['lease','message'])for(const invalid of ['oversized','origin'])for(const cleanup of ['pending','rejected','synchronous']){
+ const saved=[],calls=[];let cancelCount=0,rejectCleanup;
+ const cleanupWait=new Promise((_,reject)=>{rejectCleanup=reject;});
+ const response=new Response(new ReadableStream({
+  start(controller){controller.enqueue(new Uint8Array(invalid==='oversized'?131073:1));},
+  cancel(){cancelCount++;return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;},
+ }));
+ if(invalid==='origin')Object.defineProperty(response,'url',{value:'https://wrong-origin.invalid/private'});
+ if(cleanup==='synchronous'){
+  if(invalid==='origin')response.body.cancel=()=>{cancelCount++;throw Error('private cleanup');};
+  else{
+   const getReader=response.body.getReader.bind(response.body);
+   response.body.getReader=()=>{const reader=getReader();reader.cancel=()=>{cancelCount++;throw Error('private cleanup');};return reader;};
+  }
+ }
+ const db=async(path,method,body)=>{
+  assert.equal(method,'POST');
+  if(path==='rpc/icash_claim_text_delivery_rechecks')return claims;
+  assert.equal(path,'rpc/icash_finish_text_delivery_recheck');saved.push(body);
+  return body.p_receipt.reason?'held':'delivered';
+ };
+ let result,error,settled=false;
+ const pending=recoverTextDeliveryReceipts(db,env,async(url,options)=>{
+  calls.push(url);assert.equal(options.method,'GET');assert.equal(options.redirect,'error');
+  if(target==='lease'&&url.endsWith('/numbers/leased')||target==='message'&&url.includes('/provider-1?'))return response;
+  return Response.json(url.endsWith('/numbers/leased')?{object:'response',data:{numbers:[{number:{e164:sender}}]}}:{object:'response',data:{status:'delivered'}});
+ }).then(value=>{result=value;settled=true;},failure=>{error=failure;settled=true;});
+ try{
+  await flush();await flush();
+  assert.equal(settled,true,`${target}/${invalid}/${cleanup}: known read failure must not wait for transport cleanup`);
+  await pending;assert.equal(error,undefined);
+  assert.equal(cancelCount,1,'Start cleanup once without a provider request retry');
+  assert.equal(response.body.locked,false,'Always release the bounded reader');
+  assert.equal(calls.length,4,'One original lease read and three original message reads');
+  assert.equal(saved.length,3,'Every claimed observation reaches its original finalizer');
+  assert.equal(result.status,'receipt_read_unavailable');assert.equal(result.errors,0);assert.equal(result.readErrors,1);
+  assert.equal(result.held,target==='lease'?3:1);assert.equal(result.delivered,target==='lease'?0:2);
+  assert(!JSON.stringify(saved).includes('private'),'Cleanup errors and invalid origins are not provider receipts');
+ }finally{
+  // Late cleanup rejection remains handled after the recovery result returns.
+  if(cleanup==='pending')rejectCleanup(Error('private late cleanup'));
+  await flush();await pending;
+ }
+}
+// A completely read provider response also keeps its original bytes if cleanup
+// itself throws or rejects. The existing finalizer still decides delivery.
+for(const cleanup of ['pending','rejected','synchronous']){
+ const rawText=' {"object":"response","data":{"status":"delivered"}}\n';
+ const response=new Response(rawText),getReader=response.body.getReader.bind(response.body);
+ let cancelCount=0,rejectCleanup,saved;
+ const cleanupWait=new Promise((_,reject)=>{rejectCleanup=reject;});
+ response.body.getReader=()=>{
+  const reader=getReader();reader.cancel=()=>{
+   cancelCount++;
+   if(cleanup==='synchronous')throw Error('private cleanup');
+   return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;
+  };return reader;
+ };
+ let result,settled=false;
+ const pending=recoverTextDeliveryReceipts(async(path,method,body)=>{
+  if(path==='rpc/icash_claim_text_delivery_rechecks')return [claims[0]];
+  assert.equal(path,'rpc/icash_finish_text_delivery_recheck');saved=body;return 'held';
+ },env,async url=>url.endsWith('/numbers/leased')?Response.json({object:'response',data:{numbers:[{number:{e164:sender}}]}}):response)
+ .then(value=>{result=value;settled=true;});
+ try{
+  await flush();await flush();assert.equal(settled,true,'Complete receipt cannot wait for cleanup');await pending;
+  assert.equal(cancelCount,1);assert.equal(response.body.locked,false);
+  assert.equal(saved.p_receipt.message.rawText,rawText,'Original response bytes remain unchanged');
+  assert.deepEqual(saved.p_receipt.message.raw,JSON.parse(rawText));
+  assert.equal(result.status,'checked');assert.equal(result.readErrors,0);assert.equal(result.errors,0);
+  assert.equal(result.held,1);assert.equal(result.delivered,0,'Transport success never overrides the finalizer hold');
+ }finally{
+  if(cleanup==='pending')rejectCleanup(Error('private late cleanup'));
+  await flush();await pending;
+ }
+}
 console.log('PASS original text receipt recovery reports failed reads, preserves failed observations, and completes independent claims without replay.');

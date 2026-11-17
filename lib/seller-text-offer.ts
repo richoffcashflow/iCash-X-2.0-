@@ -14,7 +14,7 @@ import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {sellerResponseDisposition} from './seller-response-policy.ts';
 import {sellerConversionIntent} from './seller-conversion-intent.ts';
 import {sellerCommunicationIntent,sellerCommunicationReplies} from './seller-communication-intent.ts';
-import {sellerIdentityInterruption} from './seller-answer-evidence.ts';
+import {sellerIdentityInterruption,sellerInformationQuestion} from './seller-answer-evidence.ts';
 import {chronologicalSellerHistory} from './seller-memory.ts';
 
 type Message={id:string;direction:string;body:string;state:string;providerId:string|null;at?:string;updatedAt?:string;action?:string;quoteRevision?:string;priceCents?:number;customerAuthored?:boolean};
@@ -230,10 +230,11 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
   }
  }
  if(state.pendingAskingPriceCents)return ask('clarify_gross_price','Do you mean the purchase price before any mortgage payoff, liens or closing adjustments?');
- if(/^(?:why|how).*(?:price|offer)|\b(?:too low|lowball)\b/i.test(source.body)&&state.quotedPriceCents)return ask('explain_cash_price',sellerAnswerCopy.explain_cash_price.current);
+ if(/^(?:why|how)\b.*(?:price|offer)|\b(?:too low|lowball)\b/i.test(source.body)&&state.quotedPriceCents)return ask('explain_cash_price',sellerAnswerCopy.explain_cash_price.current);
  if(previous?.action==='explain_cash_price'&&/\b(?:renovated|new roof|repaired|repairs?|square feet|bedrooms?|bathrooms?)\b/i.test(source.body))return ask('repair_budget','What is your estimate of the total remaining repair budget?');
- if(/^(?:who pays (?:the )?closing costs|(?:are there|what about|what are|any) (?:the |any )?fees)[?! .]*$/i.test(source.body))return ask('explain_costs',sellerAnswerCopy.explain_costs.current);
- if(/^(?:how (?:does|will) (?:this|it) work|what happens next)[?! .]*$/i.test(source.body))return ask('explain_process',sellerAnswerCopy.explain_process.current);
+ const information=sellerInformationQuestion(source.body);
+ if(information==='costs')return ask('explain_costs',sellerAnswerCopy.explain_costs.current);
+ if(information==='process')return ask('explain_process',sellerAnswerCopy.explain_process.current);
  if(isDeliveredCallInvitation(previous)&&unqualifiedYes(source.body))return ask('invite_call_time','What day and time work for a call?');
  // Answer the seller's actual question before resuming the missing fact. A
  // listing reference does not establish agent representation or accept its terms.
