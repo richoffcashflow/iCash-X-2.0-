@@ -7,6 +7,7 @@ import {getRecordedReception,transitionRecordedReception,endRecordedReception,bo
 import {settleRecordedReception} from './recorded-reception-settlement.ts';
 import type {RecordedReceptionProviders} from './recorded-reception-provider.ts';
 import {sellerMemoryInboundTurns} from './seller-memory.ts';
+import {sellerCallSource} from './seller-call-source.ts';
 
 /** Independent cleanup and termination worker. Launch/account/wallet gates never
  * control recovery or deletion. Provider deletion is verified before finalizing. */
@@ -135,6 +136,13 @@ export async function maintainRecordedReception(rpc:RecordedReceptionRpc,provide
      carrierPricePending:freshCall.price===null,aiComplete:conversation?.status==='done',aiPricePresent:typeof object(conversation?.metadata).cost_fiat==='number',
     });
     if('reviewRequired' in settled&&settled.reviewRequired)result.held++;
+    // Capture only this already-fetched, identity-checked original. A malformed
+    // or oversized transcript records missing coverage after original usage
+    // settlement; no extra provider read, replay or new contact is introduced.
+    if(conversation?.status==='done'){
+     stage='seller_call_source';
+     if(await rpc('icash_capture_seller_call_source',{p_kind:'inbound',p_source:row.id,p_evidence:sellerCallSource(conversation)})!==true)throw Error('SELLER_CALL_SOURCE_NOT_SAVED');
+    }
    }
    await finish(initial,'reconcile','checked');result.reconciled++;
   }catch(error){
