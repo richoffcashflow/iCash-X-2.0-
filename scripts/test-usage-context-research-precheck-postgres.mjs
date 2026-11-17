@@ -58,10 +58,10 @@ try{
   assert.equal(await value(admin,"select md5(pg_get_functiondef('public.icash_usage_loop_context(uuid,uuid)'::regprocedure))"),'fc24c125163489d40d275e0b158b6455');
   assert.equal(await value(reader,'select pg_try_advisory_xact_lock(726341927)'),false,'Installer retains transaction authority until ledger completion');
  };
- await pendingInstall();await assert.rejects(admin.query("insert into public.fixture_migration_ledger values('20261117042031','wrong-ledger-content')"),error=>error.code==='23514');
+ await pendingInstall();await assert.rejects(admin.query("insert into public.fixture_migration_ledger values('20261117180250','wrong-ledger-content')"),error=>error.code==='23514');
  await admin.query('rollback');assert.equal(await definition(admin),before);assert.deepEqual(await evidence(admin),beforeEvidence);
  assert.equal(await value(admin,'select count(*)::int from public.fixture_migration_ledger'),0);
- await pendingInstall();await admin.query('insert into public.fixture_migration_ledger values($1,$2)',['20261117042031',migrationHash]);await admin.query('commit');
+ await pendingInstall();await admin.query('insert into public.fixture_migration_ledger values($1,$2)',['20261117180250',migrationHash]);await admin.query('commit');
  assert.equal(await value(admin,'select count(*)::int from public.fixture_migration_ledger'),1);
  assert.equal(await value(reader,'select pg_try_advisory_xact_lock(726341927)'),true,'Commit releases authority for the next ordinary poll');
  await holder.query('reset role');

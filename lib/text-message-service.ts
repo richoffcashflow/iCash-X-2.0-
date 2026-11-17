@@ -58,19 +58,27 @@ export async function dispatchTextMessage(accountId:string,messageId:string,manu
  * routing and one-use claim run again. A provider attempt is never replayed. */
 export async function retryVolumeDeferredText(){
  const seen=new Set<string>();
+ const startedAt=Date.now();let accepted=0,checked=0;
  let held={status:'idle'};
+ const finish=()=>({status:accepted>0?'message_accepted':held.status,accepted,checked});
  // A stale screening or disabled sender may still be in the deferred queue.
  // The original claim must reject it, without using the whole recovery pass.
- // Bound selection work and stop after any SMS transport attempt or uncertainty.
+ // Four distinct originals can use independent sender capacity. Start no new
+ // selection or dispatch after twenty seconds; always finish the current
+ // original's durable receipt instead of racing an abort against a live send.
+ // Only a saved accepted receipt permits continuing after a transport attempt.
  for(let attempt=0;attempt<4;attempt++){
+  if(Date.now()-startedAt>=20000)return finish();
   const due=await db<{accountId:string;messageId:string;claimKind:TextClaimKind}|null>('rpc/icash_next_sender_volume_retry','POST',{});
-  if(!due)return held;
+  if(!due)return finish();
   if(!['automatic','manual','meta'].includes(due.claimKind)||!due.accountId||!due.messageId)throw Error('Invalid deferred text binding');
-  if(seen.has(due.messageId))return held;
+  if(seen.has(due.messageId)||Date.now()-startedAt>=20000)return finish();
   seen.add(due.messageId);
+  checked++;
   const result=await dispatchTextMessage(due.accountId,due.messageId,due.claimKind==='manual',due.claimKind);
-  if(!['message_held','business_number_mismatch','seller_inventory_unavailable'].includes(result.status))return result;
+  if(result.status==='message_accepted'){accepted++;continue;}
+  if(!['message_held','business_number_mismatch','seller_inventory_unavailable'].includes(result.status))return {...result,accepted,checked};
   held=result;
  }
- return held;
+ return finish();
 }

@@ -32,7 +32,7 @@ try{
   const route=await loadService('app/api/internal/maintenance/route.ts',{
    db,maintenanceBatch,refreshReliability,pruneUsageLoopObservations,
    authorizeOutboundBilling:()=>authorized,process:{env:{}},readRecordingReview:()=>null,
-   applyApprovedProVoiceCapacity:async()=>{stages.push('pro_change');if(failure==='pro_change')throw Error('private pro failure');return {status:'already_verified'};},
+   applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>{stages.push('pro_change');if(failure==='pro_change')throw Error('private pro failure');return {status:'already_verified'};},
    applyApprovedEightyPercentVoiceCapacity:async()=>{stages.push('capacity_change');if(failure==='capacity_change')throw Error('private change failure');return {status:'awaiting_activation'};},
    refreshVoiceCapacity:async(_db,_reader,_review,onAgent)=>{stages.push('voice_read');await voiceWait;if(failure==='voice_read')throw Error('private provider');await onAgent({});return {status:'verified'};},
    readVoiceCapacityProvider:async()=>assert.fail('No live provider'),

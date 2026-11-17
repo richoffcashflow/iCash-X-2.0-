@@ -67,7 +67,7 @@ releases the transaction lock.
 ## Release
 
 After review and exact canonical checks, install
-`20261117042031_usage_context_research_precheck.sql` through the normal migration
+`20261117180250_usage_context_research_precheck.sql` through the normal migration
 ledger. It requires the captured invoker function, owner, service-only execution
 ACL, volatility, parallel setting, strictness, leakproof setting and empty search
 path. It changes exactly one entry condition and pins the complete resulting
@@ -84,3 +84,7 @@ activation, request receipt or workflow flag changes. Verify the exact installed
 source/security metadata and one ledger entry, then the ordinary exact-release
 web/worker checks. Observe normal read/progression evidence afterward without
 running a production selector or sending paid test work.
+
+## November 17 installation
+
+Installed once as `20261117180250_usage_context_research_precheck` after all seven canonical jobs passed for source head `38861dc2b8f92f648cf3d9ce6c07951c40c9dd23` (run `44019049571`) and a fresh independent source review and focused regression. A preceding lock-timeout attempt rolled back without installing a migration. Readback at `2026-11-17T18:02:57Z` verified the target function hash `fc24c125163489d40d275e0b158b6455` and the installed migration entry. Source and private invoker metadata are pinned by the atomic installer. Do not reinstall or replay this migration. The source filename now matches the hosted ledger version. The repair removes irrelevant ranking work; it does not establish that historical pending work completed.

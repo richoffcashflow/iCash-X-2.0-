@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 export const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
 export const migration=read('config/usage-context-research-precheck.sql');
-export const migrationPath='supabase/migrations/20261117042031_usage_context_research_precheck.sql';
+export const migrationPath='supabase/migrations/20261117180250_usage_context_research_precheck.sql';
 export const sources=JSON.parse(read('tests/fixtures/usage-context-research-before.json'));
 export const value=async(db,s,a=[])=>Object.values((await db.query(s,a)).rows[0]??{})[0];
 export const uid=n=>`00000000-0000-4000-9000-${String(n).padStart(12,'0')}`;

@@ -1,0 +1,32 @@
+[
+  {
+    "observed_at": "2026-11-17 04:38:56.261543+00",
+    "signature": "icash_seller_conversation_reply(uuid,uuid)",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_seller_conversation_reply(p_account uuid, p_job uuid)\n RETURNS text\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare j public.icash_text_ai_jobs;t public.icash_text_threads;m public.icash_text_messages;v public.icash_seller_viewing_availability;\nbegin\n select * into j from public.icash_text_ai_jobs where id=p_job and account_id=p_account and state in ('drafted','queued');\n if not found then return null;end if;\n if public.icash_seller_viewing_context(p_account,j.thread_id) is null then return public.icash_seller_reply_before_viewings(p_account,p_job);end if;\n if j.analysis->'humanRequested'='true'::jsonb or j.analysis->'callbackRequested'='true'::jsonb or j.analysis->'callRequested'='true'::jsonb or j.analysis->'optedOut'='true'::jsonb or j.analysis->'declined'='true'::jsonb then return null;end if;\n select * into t from public.icash_text_threads where id=j.thread_id and account_id=p_account;\n select * into m from public.icash_text_messages where id=j.message_id and thread_id=t.id and account_id=p_account and direction='incoming' and state='received';\n if not found or m.created_at>now() or length(m.body)>=1000 or m.body ~* '\\m(stop|unsubscribe|human|real person|call me|callback|call back|phone call|talk to|speak to)\\M' then return null;end if;\n if not exists(select 1 from public.icash_sms_routes where account_id=p_account and sender=t.sender and recipient=t.recipient and not needs_review and revision=m.route_revision)\n or exists(select 1 from public.icash_text_messages x where x.account_id=p_account and x.thread_id=t.id and x.id<>m.id and x.id is distinct from j.outgoing_id and x.created_at>=m.created_at) then return null;end if;\n select * into v from public.icash_seller_viewing_availability where account_id=p_account and thread_id=t.id and source='text' and source_id=m.id;\n if not found then return null;end if;\n if v.state='available' then return 'Thanks. I saved those seller viewing times. We will confirm a specific visit with you before anyone comes.';\n elsif v.state='withdrawn' then return 'Those seller viewing times are withdrawn. We will confirm new availability with you before arranging a visit.';\n else return 'What exact calendar date, start and end times with AM or PM, and time zone work for a property viewing?';end if;\nend $function$\n",
+    "source_hash": "1d658835fae37b6accb8fbe7bd1db2be",
+    "metadata": {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "kind": "f",
+      "owner": "postgres",
+      "strict": false,
+      "returns": "text",
+      "argmodes": null,
+      "argnames": [
+        "p_account",
+        "p_job"
+      ],
+      "language": "plpgsql",
+      "parallel": "u",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "leakproof": false,
+      "volatility": "v",
+      "securityDefiner": false,
+      "defaultArguments": 0
+    }
+  }
+]

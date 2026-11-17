@@ -31,7 +31,7 @@ for(const scenario of ['none','waiting','inventory_result',...Object.keys(normal
   console:{info:(...args)=>logs.push(args),error:()=>{}},
   refreshReliability:async(_db,ok)=>{monitored.push(ok);for(const name of Object.keys(normal))assert(finished.has(name),'Health must wait for '+name);return true;},
   pruneUsageLoopObservations:async()=>{started.push('pruning');if(scenario==='pruning')throw Error('PRIVATE telemetry');},
-  readRecordingReview:()=>null,applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),
+  readRecordingReview:()=>null,applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),
   applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),
   refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>assert.fail('No network'),recoverVoiceConfiguration:async()=>({status:'idle',requeued:0}),
   retryVolumeDeferredText:async()=>{started.push('senderVolume');if(scenario==='sender_throw')throw Error('PRIVATE sender failure');return {status:senderCases[scenario]??'idle'};},recoverTextDeliveryReceipts:async()=>({status:'idle',errors:0}),
