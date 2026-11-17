@@ -1,4 +1,4 @@
-import {supportVerifiedLegacyOfferReply} from './support-legacy-migration.ts';
+import {hasVerifiedLegacyOffer} from './support-legacy-migration.ts';
 import {supportContinuation} from './support-reply-style.ts';
 import type {SupportContext,SupportReply,SupportTurn} from './support-conversation.ts';
 const offer=(text:string)=>/\b(?:two|2)[ -](?:calendar[ -])?months?\b.{0,30}\bfree\b|\bfree\b.{0,25}\b(?:two|2)[ -](?:calendar[ -])?months?\b|\b(?:returning|legacy|welcome.back)\b.{0,25}\boffer\b/i.test(text);
@@ -51,7 +51,7 @@ function supportOfferReplacementReply(messages:SupportTurn[]):SupportReply|null{
  // A replacement request identifies the page; don't ask that question again or
  // send an unverified entitlement link. Direct current intent bounds inheritance.
  if(/\blegacy[ -]offer\b/i.test(q)&&/\b(?:new|replacement|another) link\b/i.test(q)&&!/\b(?:don[’']?t|do not|no longer) (?:want|need)|\b(?:course|seller|buyer|contract)\b/i.test(q)){
-  const verified=messages.findLast(m=>m.role==='operator')?.content===supportVerifiedLegacyOfferReply;
+  const verified=hasVerifiedLegacyOffer(messages);
   const next=verified?'Your earlier verified-purchase reply contains the offer link. I haven’t issued a replacement link; the existing checkout and code-delivery state still need review.':'I haven’t issued a new link or confirmed offer eligibility. The original offer’s verification and checkout state need review before a replacement can be sent.';
   return {reply:'You’ve identified the legacy-offer page and asked for a replacement link. '+next+' A new link alone is not a confirmed fix; any failed steps already reported remain saved here. Don’t start another paid checkout to troubleshoot this.',status:'open',managementReview:true,ai:false};
  }
