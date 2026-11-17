@@ -57,3 +57,15 @@ ACL. The only accepted result is MD5 `3b84ca1902ff715d3882b8dd6ebba935` with the
 same metadata. Reapplication or drift aborts; no additional activation is needed.
 Verify exact-head tests before installation, then verify the installed source
 and observe ordinary timeout/progress/receipt evidence across accounts.
+
+## November 17 production installation
+
+The hosted migration runner recorded `20261117184814_seller_opener_property_lookup`
+after all seven Reliability jobs passed on source `b78728434a452ae2322c43b85d08e88dc8ba37c2`
+in run `44148584989`. At 18:48 UTC the original definition and permissions matched
+the pinned baseline. Readback confirmed one ledger statement with SQL MD5
+`a99ab9791f4572c0aa9ac8134c7b08c2` and function MD5
+`3b84ca1902ff715d3882b8dd6ebba935`. The function retains its service-role
+access, empty search path, Postgres ownership and invoker security. The config
+and hosted migration file have SHA256
+`8290faf1378dda710f9a6ceb53da4b93dcc93a0a9023baeaba68e37f021a32a2`.

@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 export const read=path=>readFileSync(new URL('../../'+path,import.meta.url),'utf8');
 export const migration=read('config/seller-opener-property-lookup.sql');
-export const migrationPath='supabase/migrations/20261117182706_seller_opener_property_lookup.sql';
+export const migrationPath='supabase/migrations/20261117184814_seller_opener_property_lookup.sql';
 export const signature='public.icash_next_before_sms_inbound_campaign()';
 export const beforeHash='e6f81c009c46713083f8dc882e6b7d1f',afterHash='3b84ca1902ff715d3882b8dd6ebba935';
 export const beforePredicate="and not exists(select 1 from public.icash_property_controls pc where pc.account_id=a.id and pc.property_id=s.snapshot->>'propertyId' and pc.manual)";

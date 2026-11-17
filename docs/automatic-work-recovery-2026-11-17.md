@@ -4,14 +4,14 @@ This coordinated release addresses distinct scheduling and reporting failures
 observed during the owner's stalled-account investigation. It preserves the
 reviewed component commits as ancestors rather than deploying competing copies.
 
-| Component | Behavior | Database prerequisite at preparation |
+| Component | Behavior | Verified database prerequisite |
 | --- | --- | --- |
 | PR803 | Reuse one stable reserve calculation within acquisition capacity checking | Installed once as `20261117180236_acquisition_capacity_single_state` |
 | PR805 | Skip research ranking when the report's existing configuration/rate check already fails | Installed once as `20261117180250_usage_context_research_precheck` |
 | PR790 | Give eligible original deferred messages a bounded turn before fresh introductions | Installed once as `20261117182800_deferred_sender_fairness` |
 | PR793 | Retain explicitly empty owner audiences from validated free previews | Installed once as `20261116210706_owner_preview_empty_audience`; application change pending |
-| PR792 | Separate optional policy-review cursors from canonical foreground source writes | Not installed; exact source, metadata and relation checks required |
-| PR815 | Keep both existing account/property control checks as exact indexed lookups | Not installed; exact source and metadata checks required |
+| PR792 | Separate optional policy-review cursors from canonical foreground source writes | Installed once as `20261117190712_policy_review_lock_isolation` |
+| PR815 | Keep both existing account/property control checks as exact indexed lookups | Installed once as `20261117184814_seller_opener_property_lookup` |
 | Pending-confirmation activity | Show actual current work alongside unresolved originals, or neutral confirmation status when idle | No database change |
 
 The original PR793 packaging proposal also mentioned PR777 and PR783. That
@@ -22,13 +22,9 @@ PR777's separate queue. Existing migration receipts remain intact.
 
 ## Release evidence and boundaries
 
-The first four prerequisites above are acknowledged installations. Do not replay
-them. Their component documents contain exact receipts and verification. The two
-remaining migrations must run once through the hosted transaction-owning runner,
-only after successful canonical checks and fresh pinned-source verification.
-Record actual hosted versions and reconcile filenames after installation. A
-known lock refusal with complete rollback is different from an ambiguous write;
-inspect current state before any bounded retry.
+All six database prerequisites have hosted installation receipts. Their
+component documents record the source checks and readbacks. Each repository
+migration filename matches its actual hosted version.
 
 Require an independent review of the complete combined tree and its latest
 seven-job canonical Reliability checks. Use a normal expected-head merge,

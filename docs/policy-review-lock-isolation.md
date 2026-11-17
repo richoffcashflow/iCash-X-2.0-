@@ -52,3 +52,22 @@ unchanged policy definitions, then use the existing serialized release process.
 There is no feature-policy activation or provider/configuration change. Observe
 ordinary scheduler work and lock-timeout recurrence after the release; do not
 invoke paid work or count a healthy heartbeat as account recovery.
+
+## November 17 production installation
+
+The hosted runner recorded `20261117190712_policy_review_lock_isolation`. All
+seven canonical Reliability jobs passed on combined source
+`8d4d3a22e6263f6e40a7b966a19d05551d28583f` in run `44150403777`. The combined
+config and migration have SHA256 `c0b1375dd18964f354b7dc884a795284090ea16cb309141a9b371b8037a3adba`.
+Five prior function definitions, their access rules, the original table,
+columns, indexes, constraints and four cohorts matched the preinstall check.
+The transaction compared every original row and diagnostic to the projection
+under lock before commit.
+
+Readback at 19:07 UTC verified one ledger statement with MD5
+`817f9d2729474374f3cf5fe9a3a1b652`, four source and four review rows, the new
+initialization trigger and a four-row security-invoker view. Both private
+tables have RLS and the service role retains read-only access. All six expected
+function hashes matched, including unchanged policy promotion. The later read
+showed advanced decision and application pointers for one cohort. Its review
+diagnostics and the other three rows matched the earlier observation.
