@@ -130,6 +130,13 @@ const db=async(path,method,body)=>{
 const elevenRequest=async(path,body)=>{providerReads++;providerPaths.push(path);await preflightRead?.(path);assert.equal(body,undefined,'No legacy direct dial, even if recording dispatch fails');if(path.includes('/phone-numbers/'))return {phone_number:providerNumber};assert.equal(path,`/v1/convai/agents/${providerAgent.agent_id}?branch_id=${providerAgent.branch_id}`,'Never read main instead of the reviewed recorded branch');if(agentReadFailed)throw agentReadError??Error('Synthetic metadata read failure');const result=structuredClone(providerAgent);if(!contextOverrides)result.platform_settings.overrides.conversation_config_override.agent={first_message:false,prompt:{prompt:false}};return result;};
 let selectedDispatchReview;
 const recordingServer=(_signal,purpose,selected)=>({dispatch:async input=>{assert.equal(purpose,'dispatch');selectedDispatchReview=selected;outboundBody=input;postCount++;if(timeout)return {status:'recording_dial_unknown_no_retry'};return {status:recordingStatus,...(recordingBoundary?{dispatchBoundary:recordingBoundary}:{})};}});
+const assertSellerPurposeTransport=()=>{
+ assert.match(outboundBody.prompt,/I'm calling to see if you'd consider selling your property for all cash\./);
+ assert.match(outboundBody.prompt,/At the opening answer before another verification question/);
+ assert.match(outboundBody.prompt,/Use the bound street once to identify the property/);
+ assert.match(outboundBody.prompt,/Repeat only on request, to clarify a correction or ambiguity, or for a required exact terms readback/);
+ assert(outboundBody.prompt.length<=24000);
+};
 globalThis.__voiceTest={readSellerMemory,sellerMemoryPrompt,outboundSellerCadencePrompt,voiceApprovalDiagnostics,finishVoicePredialAbort,assignSharedLearning,SharedLearningSafetyHold,acquisitionOpeners,console:{warn:(...args)=>preflightDiagnostics.push(args)},readVoiceOutreachContext,opportunityConversationInstructions,efficientSellerPrompt,sellerGreetingName,instantLeadsEnabled,instantLeadPrompt,cancellationCallPrompt,sellerAgreementDeliveryPrompt,sellerCallerIdentityPrompt,conversationAddressFields,conversationAddressInstructions,dispatchTextMessage,selectBusinessCaller,isAdditionalBusinessPhone,secondaryBusinessPhone,secondaryCallingReady,sellerOfferPresentation,VoiceActivationBudgetError,selectedCustomCallVoice,recordingServer,object,readRecordingReview,readRecordingReviews,recordingReviewForConfig,recordingAgentMatches,recordingPolicy,sameBusinessNumber,consistentTextSenders,boundedVoiceSmsContext,voiceSmsInstructions,createHash,randomBytes,db,elevenRequest,reserveOperation:async()=>records.push({reserve:true}),contactEligibility,nextContactWindow,buyerCallInstructions,buyerFirstMessage,callEligibility,verifiedOfferCeiling,sellerFirstMessage,sellerCallPrompt,sellerCallContext,compactSellerProgress,automaticOfferReceptionPrompt,loadSellerClosingContext,sellerContractToolId,legacyAutomaticOfferReceptionPrompt,streamingAutomaticOfferReceptionPrompt,automaticOfferPolicy};
 let sharedAssignment=null;
 let source=ts.transpileModule(readFileSync(new URL('../lib/live-dispatch-service.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .* from .*;$/gm,'');
@@ -159,6 +166,7 @@ reset();providerAgent.platform_settings.guardrails=automaticOfferGuardrails();pr
 const automaticReview={...review,offerPolicy:'automatic_offer_v6',contractToolId:'tool_automatic',toolIds:[...providerAgent.conversation_config.agent.prompt.tool_ids],configHash:sha(JSON.stringify(canonical({conversation_config:providerAgent.conversation_config,platform_settings:providerAgent.platform_settings,workflow:providerAgent.workflow,procedures:providerAgent.procedures})))};
 c.agent_config_hash=automaticReview.configHash;c.required_tool_ids=automaticReview.toolIds;process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify(automaticReview);
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert.match(outboundBody.prompt,/icash_offer_and_contract get_offer/);assert.match(outboundBody.prompt,/retry that exact action once/);assert(!outboundBody.prompt.includes('DELIVERY FAILURE RESPONSE:'));assert.match(outboundBody.prompt,/Fixture only/);assert(!outboundBody.prompt.includes('PRIVATE SERVER NEGOTIATION AUTHORITY'));assert(!outboundBody.prompt.includes('9000000'),'the runtime prompt does not leak a cached price around the offer tool');
+assertSellerPurposeTransport();
 // A submitted phone and address can dial without a name; ownership still comes first.
 jobState='issued';snapshot.sellerRequest={id:'fixture-lead',phone:permission.phone,ownerName:null};
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');
@@ -178,6 +186,7 @@ greetingContacts=[];
 jobState='issued';priorSellerCalls=[{completed_at:new Date(now-60000).toISOString(),result:{transcript:Array.from({length:35},(_,i)=>[{role:'agent',message:'What repairs does the property need?'},{role:'user',message:'The roof needs work. '+('Original seller detail '+i+' ').repeat(20)}]).flat()}}];
 process.env.RECORDED_OUTBOUND_REVIEW_JSON=JSON.stringify({...automaticReview,offerPolicy:'automatic_offer_v9'});
 assert.equal((await dispatchLiveVoice('account','job')).status,'call_started');assert(outboundBody.prompt.length<=24000);assert.match(outboundBody.prompt,/SELLER CONVERSATION FIRST/);assert.match(outboundBody.prompt,/Original seller detail/);assert.match(outboundBody.prompt,/SELLER CALLER IDENTITY AND REFUSAL/);assert(!outboundBody.prompt.includes('BUYER IDENTITY:'));assert(!outboundBody.prompt.includes('say "I\'m a cash buyer"'));assert.match(outboundBody.prompt,/"principal":"Fixture Buyer"/);assert.match(outboundBody.prompt,/"companyName":null/);
+assertSellerPurposeTransport();
 reset();sharedAssignment={held:true,reason:'learning_safety_hold'};
 assert.equal((await dispatchLiveVoice('account','job')).status,'learning_safety_hold');
 assert.equal(postCount,0);assert.equal(jobState,'held');
@@ -190,6 +199,7 @@ assert.match(outboundBody.prompt,/PRIVATE SERVER NEGOTIATION AUTHORITY/);
 assert.match(outboundBody.prompt,/price request answers availability\/interest, never ownership or price authority/);
 assert.match(outboundBody.prompt,/On voicemail, .*end_call immediately/);
 assert.equal(outboundBody.prompt.split(sellerCallCadenceInstructions).length,2,'Assembled ordinary seller call includes cadence once');
+assertSellerPurposeTransport();
 assert(!Object.hasOwn(outboundBody,'call_recording_enabled'));
 assert(!records.some(r=>r.path==='icash_live_conversations'&&r.method==='POST'),'Only verified recording service may create the live binding');
 assert.deepEqual(providerPaths,[`/v1/convai/phone-numbers/${c.phone_number_id}`,`/v1/convai/agents/${review.agentId}?branch_id=${review.branchId}`]);
@@ -379,7 +389,7 @@ for(const result of ['deferred','held','unavailable','claimed']){
  process.env.META_INSTANT_LEADS_ENABLED='true';metaContext={leadId:'saved-intake',name:null,state:'submitted',address:null};metaClaimResult=result;
  assert.equal((await dispatchLiveVoice('account','job')).status,result==='deferred'?'waiting_for_active_call':result==='held'?'dispatch_permission_changed':result==='unavailable'?'held':'call_started');
  assert.equal(postCount,result==='claimed'?1:0,'Only an explicit claimed result may reach the recording provider');
- if(result==='claimed')assert.equal(outboundBody.prompt.split(sellerCallCadenceInstructions).length,2,'Assembled intake includes cadence once');
+ if(result==='claimed'){assert.equal(outboundBody.prompt.split(sellerCallCadenceInstructions).length,2,'Assembled intake includes cadence once');assertSellerPurposeTransport();}
  assert(!records.some(r=>r.path==='rpc/icash_hold_voice_job'),'Explicit Meta result never creates a stale follow-on hold');
  assert(!records.some(r=>r.path==='rpc/icash_meta_claim_voice'),'Do not invoke the legacy boolean claim after the explicit result');
 }
