@@ -4,10 +4,11 @@ import {loadService} from './helpers/simulated-journey-services.mjs';
 import {closingPayoutNote} from '../lib/closing-setup.ts';
 import {titleEmailAddress} from '../lib/title-inbound-policy.ts';
 import {titleConfirmationInstructionsFor} from '../lib/title-confirmation-instructions.ts';
+import {isDeepStrictEqual} from 'node:util';
 
 // Actual service bodies with isolated database/provider boundaries. No live sends.
 const env={VERCEL_ENV:'production',ICASH_LIVE_WORK_READY:'true',DOCUSEAL_MODE:'live'};
-Object.assign(process.env,env,{RESEND_API_KEY:'fixture',RESEND_RECEIVING_WEBHOOK_SECRET:'fixture',ICASH_TITLE_FROM_EMAIL:'from@example.invalid',ICASH_TITLE_REPLY_EMAIL:'reply@example.invalid'});
+Object.assign(process.env,env,{DOCUSEAL_API_KEY:'fixture',RESEND_API_KEY:'fixture',RESEND_RECEIVING_WEBHOOK_SECRET:'fixture',ICASH_TITLE_FROM_EMAIL:'from@example.invalid',ICASH_TITLE_REPLY_EMAIL:'reply@example.invalid'});
 const errors=[],originalError=console.error;
 console.error=(...args)=>errors.push(args);
 globalThis.fetch=async()=>{throw Error('NETWORK DISABLED');};
@@ -57,21 +58,29 @@ try{
  // A reply/customer action can cancel or finish the task while PDFs/provider I/O run.
  for(const point of ['pdf','provider'])for(const newerState of ['cancelled','dismissed','done','scheduled']){
   let email='issued',state='scheduled',sends=0;
+  const payload={type:'assignment',envelopeId:'22222222-2222-4222-8222-222222222222'};
   const db=async(path,method,data)=>{
+   if(path==='rpc/icash_prepare_title_task_delivery'){
+    const source={task:{id:'task',account_id:'account',deal_id:'deal',payload},document:{pdfSource:{id:payload.envelopeId,accountId:'account',dealId:'deal',providerId:'102'}}};
+    return {preparation:{...source,version:'title-task-preparation-v1'},delivery:{...source,version:'title-task-delivery-v1'}};
+   }
    if(path==='rpc/icash_claim_title_update'){email='dispatching';return {requestId:'request',recipient:'closer@example.invalid',address:'Fixture'};}
+   if(path==='rpc/icash_hold_title_task_delivery'){
+    if(email!=='dispatching')return false;email='needs_review';if(state==='scheduled')state='needs_review';return true;
+   }
    if(method==='PATCH'){
     const emailMatch=/email_state=eq\.([a-z_]+)/.exec(path),stateMatch=/(?:[?&])state=eq\.([a-z_]+)/.exec(path);
     if(emailMatch&&emailMatch[1]!==email||stateMatch&&stateMatch[1]!==state)return [];
     if(data.email_state)email=data.email_state;if(data.state)state=data.state;return [];
    }
-   return [{id:'task',deal_id:'deal',state,email_state:email,payload:{type:'assignment',envelopeId:'22222222-2222-4222-8222-222222222222'}}];
+   return [{id:'task',deal_id:'deal',state,email_state:email,payload}];
   };
-  const {dispatchTitleUpdate}=await loadService('lib/title-update-service.ts',{db,closingPayoutNote,titleEmailAddress,titleConfirmationInstructionsFor,completedSigningPdf:async()=>{if(point==='pdf'){state=newerState;throw Error('PRIVATE PDF details');}return new Uint8Array([1]).buffer;}});
+  const {dispatchTitleUpdate}=await loadService('lib/title-update-service.ts',{db,closingPayoutNote,titleEmailAddress,titleConfirmationInstructionsFor,isDeepStrictEqual,completedSigningPdf:async()=>{if(point==='pdf'){state=newerState;throw Error('PRIVATE PDF details');}return new Uint8Array([1]).buffer;}});
   globalThis.fetch=async()=>{sends++;state=newerState;throw Error('PRIVATE provider details');};
   const result=await dispatchTitleUpdate('account','task');
-  assert.equal(result.status,'title_followup_needs_reconciliation');
-  assert.equal(email,'needs_review','Retain delivery uncertainty independently of task state');
-  assert.equal(state,newerState==='scheduled'?'needs_review':newerState,`${point}: never resurrect ${newerState}`);
+  assert.equal(result.status,point==='provider'?'title_followup_needs_reconciliation':'title_followup_spending_held');
+  assert.equal(email,point==='provider'?'needs_review':'waiting','Retain admitted delivery uncertainty; a transient pre-claim read remains retryable');
+  assert.equal(state,point==='provider'&&newerState==='scheduled'?'needs_review':newerState,`${point}: never resurrect ${newerState}`);
   await dispatchTitleUpdate('account','task');assert.equal(sends,point==='provider'?1:0,'Never replay uncertain delivery');cases++;
  }
  assert(!JSON.stringify(errors).includes('PRIVATE'));

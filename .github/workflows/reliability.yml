@@ -82,6 +82,10 @@ jobs:
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
         run: node scripts/test-title-copy-postgres.mjs
+      - name: Verify title task sources and original receipts against concurrent edits
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
+        run: node scripts/test-title-task-delivery-postgres.mjs
       - name: Verify original signing receipt discovery and unchanged cancellation authority
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/icash-learning-pg/node_modules/pg
