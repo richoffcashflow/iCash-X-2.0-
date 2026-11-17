@@ -177,3 +177,34 @@ assert.equal(gateWrites.at(-1).body.p_components.elevenlabs.amountMicros,0);
 console.log('PASS canonical unanswered outbound calls reconcile without an invented AI or speech charge.');
 
 await wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',120);assert.equal(new URLSearchParams(network.at(-1).init.body).get('TimeLimit'),'120','carrier enforces funded call duration');const priorNetwork=network.length;assert.throws(()=>wire.dial(row.from_phone,row.to_phone,'<Response/>','https://www.geticashx.com/fixture',119));assert.equal(network.length,priorNetwork,'invalid bound never dials');
+
+// The final recording boundary uses the same actual four-read diagnostic,
+// before creating a recording or reaching the carrier dial method.
+{
+ const oldFetch=globalThis.fetch,oldWarn=console.warn,observed=[],reads=[],databaseCalls=[];
+ const business='+17208134296',carrierIngress='+18555755559',callerSid='PN'+'b'.repeat(32);
+ const {businessVoiceIngress}=await import('../lib/business-voice-numbers.ts');
+ const diagnosticsEnv={...env,CONTIGUITY_API_KEY:'synthetic-contiguity-key',RECORDED_OUTBOUND_REVIEW_JSON:JSON.stringify({...review,fromPhone:'+14243948384'})};
+ const readyDatabase=async(path,method,body)=>{
+  databaseCalls.push({path,method});
+  assert(path.startsWith('icash_business_voice_numbers?'),'A rejected caller must not reach recording admission');
+  return [{outbound_enabled:true,forwarding_ready:true,provider_account_sid:ac,caller_id_sid:callerSid}];
+ };
+ try{
+  console.warn=(...args)=>observed.push(args);
+  globalThis.fetch=async(url,init)=>{
+   reads.push({url,method:init.method});
+   if(url.endsWith('/numbers/leased'))return Response.json({data:{numbers:[{number:{e164:business},lease_status:'active',capabilities:{channels:['sms']}}]}});
+   if(url.includes('OutgoingCallerIds'))return Response.json({outgoing_caller_ids:[{sid:callerSid,account_sid:ac,phone_number:business}],next_page_uri:null});
+   if(url.includes('IncomingPhoneNumbers'))return Response.json({incoming_phone_numbers:[{account_sid:ac,phone_number:businessVoiceIngress,capabilities:{voice:true},voice_url:'https://www.geticashx.com/api/reception/recorded/inbound',voice_method:'POST'}],next_page_uri:null});
+   assert(url.includes('call_forwarding'));
+   return Response.json({object:'response',data:{number:business,call_forwarding:{enabled:true,to:carrierIngress,status:'active',estimated_completion:null}}});
+  };
+  const checked=await recordingService(diagnosticsEnv,{db:readyDatabase,provider,now:()=>now}).dispatch({fromPhone:business,accountId:account,operationKey:op,principal:'Fixture',assistantName:'Alex',firstMessage:'Hi',prompt:'Fixture only',strategyKey:'cash_interest'});
+  assert.deepEqual(checked,{status:'business_number_verification_required',dispatchBoundary:'before_recording_create_v1'});
+  assert.deepEqual(observed,[['business_calling_preflight_held',{phase:'recording_preflight',stage:'forwarding',reason:'not_ready'}]]);
+  assert.equal(databaseCalls.length,1);assert.equal(reads.length,4);assert(reads.every(x=>x.method==='GET'));
+  assert(!JSON.stringify(observed).includes(business));assert(!JSON.stringify(observed).includes(ac));
+ }finally{globalThis.fetch=oldFetch;console.warn=oldWarn;}
+}
+console.log('PASS final recorded-call readiness diagnostic: unchanged held boundary, no recording admission, no dial and no private provider values.');

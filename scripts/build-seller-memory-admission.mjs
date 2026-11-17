@@ -39,6 +39,39 @@ sql+='\n'+patch('icash_confirmed_seller_contract_text_current',[
  ["   and c.state='ready' and c.created_at<=now()",`   and c.state='ready' and c.created_at<=now()
    and (not public.icash_seller_memory_enabled(p_account) or icash_seller_agreement_memory_private.current(c.id))`]
 ]);
+sql+='\n'+patch('icash_claim_text_before_owner_question',[
+ [" if t.party='buyer' then",` -- A rolling older worker may queue the original link before attaching its
+ -- confirmation. Ordinary financial eligibility cannot bypass that source
+ -- boundary. The existing budget and recipient locks precede this check.
+ if public.icash_seller_memory_enabled(p_account) and m.customer_author_id is null
+  and exists(select 1 from public.icash_contract_text_deliveries x
+   join public.icash_signing_envelopes e on e.id=x.envelope_id and e.account_id=x.account_id
+   join icash_seller_agreement_memory_private.admissions admission on admission.account_id=e.account_id and admission.deal_id=e.deal_id
+   where x.account_id=p_account and x.message_id=p_message and e.kind='purchase' and not e.test_mode)
+  and public.icash_confirmed_seller_contract_text_current(p_account,p_message) is distinct from true then return null;end if;
+ if t.party='buyer' then`]
+]);
+sql+='\n'+patch('icash_finish_agreement_delivery_recovery',[
+ ['prepared boolean:=false;','prepared boolean:=false;memory_confirmation boolean:=false;'],
+ [" if r.state='sent' and (r.envelope_id is distinct from p_envelope or r.result is distinct from p_result) then return false;end if;",` if r.envelope_id is not null and r.envelope_id is distinct from p_envelope then return false;end if;
+ memory_confirmation:=public.icash_seller_memory_enabled(r.account_id) and exists(
+  select 1 from icash_seller_agreement_memory_private.admissions admission
+  join icash_seller_agreement_private.confirmations confirmation on confirmation.id=admission.confirmation_id
+  where admission.account_id=r.account_id and admission.deal_id=r.deal_id and confirmation.account_id=r.account_id
+   and confirmation.deal_id=r.deal_id and r.request_key='seller-confirmed:'||confirmation.id::text);
+ if r.state='sent' and (r.envelope_id is distinct from p_envelope or r.result is distinct from p_result) then return false;end if;`],
+ [" if p_result->'sent'='true'::jsonb and not coalesce(prepared,false) then return false;end if;",` -- Outcome recording can retain an original held provider reference, but it
+ -- cannot replace a refused binding with its weaker preparation predicate.
+ -- A prior successful binding survives later speech/review for receipt-only
+ -- recording; this path never renews its source or clears its review state.
+ if prepared and memory_confirmation then
+  prepared:=r.envelope_id=e.id and exists(select 1 from icash_seller_agreement_private.confirmations confirmation
+   where confirmation.account_id=r.account_id and confirmation.deal_id=r.deal_id
+    and r.request_key='seller-confirmed:'||confirmation.id::text and confirmation.envelope_id=e.id);
+ end if;
+ if p_result->'sent'='true'::jsonb and not coalesce(prepared,false) then return false;end if;`],
+ [' if prepared then',' if prepared and not memory_confirmation then']
+]);
 sql+='\n'+patch('icash_ingest_text_event_before_operational',[
  [" perform 1 from public.icash_operating_budget where id=1 for update;",` perform 1 from public.icash_operating_budget where id=1 for update;
  if typ in ('text.incoming.sms','text.incoming.mms','text.delivery.confirmed','text.delivery.failed','text.cancelled') then
@@ -93,7 +126,7 @@ sql+='\n'+patch('icash_claim_agreement_delivery_recovery',[
 ]);
 sql+=`\nrevoke all on all functions in schema icash_seller_agreement_memory_private from public,anon,authenticated,service_role;\ngrant execute on function icash_seller_agreement_memory_private.current(uuid),icash_seller_agreement_memory_private.admit_purchase(uuid,uuid,uuid,jsonb) to service_role;\nrevoke all on function public.icash_claim_seller_agreement_before_memory(text,text,jsonb,jsonb,jsonb) from public,anon,authenticated,service_role;\n`;
 for(const name of ['icash_claim_seller_agreement','icash_defer_seller_agreement'])for(const suffix of ['',',text',',text,jsonb'])sql+=`revoke all on function public.${name}(text,text,jsonb,jsonb,jsonb${suffix}) from public,anon,authenticated;\ngrant execute on function public.${name}(text,text,jsonb,jsonb,jsonb${suffix}) to service_role;\n`;
-for(const signature of ['icash_seller_agreement_memory_context(uuid,uuid)','icash_refresh_seller_agreement_memory(uuid,uuid,text,text,jsonb)'])sql+=`revoke all on function public.${signature} from public,anon,authenticated;\ngrant execute on function public.${signature} to service_role;\n`;
+for(const signature of ['icash_seller_agreement_memory_context(uuid,uuid)','icash_refresh_seller_agreement_memory(uuid,uuid,text,text,jsonb)','icash_bind_agreement_delivery_envelope(uuid,uuid,uuid)'])sql+=`revoke all on function public.${signature} from public,anon,authenticated;\ngrant execute on function public.${signature} to service_role;\n`;
 sql+=`do $unchanged$ begin if md5(pg_get_functiondef('public.icash_signing_action_allowed(uuid,uuid)'::regprocedure))<>'0c8dd6053164498e0f2e400d8e55d3b7' or md5(pg_get_functiondef('public.icash_seller_memory_context(uuid,uuid,text)'::regprocedure))<>'7a680dae86359988c3f70c705a3369b0' then raise exception 'Seller memory unrelated authority changed';end if;end $unchanged$;\n`;
 const results=JSON.parse(readFileSync(new URL('../tests/fixtures/seller-atomic-result-pins.json',import.meta.url)));
 sql+=`do $results$\ndeclare e record;p record;role_name text;table_name text;\nbegin\n for e in select * from (values\n${results.map(r=>` ('${r.signature.includes('.')?r.signature:'public.'+r.signature}','${r.hash}',${r.prosecdef},'${r.provolatile}','${r.acl}')`).join(',\n')}\n ) expected(signature,source_hash,definer,volatility,acl) loop\n select md5(pg_get_functiondef(oid)) source_hash,pg_get_userbyid(proowner) owner,prosecdef,provolatile,proparallel,proconfig,proacl::text acl into p from pg_proc where oid=to_regprocedure(e.signature);\n if p.source_hash is distinct from e.source_hash or p.owner is distinct from 'postgres' or p.prosecdef is distinct from e.definer or p.provolatile::text is distinct from e.volatility\n  or p.proparallel is distinct from 'u' or p.proconfig is distinct from array['search_path=""'] or p.acl is distinct from e.acl then raise exception 'Seller memory admission result changed: %',e.signature;end if;\n end loop;\n foreach table_name in array array['icash_seller_agreement_memory_private.admissions','icash_seller_agreement_memory_private.reviews'] loop\n  if not exists(select 1 from pg_class c where c.oid=table_name::regclass and pg_get_userbyid(c.relowner)='postgres' and c.relrowsecurity) then raise exception 'Private seller memory table protection changed';end if;\n  foreach role_name in array array['anon','authenticated','service_role'] loop\n   if has_table_privilege(role_name,table_name,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then raise exception 'Private seller memory table privilege changed';end if;\n  end loop;\n end loop;\nend $results$;\n`;

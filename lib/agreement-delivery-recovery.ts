@@ -29,6 +29,10 @@ export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,
    const sent=await d.send({accountId:job.accountId,userId:job.userId,customerEmail:job.customerEmail,dealId:job.dealId,kind:'purchase',signers:[{name:job.sellerName,phone:job.phone}],phoneLinkOnly:true,expectedTerms:job.expectedTerms});
    if(sent.testMode)throw Error('live_agreement_required');envelopeId=sent.id;
   }
+  // The original memory-backed confirmation must own this exact successful
+  // envelope before a contract message can use either financial admission path.
+  // SQL also holds rolling older workers that skip this binding step.
+  if(job.memoryReviewRequired===true&&await d.db<boolean>('rpc/icash_bind_agreement_delivery_envelope','POST',{p_account:job.accountId,p_recovery:job.id,p_envelope:envelopeId})!==true)throw Error('seller_original_agreement_binding_required');
   textAttempted=true;
   result=await d.text(job.accountId,envelopeId,job.phone);
  }catch(error){

@@ -7,6 +7,7 @@ import {readSellerMemory} from '../../lib/seller-memory.ts';
 import {sellerCallPrefix,reviewSellerAgreementMemory} from '../../lib/seller-agreement-memory-proof.ts';
 import {sellerAgreementAction} from '../../lib/seller-agreement-service.ts';
 import {processSellerTextOffer} from '../../lib/seller-text-offer-service.ts';
+import {recoverAgreementDelivery} from '../../lib/agreement-delivery-recovery.ts';
 import {qualifiedSellerTurns} from './seller-qualification-fixture.mjs';
 import {sha} from '../../lib/required-call-recording.ts';
 
@@ -49,6 +50,127 @@ export async function jointScenario(pg){
  s.args.p_call_prefix=sellerCallPrefix(live,s.conversation,now);assert(s.args.p_call_prefix);
  s.args.p_memory_fingerprint=(await s.context()).fingerprint;
  return {...s,now,live,turns,binding,db,complete,historical};
+}
+
+// A provider creation result does not attach its confirmation. Keep these
+// operations separate so a recovery fixture cannot hide that handoff gap.
+export async function preparedOriginal(s){
+ const e=await s.begin();assert(e?.id);
+ await s.pg.query("update public.icash_signing_envelopes set state='awaiting_counterparty',provider_id='original-fixture-document' where id=$1",[e.id]);
+ return e;
+}
+export async function originalContractMessage(s,envelopeId){
+ const prior=(await s.pg.query('select message_id from public.icash_contract_text_deliveries where account_id=$1 and envelope_id=$2',[s.account,envelopeId])).rows;
+ assert(prior.length<=1);if(prior.length)return prior[0].message_id;
+ const message=randomUUID();
+ await s.pg.query("insert into public.icash_text_messages(id,account_id,thread_id,direction,state,body) values($1,$2,$3,'outgoing','ready','Review your contract: https://docuseal.com/s/original-fixture')",[message,s.account,s.thread]);
+ await s.pg.query("insert into public.icash_contract_text_deliveries values($1,$2,'seller',$3,$4)",[s.account,envelopeId,message,s.thread]);
+ return message;
+}
+
+/** Actual recovery service and original SQL; only provider creation/transport,
+ * financial admission and unrelated receipt reconciliation are sentinels. */
+export async function deferredLifecycleCases(pg){
+ const queuedIds=[];
+ const queue=async s=>{const queued=await rpc(pg,'icash_defer_seller_agreement',s.args);assert(queued?.queued);queuedIds.push(queued.id);return queued.id;};
+ const row=id=>pg.query('select state,result,envelope_id from icash_seller_agreement_private.delivery_recovery where id=$1',[id]).then(r=>r.rows[0]);
+ const eligible=s=>pg.query("update public.icash_screening_jobs set result='{\"financialCheck\":{\"status\":\"eligible\"}}'::jsonb,completed_at=clock_timestamp() where id=$1",[s.screen]);
+ const harness=(scenarios,{afterCreate,beforeText}={})=>{
+  const byAccount=new Map(scenarios.map(s=>[s.account,s]));
+  const observed={creates:[],bindings:[],textAttempts:[],textClaims:[],finalizations:[]};
+  const db=async(path,_method,args)=>{
+   // No saved provider receipts exist in these prospective fixture scenarios.
+   if(path==='rpc/icash_reconcile_agreement_delivery_receipts')return 0;
+   if(path.startsWith('rpc/')){
+    if(path==='rpc/icash_finish_agreement_delivery_recovery')observed.finalizations.push(structuredClone(args));
+    if(path==='rpc/icash_bind_agreement_delivery_envelope')observed.bindings.push(structuredClone(args));
+    return rpc(pg,path.slice(4),args);
+   }
+   if(path.startsWith('icash_signing_envelopes?')){
+    const params=new URLSearchParams(path.slice(path.indexOf('?')+1));
+    const account=params.get('account_id')?.replace(/^eq\./,''),deal=params.get('deal_id')?.replace(/^eq\./,'');
+    assert(byAccount.has(account));assert.equal(byAccount.get(account).deal,deal);
+    return (await pg.query("select id,state,terms,recipients,provider_id from public.icash_signing_envelopes where account_id=$1 and deal_id=$2 and kind='purchase' and not test_mode limit 2",[account,deal])).rows;
+   }
+   throw Error('Unexpected recovery fixture path: '+path);
+  };
+  const deps={db,send:async input=>{
+   const s=byAccount.get(input.accountId);assert(s);assert.equal(input.dealId,s.deal);assert.deepEqual(input.signers,[{name:s.terms.seller,phone:s.phone}]);
+   const envelope=await preparedOriginal(s);observed.creates.push({accountId:s.account,id:envelope.id});
+   if(afterCreate)await afterCreate(s);
+   return {id:envelope.id,testMode:false};
+  },text:async(accountId,envelopeId,phone)=>{
+   const s=byAccount.get(accountId);assert(s);assert.equal(phone,s.phone);
+   observed.textAttempts.push({accountId,envelopeId});
+   const c=(await pg.query('select state,envelope_id from icash_seller_agreement_private.confirmations where account_id=$1 and deal_id=$2',[accountId,s.deal])).rows[0];
+   assert.equal(c?.state,'ready','actual service must bind the original confirmation before its first text');
+   assert.equal(c.envelope_id,envelopeId);
+   const recovery=(await pg.query("select envelope_id from icash_seller_agreement_private.delivery_recovery where account_id=$1 and deal_id=$2 and state='claimed'",[accountId,s.deal])).rows[0];
+   assert.equal(recovery?.envelope_id,envelopeId,'the original recovery stays attached to that same envelope');
+   if(beforeText)await beforeText(s);
+   const message=await originalContractMessage(s,envelopeId);
+   const claim=await rpc(pg,'icash_claim_text_before_owner_question',{p_account:accountId,p_message:message,p_sender:'+14243948384'});
+   if(claim)observed.textClaims.push({accountId,message});
+   return {sent:!!claim,status:claim?'accepted':'held'};
+  }};
+  return {...observed,run:()=>recoverAgreementDelivery(deps,{VERCEL_ENV:'production',DOCUSEAL_MODE:'live',ICASH_LIVE_WORK_READY:'true'})};
+ };
+ try{
+  {
+   const s=await jointScenario(pg);await eligible(s);const id=await queue(s),h=harness([s]);
+   assert.equal((await h.run()).status,'idle','a live original cannot consume a completion-dependent recovery');
+   assert.equal((await row(id)).state,'queued');assert.equal(h.finalizations.length,0);assert.equal(h.creates.length,0);assert.equal(h.textAttempts.length,0);
+   await pg.query('update public.icash_call_recordings set call_ended_at=clock_timestamp() where account_id=$1',[s.account]);
+   assert.equal((await h.run()).status,'idle','terminal clock without the full original source stays queued');
+   assert.equal((await row(id)).state,'queued');assert.equal(h.finalizations.length,0);
+   await s.complete();
+   assert.equal((await h.run()).status,'agreement_text_accepted','complete neutral original binds and sends its first original text');
+   assert.equal(h.creates.length,1);assert.equal(h.bindings.length,1);assert.equal(h.textAttempts.length,1);assert.equal(h.textClaims.length,1);assert.equal(h.finalizations.length,1);
+   assert.equal((await row(id)).state,'sent');assert.equal((await h.run()).status,'idle','one original is not rearmed');assert.equal(h.creates.length,1);
+   const confirmation=(await pg.query('select state,envelope_id from icash_seller_agreement_private.confirmations where account_id=$1',[s.account])).rows[0];
+   assert.equal(confirmation.state,'ready');assert.equal(confirmation.envelope_id,h.creates[0].id,'the same original envelope remains attached');
+  }
+  {
+   const live=await jointScenario(pg),liveId=await queue(live),ready=await jointScenario(pg),readyId=await queue(ready);
+   await pg.query("update icash_seller_agreement_private.delivery_recovery set created_at=clock_timestamp()-interval '2 hours' where id=$1",[liveId]);
+   await ready.complete();const h=harness([live,ready]);
+   assert.equal((await h.run()).status,'agreement_text_accepted');assert.deepEqual(h.creates.map(x=>x.accountId),[ready.account]);
+   assert.equal((await row(liveId)).state,'queued','an older live original does not block another account’s completed original');assert.equal((await row(readyId)).state,'sent');
+  }
+  {
+   const s=await jointScenario(pg),id=await queue(s),h=harness([s]);
+   await s.complete([{role:'user',message:'I have another mortgage.',time_in_call_secs:s.turns.length}]);
+   assert.equal((await h.run()).status,'agreement_recovery_needs_review','complete material changes still need review');
+   assert.equal(h.creates.length,0);assert.equal(h.textAttempts.length,0);assert.equal(h.finalizations.length,1);
+   assert.equal((await row(id)).state,'needs_review');assert.equal((await row(id)).result.reason,'seller_memory_review_required');
+  }
+  const changes={
+   material:s=>s.incoming(pg,'Actually, I have another mortgage.'),
+   stop:s=>rpc(pg,'icash_ingest_text_event_before_operational',{p_event:{id:randomUUID(),type:'text.incoming.sms',timestamp:Date.now()/1000,data:{from:s.phone,to:'+14243948384',body:'STOP',message_id:randomUUID()}},p_optout:true}),
+   manual:s=>pg.query('insert into public.icash_property_controls(account_id,property_id,manual) values($1,$2,true) on conflict(account_id,property_id) do update set manual=true',[s.account,s.snapshot.propertyId]),
+   pause:s=>pg.query('update public.icash_accounts set bot_paused=true where id=$1',[s.account]),
+  };
+  for(const stage of ['afterCreate','beforeText'])for(const [kind,change] of Object.entries(changes)){
+   const s=await jointScenario(pg);await eligible(s);const id=await queue(s);await s.complete();
+   const h=harness([s],{[stage]:change});
+   assert.equal((await h.run()).status,stage==='afterCreate'?'agreement_recovery_needs_review':'agreement_text_needs_review',kind+' at '+stage);
+   assert.equal(h.creates.length,1);assert.equal(h.bindings.length,1);assert.equal(h.textAttempts.length,stage==='afterCreate'?0:1);assert.equal(h.textClaims.length,0,kind+' cannot use ordinary financial fallback');
+   const e=(await pg.query('select state,provider_id from public.icash_signing_envelopes where id=$1',[h.creates[0].id])).rows[0];
+   assert.deepEqual(e,{state:'awaiting_counterparty',provider_id:'original-fixture-document'});assert.equal((await row(id)).state,'needs_review');
+   assert.equal((await h.run()).status,'idle','held originals are not rearmed by the repair');assert.equal(h.creates.length,1);
+  }
+  for(const changed of [false,true]){
+   const s=await jointScenario(pg);await eligible(s);assert((await s.claim())?.claimed);const e=await preparedOriginal(s);
+   if(changed)await s.incoming(pg,'Actually, I have another mortgage.');
+   const message=await originalContractMessage(s,e.id);
+   assert.equal(await rpc(pg,'icash_claim_text_before_owner_question',{p_account:s.account,p_message:message,p_sender:'+14243948384'}),null,'old workers with unbound confirmations cannot use ordinary financial fallback');
+   const c=(await pg.query('select state,envelope_id from icash_seller_agreement_private.confirmations where account_id=$1',[s.account])).rows[0];
+   assert.deepEqual(c,{state:'preparing',envelope_id:null},'the final guard does not silently bind a confirmation');
+  }
+ }finally{
+  // Isolate these fictional jobs from later unrelated concurrency cases.
+  for(const id of queuedIds)await pg.query('update icash_seller_agreement_private.delivery_recovery set expires_at=clock_timestamp() where id=$1',[id]);
+ }
 }
 
 export async function cases(pg){

@@ -12,6 +12,18 @@
     "acl": "{postgres=X/postgres,service_role=X/postgres}"
   },
   {
+    "signature": "icash_bind_agreement_delivery_envelope(uuid,uuid,uuid)",
+    "hash": "cb5fa9a1e1facee5eb005c5b16f45dca",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proparallel": "u",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
     "signature": "icash_claim_agreement_delivery_recovery()",
     "hash": "f3e6103f13dda778780e33dab4069a4c",
     "owner": "postgres",
@@ -85,7 +97,7 @@
   },
   {
     "signature": "icash_claim_text_before_owner_question(uuid,uuid,text)",
-    "hash": "2ab7c58cc5a38b95651bb0ecb054d40d",
+    "hash": "fa1ad5bd705e2c7668eee0af1723a340",
     "owner": "postgres",
     "prosecdef": false,
     "provolatile": "v",
@@ -145,7 +157,7 @@
   },
   {
     "signature": "icash_finish_agreement_delivery_recovery(uuid,uuid,jsonb)",
-    "hash": "88c280613085bf4bcbf73ca9a2f3ce91",
+    "hash": "0b6ddd9a1210269482b7ab5f1226c68e",
     "owner": "postgres",
     "prosecdef": true,
     "provolatile": "v",
@@ -385,7 +397,7 @@
   },
   {
     "signature": "icash_seller_agreement_memory_private.review_ready(uuid)",
-    "hash": "500f2556dbb6f0c87a13b005f00a7248",
+    "hash": "844ababee52617fb7e161403e53d6324",
     "owner": "postgres",
     "prosecdef": true,
     "provolatile": "v",

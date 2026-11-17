@@ -9,7 +9,18 @@ const leaseSchema=z.object({data:z.object({numbers:z.array(z.object({number:z.ob
 type Env={ [key:string]:string|undefined;CONTIGUITY_API_KEY?:string;TWILIO_ACCOUNT_SID?:string;TWILIO_AUTH_TOKEN?:string;VERCEL_ENV?:string};
 type Database=<T=unknown>(path:string,method?:string,body?:unknown)=>Promise<T>;
 const obj=(v:unknown):Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
-export class BusinessPhoneError extends Error{}
+type BusinessCallingReason='not_ready'|'read_failed'|'timeout'|'unreachable'|'http_error'|'unexpected_response'|'invalid_response';
+export type BusinessCallingDiagnostic={stage:'stored_readiness'|'configuration'|'lease'|'caller_id'|'forwarding'|'ingress';reason:BusinessCallingReason;httpStatus?:number};
+export class BusinessPhoneError extends Error{
+ readonly diagnosticReason:BusinessCallingReason;readonly httpStatus?:number;
+ constructor(message:string,diagnosticReason:BusinessCallingReason='invalid_response',httpStatus?:number){super(message);this.diagnosticReason=diagnosticReason;this.httpStatus=httpStatus;}
+}
+function safeCallingFailure(error:unknown):Pick<BusinessCallingDiagnostic,'reason'|'httpStatus'>{
+ if(!(error instanceof BusinessPhoneError))return {reason:'read_failed'};
+ const reasons:BusinessCallingReason[]=['not_ready','read_failed','timeout','unreachable','http_error','unexpected_response','invalid_response'];
+ const reason=reasons.includes(error.diagnosticReason)?error.diagnosticReason:'read_failed';
+ return {reason,...(reason==='http_error'&&typeof error.httpStatus==='number'&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<=599?{httpStatus:error.httpStatus}:{})};
+}
 export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,targetPhone:string=secondaryBusinessPhone){
  if(!isAdditionalBusinessPhone(targetPhone))throw new BusinessPhoneError('This business number is not configured.');
  if(typeof window!=='undefined'||!env.CONTIGUITY_API_KEY||!/^AC[a-f\d]{32}$/i.test(env.TWILIO_ACCOUNT_SID??'')||!env.TWILIO_AUTH_TOKEN)throw new BusinessPhoneError('The calling connection is unavailable.');
@@ -21,7 +32,7 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,target
   const signal=AbortSignal.timeout(body===undefined?8000:30000);
   let r:Response;
   try{r=await fetcher(url,{method:body===undefined?'GET':'POST',headers:{...headers,Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body),redirect:'error',cache:'no-store',credentials:'omit',signal});}
-  catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out':'could not be reached'}. ${body===undefined?'Refresh to check again.':'Refresh before retrying the change.'}`);}
+  catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out':'could not be reached'}. ${body===undefined?'Refresh to check again.':'Refresh before retrying the change.'}`,signal.aborted?'timeout':'unreachable');}
   if(!r.ok){
    let reason='';
    try{
@@ -33,11 +44,11 @@ export function businessVoiceProviders(env:Env,fetcher:typeof fetch=fetch,target
      reason=reason.replace(/[A-Za-z0-9_-]{24,}/g,'[redacted]').replace(/[<>\r\n]/g,' ').slice(0,240);
     }
    }catch{/* Status remains available when the provider has no safe error label. */}
-   throw new BusinessPhoneError(`${label} returned HTTP ${r.status}${reason?': '+reason:'.'} ${body===undefined?'':'Refresh before retrying the change.'}`.trim());
+   throw new BusinessPhoneError(`${label} returned HTTP ${r.status}${reason?': '+reason:'.'} ${body===undefined?'':'Refresh before retrying the change.'}`.trim(),'http_error',r.status);
   }
-  if(r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??'')){await r.body?.cancel().catch(()=>undefined);throw new BusinessPhoneError(`${label} returned an unexpected response.`);}
+  if(r.redirected||r.url&&r.url!==url||!/^application\/json(?:;|$)/i.test(r.headers.get('content-type')??'')){await r.body?.cancel().catch(()=>undefined);throw new BusinessPhoneError(`${label} returned an unexpected response.`,'unexpected_response');}
   try{return JSON.parse((await boundedBytes(r,262144)).toString('utf8')) as unknown;}
-  catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out while reading the response':'returned an unreadable response'}. Refresh before retrying.`);}
+  catch{throw new BusinessPhoneError(`${label} ${signal.aborted?'timed out while reading the response':'returned an unreadable response'}. Refresh before retrying.`,signal.aborted?'timeout':'invalid_response');}
  }
  function parseForwarding(value:unknown,action:'check'|'update'){
   const r=forwardingSchema.safeParse(value);
@@ -87,11 +98,24 @@ export async function connectBusinessPhone(database:Database,env:Env,fetcher:typ
  await database('rpc/icash_save_business_voice_number','POST',{p_phone:targetPhone,p_account_sid:checked.providerAccountSid,p_caller_id_sid:checked.callerIdSid,p_forwarding:checked.incoming,p_enabled:checked.incoming&&checked.callerIdVerified});
  return checked;
 }
-export async function secondaryCallingReady(database:Database,env:Env,fetcher:typeof fetch=fetch,targetPhone:string=secondaryBusinessPhone){
- if(!isAdditionalBusinessPhone(targetPhone))return false;
- const [row]=await database<{outbound_enabled:boolean;forwarding_ready:boolean;provider_account_sid:string;caller_id_sid:string|null}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(targetPhone)}&select=outbound_enabled,forwarding_ready,provider_account_sid,caller_id_sid`);
- if(!row?.outbound_enabled||!row.forwarding_ready||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!row.caller_id_sid)return false;
- const p=businessVoiceProviders(env,fetcher,targetPhone),[lease,id,forwarding,ingress]=await Promise.all([p.leased(),p.callerId(),p.forwarding(),p.ingress()]);return lease&&id===row.caller_id_sid&&ingress&&forwarding.enabled&&forwarding.to===businessVoiceIngress&&forwarding.status==='active';
+/** Optional diagnostics contain fixed stage/reason codes only. They never grant
+ * admission, retry a read, or let a logging failure affect the original result. */
+export async function secondaryCallingReady(database:Database,env:Env,fetcher:typeof fetch=fetch,targetPhone:string=secondaryBusinessPhone,onDiagnostic?:(value:BusinessCallingDiagnostic)=>void){
+ const report=(value:BusinessCallingDiagnostic)=>{try{onDiagnostic?.(value);}catch{/* Admission retains authority if its logger fails. */}};
+ const check=async<T>(stage:BusinessCallingDiagnostic['stage'],read:()=>Promise<T>)=>{
+  try{return await read();}catch(error){report({stage,...safeCallingFailure(error)});throw error;}
+ };
+ if(!isAdditionalBusinessPhone(targetPhone)){report({stage:'configuration',reason:'not_ready'});return false;}
+ const [row]=await check('stored_readiness',()=>database<{outbound_enabled:boolean;forwarding_ready:boolean;provider_account_sid:string;caller_id_sid:string|null}[]>(`icash_business_voice_numbers?phone=eq.${encodeURIComponent(targetPhone)}&select=outbound_enabled,forwarding_ready,provider_account_sid,caller_id_sid`));
+ if(!row?.outbound_enabled||!row.forwarding_ready||row.provider_account_sid!==env.TWILIO_ACCOUNT_SID||!row.caller_id_sid){report({stage:'stored_readiness',reason:'not_ready'});return false;}
+ let p:ReturnType<typeof businessVoiceProviders>;
+ try{p=businessVoiceProviders(env,fetcher,targetPhone);}catch(error){report({stage:'configuration',...safeCallingFailure(error)});throw error;}
+ const [lease,id,forwarding,ingress]=await Promise.all([
+  check('lease',p.leased),check('caller_id',p.callerId),check('forwarding',p.forwarding),check('ingress',p.ingress),
+ ]);
+ const results:[BusinessCallingDiagnostic['stage'],boolean][]=[['lease',lease],['caller_id',id===row.caller_id_sid],['ingress',ingress],['forwarding',forwarding.enabled&&forwarding.to===businessVoiceIngress&&forwarding.status==='active']];
+ for(const [stage,ready] of results)if(!ready)report({stage,reason:'not_ready'});
+ return results.every(([,ready])=>ready);
 }
 export function selectBusinessCaller(primary:string|undefined,threads:{sender:string;sender_pool_assigned?:boolean}[]){
  if(primary!==primaryBusinessPhone)throw new BusinessPhoneError('The primary calling number does not match.');

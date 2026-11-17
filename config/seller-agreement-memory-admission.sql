@@ -276,12 +276,15 @@ begin
  select * into a from icash_seller_agreement_memory_private.admissions where confirmation_id=p_confirmation;
  if not found then return false;end if;
  source:=icash_seller_agreement_memory_private.current_source(a.account_id,a.screening_id,a.phone,a.confirmation_id);
- if source is null then return false;end if;
+ -- A live original can still have its admission-time fingerprint. Recovery
+ -- needs the completed original before consuming its one-use queue claim;
+ -- otherwise the TS prefix review cannot run and strands ordinary waiting
+ -- work as needs_review. This predicate runs before the candidate limit.
+ if source is null or a.call_prefix is null or a.conversation_id is null
+  or icash_seller_agreement_memory_private.original_call(a,source) is null then return false;end if;
  if source->>'fingerprint'=a.fingerprint and coalesce(source->'liveCalls','[]'::jsonb)=a.live_calls then return true;end if;
- return a.call_prefix is not null and a.conversation_id is not null
-  and icash_seller_agreement_memory_private.manifest(source,a.call_key)=a.source_manifest
+ return icash_seller_agreement_memory_private.manifest(source,a.call_key)=a.source_manifest
   and (select count(*) from jsonb_array_elements(source->'conversations') c where c->>'sourceId'=icash_seller_agreement_memory_private.original_source(a.call_key))=1
-  and icash_seller_agreement_memory_private.original_call(a,source) is not null
   and (select coalesce(jsonb_agg(c order by c::text),'[]'::jsonb) from jsonb_array_elements(coalesce(source->'liveCalls','[]'::jsonb)) c where c->>'conversationId' is distinct from a.conversation_id)
    =(select coalesce(jsonb_agg(c order by c::text),'[]'::jsonb) from jsonb_array_elements(a.live_calls) c where c->>'conversationId' is distinct from a.conversation_id);
 end $$;
@@ -329,6 +332,70 @@ begin
  insert into icash_seller_agreement_memory_private.reviews(confirmation_id,prior_fingerprint,next_fingerprint,call_prefix,source_manifest)
  values(a.confirmation_id,a.fingerprint,p_new_fingerprint,p_call_prefix,a.source_manifest) on conflict do nothing;
  update icash_seller_agreement_memory_private.admissions set fingerprint=p_new_fingerprint,live_calls=coalesce(source->'liveCalls','[]'::jsonb) where confirmation_id=a.confirmation_id;
+ return true;
+end $$;
+
+-- Bind the one successfully created original before any recovery text path.
+-- This does not create a document, reserve spend, refresh memory or rearm work.
+create function public.icash_bind_agreement_delivery_envelope(p_account uuid,p_recovery uuid,p_envelope uuid) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare r icash_seller_agreement_private.delivery_recovery;c icash_seller_agreement_private.confirmations;
+ a icash_seller_agreement_memory_private.admissions;e public.icash_signing_envelopes;d public.icash_deal_files;screen public.icash_screening_jobs;
+begin
+ select * into r from icash_seller_agreement_private.delivery_recovery where id=p_recovery and account_id=p_account and state='claimed' and expires_at>clock_timestamp();
+ if not found or r.request_key not like 'seller-confirmed:%' or not public.icash_seller_memory_enabled(p_account) then return false;end if;
+ select admission.* into a from icash_seller_agreement_memory_private.admissions admission
+ join icash_seller_agreement_private.confirmations confirmation on confirmation.id=admission.confirmation_id
+ where admission.account_id=p_account and admission.deal_id=r.deal_id and admission.phone=r.phone
+  and confirmation.account_id=p_account and confirmation.deal_id=r.deal_id and 'seller-confirmed:'||confirmation.id::text=r.request_key;
+ if not found then return false;end if;
+ perform 1 from public.icash_operating_budget where id=1 for update;if not found then return false;end if;
+ perform pg_advisory_xact_lock(hashtextextended(a.phone,74));
+ perform 1 from public.icash_accounts where id=p_account and owner_user_id=r.requested_by and not bot_paused for update;
+ if not found or not public.icash_membership_work_allowed(p_account) then return false;end if;
+ select * into d from public.icash_deal_files where id=a.deal_id and account_id=p_account and screening_id=a.screening_id and stage='draft' for update;
+ if not found then return false;end if;
+ select * into r from icash_seller_agreement_private.delivery_recovery where id=p_recovery and account_id=p_account and state='claimed' and expires_at>clock_timestamp() for update;
+ if not found or r.deal_id<>a.deal_id or r.phone<>a.phone or r.request_key<>'seller-confirmed:'||a.confirmation_id::text
+  or r.envelope_id is not null and r.envelope_id is distinct from p_envelope or r.expected_terms is distinct from d.terms
+  or not exists(select 1 from public.icash_accounts account where account.id=p_account and account.owner_user_id=r.requested_by and not account.bot_paused) then return false;end if;
+ select * into c from icash_seller_agreement_private.confirmations where id=a.confirmation_id and account_id=p_account and deal_id=d.id for update;
+ if not found or c.state is null or c.state not in ('preparing','needs_review','ready') or c.envelope_id is not null and c.envelope_id is distinct from p_envelope
+  or c.confirmation->>'sellerLegalName' is distinct from r.seller_name
+  or c.confirmation->'agreedPriceCents' is distinct from d.terms->'priceCents'
+  or c.confirmation->>'closingDate' is distinct from d.terms->>'closingDate'
+  or not c.confirmation @> '{"sendTextRequested":true,"termsConfirmed":true,"priceAndDateConfirmed":true,"allDecisionMakersAgree":true,"soleOwner":true,"materialFactsChanged":false}'::jsonb
+  or (c.terms-array['assignmentFeeCents','assignmentDepositCents']) is distinct from (d.terms-array['assignmentFeeCents','assignmentDepositCents']) then return false;end if;
+ select * into e from public.icash_signing_envelopes where id=p_envelope and account_id=p_account and deal_id=d.id for update;
+ if not found or e.kind is distinct from 'purchase' or e.test_mode is distinct from false or e.state is distinct from 'awaiting_counterparty' or nullif(e.provider_id,'') is null
+  or e.requested_by is distinct from r.requested_by or e.created_at is null or e.created_at<c.created_at or e.created_at<r.created_at
+  or e.terms is distinct from d.terms or jsonb_array_length(e.recipients)<>2
+  or e.recipients->0->>'phone' is distinct from a.phone or e.recipients->0->>'name' is distinct from r.seller_name
+  or nullif(e.recipients->0->>'id','') is null
+  or (select count(*) from public.icash_signing_envelopes original where original.account_id=p_account and original.deal_id=d.id and original.kind='purchase' and not original.test_mode)<>1
+  or public.icash_signing_action_allowed(p_account,e.id) is distinct from true then return false;end if;
+ select * into screen from public.icash_screening_jobs where id=d.screening_id and account_id=p_account and state='complete' for share;
+ if not found or exists(select 1 from public.icash_property_controls pc where pc.account_id=p_account and pc.property_id=screen.snapshot->>'propertyId' and pc.manual)
+  or exists(select 1 from public.icash_text_suppressions x where x.phone=a.phone)
+  or exists(select 1 from public.icash_contact_suppressions x where x.contact_key=encode(sha256(convert_to(a.phone,'UTF8')),'hex'))
+  or (select count(*) from public.icash_text_threads t where t.account_id=p_account and t.deal_id=d.id and t.recipient=a.phone and t.party='seller' and t.retired_at is null)<>1
+  or not exists(select 1 from public.icash_text_threads t where t.account_id=p_account and t.deal_id=d.id and t.recipient=a.phone and t.party='seller'
+   and t.retired_at is null and not t.paused and not t.manual_only and t.ai_mode='auto' and public.icash_sms_thread_review_current(p_account,t.id,true))
+  or not exists(select 1 from icash_call_offer_private.offers o where o.account_id=p_account and o.deal_id=d.id and o.snapshot=screen.snapshot
+   and coalesce(o.state->>'acceptedPriceCents','') ~ '^[1-9][0-9]*$' and o.state->'acceptedPriceCents'=e.terms->'priceCents' and o.state->'quotedPriceCents'=e.terms->'priceCents'
+   and not exists(select 1 from jsonb_each(o.state) flag where flag.key in ('factsPending','conditionPending','agreementRevisionRequired','contractBlocked','acceptanceConditional','payoffPending') and flag.value<>'false'::jsonb))
+  or icash_seller_agreement_memory_private.current(c.id) is distinct from true then return false;end if;
+ -- Auth email updates do not use the recipient fence. Observe the current
+ -- verified owner recipient after the last potentially blocking row lock.
+ if not exists(select 1 from auth.users u where u.id=r.requested_by and u.email is not null and u.email_confirmed_at is not null and e.recipients->1->>'email'=u.email) then return false;end if;
+ -- Later confirmation, envelope or screening locks can outlive the request.
+ -- Consume the still-current request at its write boundary before attaching
+ -- confirmation authority; an expired original remains completely unbound.
+ update icash_seller_agreement_private.delivery_recovery set envelope_id=e.id
+ where id=r.id and state='claimed' and expires_at>clock_timestamp();
+ if not found then return false;end if;
+ update icash_seller_agreement_private.confirmations set envelope_id=e.id,state='ready' where id=c.id;
+ if not found then raise exception 'Original seller confirmation changed during binding';end if;
  return true;
 end $$;
 
@@ -485,6 +552,133 @@ AS $function$
     ('factsPending','conditionPending','agreementRevisionRequired','contractBlocked','acceptanceConditional','payoffPending') and flag.value<>'false'::jsonb)
  );
 $function$
+;
+
+CREATE OR REPLACE FUNCTION public.icash_claim_text_before_owner_question(p_account uuid, p_message uuid, p_sender text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare invitation public.icash_sms_inbound_invitations;t public.icash_text_threads;m public.icash_text_messages;d public.icash_deal_files;s public.icash_screening_jobs;
+begin
+ perform 1 from public.icash_operating_budget where id=1 for update;
+ select th.* into t from public.icash_text_threads th join public.icash_text_messages msg on msg.thread_id=th.id and msg.account_id=th.account_id where msg.id=p_message and msg.account_id=p_account;
+ if not found then return null;end if;
+ perform pg_advisory_xact_lock(hashtextextended(t.recipient,74));
+ perform 1 from public.icash_accounts where id=p_account and not bot_paused for update;if not found then return null;end if;
+ perform 1 from public.icash_outreach_campaigns where account_id=p_account for share;
+ select * into t from public.icash_text_threads where id=t.id and account_id=p_account for update;
+ select * into m from public.icash_text_messages where id=p_message and account_id=p_account and thread_id=t.id for update;
+ if not found or m.state<>'ready' or m.direction<>'outgoing' then return null;end if;
+ select * into d from public.icash_deal_files where id=t.deal_id and account_id=p_account and stage not in ('closed','cancelled') and coalesce(terms->>'practice','false')<>'true' for share;
+ if not found then return null;end if;
+ select * into s from public.icash_screening_jobs where id=d.screening_id and account_id=p_account and state='complete' for share;
+ if not found then return null;end if;
+
+ if exists(select 1 from public.icash_contract_text_deliveries x
+  join icash_seller_agreement_private.confirmations c on c.envelope_id=x.envelope_id and c.account_id=x.account_id
+  join icash_call_offer_private.offers o on o.account_id=c.account_id and o.deal_id=c.deal_id
+  where x.account_id=p_account and x.message_id=p_message)
+  and not public.icash_confirmed_seller_contract_text_current(p_account,p_message) then return null;end if;
+ -- A rolling older worker may queue the original link before attaching its
+ -- confirmation. Ordinary financial eligibility cannot bypass that source
+ -- boundary. The existing budget and recipient locks precede this check.
+ if public.icash_seller_memory_enabled(p_account) and m.customer_author_id is null
+  and exists(select 1 from public.icash_contract_text_deliveries x
+   join public.icash_signing_envelopes e on e.id=x.envelope_id and e.account_id=x.account_id
+   join icash_seller_agreement_memory_private.admissions admission on admission.account_id=e.account_id and admission.deal_id=e.deal_id
+   where x.account_id=p_account and x.message_id=p_message and e.kind='purchase' and not e.test_mode)
+  and public.icash_confirmed_seller_contract_text_current(p_account,p_message) is distinct from true then return null;end if;
+ if t.party='buyer' then
+  if public.icash_buyer_package_data(p_account,d.id) is null then return null;end if;
+ else if not public.icash_confirmed_seller_contract_text_current(p_account,p_message) and not public.icash_customer_authored_text(p_account,p_message) and not public.icash_seller_recovery_nonprice_current(p_account,p_message) and not (exists(select 1 from public.icash_text_ai_jobs j
+  where j.account_id=p_account and j.thread_id=t.id and j.outgoing_id=m.id and j.state='queued'
+   and j.analysis->>'dialoguePolicy'='seller-dialogue-v1' and public.icash_seller_information_action(j.analysis->>'dialogueAction'))
+  and public.icash_seller_conversation_message_current(p_account,p_message)) and not (exists(select 1 from public.icash_text_ai_jobs where account_id=p_account and outgoing_id=p_message and analysis->>'offerPolicy'='seller-text-offer-v1') and public.icash_seller_conversation_message_current(p_account,p_message)) and not (public.icash_seller_limited_contact(p_account,s.id) and (exists(select 1 from public.icash_sms_seller_openings opening where opening.thread_id=t.id and opening.owner_question_id=m.id) or m.body='Are there any mortgages, liens, or unpaid taxes that would need to be paid at closing?' or public.icash_limited_seller_text_current(p_account,p_message)
+   or (exists(select 1 from public.icash_text_ai_jobs j where j.account_id=p_account and j.thread_id=t.id and j.outgoing_id=m.id and j.analysis->>'dialoguePolicy'='seller-dialogue-v1' and j.analysis->>'dialogueAction'='clarify_ownership') and public.icash_seller_conversation_message_current(p_account,p_message)))) and (s.result->'financialCheck'->>'status' is distinct from 'eligible' or s.completed_at is null or s.completed_at>now() or s.completed_at<now()-interval '24 hours') then return null;end if; end if;
+
+ if exists(select 1 from public.icash_property_controls where account_id=p_account and property_id=s.snapshot->>'propertyId' and manual)
+ and not (
+  (public.icash_manual_handoff_reply(p_account,t.id) or public.icash_customer_authored_text(p_account,p_message))
+  and not exists(select 1 from public.icash_text_ai_jobs where outgoing_id=p_message and account_id=p_account)
+  and not exists(select 1 from public.icash_seller_opener_assignments where message_id=p_message and account_id=p_account)
+  and not exists(select 1 from public.icash_sms_inbound_invitations where message_id=p_message and account_id=p_account)
+ ) then return null;end if;
+ if exists(select 1 from public.icash_text_ai_jobs where outgoing_id=p_message and account_id=p_account) and not public.icash_seller_conversation_message_current(p_account,p_message)
+ and not exists(select 1 from public.icash_text_ai_jobs j join public.icash_text_messages incoming on incoming.id=j.message_id and incoming.account_id=j.account_id and incoming.thread_id=j.thread_id
+ where j.account_id=p_account and j.thread_id=t.id and j.outgoing_id=p_message and j.state='queued'
+ and t.party='buyer' and t.ai_mode='auto' and not t.paused and t.retired_at is null
+ and j.analysis->>'action'='buyer_factual' and j.analysis->>'factualPolicy'='approved-package-v1'
+ and incoming.direction='incoming' and incoming.state='received'
+ and m.body=public.icash_buyer_factual_text(p_account,t.id,incoming.body)) then return null;end if;
+ if t.dnc_checked_at>now() then return null;end if;
+ if not public.icash_sms_thread_review_current(p_account,t.id,true) then return null;end if;
+ if not public.icash_outreach_sms_current(p_account) then return null;end if;
+ select * into invitation from public.icash_sms_inbound_invitations where message_id=p_message and account_id=p_account;
+ if found then
+  if not public.icash_sms_inbound_campaign_current(p_account) then return null;end if;
+  select * into t from public.icash_text_threads where id=invitation.thread_id and account_id=p_account;
+  if t.id is null or t.sender<>invitation.sender or t.recipient<>invitation.recipient or t.deal_id<>invitation.deal_id or invitation.expires_at<=now() then return null;end if;
+  if not exists(select 1 from public.icash_inbound_voice_routes where called_number=invitation.called_number and business_number=p_sender and enabled and reviewed_until>now() and agent_config_hash is not null) then return null;end if;
+  if exists(select 1 from public.icash_text_messages where thread_id=t.id and direction='incoming' and id<>invitation.reply_id and created_at>=(select created_at from public.icash_text_messages where id=invitation.reply_id)) then return null;end if;
+ end if;
+ return public.icash_claim_text_before_campaign(p_account,p_message,p_sender);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.icash_finish_agreement_delivery_recovery(p_id uuid, p_envelope uuid, p_result jsonb)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r icash_seller_agreement_private.delivery_recovery;e public.icash_signing_envelopes;prepared boolean:=false;memory_confirmation boolean:=false;
+begin
+ -- Serialize with claim/defer's deal-first locking before locking the recovery
+ -- row. A simultaneous tool retry cannot deadlock with final reconciliation.
+ select * into r from icash_seller_agreement_private.delivery_recovery where id=p_id and state in ('claimed','sent');
+ if not found then return false;end if;
+ perform 1 from public.icash_deal_files d where d.id=r.deal_id and d.account_id=r.account_id for update;
+ if not found then return false;end if;
+ select * into r from icash_seller_agreement_private.delivery_recovery where id=p_id and state in ('claimed','sent') for update;
+ if not found then return false;end if;
+ if r.envelope_id is not null and r.envelope_id is distinct from p_envelope then return false;end if;
+ memory_confirmation:=public.icash_seller_memory_enabled(r.account_id) and exists(
+  select 1 from icash_seller_agreement_memory_private.admissions admission
+  join icash_seller_agreement_private.confirmations confirmation on confirmation.id=admission.confirmation_id
+  where admission.account_id=r.account_id and admission.deal_id=r.deal_id and confirmation.account_id=r.account_id
+   and confirmation.deal_id=r.deal_id and r.request_key='seller-confirmed:'||confirmation.id::text);
+ if r.state='sent' and (r.envelope_id is distinct from p_envelope or r.result is distinct from p_result) then return false;end if;
+ if p_envelope is not null then
+  select * into e from public.icash_signing_envelopes where id=p_envelope and account_id=r.account_id and deal_id=r.deal_id and kind='purchase' and not test_mode;
+  if not found then return false;end if;
+  prepared:=e.state in ('awaiting_counterparty','customer_signature_needed','completed') and e.provider_id is not null
+   and (e.terms-array['assignmentFeeCents','assignmentDepositCents'])=(r.expected_terms-array['assignmentFeeCents','assignmentDepositCents'])
+   and jsonb_array_length(e.recipients)=2 and e.recipients->0->>'name'=r.seller_name and e.recipients->0->>'phone'=r.phone;
+ end if;
+ -- Outcome recording can retain an original held provider reference, but it
+ -- cannot replace a refused binding with its weaker preparation predicate.
+ -- A prior successful binding survives later speech/review for receipt-only
+ -- recording; this path never renews its source or clears its review state.
+ if prepared and memory_confirmation then
+  prepared:=r.envelope_id=e.id and exists(select 1 from icash_seller_agreement_private.confirmations confirmation
+   where confirmation.account_id=r.account_id and confirmation.deal_id=r.deal_id
+    and r.request_key='seller-confirmed:'||confirmation.id::text and confirmation.envelope_id=e.id);
+ end if;
+ if p_result->'sent'='true'::jsonb and not coalesce(prepared,false) then return false;end if;
+ -- Preserve the worker's actual text result. Preparing an envelope is not
+ -- evidence that a text was accepted, delivered, or read by the seller.
+ update icash_seller_agreement_private.delivery_recovery set envelope_id=p_envelope,result=p_result,
+  state=case when p_result->'sent'='true'::jsonb then 'sent' else 'needs_review' end where id=r.id and state='claimed';
+ if prepared and not memory_confirmation then
+  update icash_seller_agreement_private.confirmations c set envelope_id=e.id,state='ready'
+  where c.account_id=r.account_id and c.deal_id=r.deal_id and c.state in ('preparing','needs_review')
+   and (c.envelope_id is null or c.envelope_id=e.id)
+   and c.confirmation->>'sellerLegalName'=r.seller_name and c.confirmation->'sendTextRequested'='true'::jsonb
+   and (c.terms-array['assignmentFeeCents','assignmentDepositCents'])=(e.terms-array['assignmentFeeCents','assignmentDepositCents']);
+ end if;
+ return true;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.icash_ingest_text_event_before_operational(p_event jsonb, p_optout boolean)
@@ -937,24 +1131,27 @@ revoke all on function public.icash_seller_agreement_memory_context(uuid,uuid) f
 grant execute on function public.icash_seller_agreement_memory_context(uuid,uuid) to service_role;
 revoke all on function public.icash_refresh_seller_agreement_memory(uuid,uuid,text,text,jsonb) from public,anon,authenticated;
 grant execute on function public.icash_refresh_seller_agreement_memory(uuid,uuid,text,text,jsonb) to service_role;
+revoke all on function public.icash_bind_agreement_delivery_envelope(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.icash_bind_agreement_delivery_envelope(uuid,uuid,uuid) to service_role;
 do $unchanged$ begin if md5(pg_get_functiondef('public.icash_signing_action_allowed(uuid,uuid)'::regprocedure))<>'0c8dd6053164498e0f2e400d8e55d3b7' or md5(pg_get_functiondef('public.icash_seller_memory_context(uuid,uuid,text)'::regprocedure))<>'7a680dae86359988c3f70c705a3369b0' then raise exception 'Seller memory unrelated authority changed';end if;end $unchanged$;
 do $results$
 declare e record;p record;role_name text;table_name text;
 begin
  for e in select * from (values
  ('public.icash_begin_signing(uuid,uuid,uuid,text,uuid,text,jsonb)','7ffc621ba4f68474622cd28886c9302e',false,'v','{postgres=X/postgres,service_role=X/postgres}'),
+ ('public.icash_bind_agreement_delivery_envelope(uuid,uuid,uuid)','cb5fa9a1e1facee5eb005c5b16f45dca',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_claim_agreement_delivery_recovery()','f3e6103f13dda778780e33dab4069a4c',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_claim_seller_agreement(text,text,jsonb,jsonb,jsonb)','067caa5b2c6fbe57cc988ceef40d2430',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_claim_seller_agreement(text,text,jsonb,jsonb,jsonb,text)','e3e9f966f8e6a213deef43643b78ac01',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_claim_seller_agreement(text,text,jsonb,jsonb,jsonb,text,jsonb)','11f85c6ef5cae298f5a8a7cc33d2135f',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_claim_seller_agreement_before_memory(text,text,jsonb,jsonb,jsonb)','c4b1748fc26ce94a795fc218f56e7e58',true,'v','{postgres=X/postgres}'),
  ('public.icash_claim_seller_text_agreement(uuid,uuid)','142769dd2770623355cd4aca24b3ee92',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
- ('public.icash_claim_text_before_owner_question(uuid,uuid,text)','2ab7c58cc5a38b95651bb0ecb054d40d',false,'v','{postgres=X/postgres,service_role=X/postgres}'),
+ ('public.icash_claim_text_before_owner_question(uuid,uuid,text)','fa1ad5bd705e2c7668eee0af1723a340',false,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_confirmed_seller_contract_text_current(uuid,uuid)','c13c2bd2a578a67ad18bd234fc37ed73',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_defer_seller_agreement(text,text,jsonb,jsonb,jsonb)','15ec165fffbcb5135e0da48f4ab750cb',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_defer_seller_agreement(text,text,jsonb,jsonb,jsonb,text)','31f2a421e7eab7dbcbe4961e5b7766ee',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_defer_seller_agreement(text,text,jsonb,jsonb,jsonb,text,jsonb)','72a1ee1b4a76ac67daf7b67134618176',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
- ('public.icash_finish_agreement_delivery_recovery(uuid,uuid,jsonb)','88c280613085bf4bcbf73ca9a2f3ce91',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
+ ('public.icash_finish_agreement_delivery_recovery(uuid,uuid,jsonb)','0b6ddd9a1210269482b7ab5f1226c68e',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_finish_recorded_reception_work(uuid,uuid,text,text,uuid,bigint,text,jsonb)','cd1cc13e60840806c48458e1f527497b',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_ingest_text_event(jsonb,boolean)','803a18e1b80d57c470440fb9b6e694f0',false,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_ingest_text_event_before_operational(jsonb,boolean)','299b21b220c28c7c0c96acfe3eb65c7e',false,'v','{postgres=X/postgres,service_role=X/postgres}'),
@@ -974,7 +1171,7 @@ begin
  ('icash_seller_agreement_memory_private.original_call(icash_seller_agreement_memory_private.admissions,jsonb)','96972c4297ff2c152266b3b225b59ae9',true,'s','{postgres=X/postgres}'),
  ('icash_seller_agreement_memory_private.original_source(text)','ab7604c2e79701bc2c63b66475dc288d',false,'i','{postgres=X/postgres}'),
  ('icash_seller_agreement_memory_private.remember(uuid,jsonb,text,jsonb,jsonb)','a9091bc2ffbc0a18f29665dca2dbd43d',true,'v','{postgres=X/postgres}'),
- ('icash_seller_agreement_memory_private.review_ready(uuid)','500f2556dbb6f0c87a13b005f00a7248',true,'v','{postgres=X/postgres}'),
+ ('icash_seller_agreement_memory_private.review_ready(uuid)','844ababee52617fb7e161403e53d6324',true,'v','{postgres=X/postgres}'),
  ('public.icash_seller_memory_context(uuid,uuid,text)','7a680dae86359988c3f70c705a3369b0',true,'s','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_seller_text_offer_context(uuid,uuid)','5f6e0a4049af7b8ca40b1bcb599f3547',true,'v','{postgres=X/postgres,service_role=X/postgres}'),
  ('public.icash_signing_action_allowed(uuid,uuid)','0c8dd6053164498e0f2e400d8e55d3b7',false,'s','{postgres=X/postgres,service_role=X/postgres}'),
