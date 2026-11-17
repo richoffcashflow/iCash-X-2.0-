@@ -1,15 +1,37 @@
 'use client';
 import {subscribeWorkspaceChanges} from '@/lib/workspace-events-client';
+import {webinarRequest as workspaceRequest} from '@/lib/webinar-client';
 import {useEffect,useRef,useState} from 'react';
 import {Bell,Mail,MessageCircle,X} from 'lucide-react';
-import {botUpdateConsentVersion,updateHref,updateUnread,type InboxItem,type BotUpdatePreferences as Preferences} from '@/lib/customer-updates';
+import {botUpdateConsentVersion,updateCopy,updateHref,updateUnread,type InboxItem,type BotUpdatePreferences as Preferences} from '@/lib/customer-updates';
+
+function record(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==='object'&&!Array.isArray(value);}
+function optionalText(value:unknown){return value===undefined||value===null||typeof value==='string';}
+function validPreferences(value:unknown):value is Preferences{
+ return record(value)&&typeof value.emailEnabled==='boolean'&&typeof value.smsEnabled==='boolean'
+  &&typeof value.emailAvailable==='boolean'&&typeof value.smsAvailable==='boolean'
+  &&typeof value.timezone==='string'&&!!value.timezone&&optionalText(value.email)&&optionalText(value.phone)
+  &&(value.emailSuppressed===undefined||typeof value.emailSuppressed==='boolean')
+  &&(value.seenAt===undefined||value.seenAt===null||typeof value.seenAt==='string'&&Number.isFinite(Date.parse(value.seenAt)));
+}
+function validItem(value:unknown):value is InboxItem{
+ return record(value)&&typeof value.id==='string'&&typeof value.kind==='string'&&Object.hasOwn(updateCopy,value.kind)
+  &&(value.screeningId===null||typeof value.screeningId==='string')&&optionalText(value.threadId)
+  &&typeof value.createdAt==='string'&&Number.isFinite(Date.parse(value.createdAt))
+  &&typeof value.title==='string'&&typeof value.detail==='string'&&(value.address===null||typeof value.address==='string')
+  &&(value.read===undefined||typeof value.read==='boolean');
+}
 
 export function WorkspaceUpdates({onPreferences,onBudget}:{onPreferences:()=>void;onBudget:()=>void}){
  const [items,setItems]=useState<InboxItem[]>([]),[seenAt,setSeenAt]=useState<string|null>(null),[error,setError]=useState(''),[loaded,setLoaded]=useState(false),[loadFailed,setLoadFailed]=useState(false),[retry,setRetry]=useState(0);
  const dialog=useRef<HTMLDialogElement>(null);
  useEffect(()=>{
-  let alive=true,inFlight=false;const controller=new AbortController();
-  async function load(){if(document.hidden||inFlight)return;inFlight=true;try{const response=await fetch('/api/notifications/updates',{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok)throw Error(data.error);if(alive){setItems(data.items);setSeenAt(data.preferences.seenAt??null);setLoadFailed(false);setLoaded(true);}}catch{if(alive)setLoadFailed(true);}finally{inFlight=false;}}
+  let alive=true,inFlight=false,refreshQueued=false;const controller=new AbortController();
+  async function load(){if(!alive||document.hidden)return;if(inFlight){refreshQueued=true;return;}inFlight=true;try{
+   const data=await workspaceRequest<{items:unknown;preferences:unknown}>('/api/notifications/updates',{cache:'no-store',signal:controller.signal});
+   if(!Array.isArray(data.items)||!data.items.every(validItem)||!validPreferences(data.preferences))throw Error('Invalid updates');
+   if(alive){setItems(data.items);setSeenAt(data.preferences.seenAt??null);setLoadFailed(false);setLoaded(true);}
+  }catch{if(alive)setLoadFailed(true);}finally{inFlight=false;if(alive&&refreshQueued){refreshQueued=false;void load();}}}
   void load();const unsubscribe=subscribeWorkspaceChanges(load);const timer=setInterval(load,60000);document.addEventListener('visibilitychange',load);
   return()=>{alive=false;unsubscribe();controller.abort();clearInterval(timer);document.removeEventListener('visibilitychange',load);};
  },[retry]);
@@ -20,9 +42,9 @@ export function WorkspaceUpdates({onPreferences,onBudget}:{onPreferences:()=>voi
   <dialog className="updates-dialog" ref={dialog} aria-labelledby="updates-title"><div className="updates-heading"><div><span className="workspace-eyebrow">Your bot, at a glance</span><h2 id="updates-title">Updates</h2></div><button className="icon-close" aria-label="Close updates" onClick={()=>dialog.current?.close()}><X size={20}/></button></div>
    <div className="updates-toolbar"><button onClick={()=>{dialog.current?.close();onPreferences();}}>Email & text updates</button>{unread>0&&<button onClick={()=>void markSeen()}>Mark updates read</button>}</div>
    {error&&<p className="updates-error" role="alert">{error} <button onClick={()=>setRetry(value=>value+1)}>Retry</button></p>}
-   {!loaded&&loadFailed&&<button type="button" className="workspace-quiet" onClick={()=>setRetry(value=>value+1)}>Refresh updates</button>}
+   {loadFailed&&<button type="button" className="workspace-quiet" onClick={()=>setRetry(value=>value+1)}>Refresh updates</button>}
    {!loaded&&!loadFailed&&<p className="updates-empty" role="status">Loading your bot’s updates…</p>}
-   {loaded&&!items.length&&<div className="updates-empty"><Bell size={24}/><h3>You’re all caught up.</h3><p>Seller replies, completed research and deal milestones will appear here.</p></div>}
+   {loaded&&!loadFailed&&!items.length&&<div className="updates-empty"><Bell size={24}/><h3>You’re all caught up.</h3><p>Seller replies, completed research and deal milestones will appear here.</p></div>}
    <ul className="updates-list">{items.map(item=><li key={item.id} data-unread={updateUnread(item,seenAt)}><a onClick={event=>{dialog.current?.close();if(item.kind==='credits_low'){event.preventDefault();onBudget();}}} href={updateHref(item)}><span className="update-unread-dot" aria-hidden="true"/><span><strong>{item.title}</strong><p>{item.address??item.detail}</p><small>{new Date(item.createdAt).toLocaleString('en-US',{hour12:true,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</small></span></a></li>)}</ul>
   </dialog>
  </>;
@@ -31,8 +53,9 @@ export function WorkspaceUpdates({onPreferences,onBudget}:{onPreferences:()=>voi
 export function BotUpdatePreferences({phone:accountPhone}:{phone?:string}){
  const [saved,setSaved]=useState<Preferences|null>(null),[email,setEmail]=useState(false),[sms,setSms]=useState(false),[phone,setPhone]=useState(accountPhone??''),[timezone,setTimezone]=useState('America/Chicago');
  const [consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[loadFailed,setLoadFailed]=useState(false),[retry,setRetry]=useState(0);
- useEffect(()=>{const controller=new AbortController();fetch('/api/notifications/updates',{cache:'no-store',signal:controller.signal}).then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.error);if(controller.signal.aborted)return;const p=data.preferences;setSaved(p);setEmail(p.emailEnabled);setSms(p.smsEnabled);setPhone(p.phone??accountPhone??'');setTimezone(p.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone);setLoadFailed(false);}).catch(()=>{if(!controller.signal.aborted)setLoadFailed(true);});return()=>controller.abort();},[accountPhone,retry]);
- function changed(){setConsent(false);setMessage('');}
+ const hasEdited=useRef(false);
+ useEffect(()=>{const controller=new AbortController();workspaceRequest<{preferences:unknown}>('/api/notifications/updates',{cache:'no-store',signal:controller.signal}).then(data=>{if(controller.signal.aborted)return;const p=data.preferences;if(!validPreferences(p))throw Error('Invalid preferences');setSaved(p);if(!hasEdited.current){setEmail(p.emailEnabled);setSms(p.smsEnabled);setPhone(p.phone??accountPhone??'');setTimezone(p.timezone);}setConsent(false);setLoadFailed(false);}).catch(()=>{if(!controller.signal.aborted)setLoadFailed(true);});return()=>controller.abort();},[accountPhone,retry]);
+ function changed(){hasEdited.current=true;setConsent(false);setMessage('');}
  async function save(){if(busy||!saved||(email||sms)&&!consent)return;setBusy(true);setError('');setMessage('');try{const response=await fetch('/api/notifications/updates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'preferences',emailEnabled:email,smsEnabled:sms,phone,timezone,...(email||sms?{consentVersion:botUpdateConsentVersion}:{})})});const data=await response.json();if(!response.ok)throw Error(data.error);setSaved({...saved,...data.preferences});setConsent(false);setMessage(email||sms?'Saved. New bot activity will arrive through the channels you chose.':'Activity updates are off. Your bot and budget stay as they are.');}catch(error){setError(error instanceof Error?error.message:'Could not save updates.');}finally{setBusy(false);}}
  return <section className="bot-update-preferences" aria-labelledby="bot-updates-heading"><span className="workspace-eyebrow">Stay in the loop</span><h3 id="bot-updates-heading">Your bot. Wherever you are.</h3><p>Get a direct link when a seller replies, research finishes or a deal moves forward.</p>
   {!saved&&loadFailed&&<button type="button" className="workspace-quiet" onClick={()=>setRetry(value=>value+1)}>Refresh preferences</button>}

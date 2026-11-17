@@ -24,3 +24,70 @@ fail=true;assert.equal((await syncSellerMetaCosts(db,env,transport,now)).status,
 let pages=0;const accounts=await listMetaCostAccounts(env,async(url)=>{const u=new URL(url);pages++;assert.equal(u.origin,'https://graph.facebook.com');assert.equal(pages===2?u.searchParams.get('after'):null,pages===2?'safe-cursor':null);return Response.json({data:[{id:pages===1?'act_111111':'act_222222',name:'Synthetic',currency:pages===1?'USD':'EUR'}],...(pages===1?{paging:{next:'https://untrusted.example/token',cursors:{after:'safe-cursor'}}}:{})});});
 assert.deepEqual(accounts,[{id:'act_111111',name:'Synthetic'}]);assert.equal(pages,2,'Pagination uses validated cursor on the original endpoint');
 console.log('PASS automatic Meta costs: read-only requests, exact USD amounts, timezone/DST, complete reports, duplicate/currency rejection, safe pagination, secret redaction, failed reads preserve costs and preview does no work.');
+
+// The public sync entry point must reject an oversized report while it is still
+// arriving. It must not read the whole report before enforcing the existing cap.
+const encoder=new TextEncoder(),limit=500000;
+const accountInfo={id:'act_123456789',currency:'USD',timezone_name:'America/Chicago'};
+async function syncBody(response){
+ const writes=[];let reads=0;
+ const database=async(path,method,body)=>{
+  if(path==='rpc/icash_seller_meta_access')return null;
+  if(path==='rpc/icash_claim_seller_cost_sync')return {id:'synthetic-source',token:'synthetic-lease',accountId:'act_123456789',metaCampaignId:campaign};
+  assert.equal(path,'rpc/icash_finish_seller_cost_sync');writes.push(body);return true;
+ };
+ const result=await syncSellerMetaCosts(database,env,async()=>{
+  reads++;
+  return reads===1?response:reads===2?Response.json({id:campaign,account_id:'123456789'}):Response.json({data:[row]});
+ },now);
+ return {result,writes,reads};
+}
+function chunkedBody(text,chunkSize=65536,{cleanup='resolved',open=false}={}){
+ const bytes=encoder.encode(text);let offset=0,cancelled=0,close,lateReject;
+ const stream=new ReadableStream({
+  start(controller){close=()=>{try{controller.close();}catch{}};},
+  pull(controller){
+   if(offset<bytes.length){const end=Math.min(offset+chunkSize,bytes.length);controller.enqueue(bytes.subarray(offset,end));offset=end;}
+   else if(!open)controller.close();
+  },
+  cancel(){cancelled++;if(cleanup==='rejected')return Promise.reject(Error('private cleanup failure'));if(cleanup==='pending')return new Promise((_,reject)=>{lateReject=reject;});},
+ },{highWaterMark:0});
+ const response=new Response(stream);
+ if(cleanup==='synchronous'){
+  const getReader=stream.getReader.bind(stream);
+  stream.getReader=()=>{const reader=getReader();reader.cancel=()=>{cancelled++;throw Error('private cleanup failure');};return reader;};
+ }
+ return {response,bytesRead:()=>offset,cancellations:()=>cancelled,finish(){lateReject?.(Error('private late cleanup failure'));close();}};
+}
+{
+ const fixture=chunkedBody('x'.repeat(2000000));
+ const outcome=await syncBody(fixture.response);
+ assert.equal(outcome.result.status,'invalid_report');
+ assert(fixture.bytesRead()<=limit+65536,'Reject before consuming the remainder of an oversized provider report');
+ assert.equal(outcome.reads,1,'Never fetch a replacement report');
+ assert.equal(outcome.writes.length,1);assert.equal(outcome.writes[0].p_days,null,'Unknown cost never becomes zero spend');
+ assert.equal(fixture.response.body.locked,false);
+}
+for(const cleanup of ['resolved','rejected','pending','synchronous']){
+ const fixture=chunkedBody('x'.repeat(limit+1),65536,{cleanup,open:true});let timeout;
+ try{
+  const result=await Promise.race([syncBody(fixture.response),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('Oversized body or cleanup blocked cost finalization')),500);})]);
+  assert.equal(result.result.status,'invalid_report');assert.equal(result.reads,1);assert.equal(result.writes.length,1);assert.equal(result.writes[0].p_days,null);
+  assert.equal(fixture.cancellations(),1);assert.equal(fixture.response.body.locked,false);
+ }finally{clearTimeout(timeout);fixture.finish();await new Promise(resolve=>setImmediate(resolve));}
+}
+for(const character of ['x','é','界','😀']){
+ const prefix=JSON.stringify({...accountInfo,extra:''}),available=limit-prefix.length;
+ const body=JSON.stringify({...accountInfo,extra:character.repeat(Math.floor(available/character.length))+'x'.repeat(available%character.length)});
+ assert.equal(body.length,limit);
+ // Small odd-sized chunks split multi-byte code points. The old character cap
+ // must not silently turn into a smaller byte cap or corrupt account evidence.
+ const fixture=chunkedBody(body,8191);const outcome=await syncBody(fixture.response);
+ assert.equal(outcome.result.status,'synced');assert.equal(outcome.reads,3);assert.equal(outcome.writes.length,1);assert.equal(outcome.writes[0].p_days[6].spendMicros,11200000);
+ assert.equal(fixture.response.body.locked,false);
+}
+{
+ const fixture=chunkedBody('\ufeff'+JSON.stringify(accountInfo),1);
+ assert.equal((await syncBody(fixture.response)).result.status,'synced','Preserve response.text UTF-8 BOM decoding');
+}
+console.log('PASS Meta cost report streaming: early bounded rejection, original claim finalization, cleanup failures, exact character boundary and split UTF-8 evidence.');
