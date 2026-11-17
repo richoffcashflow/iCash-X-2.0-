@@ -1,0 +1,27 @@
+[
+  {
+    "name": "icash_sms_inbound_campaign_current(uuid)",
+    "hash": "62c70558174e804a981dd341c2c55ed9",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_sms_inbound_campaign_current(p_account uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select public.icash_outreach_choice_current(p_account,'sms_inbound') or exists(\n select 1 from public.icash_outreach_campaigns c join public.icash_campaign_acknowledgments x on x.id=c.acknowledgment_id and x.account_id=c.account_id\n join public.icash_accounts a on a.id=c.account_id and a.owner_user_id=x.user_id\n where c.account_id=p_account and c.channel_selection_id is null and c.enabled and c.mode='sms_inbound' and x.policy_version='sms-inbound-2026-09-30.1'\n and exists(select 1 from public.icash_customer_identities i where i.account_id=c.account_id and length(trim(i.principal))>0 and i.principal=c.reviewed_principal))\n$function$\n"
+  },
+  {
+    "name": "icash_membership_work_allowed(uuid)",
+    "hash": "554669115ef58cb0da536bda361dcdca",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_membership_work_allowed(p_account uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select exists(select 1 from public.icash_accounts a where a.id=p_account and (a.billing_model<>'membership_credits' or exists(select 1 from public.icash_memberships m where m.account_id=a.id and m.mode='live' and m.state='active' and m.paid_through>now())))\n$function$\n"
+  },
+  {
+    "name": "icash_conversation_street(text)",
+    "hash": "13cc321d08661a1d57aeb46c230663c5",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_conversation_street(p_address text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE STRICT\n SET search_path TO ''\nAS $function$\n select trim(split_part(p_address,',',1))||case\n  when trim(split_part(p_address,',',2)) ~* '^(apt\\.?|apartment|unit|suite|ste\\.?|#)[[:space:]]*[[:alnum:]-]+$'\n  then ' '||trim(split_part(p_address,',',2)) else '' end;\n$function$\n"
+  },
+  {
+    "name": "icash_sms_thread_review_current(uuid,uuid,boolean)",
+    "hash": "e2a96a60ee77a6b6ed69ec8bf04d620b",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_sms_thread_review_current(p_account uuid, p_thread uuid, p_check_hour boolean DEFAULT true)\n RETURNS boolean\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin\n if p_check_hour is null or public.icash_sms_review_before_business_hours(p_account,p_thread,false) is distinct from true then return false;end if;\n return not p_check_hour or public.icash_sms_outreach_window_current(p_account,p_thread);\nend $function$\n"
+  },
+  {
+    "name": "icash_seller_cash_question(text,text)",
+    "hash": "974784b21482c1d8b3c501d72f1ce04c",
+    "definition": "CREATE OR REPLACE FUNCTION public.icash_seller_cash_question(p_variant text, p_address text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\ndeclare body text;begin\n if nullif(trim(p_address),'') is null then return null;end if;\n body:=case p_variant when 'cash_sale_v6' then 'Hi, have you considered a cash sale for '||trim(p_address)||'?'\n when 'all_cash_v6' then 'Hi, would you consider selling '||trim(p_address)||' for all cash?'\n when 'cash_offer_v6' then 'Hi, would you be open to a cash offer for '||trim(p_address)||'?' end;\n if length(body)>160 or body ~ '[^A-Za-z0-9 .,!?&#/-]' then return null;end if;return body;\nend $function$\n"
+  }
+]

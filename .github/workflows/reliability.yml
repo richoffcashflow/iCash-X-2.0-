@@ -323,6 +323,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install fixed local database driver outside the project
         run: npm install --prefix "$RUNNER_TEMP/outreach-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Verify inactive discovery renewal and original opener under concurrent controls
+        env:
+          DISCOVERY_REFRESH_NATIVE_TEST: ci
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+        run: node --experimental-strip-types scripts/test-discovery-opener-refresh-postgres.mjs
       - name: Verify source-bound preparation and original locks
         env:
           PREPARATION_NATIVE_TEST: '1'

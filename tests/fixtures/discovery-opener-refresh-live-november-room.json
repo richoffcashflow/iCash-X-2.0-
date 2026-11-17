@@ -1,0 +1,7 @@
+[
+  {
+    "name": "icash_sender_private.november_room(text,boolean,timestamp with time zone)",
+    "hash": "09a0a334bfcc3b18c6128e834e14bbeb",
+    "definition": "CREATE OR REPLACE FUNCTION icash_sender_private.november_room(p_sender text, p_cold boolean, p_at timestamp with time zone)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select case when p_sender in ('+16462959838','+18623812530','+17866727869','+16462494809','+15056019451','+15055072937','+15127791343','+16027722055','+14357242174','+17262035755','+17262060050','+17189714119','+16463796122','+13104615259') and p_cold then\n  p_at is not null and extract(hour from p_at at time zone 'America/New_York')>=9\n  and extract(hour from p_at at time zone 'America/New_York')<21\n  and (select count(*)<200 and count(*) filter(where admitted_at>p_at-interval '1 hour')<20\n    and count(*) filter(where admitted_at>p_at-interval '3 minutes')=0\n   from icash_sender_private.uses where sender=p_sender and cold and admitted_at>p_at-interval '24 hours')\n else true end\n$function$\n"
+  }
+]
