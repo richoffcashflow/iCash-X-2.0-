@@ -17,6 +17,25 @@ for(const answer of ["No, it's not, but I have an agent agreement.","No, it's no
 assert.equal(evidence('Yes.','Do you want to sell?'),null);
 assert.equal(evidence('It is not listed with my agent.',question,'It is listed with my agent.'),null);
 assert.equal(evidence('I might list it with an agent.'),null);
+for(const answer of [
+ 'It will be listed with an agent.','It could be listed with a realtor.',
+ 'It can be listed with an agent.','It may be listed with a broker.',
+ 'It should be listed with an agent.',"It'll be listed with an agent.",
+ 'It is going to be listed with an agent.','I plan to have it listed with an agent.',
+ 'I intend to get it listed with an agent.','I hope to have it listed with an agent.',
+ 'Could it be listed with an agent?','It might not be listed with an agent.',
+ 'If it is listed with an agent, can you still buy it?',
+ 'Suppose it is listed with an agent.','Assuming it is listed with an agent.',
+ "I don't know whether it is listed with an agent.",
+ 'It can be with you.',
+]){
+ assert.equal(evidence(answer),null,'future/hypothetical listing is not current status: '+answer);
+ const qualification=sellerOfferQualification({transcript:[{role:'agent',message:question},{role:'user',message:answer}]});
+ assert.notEqual(qualification.stop,true,'do not end the sale discussion over a possible listing');
+ assert(qualification.missing.includes('listing'),'current status still needs clarification');
+}
+for(const answer of ['It is listed with an agent. I may sell later.','It is currently listed with my realtor.','It is listed with an agent, if that matters.','Yes, it is.'])assert.equal(evidence(answer),true,'retain actual current listing: '+answer);
+for(const answer of ['It is not listed. I may sell later.','It is not listed and never will be.','It is not listed, if that matters.','No, it is not.','My listing has expired.'])assert.equal(evidence(answer),false,'retain actual current exclusion/correction: '+answer);
 const followup="Thanks for letting me know it's not listed with an agent. Are you interested in selling the property to Clear Path Homes?";
 for(const answer of ['Yes.','No.']){
  assert.equal(evidence(answer,followup),null,'selling interest must not change listing status');

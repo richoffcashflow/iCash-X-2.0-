@@ -8,14 +8,15 @@ const receiptAnswer=await replyToSupport({kind:'account',messages:[user('What di
 assert.equal(receiptAnswer.reply,valueEvidence.detail);assert.equal(receiptAnswer.status,'open');
 const leadsContext={kind:'account',messages:[user('How do I get a client?')],evidence:ready};
 const unrelatedChecks=[check('work','attention','paused'),check('credits','attention','no_available_credit'),check('readiness','attention','readiness_blocked'),check('course','attention','course_unrecorded')];
-for(const question of [
- 'What do I do if I want the bot to call properties in a specific city?',
- 'How can I choose a city for my bot?',
- 'Can I target a specific ZIP code?',
- 'I want my bot to focus on a specific area.',
+for(const [question,location] of [
+ ['What do I do if I want the bot to call properties in a specific city?','city'],
+ ['How can I choose a city for my bot?','city'],
+ ['Can I target a specific ZIP code?','ZIP code'],
+ ['I want my bot to focus on a specific area.','area'],
+ ['Can I pick a state?','state'],
 ]){
  const answer=await replyToSupport({kind:'account',messages:[user(question)],evidence:unrelatedChecks},async()=>{throw Error('Known city guidance must not call a provider');});
- assert.equal(answer.reply,'You can’t select a specific city in the current workspace. Your bot selects markets automatically.');
+ assert.equal(answer.reply,`You can’t select a specific ${location} in the current workspace. Your bot selects markets automatically.`);
  assert.equal(answer.status,'resolved');assert.equal(answer.ai,false);
  assert.doesNotMatch(answer.reply,/credits|paused|Course|readiness|Settings|\?/i);
 }

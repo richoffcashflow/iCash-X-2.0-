@@ -1,3 +1,4 @@
+import {outboundSellerListingPrompt} from './seller-listing-clarification.ts';
 import {readSellerMemory,sellerMemoryPrompt} from './seller-memory.ts';
 import {outboundSellerCadencePrompt} from './seller-call-cadence.ts';
 import {instantLeadPrompt} from './meta-instant-leads.ts';
@@ -210,7 +211,8 @@ export async function dispatchLiveVoice(accountId:string,jobId:string,automation
   const guide=!intake&&!cancellation&&p.party==='seller'&&!automaticOfferPolicy(recordedReview.offerPolicy)?base+'\n'+opportunityConversationInstructions:base;
   const efficient=!intake&&!cancellation&&!limited&&p.party==='seller'?efficientSellerPrompt(guide):guide;
   const instructions=!intake&&!cancellation&&p.party==='seller'&&automaticOfferPolicy(recordedReview.offerPolicy)?sellerCallerIdentityPrompt(efficient):efficient;
-  return outboundSellerCadencePrompt(instructions+(assigned?`\nREVIEWED INTEREST QUESTION (shared-v1/${limited?'limited':'reviewed'}): After required identity/ownership checks, only if saved history has not answered interest, ask exactly: ${acquisitionOpeners[strategy]} Existing consent, stop, handoff, offer and agreement rules still apply.`:''),{party:p.party,intake:!!intake,limited:!!limited,cancellation:!!cancellation});
+  const listing=outboundSellerListingPrompt(instructions,{party:p.party,intake:!!intake,limited:!!limited,cancellation:!!cancellation,automaticOffer:automaticOfferPolicy(recordedReview.offerPolicy)});
+  return outboundSellerCadencePrompt(listing+(assigned?`\nREVIEWED INTEREST QUESTION (shared-v1/${limited?'limited':'reviewed'}): After required identity/ownership checks, only if saved history has not answered interest, ask exactly: ${acquisitionOpeners[strategy]} Existing consent, stop, handoff, offer and agreement rules still apply.`:''),{party:p.party,intake:!!intake,limited:!!limited,cancellation:!!cancellation});
  };
  if(automaticContext&&p.party==='seller'){
   // Reserve space for the complete runtime instructions, then retain whole

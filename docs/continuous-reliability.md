@@ -1,5 +1,16 @@
 # Continuous reliability
 
+## November 17 seller, buyer and title interpretation
+
+The [conversation-quality repair](deal-conversation-quality-2026-11-17.md)
+preserves canonical seller interest, avoids treating hypothetical agent listings
+as current listings, combines exact-owner buyer contact observations with
+restrictive effective phone evidence, and keeps title verification requests or
+contradicted milestones out of positive review suggestions. Connected offline
+fixtures and independent review cover the changed paths. Production release and
+customer outcome evidence remain separate; this does not claim to resolve the
+independently observed pause/callback/ownership routes or pending scheduler work.
+
 ## November 16 collector deadline scan candidate
 
 The [deadline-plan candidate](collector-preflight-deadline-plan.md) addresses a

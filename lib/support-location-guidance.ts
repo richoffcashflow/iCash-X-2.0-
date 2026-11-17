@@ -1,3 +1,4 @@
+import {supportMarketSelectionAnswer} from './support-product-guide.ts';
 import type {SupportContext,SupportReply} from './support-conversation.ts';
 /** Geography questions are not import requests or evidence of missing outreach. */
 export function supportLocationGuidance(context:SupportContext):SupportReply|null{
@@ -17,9 +18,40 @@ export function supportLocationGuidance(context:SupportContext):SupportReply|nul
  return {reply:'The bot selects markets automatically. The workspace has no city, state or ZIP-code selector, and this chat has not changed your search area. Leads appearing in one area do not establish why other areas are missing; that needs a check of the saved search settings and property records.',status:'open',ai:false};
 }
 
-/** Split only explicit current-turn questions. Never inherit a location from
+const otherWorkspace=/^(?:is there|do i have|can i (?:switch to|use)) (?:another|a different|a second) workspace[?!.\s]*$/i;
+const anotherSignup=/^(?:can|could|may|should) i (?:sign up for|create|open) (?:another|a different|a second) (?:one|workspace|account)[?!.\s]*$/i;
+const signupForMarket=/^(?:can|could|may|should) i (?:sign up for|create|open) (?:another|a different|a second) (?:workspace|account) to (?:choose|pick|target|select) (?:a |my |another |a different )?(?:state|city|market)[?!.\s]*$/i;
+
+/** A short workspace or signup question inherits market selection only from
+ * the adjacent customer topic. An operator or another subject ends the link. */
+function workspaceMarketFollowup(context:SupportContext):SupportReply|null{
+ const index=context.messages.findLastIndex(turn=>turn.role==='user');
+ const question=context.messages[index]?.content.trim()??'';
+ const explicitMarketSignup=signupForMarket.test(question);
+ const signup=explicitMarketSignup||anotherSignup.test(question);
+ if(!signup&&!otherWorkspace.test(question))return null;
+ const prior=context.messages.slice(0,index);
+ const sinceOperator=prior.slice(prior.findLastIndex(turn=>turn.role==='operator')+1);
+ const topics=sinceOperator.filter(turn=>turn.role==='user');
+ // A signup question can also refer to the immediately preceding question
+ // about another workspace. Earlier assistant guesses are not access evidence.
+ const anchor=signup&&otherWorkspace.test(topics.at(-1)?.content.trim()??'')?topics.at(-2):topics.at(-1);
+ if(!explicitMarketSignup){
+  if(!anchor)return null;
+  const curatedLocation=supportLocationGuidance({...context,messages:[anchor]})??supportMarketSelectionAnswer(anchor.content);
+  if(!curatedLocation)return null;
+ }
+ const reply=signup
+  ?'I can’t confirm whether you can open a second workspace. I wouldn’t sign up again just to choose a market. The bot selects markets automatically.'
+  :'I can’t see which other workspaces you have access to. If you’re looking for a way to choose where the bot searches, the bot selects markets automatically.';
+ return {reply,status:'open',ai:false};
+}
+
+/** Split only explicit current-turn questions. Never split a location out of
  * older customer or operator turns, or strip a complaint inside one clause. */
 export function supportLocationParts(context:SupportContext){
+ const followup=workspaceMarketFollowup(context);
+ if(followup)return {answer:followup,remaining:''};
  const q=context.messages.findLast(t=>t.role==='user')?.content??'';
  const clauses=q.replace(/^\s*\d+[.)]\s+/gm,'').split(/(?<=[?!;])\s*|\n+|(?<=\.)\s+(?=[A-Z])|\s+and\s+(?=how (?:do|can) i (?:choose|select|set|change))/i)
   .map(s=>s.replace(/^\s*also[,\s]+/i,'').trim()).filter(Boolean);

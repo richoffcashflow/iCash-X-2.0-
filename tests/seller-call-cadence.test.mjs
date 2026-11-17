@@ -1,3 +1,4 @@
+import {sellerListingClarificationPrompt} from '../lib/seller-listing-clarification.ts';
 import {efficientSellerPrompt} from '../lib/seller-conversation-efficiency.ts';
 import assert from 'node:assert/strict';
 import {sellerCallCadenceInstructions as cadence,sellerCallCadencePrompt,outboundSellerCadencePrompt} from '../lib/seller-call-cadence.ts';
@@ -13,7 +14,7 @@ import {cancellationCallPrompt} from '../lib/cancellation-notice-policy.ts';
 const config={context_policy:buyerSpeakingPolicy,context_policy_hash:speakingBuyerReceptionPolicyHash,context_approval_reference:'synthetic-cadence-regression',agreement_tool_id:'tool_fixture'};
 const seller=receptionContextVariables(config,{status:'matched',address:'45 Fixture Lane',companyName:'Fixture Homes'});
 const original=sellerCallerIdentityPrompt(efficientSellerPrompt(sellerAgreementDeliveryPrompt(selectedSpeakingRoleInstructions('matched',automaticOfferReceptionPrompt))));
-assert.equal(seller.icash_role_instructions,original+'\n'+cadence,'Assembled inbound preserves every original authority and readback instruction');
+assert.equal(seller.icash_role_instructions,sellerListingClarificationPrompt(original)+'\n'+cadence,'Assembled inbound adds cadence after the scoped listing correction, preserving other authority and readback instructions');
 assert.match(original,/After verbally_accepted, do not ask that price again/);
 assert.match(original,/give ONE concise readback of exact price, calendar closing date and prepared inspection period/);
 assert.match(original,/sole-owner\/decision-maker answer plus accepted terms needs no separate/);

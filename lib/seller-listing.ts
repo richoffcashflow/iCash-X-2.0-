@@ -3,7 +3,7 @@ import {object} from './required-call-recording.ts';
 /** A short answer belongs to the latest question, not an earlier acknowledgement
  * in the same agent turn. Otherwise "not listed ... interested in selling?" +
  * "yes" silently reverses the seller's already established listing status. */
-function asksListingStatus(message:string):boolean{
+export function asksListingStatus(message:string):boolean{
  const sentence=message.split(/[.!?;\n]+/).map(part=>part.trim()).filter(Boolean).at(-1)??'';
  const starts=[...sentence.matchAll(/\b(?:is|are|do|does|have|has)\s+(?:you|it|(?:your|the|this|that)\s+(?:property|home|house|listing))\b/gi)];
  const last=starts.at(-1);if(!last)return false;
@@ -27,6 +27,11 @@ export function sellerListingEvidence(value:unknown,input:Record<string,unknown>
  if(/\bor\b/i.test(question)&&/selling (?:it )?yourself/i.test(question)
   &&/^(?:yes|no|yeah|nope|correct)[.! ]*$/i.test(answer))return null;
  if(/\b(?:but|however|although|except)\b/i.test(answer)&&/\b(?:agent|realtor|broker|agreement|listed|listing)\b/i.test(answer))return null;
+ // A possible or planned listing is not a current listing. Keep the modal
+ // attached to its own clause so "It is not listed. I may sell later" retains
+ // the explicit current answer. Ambiguous mixed listing claims need clarity.
+ if(/\b(?:can|could|may|might|will|would|should|going to|plans? to|planning to|considering|intend(?:ing)? to|hop(?:e|ing) to|if|suppose|supposing|assuming|whether|once)\b[^.!?;]*\b(?:listed|listing)\b/i.test(answer)
+  ||/\b(?:i|we|it|they)['’]ll\b[^.!?;]*\b(?:listed|listing)\b/i.test(answer))return null;
  // Speech transcripts include fillers and complete short replies such as
  // "No, it's not." Bind these only to the actual positive listing question;
  // never interpret an unrelated no or a contradictory added clause as evidence.

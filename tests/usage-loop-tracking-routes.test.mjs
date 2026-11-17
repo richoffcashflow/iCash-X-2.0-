@@ -29,25 +29,27 @@ assert.equal((await adminRoute.GET(adminReq)).status,503);assert.equal(reportRea
 
 // A retention outage must not block the other maintenance lanes or turn their
 // healthy status into a failed maintenance tick.
-let lanesRan=false,monitorRan=false,pruneTried=false,receiptRuns=0,volumeRuns=0;
+let lanesRan=false,monitorRan=false,pruneTried=false,receiptRuns=0,volumeRuns=0,creditRuns=0;
 const maintenance=await load('app/api/internal/maintenance/route.ts','usageMaintenanceTest',{
  retryVolumeDeferredText:async()=>{volumeRuns++;return {status:'idle'};},
  processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
  recoverTextDeliveryReceipts:async()=>{receiptRuns++;return {status:'idle',errors:0};},
  recoverOwnerActiveExports:async()=>({status:'export_receipt_held'}),
  recoverOwnerExportCapacity:async()=>({status:'capacity_review_held'}),
+ refreshDealMachineCreditWait:async()=>{creditRuns++;return {status:'credit_check_not_requested'};},
  cleanupOwnerPreflight:async()=>({status:'cleanup_pending'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),
  drainResearchExclusions:async()=>({status:'not_due'}),
  refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readRecordingReview:()=>null,readVoiceCapacityProvider:async()=>{throw Error('Unexpected provider request');},
  authorizeOutboundBilling:()=>true,pruneUsageLoopObservations,
  db:async path=>{assert.equal(path,'rpc/icash_prune_usage_loop_observations');pruneTried=true;throw Error('telemetry unavailable');},
- maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','ownerPreflightCleanup','ownerTicketContinuation','senderVolume','buyerCallPackages','textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);for(const name of ['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','ownerPreflightCleanup','buyerCallPackages'])assert.equal((await lanes[name]()).status,200,name);assert.equal((await lanes.senderVolume()).status,200);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},
+ maintenanceBatch:async lanes=>{assert.deepEqual(Object.keys(lanes),['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','providerCredits','ownerPreflightCleanup','ownerTicketContinuation','senderVolume','buyerCallPackages','textReceipts','supportCustomerEmail','supportCopies','purchaseEmail','purchaseFollowups','outbound','recording','ownerRecording','reception']);for(const name of ['capacity','inventory','researchExclusions','ownerExports','ownerExportCapacity','providerCredits','ownerPreflightCleanup','buyerCallPackages'])assert.equal((await lanes[name]()).status,200,name);assert.equal((await lanes.senderVolume()).status,200);const receipt=await lanes.textReceipts();assert.equal(receipt.status,200);assert.equal((await receipt.json()).status,'idle');lanesRan=true;return {ok:true};},
  refreshReliability:async(_db,ok)=>{assert.equal(ok,true);monitorRan=true;return true;},
  outbound:async()=>{},recording:async()=>{},ownerRecording:async()=>{},reception:async()=>{},
 });
 const maintenanceResult=await maintenance.GET(new Request('https://example.test/api/internal/maintenance'));
 assert.equal(maintenanceResult.status,200);const maintenanceBody=await maintenanceResult.json();assert.equal(maintenanceBody.capacity.status,'verified');assert.equal(maintenanceBody.ownerExports.status,'export_receipt_held');
 assert.equal(maintenanceBody.ownerExportCapacity.status,'capacity_review_held');
+assert.equal(maintenanceBody.providerCredits.status,'credit_check_not_requested');assert.equal(creditRuns,1,'Telemetry failure cannot suppress or repeat the provider-credit lane');
  assert.equal(maintenanceBody.ownerPreflightCleanup.status,'cleanup_pending');
 assert(pruneTried&&lanesRan&&monitorRan);assert.equal(volumeRuns,1);assert.equal(receiptRuns,1,'Telemetry failure cannot suppress receipt recovery');
 for(const key of ['usageEventTest','usageAdminTest','usageMaintenanceTest'])delete globalThis[key];
