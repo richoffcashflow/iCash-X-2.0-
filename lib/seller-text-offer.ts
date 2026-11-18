@@ -16,11 +16,12 @@ import {sellerConversionIntent} from './seller-conversion-intent.ts';
 import {sellerCommunicationIntent,sellerCommunicationReplies} from './seller-communication-intent.ts';
 import {sellerIdentityInterruption} from './seller-answer-evidence.ts';
 import {chronologicalSellerHistory} from './seller-memory.ts';
+import {sellerIntentClarity,sellerIntentClarityReplies,type SellerIntentClarity} from './seller-intent-clarity.ts';
 
 type Message={id:string;direction:string;body:string;state:string;providerId:string|null;at?:string;updatedAt?:string;action?:string;quoteRevision?:string;priceCents?:number;customerAuthored?:boolean};
 type Closing={legalName?:string;date?:string;inspection?:'yes'|'no'};
 export type TextOfferState=AutomaticOfferState&{textThreadId?:string;closing?:Closing;processedSource?:string;pendingAskingPriceCents?:number};
-export type TextOfferContext={accountId:string;jobId:string;threadId:string;sourceId:string;dealId:string;screeningId:string;phone:string;ownerUserId:string;ownerEmail:string;principal:string;address:string;snapshot:unknown;terms:unknown;offerState:TextOfferState|null;offerVersion:number;messages:Message[];history?:unknown[];historyComplete?:boolean;fingerprint:string;memoryFingerprint?:string;conversionEnabled?:boolean;activeCallSince?:string|null;callInvitationAllowed?:boolean};
+export type TextOfferContext={accountId:string;jobId:string;threadId:string;sourceId:string;dealId:string;screeningId:string;phone:string;ownerUserId:string;ownerEmail:string;principal:string;address:string;snapshot:unknown;terms:unknown;offerState:TextOfferState|null;offerVersion:number;messages:Message[];history?:unknown[];historyComplete?:boolean;fingerprint:string;memoryFingerprint?:string;conversionEnabled?:boolean;intentClarity?:SellerIntentClarity;activeCallSince?:string|null;callInvitationAllowed?:boolean};
 export type TextOfferPlan={kind:'message'|'review'|'wait'|'agreement';action:string;body?:string;reason?:string;nextStep?:string;state:TextOfferState;terms?:DealTerms;confirmation?:SellerAgreementConfirmation};
 const unqualifiedYes=(s:string)=>/^(?:yes|yeah|yep|sure|correct|okay|ok|that works|sounds good|i agree)[.! ,]*$/i.test(s.trim());
 const no=(s:string)=>/^(?:no|nope|not yet)[.! ,]*$/i.test(s.trim());
@@ -156,6 +157,12 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  if(previous?.action==='communication_language'&&communication!=='return_call')return review('seller_language_support_required','Continue in the seller-requested language through supported assistance; do not restart English qualification.');
  if(previous?.action==='communication_email'&&!communication)return review('seller_email_delivery_required','Use a verified, permitted email contact and supported delivery for the requested details or agreement. Do not substitute an SMS agreement or claim email delivery.');
  if(communication)return ask('communication_'+communication,sellerCommunicationReplies[communication]);
+ if(c.intentClarity&&sellerIntentClarity(source.body)===c.intentClarity){
+  // Bind this informational turn without treating it as a qualification,
+  // closing answer or new price. The locked save verifies both source IDs.
+  state.textThreadId=c.threadId;state.processedSource=c.sourceId;
+  return ask('intent_'+c.intentClarity,sellerIntentClarityReplies[c.intentClarity]);
+ }
  const sellerPrice=callSellerPriceEvidence(transcript,input);
  // The server binds this shared ledger to the same account, deal and current
  // research. A channel switch is not a withdrawal or a new price.
