@@ -95,6 +95,38 @@ const transport=async(url,options)=>{
 const reset=()=>{previews=0;capacity='ready';preflightStatus='disabled';paid=0;downloads=0;gets=0;claimed=false;saved=null;results=null;quota=true;busy=false;timeout=false;artifactFail=false;};
 const originalKey=process.env.DEALMACHINE_API_KEY,originalWarn=console.warn;process.env.DEALMACHINE_API_KEY='dm_sk_live_fixture';console.warn=()=>{};
 try{
+ for(const mode of ['direct','expired','unclaimed','untrusted','download_failed','wrong_account']){
+  reset();let directClaims=0,ordinaryClaims=0;
+  const file='https://storage.googleapis.com/fixture/original.csv?GoogleAccessId=fixture&Expires='+
+   (mode==='expired'?'1':'4102444800')+'&Signature=fixture';
+  const originalTransport=async(url,options)=>{
+   if(String(url).endsWith('/people/export')){
+    assert(claimed);assert.equal(paid++,0);
+    return Response.json({...receipt().raw,status:'completed',download_urls:[{filename:'one.csv',url:mode==='untrusted'?file.replace('storage.googleapis.com','elsewhere.example'):file}]});
+   }
+   if(String(url)===file){downloads++;assert.equal(options.method,'GET');assert.equal(options.headers,undefined);
+    return mode==='download_failed'?new Response(null,{status:403}):new Response(csv);}
+   return transport(url,options);
+  };
+  const originalDb=async(path,...args)=>{
+   if(path==='rpc/icash_claim_original_owner_download'){
+    directClaims++;assert.equal(args[1].p_account,account);assert.equal(args[1].p_batch,saved.id);
+    return mode==='unclaimed'?null:{...structuredClone(saved),recovery:null,originalDownload:true,terminalAt:now,accountId:mode==='wrong_account'?'wrong':account};
+   }
+   if(path==='rpc/icash_claim_owner_export_recovery')ordinaryClaims++;
+   return db(path,...args);
+  };
+  const result=await enrichActiveOwners(originalDb,account,candidates[0],config,250000,originalTransport);
+  const fallback=['expired','untrusted','unclaimed'].includes(mode),held=['wrong_account','download_failed'].includes(mode);
+  assert.equal(result.status,held?'export_receipt_held':'contacts_saved',mode);
+  assert.equal(paid,1);assert.equal(gets,Number(fallback));assert.equal(ordinaryClaims,Number(fallback));
+  assert.equal(directClaims,Number(!['expired','untrusted'].includes(mode)));assert.equal(downloads,Number(mode!=='wrong_account'));
+  assert.equal(!!results,!held);
+  if(mode==='download_failed'){
+   assert.equal((await recoverOwnerActiveExports(db,transport,saved.id)).status,'contacts_saved');
+   assert.equal(paid,1);assert.equal(gets,1,'After the lease expires, ordinary recovery may refresh the original link');
+  }
+ }
  for(const [lostAcknowledgments,saveOriginal] of [[1,true],[2,true],[2,false]]){
   reset();let receiptWrites=0,refusalWrites=0;const metrics=[];
   const refusalDb=async(path,method,p)=>{

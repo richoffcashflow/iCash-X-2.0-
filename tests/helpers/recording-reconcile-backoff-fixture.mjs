@@ -155,5 +155,30 @@ export async function testRecordingReconcileBackoff(f){
   await at(deadline-1);assert.deepEqual(await rpc('icash_claim_call_recording_work',['reconcile',1,120]),[]);
   await at(deadline);const [returned]=await rpc('icash_claim_call_recording_work',['reconcile',1,120]);assert.equal(returned.id,old.id);assert.equal(returned.reconcile_attempts,102);assert.equal(returned.call_sid,null);assert.equal(returned.recording_sid,null);assert.deepEqual(await financial(),ledger);
  });
- console.log('PASS migration guards, bounded receipt backoff, active-call checks, fair due-time service, leases, immutable evidence and unchanged billing.');
+ // Remove the fixture's intentional concurrent-source marker before applying
+ // the next production-pinned change to the installed predecessor.
+ await pg.exec(patched.replace('-- Concurrent unrelated body text must survive.\n',''));
+ await pg.exec(read('config/aged-recording-identity-checks.sql'));
+ for(const [days,priced,confirmedEmpty,attempts,seconds] of [
+  [0.5,true,true,32,900],[2,true,true,32,3600],[8,true,true,32,21600],
+  [8,false,true,32,900],[8,true,false,32,900],[8,true,true,15,900],
+ ]){
+  await scenario(`ended audio age ${days}, priced ${priced}, empty ${confirmedEmpty}, attempts ${attempts}`,async()=>{
+   const row=await prepare('ended',attempts);
+   const receipt={...payload(),...(priced?{providerRecordingPriceMicros:50}:{})};
+   const first=await finish(row,'reconcile','available',receipt),prior=evidence(first),money=await financial();
+   await at(now+days*86400000);
+   const [leased]=await claim('reconcile');
+   const outcome=confirmedEmpty?'available_identity_empty':'available';
+   assert.equal(await finish(leased,'reconcile',outcome,receipt,'ffffffff-ffff-4fff-8fff-ffffffffffff'),null);
+   const saved=await finish(leased,'reconcile',outcome,receipt);
+   assert.equal(Date.parse(saved.next_reconcile_at)-now,seconds*1000);
+   assert.deepEqual(evidence(saved),prior);assert.deepEqual(await financial(),money);
+   if(seconds===21600){
+    const bound=await trans('bind_conversation',{conversationId:'conv_receiptarrived',toolTokenHash:'a'.repeat(64)});
+    assert(bound);assert.equal(bound.next_reconcile_at,null,'A real binding is consumed during backoff');
+   }
+  });
+ }
+ console.log('PASS recording receipt intervals, immediate binding, exact leases and unchanged billing.');
 }

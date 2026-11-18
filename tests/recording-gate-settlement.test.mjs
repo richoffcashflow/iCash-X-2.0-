@@ -67,6 +67,7 @@ test('maintenance persists only typed hold codes and a minimal diagnostic whitel
  try{
   const f=fixture({receipt:{price:'RAW_PROVIDER_PRIVATE_VALUE',debug:'NEVER_LOG_RAW_PROVIDER'},settlement:{reason:'UNTRUSTED_RPC_REASON'}});
   assert.equal((await f.maintain()).held,1);assert.equal(f.writes.at(-1).body.p_payload.reason,'terminal_carrier_price_invalid');
+  assert.equal(f.calls,1,'The terminal call receipt is read only once');
   assert.deepEqual(warnings,[['recording_reconcile_diagnostic',{stage:'carrier',recordingId:id,reason:'terminal_carrier_price_invalid'}]]);
   assert(!/1212555|RAW_PROVIDER|UNTRUSTED|account_sid|price_unit/.test(JSON.stringify(warnings)));
   warnings.length=0;
