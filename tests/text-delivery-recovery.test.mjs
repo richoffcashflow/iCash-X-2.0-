@@ -69,6 +69,7 @@ try{
   const o=(await q('select * from icash_operation_spend where operation_key=$1',['text:'+current])).rows[0];
   const stamp=new Date(Date.parse(o.dispatched_at)+10000).toISOString();
   const data={id:m.provider_id,from:sender,to:recipient,message:m.body,timestamp:Date.parse(o.dispatched_at),attachments:[],status:mode==='failed'?'failed':'delivered',tracking:[{event:mode==='failed'?'text.delivery.failed':'text.delivery.confirmed',timestamp:stamp}]};
+  if(mode.startsWith('carrier_wait')){data.tracking=[{event:'carrier.handed_off',timestamp:stamp},{event:'delivery.awaiting_confirmation',timestamp:stamp}];if(mode==='carrier_wait_wrong')data.to='+12145550999';}
   if(mode==='wrong_id')data.id='text_wrong';if(mode==='wrong_to')data.to='+12145550999';if(mode==='wrong_body')data.message='Changed';
   if(mode==='no_delivery_time')data.tracking=[];if(mode==='contradictory')data.tracking.push({event:'text.delivery.failed',timestamp:stamp});
   if(mode==='future')data.tracking[0].timestamp=new Date(Date.now()+3600000).toISOString();
@@ -96,6 +97,7 @@ try{
  const trackingMigration=read('config/text-delivery-tracking.sql');
  assert.equal(trackingMigration,read('supabase/migrations/20261103050331_text_delivery_tracking.sql'));
  await pg.exec(trackingMigration);
+ const carrierBackoff=read('config/carrier-confirmation-backoff.sql');assert.equal(carrierBackoff,read('supabase/migrations/20261118195000_carrier_confirmation_backoff.sql'));await pg.exec(carrierBackoff);
  assert.deepEqual(await one('select to_jsonb(a) from icash_text_receipt_private.attempts a where id=$1',[legacyClaim.id]),existingEvidence,'The URL fix preserves original held evidence');
  assert.deepEqual(await one('select to_jsonb(s) from icash_text_receipt_private.schedule s where message_id=$1',[current]),existingSchedule,'The URL fix never resets backoff or attempt counts');
  assert.deepEqual(await one('select to_jsonb(c) from icash_text_receipt_private.control c'),existingControl,'The global read quota is unchanged');
@@ -124,6 +126,14 @@ try{
    assert.equal(attempt.receipt.reason,'leased_identity_unverified');
    assert.equal(result.held,1,'Saving exact provider evidence is not permission to bypass the lease verification gate');
   }
+ }
+ for(const [n,scenario,expectBackoff] of [[35,'carrier_wait',true],[36,'carrier_wait_wrong',false]]){
+  await seed(n);mode=scenario;fetches=[];
+  await q("insert into icash_text_receipt_private.schedule(message_id,next_check_at,attempts) values($1,now()-interval '2 hours',1)",[current]);
+  assert.equal((await recoverTextDeliveryReceipts(db,env,fetcher)).held,1);
+  assert.equal(await one("select next_check_at>now()+interval '3 hours' from icash_text_receipt_private.schedule where message_id=$1",[current]),expectBackoff);
+  assert.equal(await one("select state from icash_text_messages where id=$1",[current]),'accepted');
+  assert.equal(await one("select attempts from icash_text_receipt_private.schedule where message_id=$1",[current]),2);
  }
  for(const [n,scenario] of [[50,'lease_unreachable'],[51,'lease_forbidden'],[52,'lease_malformed']]){
   await seed(n);mode=scenario;fetches=[];

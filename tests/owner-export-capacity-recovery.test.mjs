@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {recoverOwnerExportCapacity} from '../lib/owner-export-capacity-recovery.ts';
+import {transportCleanupFixture,settleBeforeCleanup} from './helpers/transport-cleanup-fixture.mjs';
 const env={VERCEL_ENV:'production',DEALMACHINE_API_KEY:'dm_sk_live_fixture'};
 function fixture({claim=true,result='capacity_verified',response,timeout=false,lostSave=false}={}){
  let claimed=false;const requests=[],saved=[],metrics=[];
@@ -25,5 +26,16 @@ const quota=fixture({claim:false});assert.equal((await quota.run()).status,'capa
 for(const overrides of [{VERCEL_ENV:'preview'},{VERCEL_ENV:undefined},{DEALMACHINE_API_KEY:''}]){const f=fixture();assert.equal((await f.run(overrides)).status,'not_requested');assert.equal(f.requests.length,0);}
 for(const opts of [{timeout:true},{response:new Response('x'.repeat(1048577))},{response:Response.json({error:{message:'private'}},{status:500}),result:'held'},{response:new Response('not json'),result:'held'},{lostSave:true}]){
  const f=fixture(opts);assert.equal((await f.run()).status,opts.lostSave?'capacity_recovery_unavailable':'capacity_review_held');assert.equal(f.requests.length,1);assert.equal(f.saved.length,1);await f.run();assert.equal(f.requests.length,1);
+}
+for(const bodyKind of ['complete','oversized'])for(const mode of ['pending','rejected','synchronous']){
+ const rawText=' {"data":[{"export_id":"original","status":"failed"}]}\n';
+ const stream=transportCleanupFixture({mode,body:rawText,...(bodyKind==='oversized'?{size:1048577}:{}),headers:{'X-RateLimit-Remaining':'49','X-RateLimit-Day-Remaining':'400'}});
+ const f=fixture({response:stream.response,result:bodyKind==='complete'?'capacity_verified':'held'});
+ const outcome=await settleBeforeCleanup(f.run(),stream);assert.equal(outcome.error,undefined);
+ assert.equal(outcome.value.status,bodyKind==='complete'?'capacity_verified':'capacity_review_held');
+ assert.equal(f.requests.length,1);assert.equal(f.saved.length,1);assert.equal(f.metrics.length,1);
+ assert.deepEqual(f.saved[0].p_receipt,bodyKind==='complete'?{httpStatus:200,raw:JSON.parse(rawText),rawText,headers:{minuteRemaining:49,dayRemaining:400}}:{httpStatus:null,raw:null,rawText:'',outcome:'read_unavailable'});
+ if(bodyKind==='oversized')assert.deepEqual(f.metrics[0].p_result,{outcome:'unknown'});
+ await f.run();assert.equal(f.requests.length,1,'Consumed free review never repeats the provider request');
 }
 console.log('PASS capacity recovery: one admitted free GET, production-only, no export/download, bounded private receipt, quota wait and no replay after uncertainty.');

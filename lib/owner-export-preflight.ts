@@ -27,7 +27,11 @@ const internalId=(id:string)=>{const n=Number(id.slice(4));if(!/^per_[1-9][0-9]{
 async function readBody(response:Response,max=1048576){
  if(!response.body)throw Error('OWNER_PREFLIGHT_BODY_MISSING');
  const reader=response.body.getReader(),parts:Buffer[]=[];let size=0;
- try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('OWNER_PREFLIGHT_BODY_LIMIT');parts.push(Buffer.from(value));}}finally{await reader.cancel().catch(()=>null);}
+ try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>max)throw Error('OWNER_PREFLIGHT_BODY_LIMIT');parts.push(Buffer.from(value));}}finally{
+  // Journal this original step independently of transport cleanup progress.
+  try{void reader.cancel().catch(()=>{});}catch{/* Preserve the read outcome. */}
+  reader.releaseLock();
+ }
  const rawText=Buffer.concat(parts).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
  return {rawText,raw};
 }

@@ -17,9 +17,11 @@ try{
  const patch=read('config/confirmed-contract-text-delivery.sql');
  assert.equal(patch,read('supabase/migrations/20261105065159_confirmed_contract_text_delivery.sql'));
  await db.exec(patch);
+ await db.exec('revoke all on function public.icash_claim_agreement_delivery_recovery() from public;grant execute on function public.icash_claim_agreement_delivery_recovery() to service_role;');
+ const originalRead=read('config/agreement-claim-envelope-read.sql');assert.equal(originalRead,read('supabase/migrations/20261118195100_agreement_claim_envelope_read.sql'));await db.exec(originalRead);
  assert.equal(await current(),true);
  await db.exec('begin');
- const job=await recovery();assert.equal(job.accountId,account);assert.equal(job.phone,'+12025550101');
+ const job=await recovery();assert.equal(job.existingEnvelopes.length,1);assert.equal(job.existingEnvelopes[0].provider_id,await value('select provider_id from public.icash_signing_envelopes where account_id=$1',[account]));assert.equal(job.accountId,account);assert.equal(job.phone,'+12025550101');
  assert.equal(await recovery(),null,'Only one recovery claimant');
  assert.deepEqual(await send(),{messageId:message});assert.equal(await send(),null,'Original message dispatch cannot repeat');
  assert.equal(await value('select count(*) from public.icash_operation_spend'),1);

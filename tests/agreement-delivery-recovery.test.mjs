@@ -56,6 +56,23 @@ assert.equal(lostResponseState,'claimed');assert.equal(lostResponseFinishes,0,'D
 assert.equal((await recoverAgreementDelivery(lostResponse,env)).status,'agreement_delivery_reconciled');
 assert.equal(lostResponseState,'sent');assert.equal(lostResponseSends,1);assert.equal(lostResponseTexts,1,'Reconciliation must not resend');
 
+// An unrelated receipt failure cannot strand another authorized agreement.
+for(const stage of ['awaiting_counterparty','customer_signature_needed','completed']){
+ let claimOpen=true,providerSends=0,originalTexts=0;
+ const claimed={...job,existingEnvelopes:[{...existing[0],state:stage}]};
+ const db=async path=>{
+  if(path==='rpc/icash_reconcile_agreement_delivery_receipts')throw Error('Original receipt read unavailable');
+  if(path==='rpc/icash_claim_agreement_delivery_recovery'){if(!claimOpen)return null;claimOpen=false;return claimed;}
+  if(path==='rpc/icash_finish_agreement_delivery_recovery')return true;
+  assert.fail('An atomic envelope read should not need a second lookup: '+path);
+ };
+ const deps={db,send:async()=>{providerSends++;throw Error('Unexpected duplicate');},text:async()=>{originalTexts++;return {sent:true,status:'accepted'};}};
+ const outcome=await recoverAgreementDelivery(deps,env);
+ assert.equal(outcome.status,stage==='awaiting_counterparty'?'agreement_text_accepted':'agreement_delivery_record_pending');
+ assert.equal(outcome.receiptCheckFailed,true);assert.equal(providerSends,0);assert.equal(originalTexts,stage==='awaiting_counterparty'?1:0);
+ assert.deepEqual(await recoverAgreementDelivery(deps,env),{status:'agreement_receipt_check_pending',receiptCheckFailed:true});
+}
+
 // Exercise the real signing entry point when the current deal changes after
 // recovery consumed its one-use confirmation. No template/envelope/provider
 // access may occur for terms the seller did not confirm.

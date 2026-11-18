@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {recoverAutomaticOwnerExportCapacity} from '../lib/automatic-export-capacity.ts';
+import {transportCleanupFixture,settleBeforeCleanup} from './helpers/transport-cleanup-fixture.mjs';
 const env={VERCEL_ENV:'production',DEALMACHINE_API_KEY:'dm_sk_live_fixture',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)};
-function fixture({idle=false,quotaProbe,timeoutProbe,badProbe,largeProbe,lostSave=false,lostFinal=false,saveFails=false,providerHeaders={},parallel=false}={}){
+function fixture({idle=false,quotaProbe,timeoutProbe,badProbe,largeProbe,lostSave=false,lostFinal=false,saveFails=false,providerHeaders={},parallel=false,responseProbe,response}={}){
  let claimed=false,finals=0,claimInFlight=false;const calls=[],saved=new Map(),writes=[],metrics=[];
  let pendingStarted,processingStarted;
  const pending=new Promise(resolve=>pendingStarted=resolve),processing=new Promise(resolve=>processingStarted=resolve);
@@ -31,6 +32,7 @@ function fixture({idle=false,quotaProbe,timeoutProbe,badProbe,largeProbe,lostSav
    if(probe==='pending'){pendingStarted();await processing;}else{processingStarted();await pending;}
   }
   if(timeoutProbe===probe)throw Error('network unavailable');
+  if(responseProbe===probe)return response;
   if(largeProbe===probe)return new Response('x'.repeat(1048577));
   if(badProbe===probe)return new Response('invalid',{status:500});
   return Response.json({data:[],pagination:{limit:100,offset:0,total:0,has_more:false}},{headers:{'X-RateLimit-Remaining':'49','X-RateLimit-Day-Remaining':'300',...providerHeaders}});
@@ -52,4 +54,18 @@ for(const providerHeaders of [{Date:'x'.repeat(129)},{Age:'0'.repeat(33)}]){
  assert.deepEqual(f.metrics[0].p_result,{outcome:'unknown'});await f.run();assert.equal(f.calls.length,1);
 }
 for(const opts of [{quotaProbe:'pending'},{quotaProbe:'processing'},{timeoutProbe:'inventory'},{timeoutProbe:'pending'},{timeoutProbe:'processing'},{badProbe:'inventory'},{largeProbe:'inventory'},{saveFails:true}]){const f=fixture(opts);assert.deepEqual(await f.run(),{status:opts.saveFails?'capacity_recovery_unavailable':'capacity_review_held'});assert(f.calls.length<=3);assert.equal(new Set(f.calls).size,f.calls.length);const count=f.calls.length;await f.run();assert.equal(f.calls.length,count);}
+for(const responseProbe of ['inventory','pending'])for(const bodyKind of ['complete','oversized'])for(const mode of ['pending','rejected','synchronous']){
+ const rawText=' {"data":[],"pagination":{"limit":100,"offset":0,"total":0,"has_more":false}}\n';
+ const headers={'X-RateLimit-Remaining':'49','X-RateLimit-Day-Remaining':'300',Date:'Wed, 04 Nov 2026 22:30:00 GMT',Age:'0'};
+ const stream=transportCleanupFixture({mode,body:rawText,headers,...(bodyKind==='oversized'?{size:1048577}:{})});
+ const f=fixture({responseProbe,response:stream.response});
+ const outcome=await settleBeforeCleanup(f.run(),stream);assert.equal(outcome.error,undefined);
+ const count=bodyKind==='oversized'&&responseProbe==='inventory'?1:3;
+ assert.equal(f.calls.length,count);assert.equal(f.metrics.length,count);assert.equal(f.saved.size,count);
+ assert.equal(outcome.value.status,bodyKind==='complete'?'capacity_verified':'capacity_review_held');
+ assert.deepEqual(f.saved.get(responseProbe),bodyKind==='complete'?{httpStatus:200,raw:JSON.parse(rawText),rawText,headers:{minuteRemaining:49,dayRemaining:300,date:headers.Date,age:'0'}}:{httpStatus:null,raw:null,rawText:'',outcome:'read_unavailable'});
+ if(bodyKind==='oversized')assert.deepEqual(f.metrics.find(m=>m.p_request===responseProbe).p_result,{outcome:'unknown'});
+ if(responseProbe==='pending')assert(f.saved.has('processing'),'Independent admitted probe still journals its original result');
+ await f.run();assert.equal(f.calls.length,count,'Original inventory/status reads never replay after cleanup failure');
+}
 console.log('PASS automatic capacity transport: three separately admitted GETs, cache revalidation and bounded original Date/Age evidence, bounded responses/deadlines, quota stops, immutable receipt recovery and no export/download/send.');
