@@ -3,14 +3,16 @@ import {randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {createRequire} from 'node:module';
+import {assertDisposablePostgresTarget} from './helpers/disposable-postgres-target.mjs';
 const read=path=>readFileSync(new URL(path,import.meta.url),'utf8');
 const native=process.env.ICASH_NATIVE_QUEUED_REPLY==='1';
-let pg,second;
+let pg,second,admin;
+const databaseName='icash_queued_reply_'+randomUUID().replaceAll('-','');
 if(native){
  const {Client}=createRequire(import.meta.url)(process.env.ICASH_PG_MODULE);
  const connect=database=>new Client({host:'127.0.0.1',port:55443,user:'postgres',password:'isolated-fixture-only',database});
- const admin=connect('postgres');await admin.connect();await admin.query('drop database if exists icash_queued_reply');await admin.query('create database icash_queued_reply');await admin.end();
- const client=connect('icash_queued_reply');second=connect('icash_queued_reply');await client.connect();await second.connect();
+ admin=connect('icash_reliability');await admin.connect();await assertDisposablePostgresTarget(admin);await admin.query('create database '+databaseName);
+ const client=connect(databaseName);second=connect(databaseName);await client.connect();await second.connect();
  pg={query:(sql,args)=>client.query(sql,args),exec:sql=>client.query(sql),close:()=>client.end()};
 }else pg=await PGlite.create();
 const q=(sql,args=[])=>pg.query(sql,args);
@@ -18,9 +20,7 @@ const one=async(sql,args=[])=>Object.values((await q(sql,args)).rows[0])[0];
 const account=randomUUID(),thread=randomUUID(),source=randomUUID(),out=randomUUID(),job=randomUUID(),deal=randomUUID(),screen=randomUUID(),recording=randomUUID();
 const sender='+15550100001',recipient='+15550100002';
 try{
- let predecessors=read('./fixtures/queued-seller-reply-predecessors.sql');
- if(native)predecessors=predecessors.replace('create role service_role;',"do $$begin if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role;end if;end$$;");
- await pg.exec(predecessors);
+ await pg.exec(read('./fixtures/queued-seller-reply-predecessors.sql'));
  const migration=read('../config/queued-seller-reply-recovery.sql');assert.equal(migration,read('../supabase/migrations/20261118194800_queued_seller_reply_recovery.sql'));
  await pg.exec(migration);
  await pg.exec("insert into icash_operating_budget values(1);insert into icash_seller_progress_settings values(1,true,false,null,now()-interval '1 day')");
@@ -70,4 +70,4 @@ try{
  assert.equal(await one('select count(*)::int from icash_text_messages'),2);
  assert.equal(await one('select count(*)::int from icash_operation_spend'),0);
  console.log('PASS original seller reply recovery, source/receipt deadlines, held and uncertain sends, identity, opt-outs and one-ticket admission.');
-}finally{await second?.end();await pg.close();}
+}finally{await second?.end();await pg.close();if(admin){try{await admin.query('drop database '+databaseName);}finally{await admin.end();}}}

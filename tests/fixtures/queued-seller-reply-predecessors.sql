@@ -1,5 +1,8 @@
 -- Installed scheduler, conversation policy wrapper and voice context at the release boundary.
-create role service_role;
+do $role$
+begin
+ if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role;end if;
+end $role$;
 create table icash_operating_budget(id int primary key);
 create table icash_seller_progress_settings(id int primary key,enabled boolean,buyer_reply_enabled boolean,buyer_reply_enabled_at timestamptz,voice_receipt_wait_enabled_at timestamptz);
 create table icash_seller_reply_progress(account_id uuid,message_id uuid,next_check_at timestamptz);
