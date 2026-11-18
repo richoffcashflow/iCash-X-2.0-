@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {testEndedExportStatusRecovery} from './helpers/ended-export-status-recovery.mjs';
+import {testNoRecordsExportCapacity} from './helpers/no-records-export-capacity.mjs';
 const db=new PGlite(),read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const q=(s,a=[])=>db.query(s,a),v=async(s,a=[])=>Object.values((await q(s,a)).rows[0]??{})[0];
 const rpc=(name,...args)=>v('select public.'+name+'('+args.map((_,i)=>'$'+(i+1)).join(',')+')',args);
@@ -40,6 +41,9 @@ try{
  await q("insert into icash_research_private.owner_export_capacity_reviews(export_id,receipt_hash,reviewed_release) values($1,md5('{}'::jsonb::text),$2)",[batch,release]);
  await db.exec('rollback');
  const before=await snapshot();
+ const emptyCodeMigration=read('supabase/migrations/20261118043517_no_records_export_capacity.sql');
+ assert.equal(emptyCodeMigration,read('config/no-records-export-capacity.sql'));
+ await testNoRecordsExportCapacity({db,q,v,rpc,probes,snapshot,release,migration:emptyCodeMigration});
  await testEndedExportStatusRecovery({db,q,v,rpc,probes,snapshot,release});
  for(const mutate of [
   "update icash_research_private.requests set admitted=false",

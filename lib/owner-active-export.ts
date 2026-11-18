@@ -293,12 +293,22 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  if(admission!=='claimed')return {status:'held'};
  // Durable SQL admission owns this one attempt forever, even after disconnect.
  // Save the exact response before parsing, metrics, download or settlement.
+ let originalReceiptConfirmed=true;
  await finishAdmittedDealMachineRequest(db,batchId,async()=>{
   const r=await transport('https://api.v2.dealmachine.com/v1/people/export',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(request),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(120000)});
   const rawText=(await boundedBody(r,524288)).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
-  if(await db<boolean>('rpc/icash_record_owner_export_receipt','POST',{p_account:accountId,p_batch:batchId,p_receipt:{httpStatus:r.status,rawText,raw}})!==true)throw Error('OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED');
+  const evidence={p_account:accountId,p_batch:batchId,p_receipt:{httpStatus:r.status,rawText,raw}};
+  let recorded=r.status===402?false:await db<boolean>('rpc/icash_record_owner_export_receipt','POST',evidence)===true;
+  if(r.status===402)for(let attempt=0;attempt<2;attempt++)try{recorded=await db<boolean>('rpc/icash_record_owner_export_receipt','POST',evidence)===true;break;}catch{}
+  if(!recorded){
+   if(r.status!==402)throw Error('OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED');
+   // Preserve this observed response in the independent credit journal even
+   // when the original receipt acknowledgment remains unavailable.
+   originalReceiptConfirmed=false;
+  }
   return new Response(rawText,{status:r.status,headers:r.headers});
  });
+ if(!originalReceiptConfirmed)throw Error('OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED');
  const recovered=await recoverOwnerActiveExports(db,transport,batchId);
  // The same recovery runs inline after a new export. Preserve infrastructure
  // failure there too, so the automation route retains its normal failed-worker

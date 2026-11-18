@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
-import {currentBotActivity} from '../lib/bot-activity.ts';
+import * as botActivity from '../lib/bot-activity.ts';
 import {validActivityReport} from '../lib/activity-report.ts';
 import {dealMachinePhoto} from '../lib/property-photo.ts';
 import {savedPropertyPhoto} from '../lib/persistent-property-photo.ts';
@@ -11,6 +11,7 @@ const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7',session='11111111-1111-4111-8
 const accountRow={id:account,name:'Fixture customer',email:'fixture@example.invalid',ownAccount:false,fundedCents:25000,balanceCents:12000,reservedCents:100,leadCount:1,paused:true,assistantName:'Bot',createdAt:new Date().toISOString(),billingModel:'membership_credits',vip:false,membership:null};
 const view={id:viewId,expiresAt:new Date(Date.now()+60000).toISOString(),account:accountRow};
 let user={id:owner},proof=true,binding={sub:owner,session_id:session},active=true,calls=[],media=[],validScreen=true;
+let botProgress={status:'paused'},botTickets=[],latestOwnerChecks=[],ownerCheckReadFails=false;
 const cachedPhoto={url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg',view:'street_view',source:'DealMachine'};
 const load=(path,deps)=>{const code=ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const module={exports:{}};new Function('require','module','exports',code)(name=>{assert(name in deps,'Missing dependency '+name);return deps[name];},module,module.exports);return module.exports;};
 const database={db:async(path,method='GET',body)=>{
@@ -23,12 +24,22 @@ const database={db:async(path,method='GET',body)=>{
  if(path==='rpc/icash_owner_account_leads'){assert.equal(body.p_account,account);return {page:body.p_page,pageSize:12,query:body.p_query,total:0,leads:[]};}
  if(path==='rpc/icash_activity_report'){assert.equal(body.p_account,account);return {days:body.p_days,timezone:body.p_timezone,startAt:'2026-10-01T00:00:00Z',endAt:'2026-10-02T00:00:00Z',leads:1,calls:2,texts:3,contracts:0};}
  if(path==='rpc/icash_vip_savings'){assert.equal(body.p_account,account);return 100;}
- if(path==='rpc/icash_prospecting_progress'){assert.equal(body.p_account,account);return {status:'paused'};}
+ if(path==='rpc/icash_prospecting_progress'){assert.equal(body.p_account,account);return botProgress;}
  if(path==='rpc/icash_read_photo_cache'){assert.deepEqual(body,{p_account:account,p_screening:screen});return cachedPhoto;}
  assert.equal(method,'GET','Account inspection cannot send writes through arbitrary tables or RPCs');
  assert(path.includes('account_id=eq.'+account),'All nested records stay scoped to the selected account');
  if(path.startsWith('icash_screening_jobs?'))return validScreen?[{id:screen,result:{property:{propertyId:'prop_fixture1',images:null}}}]:[];
- if(path.startsWith('icash_automation_tickets?'))return [];
+ if(path.startsWith('icash_automation_tickets?')){
+  const filter=new URL('https://fixture.invalid/'+path).searchParams;
+  if(filter.has('kind')){
+   assert.equal(filter.get('kind'),'eq.contacts');assert.equal(filter.get('order'),'created_at.desc,id.desc');assert.equal(filter.get('limit'),'1');
+   assert.match(filter.get('created_at'),/^gte\./);assert.equal(filter.get('select'),'kind,state,outcome,created_at,completed_at');
+   assert.equal(filter.has('state'),false,'The latest attempt can supersede a prior successful lookup');
+   if(ownerCheckReadFails)throw Error('Optional history unavailable');
+   return latestOwnerChecks;
+  }
+  return botTickets;
+ }
  if(path.startsWith('icash_live_conversations?'))return [{party:'seller',result:{transcript:[{role:'user',message:'Saved answer'}]}}];
  if(path.startsWith('icash_deal_files?'))return [{id:screen}];
  if(path.startsWith('icash_text_threads?'))return [{id:screen,recipient:'+12025550123',party:'seller'}];
@@ -53,7 +64,7 @@ assert.equal((await scope.DELETE(request('','DELETE',undefined,'https://evil.inv
 assert.equal((await scope.DELETE(request('','DELETE'),context)).status,200);
 const recordings={recordingPresentationById:async(_,a,id)=>{assert.equal(a,account);assert.equal(id,screen);return {id,status:'available'};},recordingPresentation:async()=>null};
 const audio=()=>({audio:async(a,id,range)=>{media.push({a,id,range});return new Response(new Uint8Array([1,2]),{status:206,headers:{'Content-Type':'audio/mpeg'}});}});
-const resources=load('app/api/admin/accounts/view/[viewId]/[...resource]/route.ts',{...deps,'@/lib/workspace-activity-read':{workspaceActivity:async(req,a,options)=>{assert.equal(a,account);assert.equal(options,undefined,'Inspection cannot enable outcome mutation');return Response.json({properties:[]});}},'@/lib/bot-activity':{currentBotActivity},'@/lib/activity-report':{validActivityReport},'@/lib/opportunity-progress-read':{opportunityPeriod:params=>{if([...params.keys()].some(k=>!['days','timezone'].includes(k)))return null;return {days:Number(params.get('days')||1),timezone:params.get('timezone')||'UTC'};},readOpportunityProgress:async(a,days,timezone)=>{assert.equal(a,account);return {days,timezone,screened:96,eligible:60,contacted:30,responded:7,status:'paused'};}},'@/lib/property-photo':{dealMachinePhoto},'@/lib/persistent-property-photo':{savedPropertyPhoto},'@/lib/property-call-history':{propertyCallHistory:async(_,a,s,p)=>{assert.equal(a,account);assert.equal(s,screen);return {recordings:[],next:null};}},'@/lib/required-call-recording-receipt':recordings,'@/lib/required-call-recording-server':{recordingServer:audio},'@/lib/recorded-reception-server':{recordedReceptionServer:audio},'@/lib/recorded-reception-presentation':{recordedReceptionPresentation:()=>({})}});
+const resources=load('app/api/admin/accounts/view/[viewId]/[...resource]/route.ts',{...deps,'@/lib/workspace-activity-read':{workspaceActivity:async(req,a,options)=>{assert.equal(a,account);assert.equal(options,undefined,'Inspection cannot enable outcome mutation');return Response.json({properties:[]});}},'@/lib/bot-activity':botActivity,'@/lib/activity-report':{validActivityReport},'@/lib/opportunity-progress-read':{opportunityPeriod:params=>{if([...params.keys()].some(k=>!['days','timezone'].includes(k)))return null;return {days:Number(params.get('days')||1),timezone:params.get('timezone')||'UTC'};},readOpportunityProgress:async(a,days,timezone)=>{assert.equal(a,account);return {days,timezone,screened:96,eligible:60,contacted:30,responded:7,status:'paused'};}},'@/lib/property-photo':{dealMachinePhoto},'@/lib/persistent-property-photo':{savedPropertyPhoto},'@/lib/property-call-history':{propertyCallHistory:async(_,a,s,p)=>{assert.equal(a,account);assert.equal(s,screen);return {recordings:[],next:null};}},'@/lib/required-call-recording-receipt':recordings,'@/lib/required-call-recording-server':{recordingServer:audio},'@/lib/recorded-reception-server':{recordedReceptionServer:audio},'@/lib/recorded-reception-presentation':{recordedReceptionPresentation:()=>({})}});
 assert.deepEqual(Object.keys(resources).sort(),['GET','dynamic','maxDuration','runtime'],'No customer mutation method is exported');
 const get=(resource,query='')=>resources.GET(request('/view/'+viewId+'/'+resource+query),{params:Promise.resolve({viewId,resource:resource.split('/')})});
 assert.equal((await get('control')).status,404);assert.equal((await get('../account')).status,404);
@@ -74,6 +85,27 @@ assert.equal((await get('messages','?screeningId='+screen+'&threadId='+session))
 validScreen=false;assert.equal((await get('messages','?screeningId='+screen)).status,404);validScreen=true;
 response=await get('recording/audio','?id='+screen);assert.equal(response.status,206);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(media[0].a,account);
 for(const resource of ['activity','progress','bot-status','report','property-photo?screeningId='+screen]){const [name,query]=resource.split('?');assert.equal((await get(name,query?'?'+query:'')).status,200,resource);assert.equal((await get(name,'?accountId='+session)).status,400,'Cannot override inspected account');}
+botProgress={status:'ready',health:{status:'blocked',reason:'pending_work'}};
+botTickets=[{kind:'contacts',state:'consumed',expires_at:new Date(Date.now()+60000).toISOString()}];
+let bot=await (await get('bot-status')).json();assert.equal(bot.label,'Paused');assert.equal(bot.active,false,'Inspected customer Pause wins over a current ticket');
+accountRow.paused=false;
+bot=await (await get('bot-status')).json();assert.equal(bot.label,'Finding property owners');assert.equal(bot.active,true);assert.equal(bot.pendingConfirmation,true);
+botTickets=[];bot=await (await get('bot-status')).json();assert.equal(bot.active,false);assert.equal(bot.pendingConfirmation,true);assert.equal(bot.label,'Earlier work is awaiting confirmation.');
+latestOwnerChecks=[{kind:'contacts',state:'complete',outcome:'empty',created_at:new Date(Date.now()-5000).toISOString(),completed_at:new Date(Date.now()-1000).toISOString()}];
+for(const status of ['ready','working']){
+ botProgress.status=status;bot=await (await get('bot-status')).json();
+ assert.equal(bot.pendingConfirmation,true);assert.equal(bot.active,false);assert.equal(bot.ownerCheckComplete,true);assert.match(bot.label,/without a contact.*costs are under review/);
+}
+ownerCheckReadFails=true;bot=await (await get('bot-status')).json();assert.equal(bot.label,'Earlier work is awaiting confirmation.');ownerCheckReadFails=false;
+const checkReads=()=>calls.filter(call=>call.path.includes('kind=eq.contacts')).length;
+const beforeIneligible=checkReads();
+for(const status of ['settling','budget_reached','paced']){
+ botProgress.status=status;bot=await (await get('bot-status')).json();assert.equal(bot.label,'Earlier work is awaiting confirmation.');
+}
+botProgress={status:'ready',health:{status:'blocked',reason:'no_completed_work'}};
+bot=await (await get('bot-status')).json();assert.equal(bot.blocked,true);assert.equal(bot.blockedReason,'no_completed_work');assert.equal(bot.label,'No recent completed task was recorded.');
+assert.equal(checkReads(),beforeIneligible,'Budget, settling and other blocks do not read completion history');
+accountRow.paused=true;botProgress={status:'paused'};
 response=await get('property-photo','?screeningId='+screen);assert.deepEqual((await response.json()).photo,cachedPhoto,'Owner view reads the existing photo and aerial fallback');
 const cacheReads=calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length;validScreen=false;assert.equal((await get('property-photo','?screeningId='+screen)).status,404);validScreen=true;assert.equal(calls.filter(c=>c.path==='rpc/icash_read_photo_cache').length,cacheReads,'A foreign screening cannot read photo cache');
 assert.equal((await get('report','?timezone=Invalid')).status,400);

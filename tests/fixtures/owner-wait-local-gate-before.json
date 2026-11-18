@@ -1,0 +1,42 @@
+{
+  "functions": [
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "hash": "7cbb08234d4d09c6aa39190be39b9aeb",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "strict": false,
+      "definer": false,
+      "parallel": "u",
+      "volatile": "s",
+      "leakproof": false,
+      "signature": "icash_work_private.owner_enrichment_candidate_exists(uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION icash_work_private.owner_enrichment_candidate_exists(p_account uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n with source_candidates as materialized (\n select s as screening,t as ticket from public.icash_screening_jobs s\n left join public.icash_automation_tickets t on t.screening_id=s.id\n where s.account_id=p_account and s.state='complete' and s.snapshot->>'propertyType'='house' and s.snapshot->'sellerRequest' is null and public.icash_research_state_allowed(s.snapshot->'raw'->'data'->>'state') and s.result->'financialCheck'->>'status'='eligible'\n and s.completed_at>now()-interval '24 hours'\n and (t.id is null or (((t.kind='contacts' and t.state='held' and t.outcome='expired' and t.issue_attempts<3 and not exists(select 1 from public.icash_operation_spend o where o.operation_key='owners:'||s.account_id||':'||s.id))\n  or (t.kind='contacts' and t.state='held' and t.outcome='owner_preview_rate_limited' and t.owner_preview_deferrals>0))\n and (t.owner_preview_deferrals=0 or (t.account_id=s.account_id\n  and t.owner_preview_deferrals between 1 and 7 and t.owner_preview_retry_after<=clock_timestamp()\n  and t.owner_preview_retry_until>clock_timestamp()\n  and case when t.owner_preview_screening_hash=public.icash_owner_enrichment_screening_hash(s)\n   then public.icash_owner_enrichment_retry_current(s.account_id,s.id) else false end))))\n\n )\n select exists(select 1 from source_candidates c\n where icash_work_private.continued_owner_handoff_current((c.screening).account_id,(c.screening).id) and not exists(select 1 from public.icash_property_controls pc where pc.account_id=(c.screening).account_id and pc.property_id=(c.screening).snapshot->>'propertyId' and pc.manual)\n and not exists(select 1 from public.icash_owner_contacts oc join public.icash_screening_jobs prior on prior.id=oc.screening_id where oc.account_id=(c.screening).account_id and prior.snapshot->>'propertyId'=(c.screening).snapshot->>'propertyId' and oc.created_at>now()-interval '30 days')\n\n and not exists(select 1 from public.icash_operation_spend o where o.operation_key='owners:'||(c.screening).account_id||':'||(c.screening).id)\n and not exists(select 1 from public.icash_operation_spend o\n  join public.icash_screening_jobs prior on o.operation_key='owners:'||(c.screening).account_id||':'||prior.id\n  where prior.account_id=(c.screening).account_id and prior.snapshot->>'propertyId'=(c.screening).snapshot->>'propertyId'\n   and o.state in ('reserved','dispatched'))\n and not public.icash_owner_preflight_sibling_waiting((c.screening).account_id,(c.screening).id,(c.screening).snapshot,(c.screening).id) and not public.icash_owner_preflight_empty((c.screening).account_id,(c.screening).id,(c.screening).snapshot));\n$function$\n"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "hash": "089ebb9dd46fedfe4e46b8aaf69012f4",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "strict": false,
+      "definer": false,
+      "parallel": "u",
+      "volatile": "s",
+      "leakproof": false,
+      "signature": "icash_work_private.owner_enrichment_wait_candidate(uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION icash_work_private.owner_enrichment_wait_candidate(p_account uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$ select coalesce((\n select icash_work_private.owner_enrichment_candidate_exists(p_account) from public.icash_discovery_configs c\n join public.icash_operation_rates r on r.id=c.contact_rate_id where c.account_id=p_account\n  and not public.icash_research_waiting_on_outreach(p_account)\n  and public.icash_prospecting_available(p_account)>=public.icash_research_admission_quote(p_account,'owner_enrichment',r.charge_cents)),false);\n$function$\n"
+    }
+  ],
+  "expectedAfter": "CREATE OR REPLACE FUNCTION icash_work_private.owner_enrichment_wait_candidate(p_account uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select case when exists(select 1 from public.icash_screening_jobs s\n left join public.icash_automation_tickets t on t.screening_id=s.id\n where s.account_id=p_account and s.state='complete' and s.snapshot->>'propertyType'='house'\n and s.snapshot->'sellerRequest' is null and public.icash_research_state_allowed(s.snapshot->'raw'->'data'->>'state')\n and s.result->'financialCheck'->>'status'='eligible' and s.completed_at>now()-interval '24 hours'\n and (t.id is null or (t.kind='contacts' and t.state='held' and\n ((t.outcome='expired' and t.issue_attempts<3 and not exists(select 1 from public.icash_operation_spend o where o.operation_key='owners:'||s.account_id||':'||s.id))\n or (t.outcome='owner_preview_rate_limited' and t.owner_preview_deferrals>0))))) then (\n select coalesce((\n select icash_work_private.owner_enrichment_candidate_exists(p_account) from public.icash_discovery_configs c\n join public.icash_operation_rates r on r.id=c.contact_rate_id where c.account_id=p_account\n  and not public.icash_research_waiting_on_outreach(p_account)\n  and public.icash_prospecting_available(p_account)>=public.icash_research_admission_quote(p_account,'owner_enrichment',r.charge_cents)),false)\n ) else false end;\n$function$\n",
+  "afterHash": "9e35917f3f2fc3802907a8c1f1d243be"
+}

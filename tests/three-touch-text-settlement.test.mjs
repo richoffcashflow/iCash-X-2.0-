@@ -15,7 +15,7 @@ async function originals(){return value(`select jsonb_build_object(
  'messages',(select jsonb_agg(to_jsonb(m) order by id) from icash_text_messages m where id in ($1,$2)),
  'operations',(select jsonb_agg(to_jsonb(o) order by operation_key) from icash_operation_spend o))`,[first,second]);}
 try{
- assert.equal(correction,read('supabase/migrations/20261116210401_three_touch_text_settlement.sql'));
+ assert.equal(correction,read('supabase/migrations/20261116210750_three_touch_text_settlement.sql'));
  await pg.exec(threeTouchFixtureSql()+'begin;'+threeTouchMigrations()+'commit;');
  assert.equal(await value('select md5(pg_get_functiondef($1::regprocedure))',[signature]),'03b79c28737302d81e96658e09bedf2b');
  await q("insert into icash_text_threads(id,account_id,deal_id,recipient,sender,party,operational_contact_id,eligibility_until,paused,manual_only,ai_mode) values($1,$2,$1,'+12145550123','+17205550100','seller',$3,now()+interval '10 hours',false,false,'auto')",[thread,account,contact]);

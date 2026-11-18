@@ -22,7 +22,7 @@ async function seedText(id,age,body='Would you consider a cash offer?'){
  await q("insert into icash_text_messages(id,thread_id,account_id,direction,state,provider_id,body,created_at,last_delivery_at) values($1,$2,$3,'outgoing','delivered',$1::uuid::text,$4,now()-$5::interval,now()-$5::interval)",[id,thread,a,body,age]);
 }
 try{
- for(const [name,version] of [['calls','20261116183024'],['texts','20261116183150'],['catchup','20261116183154']])assert.equal(read(`config/three-touch-seller-${name}.sql`),read(`supabase/migrations/${version}_three_touch_seller_${name}.sql`));
+ for(const [name,version] of [['calls','20261116184430'],['texts','20261116184434'],['catchup','20261116184457']])assert.equal(read(`config/three-touch-seller-${name}.sql`),read(`supabase/migrations/${version}_three_touch_seller_${name}.sql`));
  await pg.exec(threeTouchFixtureSql());
  const before=await q('select to_jsonb(j) row from icash_voice_jobs j order by id');
  await pg.exec('begin;'+threeTouchMigrations()+read('config/three-touch-text-settlement.sql')+'commit;');

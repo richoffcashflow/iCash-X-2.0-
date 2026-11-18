@@ -1,5 +1,20 @@
 # Continuous reliability
 
+## November 16 collector deadline scan candidate
+
+The [deadline-plan candidate](collector-preflight-deadline-plan.md) addresses a
+reproduced repeated account-history scan inside the exact ranked observation
+selector. Mutually exclusive optional-screening branches and a matching partial
+index preserve the original source predicates and output. The bounded forward
+migration pins the predecessor and changes only its existing active manifest
+hash slot, preserving all other policy state and original evidence.
+
+Focused synthetic helper, captured-selector and complete collector-query
+equivalence regressions pass. Native concurrent CI, full installed-schema
+assessment and normal release prerequisites remain pending. This is not live recovery,
+does not retry a collection or provider action, and does not fill historical
+observation gaps or extend the collector timeout.
+
 ## November 15 reviewed undialed original
 
 One original call handler has positive recording-bound runtime evidence that it

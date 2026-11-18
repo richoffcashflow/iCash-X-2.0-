@@ -21,16 +21,25 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
   if(recent.length)schedulerFailures.set(pool,recent);else schedulerFailures.delete(pool);
   return recent;
  };
- let stopped=false,lastLoopAt=now(),nextAutomationAt=0,cursor=0;
+ let stopped=false,lastLoopAt=now(),nextAutomationAt=0,nextVoiceAt=0,cursor=0;
  const isStalled=()=>now()-lastLoopAt>180000||lanes.some(lane=>lane.pending&&now()-lane.startedAt>(['research','general'].includes(lane.pool)?260000:lane.name==='automation'?140000:75000));
  const start=lane=>{
   lane.startedAt=now();
   lane.pending=Promise.resolve().then(lane.work).then(worked=>{
+   if(worked!==null&&typeof worked==='object'){
+    if(lane.pool!=='voice'||Object.keys(worked).length!==2||worked.status!=='voice_cooldown'
+     ||!Number.isInteger(worked.retryAfterMs)||worked.retryAfterMs<100||worked.retryAfterMs>1100)throw Error('INVALID_WORKER_OUTCOME');
+    // A successful read may clear consecutive transport failures, as null
+    // already does. Preserve true-idle history and recurring failure evidence.
+    // The pool bound never wakes a sibling before its idle/error deadline.
+    lane.failures=0;nextVoiceAt=Math.max(nextVoiceAt,now()+worked.retryAfterMs);
+    lane.nextAt=nextVoiceAt;return;
+   }
    lane.failures=0;lane.idle=worked?0:Math.min(lane.idle+1,3);
    const delay=worked?(lane.name==='screening'?250:automationPools?100:1000):Math.min(lane.name==='automation'?15000:60000,(lane.name==='automation'?5000:15000)*2**(lane.idle-1));
    lane.nextAt=now()+delay;
-  },error=>{
-   if(error?.code==='SCREENING_DATABASE_UNAVAILABLE'&&['icash_next_automation','icash_next_automation_lane'].includes(error.operation)){
+  }).catch(error=>{
+   if(error?.code==='SCREENING_DATABASE_UNAVAILABLE'&&['icash_next_automation','icash_next_automation_lane','icash_poll_voice_ticket'].includes(error.operation)){
     const at=now(),recent=recentSchedulerFailures(lane.pool,at);
     schedulerFailures.set(lane.pool,[...recent,at].slice(-schedulerFailureThreshold));
    }
@@ -64,13 +73,13 @@ export function createScheduler({screening,automation,automationConcurrency=4,au
    if(!screeningLane.pending&&now()>=screeningLane.nextAt)start(screeningLane);
    if(now()>=nextAutomationAt)for(let offset=0;offset<automationLanes.length;offset++){
     const index=(cursor+offset)%automationLanes.length,lane=automationLanes[index];
-    if(lane.pending||now()<lane.nextAt)continue;
+    if(lane.pending||now()<lane.nextAt||lane.pool==='voice'&&now()<nextVoiceAt)continue;
     // Rotate even when a fast lane finishes first. Independent provider waits
     // may overlap, while fresh database claims remain staggered and bounded.
     nextAutomationAt=now()+(automationPools?250:1000);
     cursor=(index+1)%automationLanes.length;start(lane);break;
    }
-   return Math.max(1,Math.min(...lanes.map(lane=>lane.pending?250:Math.max(lane.nextAt,lane.name==='automation'?nextAutomationAt:0)-now())));
+   return Math.max(1,Math.min(...lanes.map(lane=>lane.pending?250:Math.max(lane.nextAt,lane.name==='automation'?nextAutomationAt:0,lane.pool==='voice'?nextVoiceAt:0)-now())));
   },
   async stop(){
    stopped=true;

@@ -6,15 +6,18 @@ import {continueExpiredOwnerPreflightTicket} from '../lib/owner-expired-prefligh
 const normal={
  inventory:{pages:[{status:'not_due'}]},researchExclusions:{status:'not_due'},
  ownerExports:{status:'export_recovery_idle'},ownerExportCapacity:{status:'capacity_review_idle'},
+ providerCredits:{status:'credit_check_not_requested'},
  ownerPreflightCleanup:{status:'idle'},ownerTicketContinuation:{status:'disabled'},
 };
 const legitimateWaits={
  inventory:{pages:[{status:'rate_limited'}]},researchExclusions:{status:'pending'},
  ownerExports:{status:'export_receipt_held'},ownerExportCapacity:{status:'capacity_review_held'},
+ providerCredits:{status:'provider_credit_exhausted'},
  ownerPreflightCleanup:{status:'pending'},ownerTicketContinuation:{status:'busy'},
 };
 const silentFailures={inventory:{pages:[{status:'metadata_unavailable'}]}};
 const services={inventory:'refreshInventoryGeographyBatch',researchExclusions:'drainResearchExclusions',
+ providerCredits:'refreshDealMachineCreditWait',
  ownerExports:'recoverOwnerActiveExports',ownerExportCapacity:'recoverOwnerExportCapacity',ownerPreflightCleanup:'cleanupOwnerPreflight',ownerTicketContinuation:'continueExpiredOwnerPreflightTicket'};
 const senderCases={
  sender_config:'messaging_configuration_required',sender_verification:'business_number_verification_required',sender_invitation:'inbound_invitation_not_ready',
@@ -31,10 +34,11 @@ for(const scenario of ['none','waiting','inventory_result',...Object.keys(normal
   console:{info:(...args)=>logs.push(args),error:()=>{}},
   refreshReliability:async(_db,ok)=>{monitored.push(ok);for(const name of Object.keys(normal))assert(finished.has(name),'Health must wait for '+name);return true;},
   pruneUsageLoopObservations:async()=>{started.push('pruning');if(scenario==='pruning')throw Error('PRIVATE telemetry');},
-  readRecordingReview:()=>null,applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),
+  readRecordingReview:()=>null,applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),
   applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),
   refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>assert.fail('No network'),recoverVoiceConfiguration:async()=>({status:'idle',requeued:0}),
   retryVolumeDeferredText:async()=>{started.push('senderVolume');if(scenario==='sender_throw')throw Error('PRIVATE sender failure');return {status:senderCases[scenario]??'idle'};},recoverTextDeliveryReceipts:async()=>({status:'idle',errors:0}),
+  processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
   processSupportCustomerNotifications:async()=>({failed:0}),recoverAccessHelpReplies:async()=>0,processSupportOwnerNotifications:async()=>({failed:0}),
   processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
   outbound:task('outbound'),recording:task('recording'),ownerRecording:task('ownerRecording'),reception:task('reception'),

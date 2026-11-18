@@ -52,15 +52,16 @@ const maintenanceDb=async(path,method,body)=>{
 const ok=async()=>Response.json({ok:true});
 const route=await loadService('app/api/internal/maintenance/route.ts',{
  retryVolumeDeferredText:async()=>({status:'idle'}),
+ processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
  recoverTextDeliveryReceipts:async actualDb=>{assert.equal(actualDb,maintenanceDb);receiptRuns++;return {status:'idle',errors:0};},
  processSupportCustomerNotifications:async()=>({failed:0}),
- applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
+ applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
  refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),readRecordingReview:()=>null,
  processPurchaseAccessEmails:async()=>({ready:true,failed:0}),recoverAccessHelpReplies:async()=>({status:'idle'}),
  processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
  authorizeOutboundBilling:()=>authorized,maintenanceBatch,
  refreshReliability:async(_db,healthy)=>{assert.equal(healthy,!claimUnavailable);maintenanceRuns++;return true;},
- recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),cleanupOwnerPreflight:async()=>({status:'idle'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),drainResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
+ recoverOwnerActiveExports:async()=>({status:'export_recovery_idle'}),recoverOwnerExportCapacity:async()=>({status:'capacity_review_idle'}),refreshDealMachineCreditWait:async()=>({status:'credit_check_not_requested'}),cleanupOwnerPreflight:async()=>({status:'idle'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),drainResearchExclusions:db=>syncResearchExclusions(db,fetch),db:maintenanceDb,
  pruneUsageLoopObservations:async()=>null,outbound:ok,recording:ok,ownerRecording:ok,reception:ok,
  process:{env:{}},
 });

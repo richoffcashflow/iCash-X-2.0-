@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {currentBotActivity} from '../lib/bot-activity.ts';
+import {currentBotActivity,ownerCheckWindowMs,recentOwnerCheckLabel} from '../lib/bot-activity.ts';
 import {loadService} from './helpers/simulated-journey-services.mjs';
 const now=Date.now(),expires_at=new Date(now+60000).toISOString();
 const ticket={kind:'contacts',state:'consumed',expires_at};
@@ -15,14 +15,37 @@ for(const [progress,label] of [[{status:'budget_reached'},'Waiting for available
  assert.equal(currentBotActivity({...input,paused:true},now).label,'Paused');
 }
 let authorized=true,failed=false,queries=[];
-for(const reason of ['configuration_expired','configuration_disabled','system_paused','no_completed_work','pending_work']){
+for(const reason of ['configuration_expired','configuration_disabled','system_paused','no_completed_work']){
  const value=currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{status:'ready',health:{status:'blocked',reason}}},now);
  assert.equal(value.blocked,true);assert.equal(value.active,false,'a claimed ticket cannot prove account recovery');
+ assert.equal(value.blockedReason,reason,'Typed reason preserves the recorded blocker');
  assert(!value.label.includes('next task'));
  assert.doesNotMatch(value.label,/stalled|work is delayed|work delayed/i);
- if(reason==='pending_work')assert.equal(value.label,'Earlier work is awaiting confirmation.','A pending original does not prove every workflow is delayed');
  if(reason==='no_completed_work')assert.equal(value.label,'No recent completed task was recorded.','Missing completion evidence remains explicit');
 }
+for(const reason of [undefined,'toString','unrecognized'])assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{health:{status:'blocked',reason}}},now).blockedReason,'unknown','Missing or unknown reasons cannot invent a specific blocker');
+const pendingInput={paused:false,tickets:[],screening:[],progress:{status:'ready',health:{status:'blocked',reason:'pending_work'}}};
+for(const activeInput of [{tickets:[ticket]},{screening:[{state:'running',lease_until:expires_at}]}]){
+ const value=currentBotActivity({...pendingInput,...activeInput},now);
+ assert.equal(value.active,true,'Independent current work remains visible beside pending originals');
+ assert.equal(value.pendingConfirmation,true,'Current work never clears the original confirmation gap');
+ assert.notEqual(value.blocked,true,'A pending original does not prove all work is blocked');
+}
+for(const inactiveInput of [{},{tickets:[{...ticket,state:'issued'}]},{tickets:[{...ticket,expires_at:new Date(now-1).toISOString()}]},{screening:[{state:'running',lease_until:new Date(now-1).toISOString()}]}]){
+ const value=currentBotActivity({...pendingInput,...inactiveInput},now);
+ assert.equal(value.active,false);assert.equal(value.pendingConfirmation,true);
+ assert.equal(value.label,'Earlier work is awaiting confirmation.');
+}
+assert.equal(currentBotActivity({...pendingInput,paused:true,tickets:[ticket]},now).label,'Paused');
+assert.deepEqual(pendingInput.progress,{status:'ready',health:{status:'blocked',reason:'pending_work'}},'Presentation never changes the health observation');
+const iso=time=>new Date(time).toISOString();
+const completedCheck={kind:'contacts',state:'complete',outcome:'empty',created_at:iso(now-10000),completed_at:iso(now-5000)};
+assert.match(recentOwnerCheckLabel(completedCheck,iso(now)),/without a contact.*costs are under review/);
+assert.match(recentOwnerCheckLabel({...completedCheck,outcome:'contacts_saved'},iso(now)),/saved its results/);
+for(const patch of [{kind:'discovery'},{state:'held'},{state:'issued'},{state:'consumed'},{outcome:'held_for_reconciliation'},{outcome:null},{created_at:iso(now-ownerCheckWindowMs-1)},{created_at:iso(now-4999)},{created_at:'invalid'},{completed_at:iso(now+1)},{completed_at:null},{completed_at:'invalid'}]){
+ assert.equal(recentOwnerCheckLabel({...completedCheck,...patch},iso(now)),null);
+}
+assert.equal(recentOwnerCheckLabel(undefined,iso(now)),null);
 assert.equal(currentBotActivity({paused:false,tickets:[ticket],screening:[],progress:{health:{status:'unavailable'}}},now).unavailable,true);
 const account='00000000-0000-4000-8000-000000000001';
 const request=new Request('https://workspace.invalid/api/work/bot-status');

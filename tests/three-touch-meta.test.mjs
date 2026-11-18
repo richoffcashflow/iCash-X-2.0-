@@ -9,7 +9,7 @@ async function scenario(name,fn){await db.exec('begin');try{await fn();cases++;}
 const prepare=()=>val('select icash_meta_prepare_followups($1)',[lead]);
 const current=id=>val('select icash_meta_followup_call_current($1,$2)',[lead,id]);
 try{
- assert.equal(read('config/three-touch-meta-calls.sql'),read('supabase/migrations/20261116183159_three_touch_meta_calls.sql'));
+ assert.equal(read('config/three-touch-meta-calls.sql'),read('supabase/migrations/20261116184502_three_touch_meta_calls.sql'));
  await db.exec(threeTouchFixtureSql()+threeTouchMetaFixtureSql());
  const originalJobs=await q('select to_jsonb(j) row from icash_voice_jobs j');
  await db.exec('begin;'+threeTouchMigrations()+read('config/three-touch-meta-calls.sql')+'commit;');

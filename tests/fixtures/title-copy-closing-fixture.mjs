@@ -1,0 +1,35 @@
+import {readFileSync} from 'node:fs';
+import {installClosingSourceFixture,sourceCase} from './closing-original-source-fixture.mjs';
+export async function installTitleCopyClosingFixture(db){
+ await installClosingSourceFixture(db);
+ const first=await sourceCase(db),second=await sourceCase(db);
+ await db.exec('begin;'+readFileSync('config/closing-original-source-guard.sql','utf8')+'commit;');
+ await db.exec(`alter table public.icash_accounts add column bot_paused boolean not null default false;
+ alter table public.icash_accounts add column fixture_spending_allowed boolean not null default true;
+ alter table public.icash_signing_envelopes add column template_id uuid not null default gen_random_uuid();
+ alter table public.icash_title_requests add column property_address text not null default 'Fixture title property';
+ alter table public.icash_title_requests add column verified_until timestamptz not null default now()+interval '1 day';
+ alter table public.icash_title_contacts add column evidence_ref text not null default 'owner-closing-verification:fixture';
+ alter table public.icash_title_contacts add column rate_id uuid;
+ update public.icash_title_contacts c set rate_id=r.rate_id from public.icash_title_requests r where r.deal_id=c.deal_id and r.account_id=c.account_id;
+ create table public.icash_operation_rates(id uuid primary key,operation text,enabled boolean,expires_at timestamptz);
+ insert into public.icash_operation_rates select distinct rate_id,'title_email',true,now()+interval '1 day' from public.icash_title_requests;
+ alter table public.icash_operation_spend add column state text not null default 'settled';
+ alter table public.icash_operation_spend add column permission_until timestamptz not null default now()+interval '1 day';
+ create table public.icash_title_followup_settings(id int primary key,enabled boolean not null);insert into public.icash_title_followup_settings values(1,true);
+ alter table public.icash_title_tasks drop constraint icash_title_tasks_kind_check;
+ alter table public.icash_title_tasks add constraint icash_title_tasks_kind_check check(kind in ('follow_up','reply_review','deadline','document_update'));
+ alter table public.icash_title_tasks alter column payload set default '{}';
+ alter table public.icash_title_tasks add column email_state text not null default 'waiting';
+ alter table public.icash_title_tasks add column email_provider_id text;
+ alter table public.icash_title_tasks add column email_retry_at timestamptz not null default now();`);
+ await db.exec(readFileSync('tests/fixtures/title-copy-predecessors.sql','utf8'));
+ const sentinels=readFileSync('tests/fixtures/title-copy-schema.sql','utf8');
+ await db.exec(sentinels.slice(sentinels.indexOf('create function public.icash_reserve_operation')));
+ await db.exec(`revoke all on function public.icash_claim_title_update(uuid,uuid,jsonb),public.icash_signing_action_allowed(uuid,uuid),public.icash_title_contact_matches(uuid,uuid,text) from public,anon,authenticated;
+ grant execute on function public.icash_claim_title_update(uuid,uuid,jsonb),public.icash_signing_action_allowed(uuid,uuid),public.icash_title_contact_matches(uuid,uuid,text) to service_role;
+ grant all on all tables in schema public to service_role;`);
+ await db.exec('begin;'+readFileSync('config/title-executed-copy-requests.sql','utf8')+'commit;');
+ await db.exec("update icash_title_copy_private.policy set enabled=true,activated_at=now()-interval '1 minute',release_sha=repeat('a',40)");
+ return {first,second};
+}

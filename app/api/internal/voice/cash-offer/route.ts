@@ -5,6 +5,7 @@ import {after,NextResponse} from 'next/server';
 import {db} from '@/lib/stripe-test';
 import {bindSellerAgreementCall} from '@/lib/seller-agreement-binding';
 import {automaticCallOffer,blockedOffer,buyerAgreementHandoff} from '@/lib/automatic-call-offer';
+import {sellerProspectiveListingReply} from '@/lib/seller-listing-clarification';
 import {sellerListingEvidence} from '@/lib/seller-listing';
 import {sellerRoutineOwnershipAnswer} from '@/lib/seller-ownership-answer';
 import {sellerRoutineTimingAnswer} from '@/lib/seller-timing-answer';
@@ -37,7 +38,8 @@ export async function POST(request:Request){
   const intake=await instantCallAddress(token,input,{db,sms:dispatchTextMessage,voice:dispatchLiveVoice,bind:bindSellerAgreementCall,history:()=>transcript(input),env:process.env});
   if(intake)return NextResponse.json(intake,{headers});
   const d={db,bind:bindSellerAgreementCall,verifyQualification:async(i:Record<string,unknown>,context:Parameters<typeof boundSellerQualification>[1])=>{
-   const current=await transcript(i),qualification=await boundSellerQualification(db,context,current);
+   const current=await transcript(i),qualification=await boundSellerQualification(db,{...context,conversationId:String(i.conversationId)},current,
+    ()=>evidence??=createRecordedReceptionProviders(process.env).conversation(String(i.conversationId)));
    if(qualification.ready){
     const observation={p_hash:sha(token),p_conversation:i.conversationId,p_evidence_hash:sha(JSON.stringify(current))};
     // Reporting is not offer authority. Keep it after the caller's response;
@@ -45,7 +47,7 @@ export async function POST(request:Request){
     try{after(async()=>{try{await db('rpc/icash_targeting_note_qualified','POST',observation);}catch{console.warn('targeting_qualification_observation_pending');}});}catch{console.warn('targeting_qualification_observation_pending');}
    }
    return qualification;
-  },resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>,continuity?:{previousQuoteRevision:string})=>callOfferEvidence(await transcript(i),i,continuity),recoverPayoffFacts:async(i:Record<string,unknown>,mortgageCents:number,priceCents:number)=>sellerPayoffRecovery(await transcript(i),mortgageCents,priceCents),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyRoutineOwnershipAnswer:async(i:Record<string,unknown>)=>sellerRoutineOwnershipAnswer(await transcript(i),i),verifyRoutineTimingAnswer:async(i:Record<string,unknown>)=>sellerRoutineTimingAnswer(await transcript(i),i),verifySellerPrice:async(i:Record<string,unknown>)=>callSellerPriceEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
+  },resolveStatement:async(i:Record<string,unknown>)=>callSellerStatement(await transcript(i),i),verifyInput:async(i:Record<string,unknown>,continuity?:{previousQuoteRevision:string})=>callOfferEvidence(await transcript(i),i,continuity),recoverPayoffFacts:async(i:Record<string,unknown>,mortgageCents:number,priceCents:number)=>sellerPayoffRecovery(await transcript(i),mortgageCents,priceCents),verifyPayoffChange:async(i:Record<string,unknown>)=>callPayoffEvidence(await transcript(i),i),verifyListingStatus:async(i:Record<string,unknown>)=>sellerListingEvidence(await transcript(i),i),verifyListingClarification:async(i:Record<string,unknown>)=>sellerProspectiveListingReply(await transcript(i),i),verifyRoutineOwnershipAnswer:async(i:Record<string,unknown>)=>sellerRoutineOwnershipAnswer(await transcript(i),i),verifyRoutineTimingAnswer:async(i:Record<string,unknown>)=>sellerRoutineTimingAnswer(await transcript(i),i),verifySellerPrice:async(i:Record<string,unknown>)=>callSellerPriceEvidence(await transcript(i),i),verifyPayoffFacts:async(i:Record<string,unknown>)=>sellerPayoffEvidence(await transcript(i),i)};
   if(input.action!=='confirm_and_send'&&input.action!=='status'){
    const result=await automaticCallOffer(token,input,d);
    if(process.env.META_INSTANT_LEADS_ENABLED==='true'&&result.quoteAllowed&&'priceCents' in result)try{await db('rpc/icash_meta_note_offer_authorized','POST',{p_hash:sha(token),p_conversation:input.conversationId,p_price:result.priceCents});}catch{console.warn('instant_offer_observation_pending');}

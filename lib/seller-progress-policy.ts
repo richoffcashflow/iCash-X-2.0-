@@ -7,9 +7,12 @@ export type SellerProgressContext={
  customerNegotiation?:boolean;
  dialogue?:{sourceBody?:string;routineQualification?:boolean;action?:string|null;conditionState?:string|null};
 };
-export function planSellerProgress<T extends {action:string;facts:{kind:string;quote:string}[];humanRequested:boolean;callbackRequested:boolean;callRequested?:boolean;optedOut:boolean;declined:boolean}>(analysis:T,progress:SellerProgressContext|undefined){
+export function planSellerProgress<T extends {action:string;facts:{kind:string;quote:string}[];humanRequested:boolean;callbackRequested:boolean;callRequested?:boolean;purposeQuestion?:boolean;optedOut:boolean;declined:boolean}>(analysis:T,progress:SellerProgressContext|undefined){
  if(!progress||analysis.humanRequested||analysis.callbackRequested||analysis.callRequested||analysis.optedOut||analysis.declined)return analysis;
  if(progress.reviewReason||progress.customerNegotiation)return {...analysis,action:'review'};
+ // A newly asked purpose question is not a missing qualification answer.
+ // SQL still derives its exact copy and enforces the existing two-reply cap.
+ if(analysis.purposeQuestion&&analysis.action==='reply_identity')return analysis;
  const asked=new Set(progress.priorActions??[]),answered=new Set([...(progress.answered??[]),...analysis.facts.map(f=>f.kind)]);
  // Completed or previously attempted questions cannot become another callback loop.
  const kind=analysis.action.replace(/^ask_/,'');

@@ -1,0 +1,102 @@
+{
+  "functions": [
+    {
+      "acl": [
+        "postgres=X/postgres"
+      ],
+      "hash": "76d3f94ade8ea173659f058f3b55c549",
+      "signature": "icash_learning_private.observe_policy_decision()",
+      "definition": "CREATE OR REPLACE FUNCTION icash_learning_private.observe_policy_decision()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nbegin\n insert into icash_learning_private.policy_cohorts(domain,context,market,policy_version,latest_decision_id) values(new.domain,new.context,new.market,new.policy_version,new.id)\n on conflict(domain,context,market,policy_version) do update set latest_decision_id=greatest(icash_learning_private.policy_cohorts.latest_decision_id,excluded.latest_decision_id);\n return new;\nend $function$\n"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "hash": "d2ce7d23e7de54aa0476aa6cb722c9a9",
+      "signature": "icash_advance_policy_proposal(bigint)",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_advance_policy_proposal(p_proposal bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare p icash_learning_private.improvement_proposals;s icash_learning_policy_private.settings;r icash_learning_private.policy_releases;\n a icash_learning_private.policy_applications;fallback icash_learning_private.policy_applications;d icash_learning_policy_private.decisions;v_stage text;proof jsonb;rid uuid;source_id text;validated_sha text;\nbegin\n select * into p from icash_learning_private.improvement_proposals where id=p_proposal for update;\n if not found or p.category<>'learning_policy' or p.cohort_key in ('','legacy-global') then raise exception 'Policy cohort required';end if;\n select * into s from icash_learning_policy_private.settings where id=1;\n select * into r from icash_learning_private.policy_releases where release_sha=s.release_sha and completed_at<=now() and registered_at<=now();\n if not found or p.policy_version is distinct from s.policy_version or p.release_sha is distinct from r.release_sha then return jsonb_build_object('advanced',false,'reason','verified_release_required');end if;\n select * into a from icash_learning_private.policy_applications where (domain,context,market,policy_version)=(p.policy_domain,p.policy_context,p.policy_market,p.policy_version) and release_sha=r.release_sha order by id desc limit 1;\n if p.status in ('limited_experiment','promoted') then\n  select candidate.* into fallback from icash_learning_private.policy_applications candidate join icash_learning_policy_private.decisions cd on cd.id=candidate.decision_id\n   where (candidate.domain,candidate.context,candidate.market,candidate.policy_version,candidate.release_sha)=(p.policy_domain,p.policy_context,p.policy_market,p.policy_version,r.release_sha)\n   and candidate.created_at>now()-interval '6 hours' and candidate.mode in ('explore','held') and cd.decision->>'status' in ('explore','safety_hold')\n   and exists(select 1 from icash_learning_private.policy_applications prior where (prior.domain,prior.context,prior.market,prior.policy_version,prior.release_sha)=(candidate.domain,candidate.context,candidate.market,candidate.policy_version,candidate.release_sha) and prior.id<candidate.id and prior.mode='shared')\n   and not exists(select 1 from icash_learning_private.policy_applications later where (later.domain,later.context,later.market,later.policy_version,later.release_sha)=(candidate.domain,candidate.context,candidate.market,candidate.policy_version,candidate.release_sha) and later.id>candidate.id and later.mode='shared')\n   order by candidate.id desc limit 1;\n  if fallback.id is not null then a:=fallback;end if;\n end if;\n if a.id is not null then select * into d from icash_learning_policy_private.decisions where id=a.decision_id;end if;\n if p.status='candidate' then\n  v_stage:='offline_validated';source_id:='ci:'||r.ci_run_id||':'||r.ci_run_attempt;\n  proof:=jsonb_build_object('source','release_ci','offlinePassed',true);\n elsif p.status='offline_validated' and s.enabled and s.activated_at between r.completed_at and now() and a.created_at>=s.activated_at\n  and (p.policy_domain<>'seller_sms' or exists(select 1 from icash_learning_policy_private.sms_settings where id=1 and enabled)) then\n  v_stage:='limited_experiment';source_id:='application:'||a.id;\n  proof:=jsonb_build_object('source','policy_decision','limitedActive',true);\n elsif p.status='limited_experiment' and s.activated_at<=now()-interval '72 hours' and a.decision_id=(select latest_decision_id from icash_learning_private.policy_cohorts where (domain,context,market,policy_version)=(p.policy_domain,p.policy_context,p.policy_market,p.policy_version)) and a.created_at>now()-interval '6 hours' and a.mode='shared' and d.decision->>'status'='shared'\n  and s.enabled and s.activated_at<=a.created_at then\n  v_stage:='promoted';source_id:='application:'||a.id;\n  proof:=jsonb_build_object('source','policy_decision','outcomePassed',true,'objective',d.decision->>'objective','reason',d.decision->>'reason');\n elsif p.status in ('limited_experiment','promoted') and a.created_at>now()-interval '6 hours' and a.mode in ('explore','held') and d.decision->>'status' in ('explore','safety_hold')\n  and exists(select 1 from icash_learning_private.policy_applications prior join icash_learning_policy_private.decisions prior_d on prior_d.id=prior.decision_id\n   where (prior.domain,prior.context,prior.market,prior.policy_version,prior.release_sha)=(a.domain,a.context,a.market,a.policy_version,a.release_sha)\n   and prior.id<a.id and prior.mode='shared' and prior_d.decision->>'status'='shared') then\n  v_stage:='rolled_back';source_id:='application:'||a.id;\n  proof:=jsonb_build_object('source','policy_decision','rollbackApplied',true,'reason',d.decision->>'reason');\n else return jsonb_build_object('advanced',false,'reason','stage_evidence_required');end if;\n select id into rid from icash_learning_private.validation_receipts where proposal_id=p.id and proposal_version=p.version and validation_receipts.stage=v_stage and receipt->>'sourceId'=source_id;\n if rid is null then\n  rid:=gen_random_uuid();\n  insert into icash_learning_private.validation_receipts(id,proposal_id,proposal_version,stage,release_sha,policy_version,receipt)\n  values(rid,p.id,p.version,v_stage,r.release_sha,p.policy_version,proof||jsonb_build_object('verified',true,'sourceId',source_id,'releaseSha',r.release_sha,'policyVersion',p.policy_version,'domain',p.policy_domain,'context',p.policy_context,'market',p.policy_market,'decisionId',d.id,'applicationId',a.id));\n end if;\n return public.icash_transition_improvement_proposal(p.id,p.version,v_stage,rid);\nend $function$\n"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "hash": "eda5be44fa0b84b369edad854e83f558",
+      "signature": "icash_review_policy_cohorts()",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_review_policy_cohorts()\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare c record;p icash_learning_private.improvement_proposals;k text;e jsonb;n integer:=0;i integer;errors integer:=0;current_release text;\nbegin\n select release_sha into current_release from icash_learning_policy_private.settings where id=1;\n if not pg_try_advisory_xact_lock(810242) then return jsonb_build_object('reviewed',0);end if;\n for c in select x.*,d.created_at decision_at,d.decision from icash_learning_private.policy_cohorts x join icash_learning_policy_private.decisions d on d.id=x.latest_decision_id\n  where (x.last_reviewed_at is null or x.last_reviewed_at<=now()-interval '1 hour') and d.created_at>=now()-interval '6 hours'\n  order by x.last_reviewed_at nulls first,x.domain,x.context,x.market,x.policy_version limit 20 for update of x skip locked\n loop\n begin\n  k:=md5(jsonb_build_array(c.domain,c.context,c.market,c.policy_version)::text);\n  e:=jsonb_build_object('source','canonical_policy_cohort_v1','domain',c.domain,'context',c.context,'market',c.market,'policyVersion',c.policy_version,'decisionId',c.latest_decision_id::text,'applicationId',c.latest_application_id::text,'decisionStatus',c.decision->>'status','businessSuccess',false);\n  select * into p from icash_learning_private.improvement_proposals where category='learning_policy' and cohort_key=k order by version desc limit 1 for update;\n  if not found or p.release_sha is distinct from current_release then\n   insert into icash_learning_private.improvement_proposals(category,cohort_key,version,policy_domain,policy_context,policy_market,policy_version,release_sha,evidence)\n   values('learning_policy',k,coalesce(p.version+1,1),c.domain,c.context,c.market,c.policy_version,current_release,e) returning * into p;\n   insert into icash_learning_private.proposal_events(proposal_id,status,evidence) values(p.id,'observed',e);\n  else\n   update icash_learning_private.improvement_proposals set observations=observations+1,consecutive_observations=case when last_observed_at>=now()-interval '2 hours' then consecutive_observations+1 else 1 end,last_observed_at=now(),last_reviewed_at=now(),evidence=e where id=p.id returning * into p;\n   if p.status='observed' and p.consecutive_observations>=3 and p.first_observed_at<=now()-interval '2 hours' then\n    update icash_learning_private.improvement_proposals set status='candidate' where id=p.id;\n    insert into icash_learning_private.proposal_events(proposal_id,status,evidence) values(p.id,'candidate',e);\n   end if;\n  end if;\n  -- Maximum four individually verified steps, never skip a missing prerequisite.\n  for i in 1..4 loop perform public.icash_advance_policy_proposal(p.id);end loop;\n  update icash_learning_private.policy_cohorts set last_reviewed_at=now(),last_error_at=null,last_error_code=null where (domain,context,market,policy_version)=(c.domain,c.context,c.market,c.policy_version);\n  n:=n+1;\n exception when others then\n  update icash_learning_private.policy_cohorts set last_reviewed_at=now(),last_error_at=now(),last_error_code=sqlstate where (domain,context,market,policy_version)=(c.domain,c.context,c.market,c.policy_version);\n  errors:=errors+1;\n end;\n end loop;\n return jsonb_build_object('reviewed',n,'errors',errors);\nend $function$\n"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "hash": "35c89b7e14789f22822c5044b540a3b0",
+      "signature": "icash_review_learning_operations()",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_review_learning_operations()\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare a jsonb;b jsonb;begin a:=public.icash_review_operations_before_cohorts();b:=public.icash_review_policy_cohorts();perform public.icash_review_operation_deadlines();if (b->>'errors')::integer>0 then update icash_learning_private.components set last_error_at=now(),last_error_code='P0001' where component='review';end if;return a||jsonb_build_object('policyCohorts',b);end $function$\n"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "hash": "8f5cff0fb9c04cc28da44ee45084d887",
+      "signature": "icash_record_learning_policy_hold(bigint,uuid,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.icash_record_learning_policy_hold(p_decision bigint, p_account uuid, p_subject text)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare d icash_learning_policy_private.decisions;s icash_learning_policy_private.settings;a bigint;k text;\nbegin\n select * into d from icash_learning_policy_private.decisions where id=p_decision;\n select * into s from icash_learning_policy_private.settings where id=1;\n if d.id is null or not coalesce(s.enabled,false) then return null;end if;\n if p_subject is null or length(p_subject) not between 1 and 200 or not exists(select 1 from public.icash_accounts where id=p_account)\n  or d.domain not in ('seller_calls','buyer_search') or d.policy_version<>s.policy_version or d.created_at not between greatest(s.evidence_after,now()-interval '6 hours') and now()\n  or d.decision->>'status' is distinct from 'safety_hold' or d.decision->'allowedChoices' is distinct from '[]'::jsonb\n  or d.stats is distinct from public.icash_shared_learning_stats(d.domain,d.context,d.market)\n  or not exists(select 1 from icash_learning_private.policy_releases where release_sha=s.release_sha and completed_at<=s.activated_at)\n  or exists(select 1 from public.icash_learning_assignments where account_id=p_account and domain=d.domain and subject=p_subject) then raise exception 'Canonical policy hold required';end if;\n k:=md5(jsonb_build_array(p_account,d.domain,p_subject,d.id)::text);\n insert into icash_learning_private.policy_applications(decision_id,source,source_key,release_sha,domain,context,market,policy_version,variant,mode)\n values(d.id,'shared_hold',k,s.release_sha,d.domain,d.context,d.market,d.policy_version,'','held') on conflict(source,source_key) do nothing returning id into a;\n if a is null then select id into a from icash_learning_private.policy_applications where source='shared_hold' and source_key=k;end if;\n update icash_learning_private.policy_cohorts set latest_application_id=greatest(coalesce(latest_application_id,0),a) where (domain,context,market,policy_version)=(d.domain,d.context,d.market,d.policy_version);\n return a;\nend $function$\n"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres"
+      ],
+      "hash": "503334dfe3df197bdfbc4a09482ae086",
+      "signature": "icash_learning_private.record_policy_application()",
+      "definition": "CREATE OR REPLACE FUNCTION icash_learning_private.record_policy_application()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare d icash_learning_policy_private.decisions;s icash_learning_policy_private.settings;a bigint;src text;src_key text;expected jsonb;\nbegin\n if tg_op='UPDATE' then\n  if old.learning_decision_id is not null and row(new.learning_decision_id,new.learning_policy_version,new.learning_selection_mode,new.variant) is distinct from row(old.learning_decision_id,old.learning_policy_version,old.learning_selection_mode,old.variant) then raise exception 'Learning allocation is immutable';end if;\n  if old.learning_decision_id is null and new.learning_decision_id is not null then raise exception 'Historical allocation cannot be relabelled';end if;\n  return new;\n end if;\n if new.learning_decision_id is null then return new;end if;\n select * into d from icash_learning_policy_private.decisions where id=new.learning_decision_id;\n if not found or new.learning_policy_version is distinct from d.policy_version or new.learning_selection_mode is null or new.learning_selection_mode not in ('control','explore','shared')\n  or d.created_at not between now()-interval '6 hours' and now() or not (new.variant=any(d.choices))\n  or (new.learning_selection_mode='shared' and (d.decision->>'status' is distinct from 'shared' or d.decision->>'winner' is distinct from new.variant)) then raise exception 'Allocation decision mismatch';end if;\n if d.stats is distinct from public.icash_shared_learning_stats(d.domain,d.context,d.market) then raise exception 'Allocation evidence changed';end if;\n select * into s from icash_learning_policy_private.settings where id=1;\n if tg_table_name='icash_learning_assignments' then\n  if row(new.domain,new.context,new.market) is distinct from row(d.domain,d.context,d.market) then raise exception 'Allocation cohort mismatch';end if;\n  expected:=icash_learning_private.expected_shared_allocation(new.account_id,new.domain,new.subject,new.context,d.decision,coalesce(s.enabled,false));\n  if expected is null or expected->>'variant' is distinct from new.variant or expected->>'mode' is distinct from new.learning_selection_mode then raise exception 'Deterministic allocation mismatch';end if;\n  src:='shared_assignment';src_key:=md5(jsonb_build_array(new.account_id,new.domain,new.subject)::text);\n else\n  if d.domain<>'seller_sms' or d.context is distinct from new.learning_context or d.market<>'*' then raise exception 'Allocation cohort mismatch';end if;\n  expected:=case when new.learning_context='cash-question-v6' then public.icash_seller_cash_question_plan(new.account_id,new.thread_id)\n   else public.icash_seller_sms_learning_plan(new.account_id,new.thread_id) end;\n  if expected is null or expected->>'variant' is distinct from new.variant or expected->>'mode' is distinct from new.learning_selection_mode or expected->>'body' is distinct from new.body or expected->'stats' is distinct from d.stats or expected->'decision' is distinct from d.decision then raise exception 'Seller SMS allocation mismatch';end if;\n  src:='seller_sms';src_key:=new.thread_id::text;\n end if;\n select * into s from icash_learning_policy_private.settings where id=1;\n -- Disabled policy decisions may still be observed; activation is separate proof.\n if not coalesce(s.enabled,false) or s.release_sha is null or s.activated_at is null or s.activated_at>now() or s.policy_version<>d.policy_version then return new;end if;\n if d.created_at<s.evidence_after then raise exception 'Stale release decision';end if;\n if src='seller_sms' and not exists(select 1 from icash_learning_policy_private.sms_settings where id=1 and enabled) then return new;end if;\n if not exists(select 1 from icash_learning_private.policy_releases where release_sha=s.release_sha and completed_at<=s.activated_at and registered_at<=now()) then raise exception 'Verified policy release required';end if;\n insert into icash_learning_private.policy_applications(decision_id,source,source_key,release_sha,domain,context,market,policy_version,variant,mode)\n values(d.id,src,src_key,s.release_sha,d.domain,d.context,d.market,d.policy_version,new.variant,new.learning_selection_mode) returning id into a;\n update icash_learning_private.policy_cohorts set latest_application_id=a where (domain,context,market,policy_version)=(d.domain,d.context,d.market,d.policy_version);\n return new;\nend $function$\n"
+    }
+  ],
+  "table": {
+    "acl": [
+      "postgres=arwdDxtm/postgres",
+      "service_role=r/postgres"
+    ],
+    "rls": true,
+    "owner": "postgres"
+  },
+  "columns": [
+    {
+      "name": "domain",
+      "type": "text"
+    },
+    {
+      "name": "context",
+      "type": "text"
+    },
+    {
+      "name": "market",
+      "type": "text"
+    },
+    {
+      "name": "policy_version",
+      "type": "text"
+    },
+    {
+      "name": "latest_decision_id",
+      "type": "bigint"
+    },
+    {
+      "name": "latest_application_id",
+      "type": "bigint"
+    },
+    {
+      "name": "last_reviewed_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "last_error_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "last_error_code",
+      "type": "text"
+    }
+  ]
+}
