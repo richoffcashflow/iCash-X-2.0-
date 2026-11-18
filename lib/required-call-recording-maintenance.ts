@@ -146,8 +146,10 @@ export async function maintainRecordings(db:RecordingDb,provider:RecordingProvid
    if(receipt.status==='completed'){
     if(!row.end_requested_at){const requested=await recordingTransition(db,row,'stop',{stopTokenHash:row.stop_token_hash});if(!requested)throw Error('CALL_TERMINATION_REQUEST_REQUIRED');row=requested;}
     if(!row.call_ended_at){const ended=await provider.end(row.call_sid!);if(ended.sid!==row.call_sid||ended.account_sid!==row.provider_account_sid||ended.status!=='completed')throw Error('CALL_TERMINATION_UNCONFIRMED');const saved=await recordingTransition(db,row,'call_ended',{callSid:row.call_sid,providerAccountSid:row.provider_account_sid,status:ended.status});if(!saved)throw Error('CALL_TERMINATION_SAVE_REQUIRED');row=saved;}
-    outcome=emptyIdentity&&row.state==='available'&&row.call_ended_at?'available_identity_empty':'available';
     payload=finalRecordingPayload(receipt);
+    const samePrice=typeof payload.providerRecordingPriceMicros==='number'&&row.price_is_estimate===false
+     &&payload.providerRecordingPriceMicros===row.provider_recording_price_micros;
+    outcome=emptyIdentity&&row.state==='available'&&row.call_ended_at&&samePrice?'available_identity_empty':'available';
    }
    else if(receipt.status==='absent'){const ended=await provider.end(row.call_sid!);if(ended.sid!==row.call_sid||ended.account_sid!==row.provider_account_sid||ended.status!=='completed')throw Error('REQUIRED_RECORDING_END_UNCONFIRMED');outcome='absent';payload={};}
    else{

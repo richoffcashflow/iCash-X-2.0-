@@ -37,6 +37,18 @@ try{
  assert.deepEqual(await maintainRecordings(unboundDb,{...provider,conversations:async()=>({has_more:false,conversations:[]})},{TWILIO_ACCOUNT_SID:ac}),{deleted:0,reconciled:1,held:0});
  assert.equal(finishes[0].p_outcome,'available');assert.equal(finishes[0].p_payload.durationSeconds,30);
  assert.equal(unbound.conversation_id,null,'No AI conversation fabricated');
+ // Only an empty search and a fresh, matching actual price can extend the retry interval.
+ for(const [recordedPrice,estimate,carrierPrice,more,outcome] of [
+  [1000,false,'-0.001000',false,'available_identity_empty'],[0,false,'0',false,'available_identity_empty'],
+  [1000,false,null,false,'available'],[1000,true,'-0.001000',false,'available'],
+  [1000,false,'-0.002000',false,'available'],[1000,false,'-0.001000',true,'available'],
+ ]){
+  const priced={...unbound,state:'available',price_is_estimate:estimate,provider_recording_price_micros:recordedPrice};
+  const dbForPrice=(path,method,input)=>path==='rpc/icash_claim_call_recording_work'&&input.p_kind==='reconcile'?[priced]:unboundDb(path,method,input);
+  finishes=[];
+  await maintainRecordings(dbForPrice,{...provider,conversations:async()=>({has_more:more,conversations:[]}),getRecording:async()=>({...receipt,price:carrierPrice})},{TWILIO_ACCOUNT_SID:ac});
+  assert.deepEqual(finishes.map(x=>x.p_outcome),[outcome]);
+ }
  finishes=[];
  assert.equal((await maintainRecordings(unboundDb,{...provider,conversations:async()=>({has_more:false,conversations:[]}),getRecording:async()=>({...receipt,call_sid:'CA'+'d'.repeat(32)})},{TWILIO_ACCOUNT_SID:ac})).held,1);
  assert.deepEqual(finishes.map(x=>x.p_outcome),['retry'],'Wrong carrier recording never becomes available');
