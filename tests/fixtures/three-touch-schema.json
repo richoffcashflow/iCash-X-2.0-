@@ -1,0 +1,226 @@
+[
+  {
+    "name": "icash_live_callbacks",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "conversation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "due_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "timezone",
+        "type": "text"
+      },
+      {
+        "name": "evidence",
+        "type": "jsonb"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  },
+  {
+    "name": "icash_meta_lead_messages",
+    "columns": [
+      {
+        "name": "message_id",
+        "type": "uuid"
+      },
+      {
+        "name": "lead_id",
+        "type": "uuid"
+      },
+      {
+        "name": "purpose",
+        "type": "text"
+      },
+      {
+        "name": "evidence_key",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_seller_gaps",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid"
+      },
+      {
+        "name": "screening_id",
+        "type": "uuid"
+      },
+      {
+        "name": "thread_id",
+        "type": "uuid"
+      },
+      {
+        "name": "source",
+        "type": "text"
+      },
+      {
+        "name": "source_id",
+        "type": "uuid"
+      },
+      {
+        "name": "reason",
+        "type": "text"
+      },
+      {
+        "name": "stage",
+        "type": "text"
+      },
+      {
+        "name": "channel",
+        "type": "text"
+      },
+      {
+        "name": "quote",
+        "type": "text"
+      },
+      {
+        "name": "state",
+        "type": "text"
+      },
+      {
+        "name": "due_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "source_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "outgoing_id",
+        "type": "uuid"
+      },
+      {
+        "name": "resolution",
+        "type": "text"
+      },
+      {
+        "name": "resolved_by",
+        "type": "uuid"
+      },
+      {
+        "name": "resolved_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "review_reason",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "icash_seller_recovery_attempts",
+    "columns": [
+      {
+        "name": "gap_id",
+        "type": "uuid"
+      },
+      {
+        "name": "account_id",
+        "type": "uuid"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid"
+      },
+      {
+        "name": "thread_id",
+        "type": "uuid"
+      },
+      {
+        "name": "variant",
+        "type": "text"
+      },
+      {
+        "name": "reason",
+        "type": "text"
+      },
+      {
+        "name": "stage",
+        "type": "text"
+      },
+      {
+        "name": "source_channel",
+        "type": "text"
+      },
+      {
+        "name": "message_id",
+        "type": "uuid"
+      },
+      {
+        "name": "policy_version",
+        "type": "text"
+      },
+      {
+        "name": "assigned_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "delivered_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "responded_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "contract_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "closed_at",
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "opted_out_at",
+        "type": "timestamp with time zone"
+      }
+    ]
+  }
+]
