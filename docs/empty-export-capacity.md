@@ -51,3 +51,10 @@ Missing, future or inconsistent completion, an active recovery lease and every
 source/artifact check still block recovery. HTTP500/504 retain their original
 minimum ages. The same three fresh idle probes remain mandatory; completing a
 rejection never itself releases scheduling capacity or money.
+
+The provider also returns `no_records_matched` for this exact HTTP 400
+message. The capacity reader accepts that code when the stored raw response,
+its text copy, the batch and the finished admitted request agree. An extra
+response field, saved artifact, parsed rows, batch results or recovery history
+keeps this newer response on hold. The same three provider inventory reads
+must finish before the next independent export can proceed.

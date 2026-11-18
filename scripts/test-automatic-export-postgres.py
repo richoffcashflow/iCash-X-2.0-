@@ -28,17 +28,23 @@ def contend(query, count=24):
 
 
 assert sql("select current_database();") == "icash_reliability"
-for status in [500, 504, 400]:
+for status, empty_code in [(500, None), (504, None), (400, "invalid_request"), (400, "no_records_matched")]:
     sql("drop schema if exists icash_research_private cascade; drop schema public cascade; create schema public;")
     for file in ["tests/fixtures/automatic-export-foundation.sql", "config/owner-export-capacity-recovery.sql", "supabase/migrations/20261030012215_owner_export_capacity_precision.sql", "config/automatic-export-capacity.sql", "config/gateway-export-capacity.sql", "config/empty-export-capacity.sql", "config/empty-export-immediate-capacity.sql"]:
         source = (ROOT/file).read_text()
         if "foundation" in file:
             source = re.sub(r"create role (anon|authenticated|service_role);", "", source)
         sql(source)
+    if empty_code == "no_records_matched":
+        for file in ["tests/fixtures/unknown-export-foundation.sql", "config/unknown-export-capacity.sql"]:
+            sql((ROOT/file).read_text())
+        sql("alter table icash_research_private.owner_exports add column artifact_sha256 text, "
+            "add column parsed_rows jsonb, add column recovery_history jsonb not null default '[]';")
+        sql("begin;" + (ROOT/"config/no-records-export-capacity.sql").read_text() + "commit;")
     batch, account = "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"
     raw = {"error": {"code": "internal_error", "request_id": "req_fixture"}}
     if status == 400:
-        raw = {"error": {"code": "invalid_request", "request_id": "req_fixture", "message": 'No records matched this export. Filters and scrub settings (like "Active phone numbers only") may have excluded every record — adjust them and try again.'}}
+        raw = {"error": {"code": empty_code, "request_id": "req_fixture", "message": 'No records matched this export. Filters and scrub settings (like "Active phone numbers only") may have excluded every record — adjust them and try again.'}}
     failure = {"httpStatus": status, "raw": raw, "rawText": json.dumps(raw)} if status != 504 else {"httpStatus": 504, "raw": None, "rawText": "<title>dealmachine.com | 504: Gateway time-out</title><p>api.v2.dealmachine.com</p>"}
     paid_receipt = literal(raw) if status == 400 else "null"
     created = "now()-interval '1 second'" if status == 400 else "now()-interval '8 minutes'"
@@ -134,4 +140,5 @@ for status in [500, 504, 400]:
     assert sql(f"select md5(to_jsonb(r)::text) from icash_research_private.requests r where id='{batch}';") == original_request
     assert sql("select md5(to_jsonb(b)::text) from icash_research_private.owner_batches b;") == original_batch
     assert sql("select md5(to_jsonb(s)::text) from public.icash_operation_spend s;") == original_money
-    print(f"PASS native PostgreSQL HTTP {status}: competing workers claim one recovery, one request per probe, idempotent receipts and capacity completion; original money and owner fences remain.")
+    source = f"HTTP {status} {empty_code}" if empty_code else f"HTTP {status}"
+    print(f"PASS native PostgreSQL {source} with competing recovery claims, one request per probe, idempotent receipts and preserved original money and owner fences.")
