@@ -38,8 +38,9 @@ export function BotRunBar({apiBase='/api/work',readOnly=false,hasLeads,botName,v
  const runEnabled=modeRunning&&funded&&!stopped&&!paymentRequired;
  const live=readOnly?observedLive:runEnabled;
  const waitingConfirmation=readOnly&&running&&funded&&!stopped&&!paymentRequired&&!busy&&pendingConfirmation&&!active;
- const liveLabel=!readOnly?(runEnabled?'Run enabled':stopped?'Paused':'Not running'):blocked?blockedTitle:healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':waitingConfirmation?'Awaiting confirmation':live?'Live':'Not live';
- const title=readOnly&&(stale||healthUnavailable)?'Checking status':paymentRequired?'Restore access':readOnly&&blocked?blockedTitle:readOnly&&active?'Bot working':waitingConfirmation?'Awaiting confirmation':!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped||readOnly&&current?.label==='Paused'?'Bot paused':(readOnly?running:modeRunning)?(readOnly?'Run enabled':'Bot running'):'Bot ready';
+ const pendingTitle=current?.ownerCheckComplete===true?'Owner check complete':'Awaiting confirmation';
+ const liveLabel=!readOnly?(runEnabled?'Run enabled':stopped?'Paused':'Not running'):blocked?blockedTitle:healthUnavailable||stale||busy||running&&funded&&!paymentRequired&&!stopped&&!current?'Checking status':waitingConfirmation?pendingTitle:live?'Live':'Not live';
+ const title=readOnly&&(stale||healthUnavailable)?'Checking status':paymentRequired?'Restore access':readOnly&&blocked?blockedTitle:readOnly&&active?'Bot working':waitingConfirmation?pendingTitle:!funded?(balanceCents===undefined?'Ready when you are':hasCreditHistory?'Out of credits':'Add money to start your bot'):stopped||readOnly&&current?.label==='Paused'?'Bot paused':(readOnly?running:modeRunning)?(readOnly?'Run enabled':'Bot running'):'Bot ready';
  let detail: string;
  if (readOnly && stale) detail='Reconnecting…';
  else if (paymentRequired) detail='Update your subscription to continue.';

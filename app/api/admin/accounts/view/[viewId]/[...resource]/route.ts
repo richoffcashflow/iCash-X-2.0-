@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {workspaceActivity} from '@/lib/workspace-activity-read';
-import {currentBotActivity} from '@/lib/bot-activity';
+import {currentBotActivity,ownerCheckWindowMs,recentOwnerCheckLabel,type OwnerCheckTicket} from '@/lib/bot-activity';
 import {validActivityReport,type ActivityDays} from '@/lib/activity-report';
 import {opportunityPeriod,readOpportunityProgress} from '@/lib/opportunity-progress-read';
 import {dealMachinePhoto} from '@/lib/property-photo';
@@ -47,7 +47,13 @@ export async function GET(req:Request,context:{params:Promise<{viewId:string;res
    db<{kind:string;state:string;expires_at:string}[]>(`icash_automation_tickets?account_id=eq.${accountId}&state=eq.consumed&expires_at=gt.${new Date().toISOString()}&select=kind,state,expires_at&order=created_at.desc&limit=10`),
    db<{state:string;lease_until:string|null}[]>(`icash_screening_jobs?account_id=eq.${accountId}&state=eq.running&select=state,lease_until&limit=10`)
   ]);
-  return json(currentBotActivity({paused:view.account.paused,tickets,screening,progress}));
+  const activity=currentBotActivity({paused:view.account.paused,tickets,screening,progress});
+  if(!activity.pendingConfirmation||activity.active||(progress?.status!=='ready'&&progress?.status!=='working'))return json(activity);
+  // Inspect the newest attempt, including holds. A later incomplete lookup takes precedence over an older success.
+  const since=new Date(Date.parse(activity.checkedAt)-ownerCheckWindowMs).toISOString();
+  const [latest]=await db<OwnerCheckTicket[]>(`icash_automation_tickets?account_id=eq.${accountId}&kind=eq.contacts&created_at=gte.${since}&select=kind,state,outcome,created_at,completed_at&order=created_at.desc,id.desc&limit=1`,'GET',undefined,req.signal).catch(()=>[]);
+  const label=recentOwnerCheckLabel(latest,activity.checkedAt);
+  return json(label?{...activity,ownerCheckComplete:true,label}:activity);
  }
  if(resource==='report'){
   const f=z.object({days:z.enum(['1','7','30']).default('1'),timezone:z.string().max(100).default('UTC')}).strict().parse(query);
