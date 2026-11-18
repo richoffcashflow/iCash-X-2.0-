@@ -10,6 +10,7 @@ const suites = [
  'seller-opener-property-lookup',
  'owner-wait-local-gate',
  'dealmachine-credit-wait', 'provider-credit-wait-db',
+ 'unknown-export-capacity-database',
  'owner-batch-pool-selection',
  'research-priority-cost-isolation',
  'seller-call-learning-planning',

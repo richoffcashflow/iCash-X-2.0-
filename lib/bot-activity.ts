@@ -6,7 +6,19 @@ export const botTaskLabels:Record<string,string>={
  title_followup:'Following up with title',customer_updates:'Sending an update',customer_attention:'Sending an update',
 };
 export type BotBlockedReason='no_completed_work'|'configuration_expired'|'configuration_disabled'|'system_paused'|'unknown';
-export type BotActivity={active:boolean;label:string;checkedAt:string;blocked?:boolean;blockedReason?:BotBlockedReason;unavailable?:boolean;pendingConfirmation?:boolean};
+export type BotActivity={active:boolean;label:string;checkedAt:string;blocked?:boolean;blockedReason?:BotBlockedReason;unavailable?:boolean;pendingConfirmation?:boolean;ownerCheckComplete?:boolean};
+export type OwnerCheckTicket={kind:string;state:string;outcome:string|null;created_at:string;completed_at:string|null};
+export const ownerCheckWindowMs=30*60*1000;
+
+export function recentOwnerCheckLabel(ticket:OwnerCheckTicket|undefined,checkedAt:string):string|null{
+ if(ticket?.kind!=='contacts'||ticket.state!=='complete'||!ticket.completed_at)return null;
+ const started=Date.parse(ticket.created_at),finished=Date.parse(ticket.completed_at),now=Date.parse(checkedAt);
+ if(!(started>=now-ownerCheckWindowMs&&started<=finished&&finished<=now))return null;
+ if(ticket.outcome==='empty')return 'An owner lookup finished without a contact for the property it checked. Earlier work costs are under review.';
+ if(ticket.outcome==='contacts_saved')return 'An owner lookup finished and saved its results. Earlier work costs are under review.';
+ return null;
+}
+
 function blockedReason(reason:string|undefined):BotBlockedReason{
  switch(reason){
   case 'no_completed_work':case 'configuration_expired':case 'configuration_disabled':case 'system_paused':return reason;

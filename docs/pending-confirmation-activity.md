@@ -7,8 +7,13 @@ valid consumed ticket or running screening lease. Expired, issued and finished
 work still cannot produce an active task.
 
 The owner account preview shows the actual current task and the earlier-work
-confirmation note together. Without current task evidence, it shows “Awaiting
-confirmation” with no live indicator or animation. The customer workspace keeps
+confirmation note together. Between tasks on a ready or working account it
+shows “Owner check complete” when the account’s latest owner lookup started
+and finished within the past 30 minutes and recorded an empty or saved result.
+The detail gives the outcome and identifies the costs still under review.
+A newer unfinished lookup, missing result or older check leaves the original
+“Awaiting confirmation” status in place. Both idle states use the inactive
+indicator. The customer workspace keeps
 its saved Run/Pause presentation and existing task labels. Actual Pause, missing
 completion, configuration blocks, unavailable reads, stale data and account-view
 isolation retain their existing precedence.

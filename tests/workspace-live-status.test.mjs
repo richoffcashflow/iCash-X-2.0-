@@ -45,6 +45,15 @@ assert(!pendingTree.props.className.includes('is-active'));
 const idlePendingCustomer=render({readOnly:false,enabled:true});
 assert.match(text(idlePendingCustomer),/Bot running/);assert.match(text(idlePendingCustomer),/Searching for a deal/);
 assert.doesNotMatch(text(idlePendingCustomer),/Earlier work is awaiting confirmation|Awaiting confirmation|Work needs attention/);
+activity={...activity,ownerCheckComplete:true,label:'An owner lookup finished without a contact for the property it checked. Earlier work costs are under review.'};
+const finishedCheckTree=render();
+assert.equal(text(all(finishedCheckTree).find(n=>n.type==='h2')),'Owner check complete');
+assert.equal(text(all(finishedCheckTree).find(n=>n.props?.role==='status')).trim(),'Owner check complete');
+assert.match(text(finishedCheckTree),/without a contact.*costs are under review/);
+assert.equal(live(finishedCheckTree),false);assert(!finishedCheckTree.props.className.includes('is-active'));
+for(const change of [{readOnly:false,enabled:true},{stale:true},{stopped:true},{busy:true},{paymentRequired:true},{balanceCents:0},{principalKey:'another-account'}]){
+ assert.doesNotMatch(text(render(change)),/Owner check complete|costs are under review/);
+}
 activity={principalKey:'fixture',...currentBotActivity({...pendingInput,tickets:[{kind:'contacts',state:'consumed',expires_at:new Date(Date.now()+60000).toISOString()}]})};
 pendingTree=render();
 assert.match(text(pendingTree),/Bot working/);

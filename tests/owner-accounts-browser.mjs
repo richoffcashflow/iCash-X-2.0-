@@ -32,7 +32,15 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
     if(path.startsWith(root)&&expired)return route.fulfill({status:410,json:{error:'This account view has ended. Open the account again from Accounts.'}});
     if(path===root){inspecting=true;return route.fulfill({json:{view:{id:activeView,expiresAt:new Date(Date.now()+1800000).toISOString(),account:second?secondAccount:account}}});}
     if(path===root+'/activity')return route.fulfill({json:customerWork(second)});
-    if(path===root+'/bot-status')return route.fulfill({json:second?{...(secondBotStatus==='blocked'?{active:false,blocked:true,blockedReason:secondBlockReason,label:'A service issue is blocking work on your account.'}:secondBotStatus==='pending'?{active:false,pendingConfirmation:true,label:'Earlier work is awaiting confirmation.'}:{active:true,pendingConfirmation:true,label:'Finding property owners'}),checkedAt:new Date().toISOString()}:{active:false,label:'Waiting for the next task',checkedAt:now}});
+    if(path===root+'/bot-status'){
+     const states={
+      blocked:{active:false,blocked:true,blockedReason:secondBlockReason,label:'A service issue is blocking work on your account.'},
+      pending:{active:false,pendingConfirmation:true,label:'Earlier work is awaiting confirmation.'},
+      complete:{active:false,pendingConfirmation:true,ownerCheckComplete:true,label:'An owner lookup finished without a contact for the property it checked. Earlier work costs are under review.'},
+      active:{active:true,pendingConfirmation:true,label:'Finding property owners'},
+     };
+     return route.fulfill({json:second?{...states[secondBotStatus],checkedAt:new Date().toISOString()}:{active:false,label:'Waiting for the next task',checkedAt:now}});
+    }
     if(path===root+'/progress')return route.fulfill({json:{progress:{days:Number(u.searchParams.get('days')??1),timezone:u.searchParams.get('timezone')??'UTC',startAt:now,endAt:now,queued:0,screened:27,eligible:12,contacted:14,responded:1,status:second?'ready':'paused'}}});
     if(path===root+'/report')return route.fulfill({json:report(u)});
     if(path===root+'/property-photo')return route.fulfill({json:{photo:{view:'street_view',source:'DealMachine',url:'https://img.dealmachine.com/sv/35,-90.jpg',fallbackUrl:'https://img.dealmachine.com/sat/35,-90.jpg'}}});
@@ -126,6 +134,10 @@ export async function verifyOwnerAccounts(browser,base,options,name,fixtureCooki
   await page.getByRole('heading',{name:'Awaiting confirmation',exact:true}).waitFor();
   await page.getByText('Earlier work is awaiting confirmation.',{exact:true}).waitFor();
   assert.equal(await page.locator('.bot-live-status').getAttribute('data-live'),'false','pending original receipts alone cannot show live work');
+  secondBotStatus='complete';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  await page.getByRole('heading',{name:'Owner check complete',exact:true}).waitFor();
+  await page.getByText('An owner lookup finished without a contact for the property it checked. Earlier work costs are under review.',{exact:true}).waitFor();
+  assert.equal(await page.locator('.bot-live-status').getAttribute('data-live'),'false','a completed lookup is past activity');
   secondBotStatus='active';await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   await page.getByRole('heading',{name:'Taylor is working',exact:true}).waitFor();
   await page.getByText('Finding property owners. Earlier work is awaiting confirmation.',{exact:true}).waitFor();
