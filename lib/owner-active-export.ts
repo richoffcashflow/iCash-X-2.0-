@@ -12,7 +12,7 @@ type Candidate={screeningId:string;snapshot:unknown};
 type Config={contact_rate_id:string;contact_credit_cap:number;property_credit_micros:number;data_rights_until:string;research_version?:number};
 type Audience=ReturnType<typeof ownerBatchAudience>;
 type Receipt={httpStatus:number;raw:unknown;rawText:string};
-type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];preview:unknown;request:ReturnType<typeof activeOwnerExportRequest>;receipt:Receipt;recovery:unknown;csv:string|null;lease:string;localOnly?:boolean;artifactSha256?:string;recoveryHttpStatus?:number;terminalAt?:string|null;atomicRecovery?:boolean;quotaRequestId?:string};
+type SavedExport={id:string;accountId:string;createdAt:string;items:Candidate[];preview:unknown;request:ReturnType<typeof activeOwnerExportRequest>;receipt:Receipt;recovery:unknown;csv:string|null;lease:string;localOnly?:boolean;artifactSha256?:string;recoveryHttpStatus?:number;terminalAt?:string|null;atomicRecovery?:boolean;quotaRequestId?:string;originalDownload?:boolean;originalArtifact?:boolean};
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const invalid=()=>{throw Error('OWNER_EXPORT_RECONCILIATION_REQUIRED');};
@@ -124,6 +124,20 @@ async function downloadOriginal(url:unknown,transport:typeof fetch){
  const bytes=await boundedBody(response,1048576),plain=bytes[0]===0x1f&&bytes[1]===0x8b?gunzipSync(bytes,{maxOutputLength:1048576}):bytes;
  return new TextDecoder('utf-8',{fatal:true}).decode(plain);
 }
+// A signed CSV from the completed purchase is already bound to this export.
+// Older or incomplete purchase responses use the existing status endpoint.
+function originalOwnerDownloadUrl(raw:unknown){
+ const body=object(raw),files=body.download_urls;
+ if(body.status!=='completed'||body.file_count!==1||!integer(body.record_count)||body.record_count<1
+  ||!Array.isArray(files)||files.length!==1)return null;
+ const {url,filename}=object(files[0]);
+ if(typeof url!=='string'||url.length>4096||typeof filename!=='string'||!/[.]csv(?:[.]gz)?$/i.test(filename))return null;
+ let u:URL;try{u=new URL(url);}catch{return null;}
+ const expiry=u.searchParams.get('Expires');
+ if(u.origin!=='https://storage.googleapis.com'||u.username||u.password||u.hash||!u.searchParams.get('GoogleAccessId')
+  ||!u.searchParams.get('Signature')||!expiry||!/^\d{1,12}$/.test(expiry)||Number(expiry)<=Date.now()/1000)return null;
+ return url;
+}
 async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:typeof fetch){
  const original=object(saved.receipt.raw),exportId=original.export_id;
  if(typeof exportId!=='string'||!/^[-a-zA-Z0-9_]{1,128}$/.test(exportId))return invalid();
@@ -131,33 +145,41 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
  // Exhausted provider recovery may only reprocess its immutable local artifact.
  // A missing/corrupt saved CSV must never turn this claim into another GET.
  if(saved.localOnly===true){
-  const data=object(recovery.data);
+  const data=saved.originalArtifact===true?original:object(recovery.data);
   if(!csv||Buffer.byteLength(csv)>1048576||createHash('sha256').update(csv).digest('hex')!==saved.artifactSha256
-   ||saved.receipt.httpStatus!==200||saved.recoveryHttpStatus!==200||!saved.terminalAt
+   ||saved.receipt.httpStatus!==200||!saved.terminalAt
+   ||(saved.originalArtifact===true?saved.recovery!==null:saved.recoveryHttpStatus!==200)
    ||data.export_id!==exportId||data.status!=='completed'||data.record_count!==original.record_count)return invalid();
  }
  if(csv===null){
-  // This is always the original ID, never a search/history match or new export.
-  let rawText='';
-  const readOriginal=async()=>{
-   const response=await transport('https://api.v2.dealmachine.com/v1/exports/'+exportId,{method:'GET',headers:{Authorization:`Bearer ${process.env.DEALMACHINE_API_KEY}`},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
-   rawText=(await boundedBody(response,131072)).toString('utf8');
-   return new Response(rawText,{status:response.status,headers:response.headers});
-  };
-  // SQL has already admitted this exact GET. Its durable request is consumed
-  // even if the response is lost; only a confirmed receipt permits a successor.
-  const r=saved.quotaRequestId
-   ?await finishAdmittedDealMachineRequest(db,saved.quotaRequestId,readOriginal)
-   :await dealMachineRequest(db,'owner_preview',readOriginal,{accountId:saved.accountId,operationKey:'owner-export-recovery:'+saved.id});
-  const recorded=saved.atomicRecovery===true
-   ?await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_quota_recovery',{p_batch:saved.id,p_lease:saved.lease,p_request:saved.quotaRequestId,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})
-   :await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_recovery',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}});
-  if(recorded!==true)return invalid();
-  recovery=object(r.raw);
-  const data=object(recovery.data);
-  if(!r.ok||data.export_id!==exportId||data.status!=='completed'||data.record_count!==original.record_count)return {status:'export_receipt_held'};
-  const files=data.download_urls;if(!Array.isArray(files)||files.length!==1)return invalid();
-  csv=await downloadOriginal(object(files[0]).url,transport);
+  let fileUrl:unknown;
+  if(saved.originalDownload===true){
+   validateOwnerExportReceipt(saved.receipt,saved.request);
+   fileUrl=originalOwnerDownloadUrl(original);if(!fileUrl)return invalid();
+  }else{
+   // This is always the original ID, never a search/history match or new export.
+   let rawText='';
+   const readOriginal=async()=>{
+    const response=await transport('https://api.v2.dealmachine.com/v1/exports/'+exportId,{method:'GET',headers:{Authorization:`Bearer ${process.env.DEALMACHINE_API_KEY}`},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+    rawText=(await boundedBody(response,131072)).toString('utf8');
+    return new Response(rawText,{status:response.status,headers:response.headers});
+   };
+   // SQL has already admitted this exact GET. Its durable request is consumed
+   // even if the response is lost; only a confirmed receipt permits a successor.
+   const r=saved.quotaRequestId
+    ?await finishAdmittedDealMachineRequest(db,saved.quotaRequestId,readOriginal)
+    :await dealMachineRequest(db,'owner_preview',readOriginal,{accountId:saved.accountId,operationKey:'owner-export-recovery:'+saved.id});
+   const recorded=saved.atomicRecovery===true
+    ?await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_quota_recovery',{p_batch:saved.id,p_lease:saved.lease,p_request:saved.quotaRequestId,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}})
+    :await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_recovery',{p_batch:saved.id,p_lease:saved.lease,p_receipt:{httpStatus:r.status,raw:r.raw,rawText}});
+   if(recorded!==true)return invalid();
+   recovery=object(r.raw);
+   const data=object(recovery.data);
+   if(!r.ok||data.export_id!==exportId||data.status!=='completed'||data.record_count!==original.record_count)return {status:'export_receipt_held'};
+   const files=data.download_urls;if(!Array.isArray(files)||files.length!==1)return invalid();
+   fileUrl=object(files[0]).url;
+  }
+  csv=await downloadOriginal(fileUrl,transport);
   // Save even a malformed CSV privately before interpreting or settling it.
   if(await saveRecoveryEvidence(db,'rpc/icash_record_owner_export_artifact',{p_batch:saved.id,p_lease:saved.lease,p_csv:csv})!==true)return invalid();
  }
@@ -177,15 +199,20 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
  return {status:'contacts_saved',batchProperties:results.length};
 }
 /** Maintenance only resumes original GET/download/persistence. Never a POST. */
-export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof fetch=fetch,batchId:string|null=null){
+export async function recoverOwnerActiveExports(db:ResearchDb,transport:typeof fetch=fetch,batchId:string|null=null,originalAccount?:string){
  if(!/^dm_sk_live_[A-Za-z0-9_-]+$/.test(process.env.DEALMACHINE_API_KEY??''))return {status:'provider_not_configured'};
- let saved=await db<SavedExport|null>('rpc/icash_claim_owner_export_recovery','POST',{p_batch:batchId});
+ const direct=originalAccount&&batchId?await db<SavedExport|null>('rpc/icash_claim_original_owner_download','POST',{p_account:originalAccount,p_batch:batchId}):null;
+ let saved=direct??await db<SavedExport|null>('rpc/icash_claim_owner_export_recovery','POST',{p_batch:batchId});
  const continuation=saved===null;
  if(continuation)saved=await db<SavedExport|null>('rpc/icash_claim_owner_export_quota_recovery','POST',{p_batch:batchId});
  if(!saved)return {status:'export_recovery_idle'};
  try{
   // The RPC origin is part of the contract. A malformed atomic result must
   // never fall through to a second admission or the ordinary provider path.
+  if(direct!==null||saved.originalDownload!==undefined){
+   if(!direct||saved.originalDownload!==true||saved.accountId!==originalAccount||saved.id!==batchId
+    ||!saved.terminalAt||saved.csv!==null||saved.recovery!==null||saved.localOnly||saved.atomicRecovery!==undefined||saved.quotaRequestId!==undefined)return invalid();
+  }
   if(continuation||saved.atomicRecovery!==undefined||saved.quotaRequestId!==undefined){
    if(saved.atomicRecovery!==true||saved.localOnly!==false||saved.csv!==null
     ||typeof saved.quotaRequestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.quotaRequestId))return invalid();
@@ -294,7 +321,7 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
  // Durable SQL admission owns this one attempt forever, even after disconnect.
  // Save the exact response before parsing, metrics, download or settlement.
  let originalReceiptConfirmed=true;
- await finishAdmittedDealMachineRequest(db,batchId,async()=>{
+ const purchase=await finishAdmittedDealMachineRequest(db,batchId,async()=>{
   const r=await transport('https://api.v2.dealmachine.com/v1/people/export',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(request),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(120000)});
   const rawText=(await boundedBody(r,524288)).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
   const evidence={p_account:accountId,p_batch:batchId,p_receipt:{httpStatus:r.status,rawText,raw}};
@@ -309,7 +336,7 @@ export async function enrichActiveOwners(db:ResearchDb,accountId:string,primary:
   return new Response(rawText,{status:r.status,headers:r.headers});
  });
  if(!originalReceiptConfirmed)throw Error('OWNER_EXPORT_RECEIPT_SAVE_UNCONFIRMED');
- const recovered=await recoverOwnerActiveExports(db,transport,batchId);
+ const recovered=await recoverOwnerActiveExports(db,transport,batchId,purchase.ok&&originalOwnerDownloadUrl(purchase.raw)?accountId:undefined);
  // The same recovery runs inline after a new export. Preserve infrastructure
  // failure there too, so the automation route retains its normal failed-worker
  // response instead of treating unavailable persistence as ordinary held work.

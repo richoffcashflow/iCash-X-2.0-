@@ -72,6 +72,7 @@ try{
  const admit=(b=batch,a=account,its=items,pr=preview,req=request)=>rpc('icash_admit_owner_active_export',[a,its[0].screeningId,b,its,pr,config,req]);
  assert.equal(await admit(),'held');assert.equal(Number(await v('select count(*) from icash_operation_spend')),0);
  await db.exec('update icash_research_private.owner_export_settings set enabled=true');
+ await (await import('./helpers/original-owner-download-fixture.mjs')).testOriginalOwnerDownload({db,q,v,rpc,read,admit,batch,account,other,request,items,preview});
  for(const returned of [0,1]){
   await db.exec('begin;');
   await q("insert into icash_discovery_filter_pages values($1,'mobile',$2)",[account,{version:'seller-targeting-v1',targeting:{segment:'mobile'}}]);
