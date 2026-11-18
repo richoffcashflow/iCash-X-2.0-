@@ -10,7 +10,7 @@ const schema=z.object({
  replies:z.object({observed:count,actionable:count,restrictedOrAutomated:count,currentlyAccepted:count,delivered:count,sourceTimeUnknown:count,acceptedDispatchLatencyUnknown:count,
   dispatchLatencySeconds:latency,currentWithoutBoundAutomaticReply:count,laterCustomerReplies:count,currentUnsubmitted:count,currentMissingAiJob:count,customerControlled:count,dueProgressChecks:count,oldestDueSeconds:age,
   reasons:z.array(z.object({reason:z.string().min(1).max(100),count:count}).strict()).max(12)}).strict(),
- calls:z.object({attempted:count,completed:count,humanResponses:count,humanResponseUnknown:count}).strict(),
+ calls:z.object({attempted:count,completed:count,humanResponses:count,carrierUnanswered:count.optional(),humanResponseUnknown:count}).strict(),
  offers:z.object({observedDeals:count,quoteRecorded:count,acceptanceRecorded:count,currentQuoteSmsDelivered:count,verifiedPurchaseSigned:count,
   quotedWithoutAcceptance:count,acceptedWithoutVerifiedPurchaseOnDeal:count,voiceQuoteDeliveryUnknown:count,currentOfferAuthority:z.null()}).strict(),
  callbacks:z.object({observed:count,scheduledReviewsDue:count,oldestDueSeconds:age,heldForHuman:count}).strict(),
@@ -27,7 +27,7 @@ export function validSellerConversionReport(value:unknown,days:1|7|30):boolean{
   ||r.reasons.reduce((sum,x)=>sum+x.count,0)>r.currentWithoutBoundAutomaticReply||new Set(r.reasons.map(x=>x.reason)).size!==r.reasons.length)return false;
  if(l.samples===0?(l.p50!==null||l.p90!==null||l.max!==null):(l.p50===null||l.p90===null||l.max===null||l.p50>l.p90||l.p90>l.max))return false;
  if((r.dueProgressChecks===0)!==(r.oldestDueSeconds===null)||(b.scheduledReviewsDue===0)!==(b.oldestDueSeconds===null))return false;
- return c.completed<=c.attempted&&c.humanResponses<=c.completed&&c.humanResponseUnknown===c.attempted-c.completed
+ return c.completed<=c.attempted&&c.humanResponses<=c.completed&&c.humanResponseUnknown===c.attempted-c.completed-(c.carrierUnanswered??0)
   &&o.quoteRecorded<=o.observedDeals&&o.acceptanceRecorded<=o.quoteRecorded&&o.currentQuoteSmsDelivered<=o.quoteRecorded
   &&o.verifiedPurchaseSigned<=o.observedDeals&&o.quotedWithoutAcceptance===o.quoteRecorded-o.acceptanceRecorded
   &&o.acceptedWithoutVerifiedPurchaseOnDeal<=o.acceptanceRecorded&&o.voiceQuoteDeliveryUnknown<=o.quoteRecorded

@@ -18,6 +18,9 @@ try{
  await pg.exec("update icash_reliability_private.incidents set peak_severity='critical',seen_reasons=array['worker','maintenance','workflows']");
  await pg.exec(read('supabase/migrations/20261102210458_account_work_outages.sql'));
  await pg.exec(read('config/account-work-funding-eligibility.sql'));
+ // The deployed snapshot wrapper retains this exact predecessor under its renamed entry point.
+ await pg.exec("alter function icash_refresh_account_work_snapshot() rename to icash_refresh_work_before_incoming_texts;create function icash_refresh_account_work_snapshot() returns jsonb language sql as $$select public.icash_refresh_work_before_incoming_texts()$$;");
+ const pendingProgress=read('config/pending-account-progress.sql');assert.equal(pendingProgress,read('supabase/migrations/20261118194900_pending_account_progress.sql'));await pg.exec(pendingProgress);
  await pg.exec(read('config/account-work-fresh-recovery.sql'));
  await pg.exec(read('supabase/migrations/20261102211401_account_work_existing_discovery_index.sql'));
  assert.equal(await one("select count(*) from pg_indexes where tablename='icash_discovery_results' and indexname in ('icash_discovery_results_account','icash_account_discovery_completed')"),1,'reuse the existing discovery index');
@@ -48,6 +51,11 @@ try{
  await q('delete from fixture_contact_candidates');
  await q("insert into icash_operation_spend(operation_key,account_id,state,charge_cap_cents,created_at) values('held-original',$1,'dispatched',150,now()-interval '1 day')",[id(9)]);
  assert.equal((await refresh()).snapshot.accountProgress.pendingAccounts,1,'a held original operation stays visible despite insufficient fresh-work funding');
+ report=await refresh();assert.equal(report.snapshot.accountProgress.stalledPendingAccounts,1);
+ const stalled=report.snapshot.accountProgress.stalledAccounts;
+ await q("insert into icash_operation_spend(operation_key,account_id,state,actual_micros,settled_at) values('recent-pending',$1,'settled',1,now())",[id(9)]);
+ report=await refresh();assert.equal(report.snapshot.accountProgress.pendingAccounts,1);assert.equal(report.snapshot.accountProgress.stalledPendingAccounts,0);assert.equal(report.snapshot.accountProgress.stalledAccounts,stalled-1);
+ await q("delete from icash_operation_spend where operation_key='recent-pending'");
  await q("delete from icash_operation_spend where operation_key='held-original'");
  await refresh();
  assert.equal((await one('select icash_account_work_health($1)',[id(1)])).status,'blocked');

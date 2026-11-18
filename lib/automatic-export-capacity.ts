@@ -13,7 +13,12 @@ async function saveProbe(db:ResearchDb,reviewId:string,probe:Probe,receipt:Recei
 async function readReceipt(response:Response):Promise<Receipt>{
  if(!response.body)throw Error('CAPACITY_BODY_UNAVAILABLE');
  const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
- try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576)throw Error('CAPACITY_BODY_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>null);reader.releaseLock();}
+ try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576)throw Error('CAPACITY_BODY_TOO_LARGE');chunks.push(value);}}finally{
+  // Each admitted probe must reach its original journal/finalizer even if
+  // closing the transport stays pending. No probe is retried here.
+  try{void reader.cancel().catch(()=>{});}catch{/* Preserve the read outcome. */}
+  reader.releaseLock();
+ }
  const rawText=Buffer.concat(chunks).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
  const number=(name:string)=>{const value=response.headers.get(name);return value!==null&&/^\d{1,10}$/.test(value)?Number(value):null;};
  // Retain original provider freshness evidence for database validation. Never

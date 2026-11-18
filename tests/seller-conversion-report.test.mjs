@@ -22,6 +22,10 @@ const owner='592171a0-2bb9-484e-8c9a-dd5d2b43b5f7';
 let fixture=read('./fixtures/seller-conversion-report.sql');
 if(native)fixture=fixture.replace(/create role (anon|authenticated|service_role);/g,(_,role)=>`do $$begin if not exists(select 1 from pg_roles where rolname='${role}') then create role ${role};end if;end$$;`);
 await pg.exec(fixture+read('./fixtures/seller-conversion-report-helpers.sql')+read('../config/seller-conversion-report.sql'));
+await pg.exec(`alter table icash_call_recordings add column start_claimed_at timestamptz,add column recording_sid text,add column provider_account_sid text,add column from_phone text,add column to_phone text;
+ create table icash_recorded_gate_terminal_receipts(recording_id uuid primary key,account_id uuid,call_sid text,receipt jsonb,created_at timestamptz);`);
+const outcomes=read('../config/known-seller-call-outcomes.sql');assert.equal(outcomes,read('../supabase/migrations/20261118195200_known_seller_call_outcomes.sql'));
+await pg.exec(outcomes);
 const report=async()=>{const {v}=await one('select icash_seller_conversion_report($1,7) v',[owner]);assert(validSellerConversionReport(v,7),JSON.stringify(v));return v;};
 const at=n=>new Date(Date.now()-n*1000).toISOString();
 async function seed({mode='live',actor=randomUUID(),practice=false}={}){
@@ -67,7 +71,14 @@ const superseded=await seed();await incoming(superseded);await incoming(supersed
 r=await report();assert.equal(r.replies.sourceTimeUnknown,1);assert.equal(r.replies.acceptedDispatchLatencyUnknown,2);assert.equal(r.replies.currentlyAccepted,3);assert.equal(r.replies.delivered,2);assert.equal(r.replies.laterCustomerReplies,1);assert.equal(r.replies.currentMissingAiJob,1);assert.equal(r.replies.dueProgressChecks,1);assert(r.replies.oldestDueSeconds>=120);
 const live=await call(c),voicemail=await call(c,{human:false});await call(c,{mismatch:true});
 await q("insert into icash_live_callbacks(conversation_id,account_id,screening_id,due_at,state,created_at) values($1,$2,$3,$4,'pending_dispatch_review',$5),($6,$2,$3,$4,'pending_dispatch_review',$5)",[live,c.a,c.s,at(300),at(1800),voicemail]);
-r=await report();assert.deepEqual(r.calls,{attempted:3,completed:2,humanResponses:1,humanResponseUnknown:1});assert.equal(r.callbacks.observed,1);assert.equal(r.callbacks.scheduledReviewsDue,1);
+r=await report();assert.deepEqual(r.calls,{attempted:3,completed:2,humanResponses:1,carrierUnanswered:0,humanResponseUnknown:1});assert.equal(r.callbacks.observed,1);assert.equal(r.callbacks.scheduledReviewsDue,1);
+const missed=randomUUID(),fromPhone='+15550100101',toPhone='+15550100102';
+await q("insert into icash_call_recordings(id,account_id,screening_id,call_sid,dial_claimed_at,provider_account_sid,from_phone,to_phone) values($1,$2,$3,'CAfixture',now()-interval '1 hour','ACfixture',$4,$5)",[missed,c.a,c.s,fromPhone,toPhone]);
+await q("insert into icash_recorded_gate_terminal_receipts values($1,$2,'CAfixture',$3,now()-interval '50 minutes')",[missed,c.a,{sid:'CAfixture',account_sid:'ACfixture',from:fromPhone,to:toPhone,direction:'outbound-api',duration:'0',status:'no-answer'}]);
+r=await report();assert.deepEqual(r.calls,{attempted:4,completed:2,humanResponses:1,carrierUnanswered:1,humanResponseUnknown:1});
+for(const sql of [`update icash_recorded_gate_terminal_receipts set account_id=gen_random_uuid()`,`update icash_recorded_gate_terminal_receipts set receipt=receipt||'{"duration":"6"}'`,`update icash_recorded_gate_terminal_receipts set receipt=receipt||'{"account_sid":"other"}'`,`update icash_recorded_gate_terminal_receipts set receipt=receipt||'{"status":"completed"}'`,`update icash_call_recordings set recording_sid='REfixture' where id=$1`]){
+ await pg.exec('begin');await q(sql,sql.includes('$1')?[missed]:[]);const changed=await report();assert.equal(changed.calls.carrierUnanswered,0);assert.equal(changed.calls.humanResponseUnknown,2);await pg.exec('rollback');
+}
 const state={processedSource:m.id,textThreadId:c.t,quotedPriceCents:20000000,acceptedPriceCents:20000000,quoteRevision:1};
 await q('insert into icash_call_offer_private.offers values($1,$2,$3,$4)',[c.d,c.a,state,at(100)]);
 await q("insert into icash_call_offer_private.events(deal_id,account_id,call_key,action,state,created_at) values($1,$2,$3,'quote',$4,$5),($1,$2,$3,'accept',$4,$5)",[c.d,c.a,'sms:'+m.id,state,at(100)]);

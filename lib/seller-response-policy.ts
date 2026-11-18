@@ -14,6 +14,9 @@ export const sellerResponsePatterns={
 };
 const normalize=(body:string)=>body.toLowerCase().replace(/[’‘]/g,"'").replace(/[“”]/g,'"').replace(/\s+/g,' ').trim();
 export const sellerStandaloneStopPattern="(?:^|[.!?;] +)(?:please )?stop[.!;](?: +|$)";
+// A direct request to pause this discussion is a reversible conversation hold,
+// not permanent suppression or a request to change a contract or payment.
+export const sellerPausePattern="^(?:(?:ok(?:ay)?|yes)[, ]+)?(?:please )?pause(?: here)?(?: for now)?(?: please)?[.! ,]*$";
 export const sellerWithdrawalPattern="(?:^|[.!?;] +)(?:(?:ok(?:ay)?|yes)[, ]+)?(?:never mind|nevermind|forget it|go away|go to hell)(?: please)?[.! ,]*$";
 function directMatch(body:string,pattern:string){
  for(const match of body.matchAll(new RegExp(pattern,'g'))){
@@ -29,6 +32,7 @@ export function sellerResponseDisposition(source:string):SellerResponseDispositi
  const body=normalize(source);
  if(directMatch(body,sellerResponsePatterns.optOut)||directMatch(body,sellerStandaloneStopPattern))return 'opt_out';
  if(directMatch(body,sellerWithdrawalPattern))return 'declined';
+ if(directMatch(body,sellerPausePattern))return 'review';
  // Exclude only the channel preference, never a separate refusal in the same message.
  const declineBody=/\b(?:call|talk)\b/.test(body)?body.replace(/\bnot (?:(?:super|very|really|that|at all) )?interested in (?:texting|emailing|emails|texts)\b/g,''):body;
  if(directMatch(declineBody,sellerResponsePatterns.declined)){

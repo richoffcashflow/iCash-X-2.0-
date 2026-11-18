@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {preflightOwnerExport,cleanupOwnerPreflight} from '../lib/owner-export-preflight.ts';
+import {transportCleanupFixture,settleBeforeCleanup} from './helpers/transport-cleanup-fixture.mjs';
 const account='fixture-account',ids=['per_3','per_4'],base={id:'fixture-id',lease:'fixture-lease',listId:'fixture-list',name:'icash-owner-preflight-fixture-id',ids,mobileOnly:false};
 function fixture(options={}){
  const calls=[],receipts=[],metrics=[];let status=options.status??'create',saved={},lost=false,cleanupClaimed=false;
@@ -29,6 +30,7 @@ function fixture(options={}){
   const path=new URL(url).pathname,b=o.body?JSON.parse(o.body):null;calls.push({path,method:o.method,body:b});
   assert.equal(o.redirect,'error');assert.equal(o.cache,'no-store');assert(o.signal instanceof AbortSignal);assert(!path.includes('export'));assert(!path.includes('/people/ids'));
   if(options.timeout)throw Error('private provider detail');
+  if(options.response)return options.response;
   if(options.big)return new Response('x'.repeat(1048577));
   if(options.httpError)return Response.json({error:{message:'private provider detail'}},{status:500});
   if(path==='/v1/lists'){assert.deepEqual(b,{name:base.name,source_type:'people',record_ids:[3,4],add_as_prospects:false});return Response.json({data:{list_id:base.listId,name:base.name,source_type:'people',status:'completed',total_count:2}});}
@@ -52,5 +54,20 @@ try{
  const quota=fixture({quota:false,noCleanup:true});assert.equal((await quota.run()).status,'pending');assert.equal(quota.calls.length,0);assert.equal(quota.receipts.length,0,'A proved local refusal is not a provider receipt');
  const denied=fixture({quota:false,noCleanup:true,refuseDeferral:true});assert.equal((await denied.run()).status,'held');assert.equal(denied.calls.length,0);
  const cleanup=fixture({status:'held'});await cleanup.cleanup();await cleanup.cleanup();assert.equal(cleanup.calls.length,1);
+ for(const action of ['create','cleanup'])for(const bodyKind of ['complete','oversized'])for(const mode of ['pending','rejected','synchronous']){
+  const rawText=action==='create'?' {"data":{"list_id":"fixture-list","status":"completed"}}\n':' {"data":{"deleted":true}}\n';
+  const stream=transportCleanupFixture({mode,body:rawText,...(bodyKind==='oversized'?{size:action==='create'?1048577:65537}:{})});
+  const f=fixture({status:action==='create'?'create':'held',noCleanup:action==='create',response:stream.response});
+  const outcome=await settleBeforeCleanup(action==='create'?f.run():f.cleanup(),stream);
+  assert.equal(outcome.error,undefined);assert.equal(f.calls.length,1,'Original provider action is never replayed');
+  assert.equal(f.receipts.length,1,'Original evidence/failure is journaled once');
+  assert.deepEqual(f.receipts[0].p_receipt,bodyKind==='complete'?{httpStatus:200,raw:JSON.parse(rawText),rawText}:{httpStatus:null,raw:null,rawText:null});
+  assert.equal(f.metrics.length,1,'Original quota request is finalized once');
+  if(bodyKind==='oversized')assert.deepEqual(f.metrics[0].p_result,{outcome:'unknown'},'Missing body never grants zero-cost success');
+  if(action==='create'){
+   assert.equal(outcome.value.status,bodyKind==='complete'?'pending':'held');await f.run();
+  }else await f.cleanup();
+  assert.equal(f.calls.length,1,'A completed or uncertain original does not repeat');
+ }
  console.log('PASS owner preflight transport: separate creation/count capabilities, original receipt-before-interpretation, lost-save acknowledgment, free bounded cleanup, active/mobile filters, no export or repeat after unknown outcome.');
 }finally{if(key===undefined)delete process.env.DEALMACHINE_API_KEY;else process.env.DEALMACHINE_API_KEY=key;}

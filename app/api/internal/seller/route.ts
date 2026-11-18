@@ -32,7 +32,10 @@ export async function GET(req:Request){
   .catch(()=>{instantFailed=true;return {status:'instant_lead_retry_pending'};});
  // Recovery is independent of new seller intake. A failed or slow receipt
  // lookup must not delay a newly submitted property's first response.
- const agreementRecovery=recoverAgreementDelivery({db,send:sendForSignatures,text:textPendingContract},process.env).catch(()=>{
+ const agreementRecovery=recoverAgreementDelivery({db,send:sendForSignatures,text:textPendingContract},process.env).then(result=>{
+   if('receiptCheckFailed' in result && result.receiptCheckFailed)recoveryFailures.push('agreementRecovery');
+   return result;
+ }).catch(()=>{
    console.warn('seller_agreement_recovery_unavailable');
    return failedRecovery('agreementRecovery','agreement_recovery_unavailable');
  });

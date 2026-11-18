@@ -37,6 +37,31 @@ Date.now=()=>Date.parse('2026-11-16T12:00:00Z');process.env.DOCUSEAL_TEST_API_KE
 const reset=()=>{raw=document();records=[];requests=[];allowedReads=0;failAt=0;patchFailure=false;expireFailure=false;markerResult=true;observed=[];envelope.state='needs_review';pollClaim=true;};
 const input={accountId:'account',userId:'user',customerEmail:'customer@example.invalid',dealId:'deal',kind:'purchase',signers:[{name:'Fixture seller',email:'seller@example.invalid'}]};
 try{
+ // A known failed original GET must return to its caller without waiting for
+ // transport cleanup. It never records a receipt, signs or creates anything.
+ const originalFixtureFetch=globalThis.fetch,flush=()=>new Promise(resolve=>setImmediate(resolve));
+ for(const cleanup of ['pending','rejected','synchronous']){
+  reset();let cancels=0,rejectCleanup,settled=false,error;
+  const cleanupWait=new Promise((_,reject)=>{rejectCleanup=reject;});
+  const response=new Response(new ReadableStream({
+   start(controller){controller.enqueue(new Uint8Array(1));},
+   cancel(){cancels++;return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;},
+  }),{status:503});
+  if(cleanup==='synchronous')response.body.cancel=()=>{cancels++;throw Error('private cleanup');};
+  globalThis.fetch=async(url,options)=>{requests.push({url,method:options.method});assert.equal(options.redirect,'error');return response;};
+  const pending=reconcileSigningReceipt('account','envelope').then(()=>{settled=true;},failure=>{error=failure;settled=true;});
+  try{
+   await flush();await flush();assert.equal(settled,true,`${cleanup}: failed original poll cannot await cleanup`);await pending;
+   assert.equal(error?.message,'Signing provider request failed. Do not resend until its status is checked.');
+   assert.equal(cancels,1);assert.deepEqual(requests,[{url:'https://api.docuseal.com/submissions/123',method:'GET'}]);
+   assert.equal(observed.length,0);assert.equal(envelope.state,'needs_review');
+   assert.equal(records.filter(r=>r.path==='rpc/icash_claim_signing_poll').length,1);
+   assert(!records.some(r=>r.method==='PATCH'||r.path==='rpc/icash_claim_auto_signature'),'No evidence or authority is fabricated from failure');
+  }finally{
+   if(cleanup==='pending')rejectCleanup(Error('private late cleanup'));
+   await flush();await pending;globalThis.fetch=originalFixtureFetch;
+  }
+ }
  for(const terminal of ['pending','expired','declined','archived','unknown','future','completed']){
   reset();
   if(['expired','declined'].includes(terminal))raw.status=terminal;

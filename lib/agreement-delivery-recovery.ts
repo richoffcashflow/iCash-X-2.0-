@@ -1,6 +1,7 @@
 import {signingTermsHash} from './signing-policy.ts';
 import {dealTermsSchema} from './deal-documents.ts';
-type Job={id:string;accountId:string;userId:string;customerEmail:string;dealId:string;phone:string;sellerName:string;expectedTerms:unknown};
+type RecoveryEnvelope={id:string;state:string;terms:unknown;recipients:{name:string;phone?:string}[];provider_id:string|null};
+type Job={id:string;accountId:string;userId:string;customerEmail:string;dealId:string;phone:string;sellerName:string;expectedTerms:unknown;existingEnvelopes?:RecoveryEnvelope[]};
 type Database=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;
 type Dependencies={db:Database;send:(input:{accountId:string;userId:string;customerEmail:string;dealId:string;kind:'purchase';signers:{name:string;phone:string}[];phoneLinkOnly:true;expectedTerms:unknown})=>Promise<{id:string;testMode:boolean}>;text:(accountId:string,envelopeId:string,phone:string)=>Promise<{sent:boolean;status:string}>};
 /** One owner-authorized request, one provider creation. An uncertain send stays
@@ -9,16 +10,22 @@ export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,
  if(env.VERCEL_ENV!=='production'||env.DOCUSEAL_MODE!=='live'||env.ICASH_LIVE_WORK_READY!=='true')return {status:'disabled'};
  // A worker may stop after SMS acceptance but before saving its result. Read
  // the existing provider receipt; reconciliation cannot send or create work.
- const reconciled=await d.db<number>('rpc/icash_reconcile_agreement_delivery_receipts','POST',{});
- const job=await d.db<Job|null>('rpc/icash_claim_agreement_delivery_recovery','POST',{});if(!job)return {status:reconciled>0?'agreement_delivery_reconciled':'idle'};
+ const reconciled=await d.db<number>('rpc/icash_reconcile_agreement_delivery_receipts','POST',{}).catch(()=>null);
+ const receiptHealth=reconciled===null?{receiptCheckFailed:true}:{};
+ const job=await d.db<Job|null>('rpc/icash_claim_agreement_delivery_recovery','POST',{});
+ if(!job)return {status:reconciled===null?'agreement_receipt_check_pending':reconciled>0?'agreement_delivery_reconciled':'idle',...receiptHealth};
  let envelopeId:string|null=null;
  let textAttempted=false;
  let result:{sent:boolean;status:string};
  try{
-  const existing=await d.db<{id:string;state:string;terms:unknown;recipients:{name:string;phone?:string}[];provider_id:string|null}[]>(`icash_signing_envelopes?account_id=eq.${job.accountId}&deal_id=eq.${job.dealId}&kind=eq.purchase&test_mode=eq.false&select=id,state,terms,recipients,provider_id&limit=2`);
+  const existing=job.existingEnvelopes===undefined?await d.db<RecoveryEnvelope[]>(`icash_signing_envelopes?account_id=eq.${job.accountId}&deal_id=eq.${job.dealId}&kind=eq.purchase&test_mode=eq.false&select=id,state,terms,recipients,provider_id&limit=2`):job.existingEnvelopes;
+  if(!Array.isArray(existing))throw Error('existing_agreement_needs_review');
   if(existing.length){
    const e=existing[0];
-   if(existing.length!==1||e.state!=='awaiting_counterparty'||!e.provider_id||signingTermsHash(dealTermsSchema.parse(e.terms))!==signingTermsHash(dealTermsSchema.parse(job.expectedTerms))||e.recipients.length!==2||e.recipients[0].phone!==job.phone||e.recipients[0].name!==job.sellerName)throw Error('existing_agreement_needs_review');
+   if(existing.length!==1||!e.provider_id||signingTermsHash(dealTermsSchema.parse(e.terms))!==signingTermsHash(dealTermsSchema.parse(job.expectedTerms))||e.recipients.length!==2||e.recipients[0].phone!==job.phone||e.recipients[0].name!==job.sellerName)throw Error('existing_agreement_needs_review');
+   // The signer may already have acted. The original receipt loop owns that outcome.
+   if(e.state==='customer_signature_needed'||e.state==='completed')return {status:'agreement_delivery_record_pending',...receiptHealth};
+   if(e.state!=='awaiting_counterparty')throw Error('existing_agreement_needs_review');
    envelopeId=e.id;
   }else{
    // Keep the claim's seller-confirmed document through signing's fresh read.
@@ -33,15 +40,15 @@ export async function recoverAgreementDelivery(d:Dependencies,env:Record<string,
   // A text operation may save provider acceptance and then lose its response.
   // Leave that one-shot claim intact for receipt-only reconciliation; declaring
   // failure here would strand a real receipt in an ineligible needs_review row.
-  if(textAttempted)return {status:'agreement_delivery_record_pending'};
+  if(textAttempted)return {status:'agreement_delivery_record_pending',...receiptHealth};
   const reason=error instanceof Error?error.message.slice(0,250):'Agreement recovery needs review';
   try{await d.db('rpc/icash_finish_agreement_delivery_recovery','POST',{p_id:job.id,p_envelope:envelopeId,p_result:{sent:false,status:'needs_review',reason}});}catch{console.warn('agreement_recovery_record_pending');}
-  return {status:'agreement_recovery_needs_review'};
+  return {status:'agreement_recovery_needs_review',...receiptHealth};
  }
  // Persist the actual outcome once. A failed database write does not turn an
  // accepted text into a failed delivery, and must never trigger another send.
  try{
-  if(await d.db('rpc/icash_finish_agreement_delivery_recovery','POST',{p_id:job.id,p_envelope:envelopeId,p_result:{sent:result.sent,status:result.status}})!==true)return {status:'agreement_delivery_record_pending'};
- }catch{return {status:'agreement_delivery_record_pending'};}
- return {status:result.sent?'agreement_text_accepted':'agreement_text_needs_review'};
+  if(await d.db('rpc/icash_finish_agreement_delivery_recovery','POST',{p_id:job.id,p_envelope:envelopeId,p_result:{sent:result.sent,status:result.status}})!==true)return {status:'agreement_delivery_record_pending',...receiptHealth};
+ }catch{return {status:'agreement_delivery_record_pending',...receiptHealth};}
+ return {status:result.sent?'agreement_text_accepted':'agreement_text_needs_review',...receiptHealth};
 }

@@ -24,7 +24,10 @@ export async function recoverOwnerExportCapacity(db:ResearchDb,transport:typeof 
    });
    if(!response.body)throw Error('EXPORT_CAPACITY_RESPONSE_UNAVAILABLE');
    const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
-   try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576)throw Error('EXPORT_CAPACITY_RESPONSE_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>null);}
+   try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576)throw Error('EXPORT_CAPACITY_RESPONSE_TOO_LARGE');chunks.push(value);}}finally{
+    try{void reader.cancel().catch(()=>{});}catch{/* Preserve the original free-read outcome. */}
+    reader.releaseLock();
+   }
    const rawText=Buffer.concat(chunks).toString('utf8');let raw:unknown=null;try{raw=JSON.parse(rawText);}catch{}
    const number=(name:string)=>{const value=response.headers.get(name);return value!==null&&/^\d{1,10}$/.test(value)?Number(value):null;};
    received=true;
