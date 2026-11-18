@@ -27,7 +27,7 @@ begin
  source:=pg_get_functiondef(voice_context);
  anchor:=$old$(source_at<now()-interval '15 minutes' or not exists(select 1 from public.icash_seller_progress_settings settings$old$;
  patched:=replace(source,anchor,$new$((source_at<now()-interval '15 minutes' and not (
-   source_at>=now()-interval '24 hours' and j.state='queued' and j.thread_id=t.id and j.analysis->>'dialoguePolicy'='seller-dialogue-v1'
+   source_at>=now()-interval '24 hours' and j.state='queued' and j.thread_id=t.id and (j.analysis->>'dialoguePolicy') is not distinct from 'seller-dialogue-v1'
    and exists(select 1 from public.icash_text_messages original where original.id=j.outgoing_id and original.account_id=p_account
     and original.thread_id=t.id and original.request_key=j.id and original.direction='outgoing' and original.state='ready'
     and original.provider_id is null and original.last_delivery_at is null and original.customer_author_id is null

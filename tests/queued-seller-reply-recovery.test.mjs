@@ -53,6 +53,7 @@ try{
  assert.equal(await voice(),true,'The original was finished and prepared inside the receipt deadline');
  for(const [sql,args] of [
   ["update icash_call_recordings set call_ended_at=now()-interval '3 hours'",[]],["update icash_text_ai_jobs set state='drafted'",[]],
+  ["update icash_text_ai_jobs set analysis=analysis-'dialoguePolicy'",[]],
   ["update icash_text_messages set created_at=now()-interval '3 hours' where id=$1",[out]],
   ["update icash_seller_progress_settings set voice_receipt_wait_enabled_at=now()",[]],
   ["update icash_call_recordings set screening_id=gen_random_uuid()",[]],
