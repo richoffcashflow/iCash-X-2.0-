@@ -16,7 +16,8 @@ BATCH = "00000000-0000-4000-8000-000000000001"
 ACCOUNT = "00000000-0000-4000-8000-000000000002"
 SCREENING = "00000000-0000-4000-8000-000000000003"
 TICKET = "00000000-0000-4000-8000-000000000004"
-MISSING_FINISH = os.environ.get("ICASH_TEST_MISSING_EXPORT_FINISH") == "1"
+ABANDONED_HANDLER = os.environ.get("ICASH_TEST_ABANDONED_EXPORT_HANDLER") == "1"
+MISSING_FINISH = os.environ.get("ICASH_TEST_MISSING_EXPORT_FINISH") == "1" or ABANDONED_HANDLER
 
 
 def sql(query):
@@ -110,6 +111,19 @@ def setup():
       update icash_research_private.export_capacity_automation set enabled=true,gateway_enabled=true,empty_enabled=true;""")
     if MISSING_FINISH:
         sql("update icash_research_private.requests set finished_at=null,result=null where kind='owner_lookup';")
+    if ABANDONED_HANDLER:
+        sql("""update icash_research_private.owner_batches set created_at=now()-interval '21 minutes';
+          update icash_research_private.requests set created_at=now()-interval '21 minutes' where kind='owner_lookup';
+          update icash_automation_tickets set state='consumed',outcome=null,completed_at=null,
+            created_at=now()-interval '22 minutes',expires_at=now()-interval '20 minutes';
+          alter function icash_research_private.capacity_source_policy(uuid,text) rename to capacity_source_before_credit;
+          create function icash_research_private.capacity_source_policy(uuid,text) returns text language sql stable set search_path=''
+            as 'select icash_research_private.capacity_source_before_credit($1,$2)';
+          create table icash_research_private.dealmachine_credit_state(id integer primary key,function_hashes jsonb);
+          insert into icash_research_private.dealmachine_credit_state values(1,jsonb_build_object(
+            'icash_research_private.capacity_source_before_credit(uuid,text)',
+            md5(pg_get_functiondef('icash_research_private.capacity_source_before_credit(uuid,text)'::regprocedure))));""")
+        sql("begin;" + (ROOT / "config/abandoned-export-handler-capacity.sql").read_text() + "commit;")
 
 
 def enable():
@@ -146,12 +160,12 @@ for change in [
     "update icash_research_private.owner_exports set csv='new artifact'",
     "update icash_research_private.owner_exports set recovery='{}'",
     "update icash_research_private.owner_exports set lease_until=now()+interval '1 minute'",
-    "update icash_automation_tickets set completed_at=null",
+    "update icash_automation_tickets set completed_at=now()" if ABANDONED_HANDLER else "update icash_automation_tickets set completed_at=null",
     "update icash_automation_tickets set issue_attempts=null",
     "update icash_automation_tickets set issue_attempts=0",
     "update icash_automation_tickets set issue_attempts=2",
     "update icash_automation_tickets set completed_at=now()",
-    "update icash_automation_tickets set state='consumed'",
+    "update icash_automation_tickets set state='held'" if ABANDONED_HANDLER else "update icash_automation_tickets set state='consumed'",
     "update icash_automation_tickets set outcome='completed'",
     "update icash_automation_tickets set account_id=null",
     "update icash_automation_tickets set screening_id=null",
@@ -202,7 +216,7 @@ for change in [
     "update icash_research_private.owner_exports set receipt='{\"httpStatus\":200,\"raw\":{\"export_id\":\"late-original\"}}'",
     "update icash_research_private.owner_batches set paid_receipt='{\"export_id\":\"late-original\"}'",
     "update icash_research_private.requests set result='{\"outcome\":\"response\",\"httpStatus\":200}' where kind='owner_lookup'",
-    "update icash_automation_tickets set state='consumed'",
+    "update icash_automation_tickets set state='held'" if ABANDONED_HANDLER else "update icash_automation_tickets set state='consumed'",
 ]:
     setup()
     enable()
@@ -239,7 +253,7 @@ for change in [
     "update icash_research_private.export_capacity_automation set missing_finish_enabled=false" if MISSING_FINISH else "update icash_research_private.export_capacity_automation set unknown_enabled=false",
     "update icash_research_private.export_capacity_automation set enabled=false",
     "update icash_research_private.owner_exports set request='{\"people_ids\":[\"changed-owner\"]}'",
-    "update icash_automation_tickets set completed_at=completed_at+interval '1 second'",
+    "update icash_automation_tickets set completed_at=now()" if ABANDONED_HANDLER else "update icash_automation_tickets set completed_at=completed_at+interval '1 second'",
 ]:
     assert sql("begin;" + change + f";select icash_finish_automatic_export_capacity('{claim['reviewId']}');rollback;") == "capacity_review_held", change
 finished = contend(f"select icash_finish_automatic_export_capacity('{claim['reviewId']}');", 16)
