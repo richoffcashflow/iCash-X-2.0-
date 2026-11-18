@@ -34,6 +34,9 @@ try{
  async function setup(){
   await owner.query('drop schema if exists icash_recording_private,icash_seller_recovery_private,icash_seller_agreement_private,icash_text_receipt_private cascade;drop schema public cascade;create schema public;');
   await owner.query(fixture+threeTouchMetaFixtureSql()+'begin;'+threeTouchMigrations()+read('config/three-touch-meta-calls.sql')+read('config/three-touch-text-settlement.sql')+'commit;'+seed);
+  const signature='public.icash_seller_text_cadence_current(uuid,uuid,uuid,boolean)';
+  await owner.query('revoke all on function '+signature+' from public,anon,authenticated;grant execute on function '+signature+' to service_role;');
+  await owner.query('begin;'+read('config/answered-seller-stops-cold-text.sql')+'commit;');
   await admin.query('alter role service_role bypassrls');
  }
  await setup();
@@ -92,6 +95,11 @@ try{
  assert.equal(prepared.filter(Boolean).length,1,'16 preparations queue the actual third message once');
  assert.equal(await value(owner,'select count(*)::int from icash_text_messages'),3);
  assert.equal(await value(owner,"select state from icash_text_messages where id=$1",[prepared.find(Boolean)]),'ready');
+ const preparedMessage=prepared.find(Boolean);
+ await owner.query("insert into icash_text_messages(id,account_id,thread_id,direction,state,event_id,body,created_at) values(gen_random_uuid(),$1,$2,'incoming','received','during-call','Please text me.',now()-interval '4 hours 3 minutes')",[a,thread]);
+ const coldAdmissions=await Promise.all(workers.map(c=>value(c,'select icash_seller_text_cadence_current($1,$2,$3,true)',[a,thread,preparedMessage])));
+ assert(coldAdmissions.every(admitted=>admitted===false),'All final admissions stop the queued unanswered follow-up after a real reply');
+ assert.equal(await value(owner,'select icash_seller_text_cadence_current($1,$2,null,false)',[a,thread]),true);
  console.log('PASS native three-touch: 16 competing call queues and 16 text catch-up scans create one next step, original jobs/costs stay unchanged, five late call-control races and one late SMS-cost race block preparation.');
 }finally{
  await Promise.allSettled(clients.filter(c=>c!==admin).map(c=>c.end()));
