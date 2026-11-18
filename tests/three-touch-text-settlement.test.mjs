@@ -83,5 +83,35 @@ try{
   await q('update icash_seller_recovery_private.unanswered_policy set three_touch_enabled=false');
   assert.equal(await current(),true,'inactive legacy second-text behavior is preserved');
  });
+ const incoming=async(target=thread,owner=account,accepted=true)=>{
+  const id=randomUUID();await q("insert into icash_text_messages(id,account_id,thread_id,direction,state,event_id,body,created_at) values($1,$2,$3,'incoming','received',$4,'Please text me.',now()-interval '4 hours 3 minutes')",[id,owner,target,accepted?'event-'+id:null]);return id;
+ };
+ await scenario('reproduce the no-response shortcut for a seller who texted during a call',async()=>{
+  await incoming();assert.equal(await current(),true);
+ });
+ const stopCold=read('config/answered-seller-stops-cold-text.sql');
+ assert.equal(stopCold,read('supabase/migrations/20261118202100_answered_seller_stops_cold_text.sql'));
+ // Reconstruct the installed service-only grants on the historical fixture definition.
+ await pg.exec('revoke all on function '+signature+' from public,anon,authenticated;grant execute on function '+signature+' to service_role;');
+ const authority=await metadata();await pg.exec('begin;'+stopCold+'commit;');assert.deepEqual(await metadata(),authority);
+ await scenario('unanswered scan and prepared final dispatch stop while the actual reply stays eligible',async()=>{
+  assert.equal(await catchup(),1);const gap=await value('select id from icash_seller_gaps');const cold=await prepare(gap);assert.ok(cold);
+  const original=await originals();await incoming();
+  assert.equal(await current(cold),false);assert.equal(await current(),false);assert.equal(await catchup(),0);
+  assert.equal(await value('select icash_seller_text_cadence_current($1,$2,null,false)',[account,thread]),true);
+  assert.deepEqual(await originals(),original,'Earlier financial and provider evidence stays intact');
+ });
+ await scenario('cold contact stops across business numbers and accounts for this seller only',async()=>{
+  const other=randomUUID(),peer=randomUUID();
+  await q("insert into icash_text_threads(id,account_id,recipient,sender,party) values($1,$2,'+12145550123','+17205550101','seller')",[other,peer]);
+  await incoming(other,peer);assert.equal(await current(),false);
+  await q("update icash_text_threads set recipient='+12145550999' where id=$1",[other]);assert.equal(await current(),true);
+ });
+ await scenario('an incoming row without provider evidence cannot end the sequence',async()=>{await incoming(thread,account,false);assert.equal(await current(),true);});
+ await scenario('manual contact keeps its independent final controls',async()=>{await incoming();await q("update icash_text_messages set customer_author_id=gen_random_uuid() where id=$1",[second]);assert.equal(await current(second),true);});
+ await scenario('a verified seller call blocks cold outreach and preserves ongoing dialogue',async()=>{
+  await q("insert into icash_live_conversations(id,account_id,screening_id,contact_key,party,state,conversation_id,completed_at,result) values(gen_random_uuid(),$1,$2,encode(sha256(convert_to('+12145550123','UTF8')),'hex'),'seller','complete','conv-human',now()-interval '4 hours',$3)",[account,screen,{contactEvidence:'response',transcript:[{role:'user',message:'Yes, I own this home.'}]}]);
+  assert.equal(await current(),false);assert.equal(await value('select icash_seller_text_cadence_current($1,$2,null,false)',[account,thread]),true);
+ });
  console.log(`PASS three-touch text settlement: ${cases} scenarios; predecessor reproduced, all prior costs settled, missing/wrong-account evidence fails closed, late changes blocked, legacy behavior and originals preserved.`);
 }catch(e){console.error(e.message,e.cause?.message??'');process.exitCode=1;}finally{await pg.close();}
