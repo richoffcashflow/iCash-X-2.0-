@@ -10,6 +10,11 @@ const migrationName = readdirSync(new URL('../supabase/migrations/', import.meta
   .find(name => name.endsWith('_funded_search_recovery.sql'));
 assert.ok(migrationName);
 assert.equal(read('supabase/migrations/' + migrationName), migration);
+const rankingMigration = read('config/independent-search-market-order.sql');
+const rankingName = readdirSync(new URL('../supabase/migrations/', import.meta.url))
+  .find(name => name.endsWith('_independent_search_market_order.sql'));
+assert.ok(rankingName);
+assert.equal(read('supabase/migrations/' + rankingName), rankingMigration);
 
 const pg = new PGlite();
 const value = async (query, params = []) => Object.values((await pg.query(query, params)).rows[0])[0];
@@ -82,6 +87,26 @@ try {
   await pg.exec('begin;' + migration + 'commit;');
 
   const denied = {outcome:'http_error',httpStatus:402};
+  async function chooseMarket() {
+    let chosen;
+    await scenario(async () => {
+      await receipt(denied);
+      await pg.exec(`
+        create or replace function public.icash_research_zip_known(text) returns boolean
+        language sql stable as $$select $1 between '20101' and '20200'$$;
+        insert into public.icash_inventory_markets(account_id,zip,next_scan_at,priority)
+          select '${account}',n::text,now(),n from generate_series(20001,20200) n;
+        insert into public.fixture_scores values('20164',100),('20165',1000);
+      `);
+      assert.equal(await recover(),true);
+      chosen=(await config()).zip;
+    });
+    return chosen;
+  }
+  const originalChoice=await chooseMarket();
+  assert.equal(originalChoice,'20164','The better-scoring 65th eligible ZIP is outside the candidate limit');
+  await pg.exec('begin;' + rankingMigration + 'commit;');
+  assert.equal(await chooseMarket(),originalChoice,'Ranking must scan beyond 100 unavailable ZIPs and preserve the candidate limit');
   await scenario(async () => {
     await receipt(denied);
     const before = await snapshot();
