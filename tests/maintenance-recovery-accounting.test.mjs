@@ -40,7 +40,7 @@ for(const scenario of ['none','waiting','inventory_result',...Object.keys(normal
   retryVolumeDeferredText:async()=>{started.push('senderVolume');if(scenario==='sender_throw')throw Error('PRIVATE sender failure');return {status:senderCases[scenario]??'idle'};},recoverTextDeliveryReceipts:async()=>({status:'idle',errors:0}),
   processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
   processSupportCustomerNotifications:async()=>({failed:0}),recoverAccessHelpReplies:async()=>0,processSupportOwnerNotifications:async()=>({failed:0}),
-  processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
+  processPaymentRecoveries:async()=>({checked:0,accepted:0,failed:0}),fundingStripe:()=>{throw Error("Unexpected recovery provider");},processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
   outbound:task('outbound'),recording:task('recording'),ownerRecording:task('ownerRecording'),reception:task('reception'),
  };
  for(const [name,service] of Object.entries(services))deps[service]=async()=>{

@@ -1,4 +1,5 @@
 import {sendLegacyTrialReminder} from '@/lib/legacy-trial-reminder';
+import {observeInvoiceRecovery} from '@/lib/payment-recovery';
 import {reconcilePrivateVipCheckout,settlePrivateVipInvoice,syncPrivateVip} from '@/lib/private-vip';
 import {schedulePurchaseAccessEmail} from '@/lib/purchase-access-dispatch';
 export const maxDuration=120;
@@ -40,7 +41,7 @@ export async function POST(req:Request) {
   const invoice=await stripe.invoices.retrieve(event.data.object.id);
   if(invoice.id!==event.data.object.id||invoice.livemode!==event.livemode)throw Error('Invoice mode mismatch');
   const sid=invoice.parent?.subscription_details?.subscription,id=typeof sid==='string'?sid:sid?.id;
-  if(id){const sub=await stripe.subscriptions.retrieve(id);if(!await syncPrivateVip(sub)&&!await syncMembershipSubscription(sub))await syncDailySubscription(sub);}
+  if(id){const sub=await stripe.subscriptions.retrieve(id);if(!await syncPrivateVip(sub)&&!await syncMembershipSubscription(sub))await syncDailySubscription(sub);await observeInvoiceRecovery(invoice,sub,db);}
  }else if(event.type==="customer.subscription.updated"||event.type==="customer.subscription.deleted"){const sub=await stripe.subscriptions.retrieve(event.data.object.id);if(!await syncPrivateVip(sub)&&!await syncMembershipSubscription(sub))await syncDailySubscription(sub);
  }else if(event.type==="charge.refunded"||event.type==="charge.dispute.created"){
   const obj=event.data.object;const payment=typeof obj.payment_intent==="string"?obj.payment_intent:obj.payment_intent?.id;
