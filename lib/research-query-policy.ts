@@ -1,7 +1,7 @@
 import {z} from 'zod';
 export const researchQueryPolicySchema=z.discriminatedUnion('version',[
  z.object({version:z.enum(['research-efficiency-v1','research-efficiency-v2']),exclusionListId:z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).nullable()}).strict(),
- z.object({version:z.literal('financial-prefilter-v1'),exclusionListId:z.string().regex(/^[A-Za-z0-9_-]{1,100}$/),asOf:z.iso.date(),tier:z.number().int().min(0).max(2)}).strict(),
+ z.object({version:z.literal('financial-prefilter-v1'),exclusionListId:z.string().regex(/^[A-Za-z0-9_-]{1,100}$/),asOf:z.iso.date(),tier:z.number().int().min(0).max(2),valueBand:z.object({min:z.number().int().min(0),max:z.number().int().positive().max(500000)}).strict().refine(b=>b.min<=b.max).optional()}).strict(),
 ]);
 export type ResearchQueryPolicy=z.infer<typeof researchQueryPolicySchema>;
 export const researchQueryPolicyValid=(v:unknown):v is ResearchQueryPolicy=>researchQueryPolicySchema.safeParse(v).success;
@@ -23,11 +23,14 @@ export const researchEligibilityFilters=(version:ResearchQueryPolicy['version'])
 export function financialPrefilters(policy:ResearchQueryPolicy,minimumRepairs=0):Record<string,unknown>[]{
  if(policy.version!=='financial-prefilter-v1')return [];
  if(!researchQueryPolicyValid(policy)||![0,25000].includes(minimumRepairs))throw Error('DISCOVERY_CONFIGURATION_INVALID');
+ const floor=minimumRepairs===25000?50000:14285.72;
  const filters:Record<string,unknown>[]=[
   {filter_id:'market_status',operator:'contains_any',value:[6]},
   // floor(10,000 dollars / 0.70 to cents): even zero repairs cannot produce
   // a positive seller ceiling at or below this value. No arbitrary price band.
-  {filter_id:'estimated_value',operator:'greater_than',value:minimumRepairs===25000?50000:14285.72},
+  policy.valueBand
+   ? {filter_id:'estimated_value',operator:'range',value:{min:Math.max(policy.valueBand.min,floor+0.01),max:policy.valueBand.max}}
+   : {filter_id:'estimated_value',operator:'greater_than',value:floor},
   {filter_id:'estimated_repair_cost',operator:'greater_than_or_equal',value:0},
   {filter_id:'num_total_active_liens',operator:'less_than_or_equal',value:0},
  ];

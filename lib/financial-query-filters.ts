@@ -6,10 +6,21 @@ const lower=(f:Filter)=>['greater_than','greater_than_or_equal'].includes(String
 export function combineFinancialFilters(filters:Filter[]):Filter[]|null{
  const result:Filter[]=[];
  for(const f of filters){
+  if(f.filter_id==='estimated_value'&&f.operator==='range'){
+   const bounds=f.value as {min:number;max:number}|undefined;
+   if(!bounds||!Number.isFinite(bounds.min)||!Number.isFinite(bounds.max)||bounds.min>bounds.max)return null;
+  }
   const index=result.findIndex(existing=>existing.filter_id===f.filter_id);
   if(index<0){result.push({...f});continue;}
   const previous=result[index];
   if(previous.operator===f.operator&&same(previous.value,f.value))continue;
+  if(f.filter_id==='estimated_value'&&previous.operator==='range'&&f.operator==='range'){
+   const a=previous.value as {min:number;max:number},b=f.value as {min:number;max:number};
+   const min=Math.max(a.min,b.min),max=Math.min(a.max,b.max);
+   if(min>max)return null;
+   result[index]={...previous,value:{min,max}};
+   continue;
+  }
   if(lower(previous)&&lower(f)){
    if(Number(f.value)>Number(previous.value)||f.value===previous.value&&f.operator==='greater_than')result[index]={...f};
    continue;
