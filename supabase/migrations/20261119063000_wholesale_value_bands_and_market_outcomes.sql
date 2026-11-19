@@ -82,39 +82,11 @@ begin
  if p_policy ? 'valueBand' and (jsonb_typeof(p_policy->'valueBand') is distinct from 'object'
   or p_policy->'valueBand' is distinct from jsonb_build_object('min',p_policy#>'{valueBand,min}','max',p_policy#>'{valueBand,max}')
   or jsonb_typeof(p_policy#>'{valueBand,min}') is distinct from 'number' or jsonb_typeof(p_policy#>'{valueBand,max}') is distinct from 'number'
-  or (p_policy#>>'{valueBand,min}') !~ '^[0-9]+
-  jsonb_build_object('filter_id','market_status','operator','contains_any','value',jsonb_build_array(6)),
-  case when p_policy ? 'valueBand' then jsonb_build_object('filter_id','estimated_value','operator','range','value',jsonb_build_object('min',greatest(floor_value+0.01,(p_policy#>>'{valueBand,min}')::numeric),'max',p_policy#>'{valueBand,max}')) else jsonb_build_object('filter_id','estimated_value','operator','greater_than','value',floor_value) end,
-  jsonb_build_object('filter_id','estimated_repair_cost','operator','greater_than_or_equal','value',0),
-  jsonb_build_object('filter_id','num_total_active_liens','operator','less_than_or_equal','value',0));
- if tier<2 then
-  filters:=filters||jsonb_build_array(
-   jsonb_build_object('filter_id','estimated_equity_percentage','operator','greater_than_or_equal','value',case when tier=0 then 90 else 80 end),
-   jsonb_build_object('filter_id','last_sale_date','operator','is_before','value',to_char(as_of-case when tier=0 then interval '10 years' else interval '7 years' end,'YYYY-MM-DD')));
-  if tier=0 then filters:=filters||'[{"filter_id":"has_absentee_owners","value":true}]'::jsonb;end if;
- end if;
- return filters;
-exception when others then return null;
-end $function$
- or (p_policy#>>'{valueBand,max}') !~ '^[0-9]+
-  jsonb_build_object('filter_id','market_status','operator','contains_any','value',jsonb_build_array(6)),
-  jsonb_build_object('filter_id','estimated_value','operator','greater_than','value',floor_value),
-  jsonb_build_object('filter_id','estimated_repair_cost','operator','greater_than_or_equal','value',0),
-  jsonb_build_object('filter_id','num_total_active_liens','operator','less_than_or_equal','value',0));
- if tier<2 then
-  filters:=filters||jsonb_build_array(
-   jsonb_build_object('filter_id','estimated_equity_percentage','operator','greater_than_or_equal','value',case when tier=0 then 90 else 80 end),
-   jsonb_build_object('filter_id','last_sale_date','operator','is_before','value',to_char(as_of-case when tier=0 then interval '10 years' else interval '7 years' end,'YYYY-MM-DD')));
-  if tier=0 then filters:=filters||'[{"filter_id":"has_absentee_owners","value":true}]'::jsonb;end if;
- end if;
- return filters;
-exception when others then return null;
-end $function$
-
+  or (p_policy#>>'{valueBand,min}') !~ '^[0-9]+$' or (p_policy#>>'{valueBand,max}') !~ '^[0-9]+$'
   or (p_policy#>>'{valueBand,max}')::numeric not between greatest(floor_value+0.01,(p_policy#>>'{valueBand,min}')::numeric) and 500000) then return null;end if;
  filters:=jsonb_build_array(
   jsonb_build_object('filter_id','market_status','operator','contains_any','value',jsonb_build_array(6)),
-  jsonb_build_object('filter_id','estimated_value','operator','greater_than','value',floor_value),
+  case when p_policy ? 'valueBand' then jsonb_build_object('filter_id','estimated_value','operator','range','value',jsonb_build_object('min',greatest(floor_value+0.01,(p_policy#>>'{valueBand,min}')::numeric),'max',p_policy#>'{valueBand,max}')) else jsonb_build_object('filter_id','estimated_value','operator','greater_than','value',floor_value) end,
   jsonb_build_object('filter_id','estimated_repair_cost','operator','greater_than_or_equal','value',0),
   jsonb_build_object('filter_id','num_total_active_liens','operator','less_than_or_equal','value',0));
  if tier<2 then
