@@ -57,7 +57,7 @@ const route=await loadService('app/api/internal/maintenance/route.ts',{
  processSupportCustomerNotifications:async()=>({failed:0}),
  applyApprovedFullBusinessVoiceCapacity:async()=>({status:'awaiting_activation'}),applyApprovedProVoiceCapacity:async()=>({status:'already_verified'}),applyApprovedEightyPercentVoiceCapacity:async()=>({status:'awaiting_activation'}),refreshVoiceCapacity:async()=>({status:'verified'}),readVoiceCapacityProvider:()=>{throw Error('No live provider');},
  refreshInventoryGeographyBatch:async()=>({pages:[{status:'not_due'}]}),readRecordingReview:()=>null,
- processPurchaseAccessEmails:async()=>({ready:true,failed:0}),recoverAccessHelpReplies:async()=>({status:'idle'}),
+ processPaymentRecoveries:async()=>({checked:0,accepted:0,failed:0}),fundingStripe:()=>{throw Error("Unexpected recovery provider");},processPurchaseAccessEmails:async()=>({ready:true,failed:0}),recoverAccessHelpReplies:async()=>({status:'idle'}),
  processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
  authorizeOutboundBilling:()=>authorized,maintenanceBatch,
  refreshReliability:async(_db,healthy)=>{assert.equal(healthy,!claimUnavailable);maintenanceRuns++;return true;},

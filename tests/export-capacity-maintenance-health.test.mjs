@@ -68,7 +68,7 @@ async function maintenance(recover){
   cleanupOwnerPreflight:async()=>({status:'idle'}),continueExpiredOwnerPreflightTicket:async()=>({status:'disabled'}),retryVolumeDeferredText:async()=>({status:'idle'}),
   processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
   recoverTextDeliveryReceipts:async()=>({status:'idle',errors:0}),processSupportCustomerNotifications:async()=>({failed:0}),recoverAccessHelpReplies:async()=>0,
-  processSupportOwnerNotifications:async()=>({failed:0}),processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
+  processSupportOwnerNotifications:async()=>({failed:0}),processPaymentRecoveries:async()=>({checked:0,accepted:0,failed:0}),fundingStripe:()=>{throw Error("Unexpected recovery provider");},processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
   outbound:ok('outbound'),recording:ok('recording'),ownerRecording:ok('ownerRecording'),reception:ok('reception'),
  });
  const response=await route.GET(new Request('https://fixture.test'));

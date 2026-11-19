@@ -348,6 +348,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install fixed local database driver outside the project
         run: npm install --prefix "$RUNNER_TEMP/outreach-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Verify payment recovery and manual-off races on native PostgreSQL
+        env:
+          ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg
+          ICASH_PAYMENT_RECOVERY_NATIVE: '1'
+        run: node --experimental-strip-types tests/payment-recovery-database.test.mjs
       - name: Verify seller pause classification and guarded migration on native PostgreSQL
         env:
           ICASH_PG_MODULE: ${{ runner.temp }}/outreach-pg/node_modules/pg

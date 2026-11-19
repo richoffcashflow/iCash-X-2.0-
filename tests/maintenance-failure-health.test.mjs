@@ -43,7 +43,7 @@ try{
    processBuyerCallPackages:async()=>({errors:0}),dispatchTextMessage:()=>assert.fail('No buyer provider'),
    recoverTextDeliveryReceipts:async()=>({status:failure==='text_configuration'?'configuration_unavailable':'idle',errors:0}),
    processSupportCustomerNotifications:async()=>({failed:0}),recoverAccessHelpReplies:async()=>0,processSupportOwnerNotifications:async()=>({failed:0}),
-   processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
+   processPaymentRecoveries:async()=>({checked:0,accepted:0,failed:0}),fundingStripe:()=>{throw Error("Unexpected recovery provider");},processPurchaseAccessEmails:async()=>({ready:true,failed:0}),processPurchaseAccessFollowups:async()=>({ready:true,failed:0}),
    outbound:task('outbound'),recording:task('recording'),ownerRecording:task('ownerRecording'),reception:task('reception'),
   });
   assert.equal((await route.GET(new Request('https://fixture.test'))).status,401);assert.deepEqual(stages,[]);

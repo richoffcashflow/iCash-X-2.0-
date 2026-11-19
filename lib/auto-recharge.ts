@@ -3,7 +3,8 @@ import type Stripe from 'stripe';
 import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
-type Attempt={id:string;account_id:string;mode:'live'|'test';order_id:string;approved_order:string;amount_cents:number;stripe_customer_id:string;stripe_payment_method_id:string;stripe_payment_id:string|null;created_at:string;state:string};
+import {paymentFailureKind,type PaymentFailureKind} from './payment-recovery-policy.ts';
+type Attempt={id:string;account_id:string;mode:'live'|'test';order_id:string;approved_order:string;amount_cents:number;stripe_customer_id:string;stripe_payment_method_id:string;stripe_payment_id:string|null;created_at:string;state:string;failure_kind?:PaymentFailureKind|null;decline_code?:string|null};
 const id=(value:string|{id:string}|null)=>typeof value==='string'?value:value?.id;
 export async function activateAutoRecharge(session:Stripe.Checkout.Session){
  if(session.metadata?.icash_auto_recharge!=='true')return;
@@ -46,8 +47,15 @@ export async function reconcileAutoRecharge(deadline:number){
    }
    if(pi.status==='succeeded')await settleAutoRecharge(pi);
    else if(['requires_payment_method','requires_action','canceled'].includes(pi.status)){
-    if(pi.status!=='canceled')await stripe.paymentIntents.cancel(pi.id);
-    await stopAttempt(t,'failed','Auto recharge needs a payment update. Add money to continue.');
+    const kind=pi.status==='canceled'&&t.failure_kind?t.failure_kind:paymentFailureKind(pi),code=pi.last_payment_error?.decline_code??pi.last_payment_error?.code??t.decline_code??null;
+    // Finish the original before another daily attempt may be considered. A lost
+    // cancellation response keeps the same original pending for readback.
+    if(pi.status!=='canceled'){
+     await db(`icash_auto_recharge_attempts?id=eq.${t.id}&state=eq.pending`,'PATCH',{failure_kind:kind,decline_code:code});
+     const canceled=await stripe.paymentIntents.cancel(pi.id);
+     if(canceled.status!=='canceled')throw Error('Recharge cancellation unconfirmed');
+    }
+    await db('rpc/icash_record_recharge_failure','POST',{p_attempt:t.id,p_payment:pi.id,p_kind:kind,p_code:code});
    }
   }catch{failed++;/* Preserve the same attempt and PaymentIntent for recovery. */}
  }

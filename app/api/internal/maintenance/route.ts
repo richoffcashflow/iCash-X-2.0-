@@ -1,4 +1,6 @@
 import {retryVolumeDeferredText,dispatchTextMessage} from '@/lib/text-message-service';
+import {processPaymentRecoveries} from '@/lib/payment-recovery';
+import {fundingStripe} from '@/lib/funding';
 import {processBuyerCallPackages} from '@/lib/buyer-call-package-service';
 import {recoverTextDeliveryReceipts} from '@/lib/text-delivery-recovery';
 import {processSupportCustomerNotifications} from '@/lib/support-customer-notifications';
@@ -64,6 +66,7 @@ export async function GET(request:Request){
  });
  const pruning=pruneUsageLoopObservations(db).catch(()=>undefined);
  const result=await maintenanceBatch({
+  paymentRecovery:async()=>{const result=await processPaymentRecoveries({db,stripe:fundingStripe});return Response.json(result,{status:result.failed===0?200:503});},
   capacity:async()=>{await capacity;return new Response(null,{status:capacityOk?200:503});},
   inventory:async()=>{const result=await inventory;return Response.json(result,{status:'pages' in result&&result.pages.every(page=>['metadata_saved','not_due','rate_limited'].includes(page.status))?200:503});},
   researchExclusions:async()=>{const result=await researchExclusions;return Response.json(result,{status:result.status==='sync_unavailable'?503:200});},

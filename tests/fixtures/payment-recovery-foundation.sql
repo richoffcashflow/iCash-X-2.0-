@@ -1,0 +1,41 @@
+-- Disposable, fictional accounts only; provider and unrelated eligibility dependencies.
+do $$begin
+ if not exists(select from pg_roles where rolname='anon') then create role anon;end if;
+ if not exists(select from pg_roles where rolname='authenticated') then create role authenticated;end if;
+ if not exists(select from pg_roles where rolname='service_role') then create role service_role;end if;
+end $$;
+create table icash_accounts(id uuid primary key,owner_user_id uuid,bot_paused boolean default false);
+create table icash_wallets(account_id uuid primary key,balance_cents bigint default 0,reserved_cents bigint default 0);
+create table icash_funding_orders(id uuid primary key default gen_random_uuid(),account_id uuid,mode text,guest_hash text,pack_code text,price_cents bigint,credit_cents bigint,run_days integer,flexible_pacing boolean,state text default 'pending',credited_at timestamptz,paid_at timestamptz,charged_total_cents bigint,payer_email text,stripe_payment_id text);
+create table icash_auto_recharges(account_id uuid,mode text,enabled boolean default false,pending_order uuid,approved_order uuid,amount_cents bigint,stripe_customer_id text,stripe_payment_method_id text,last_attempt_at timestamptz,issue text,updated_at timestamptz default now(),primary key(account_id,mode));
+create table icash_auto_recharge_attempts(id uuid primary key default gen_random_uuid(),account_id uuid,mode text,order_id uuid unique,approved_order uuid,amount_cents bigint,stripe_customer_id text,stripe_payment_method_id text,stripe_payment_id text unique,state text default 'pending',lease_until timestamptz,created_at timestamptz default now());
+create unique index icash_auto_recharge_pending on icash_auto_recharge_attempts(account_id,mode) where state='pending';
+create table icash_memberships(id uuid primary key,account_id uuid,mode text,state text,cancel_at_period_end boolean default false);
+create table icash_private_vip_subscriptions(id uuid primary key,account_id uuid,mode text,state text,cancel_at_period_end boolean default false);
+create table icash_billing_reviews(account_id uuid,resolved_at timestamptz);
+create table icash_daily_plans(account_id uuid,mode text,state text);
+create table icash_spend_activations(account_id uuid,enabled boolean,customer_cap_cents bigint);
+create function icash_membership_work_allowed(uuid) returns boolean language sql stable as $$select exists(select from public.icash_memberships where account_id=$1 and state='active' and not cancel_at_period_end)$$;
+create function icash_authorized_grant_cents(uuid) returns bigint language sql as $$select 0::bigint$$;
+create table fixture_credits(reference text primary key,amount bigint);
+create function icash_post_credit(uuid,text,text,bigint,text) returns void language sql as $$insert into public.fixture_credits values($2,$4) on conflict do nothing;update public.icash_wallets set balance_cents=balance_cents+$4 where account_id=$1$$;
+create table icash_customer_update_preferences(account_id uuid primary key,owner_user_id uuid,sms_enabled boolean default false,phone text,timezone text default 'UTC',consent_version text,consented_at timestamptz);
+create table icash_customer_update_deliveries(id uuid,channel text,recipient text,authorized_at timestamptz);
+create table icash_webinar_outbox(id uuid,channel text,recipient text,sent_at timestamptz,first_attempt_at timestamptz,state text);
+create table icash_email_suppressions(account_id uuid,email text,reason text,created_at timestamptz default now());
+create table icash_text_suppressions(phone text);
+create table icash_webinar_phone_suppressions(phone text);
+create function icash_customer_update_consent_valid(text) returns boolean language sql as $$select $1='fixture-consent'$$;
+create function icash_webinar_campaign_sender(text) returns text language sql as $$select '+12125550100'::text$$;
+create schema icash_sender_private;
+create table icash_sender_private.uses(source text,source_id uuid primary key,sender text);
+create table fixture_sender_room(enabled boolean);insert into fixture_sender_room values(true);
+create function icash_sender_private.take(text,uuid,text,boolean,uuid default null) returns boolean language plpgsql as $$begin
+ if not(select enabled from public.fixture_sender_room) then return false;end if;
+ insert into icash_sender_private.uses values($1,$2,$3) on conflict do nothing;return found;end$$;
+insert into icash_accounts values('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002',false);
+insert into icash_wallets(account_id) select id from icash_accounts;
+insert into icash_memberships values('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','live','active',false);
+insert into icash_funding_orders(id,account_id,mode,pack_code,price_cents,credit_cents,state,credited_at,payer_email) values('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','live','custom',2500,2500,'paid',now()-interval '30 days','fixture@example.invalid');
+insert into icash_auto_recharges(account_id,mode,enabled,approved_order,amount_cents,stripe_customer_id,stripe_payment_method_id) values('00000000-0000-4000-8000-000000000001','live',true,'00000000-0000-4000-8000-000000000004',2500,'cus_fixture','pm_fixture');
+insert into icash_customer_update_preferences(account_id,owner_user_id,sms_enabled,phone,timezone,consent_version,consented_at) select id,owner_user_id,true,'+12125550123','UTC','fixture-consent',now()-interval '30 days' from icash_accounts;

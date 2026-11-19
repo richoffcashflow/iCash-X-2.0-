@@ -6,6 +6,7 @@ import {fundingMode} from '@/lib/funding-policy';
 import {membershipAccessible} from '@/lib/membership-policy';
 import {recordPurchaseAcceptance} from '@/lib/purchase-acceptance';
 import {bindCheckoutMeasurement} from '@/lib/checkout-measurement';
+import {observeInvoiceRecovery} from '@/lib/payment-recovery';
 import {privateVipVersion,privateVipTerms,privateVipCents} from './private-vip-policy.ts';
 type PrivateVip={id:string;membership_id:string;account_id:string;mode:'live'|'test';state:string;customer_id:string|null;session_id:string|null;subscription_id:string|null;paid_until:string|null;cancel_at_period_end:boolean;created_at:string};
 const ref=(v:string|{id:string}|null|undefined)=>typeof v==='string'?v:v?.id;
@@ -48,7 +49,7 @@ export async function reconcilePrivateVipCheckout(sessionId:string){
 }
 async function recover(v:PrivateVip){
  const stripe=fundingStripe();if(v.session_id&&!v.subscription_id)await reconcilePrivateVipCheckout(v.session_id);
- v=await row(v.id);if(v.subscription_id){const s=await stripe.subscriptions.retrieve(v.subscription_id);await syncPrivateVip(s);const paid=await stripe.invoices.list({subscription:s.id,status:'paid',limit:1});if(paid.data[0])await settlePrivateVipInvoice(paid.data[0].id);}
+ v=await row(v.id);if(v.subscription_id){const s=await stripe.subscriptions.retrieve(v.subscription_id);await syncPrivateVip(s);const failed=ref(s.latest_invoice);if(s.status==='past_due'&&failed)await observeInvoiceRecovery(await stripe.invoices.retrieve(failed),s,db);const paid=await stripe.invoices.list({subscription:s.id,status:'paid',limit:1});if(paid.data[0])await settlePrivateVipInvoice(paid.data[0].id);}
 }
 export async function reconcilePrivateVip(m:Membership){if(!m.private_invite_id)return;const v=await latest(m);if(v&&v.state!=='expired')await recover(v);}
 export async function reconcilePrivateVips(deadline:number){

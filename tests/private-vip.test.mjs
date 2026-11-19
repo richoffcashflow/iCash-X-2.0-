@@ -15,7 +15,7 @@ const f=await privateVipFixture();try{
  const request=new Request('https://www.geticashx.com/api/billing/private-vip');
  const db=async(path,method,body)=>{if(failSave&&method==='PATCH'&&body.session_id){failSave=false;throw Error('Lost checkout save');}return f.db(path,method,body);};
  const recordPurchaseAcceptance=async(req,r)=>{assert.equal(req,request);await f.rpc('icash_record_purchase_acceptance',{p_kind:r.kind,p_reference:r.reference,p_mode:r.mode,p_account:r.accountId,p_guest:r.guestHash,p_version:r.version,p_terms:r.terms,p_amount:r.amountCents,p_policy_version:'fixture',p_policy:'fixture',p_context:{}});};
- const deps={...policy,db,fundingStripe:()=>stripe,fundingMode:()=> 'live',membershipAccessible,recordPurchaseAcceptance,bindCheckoutMeasurement:async()=>{}};
+ const deps={observeInvoiceRecovery:async()=>{},...policy,db,fundingStripe:()=>stripe,fundingMode:()=> 'live',membershipAccessible,recordPurchaseAcceptance,bindCheckoutMeasurement:async()=>{}};
  const api=await loadService('lib/private-vip.ts',deps);let m=await f.current();
  await assert.rejects(api.changePrivateVip({...m,private_invite_id:null},'upgrade','https://www.geticashx.com',request));
  failSave=true;await assert.rejects(api.changePrivateVip(m,'upgrade','https://www.geticashx.com',request),/Lost checkout save/);

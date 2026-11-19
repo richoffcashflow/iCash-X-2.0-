@@ -1,4 +1,5 @@
 import {reconcileVipChanges} from '@/lib/vip-membership';
+import {observeInvoiceRecovery} from './payment-recovery.ts';
 import {db} from '@/lib/stripe-test';
 import {fundingStripe} from '@/lib/funding';
 import {fundingMode} from '@/lib/funding-policy';
@@ -26,6 +27,10 @@ export async function reconcileMemberships(deadline:number){
     const sub=await stripe.subscriptions.retrieve(m.stripe_subscription_id);
     // Verify the subscription's stored binding before considering its invoices.
     if(sub.metadata.icash_membership!==m.id||!await syncMembershipSubscription(sub))throw Error('Membership recovery binding mismatch');
+    if(sub.status==='past_due'&&sub.latest_invoice){
+     const invoiceId=typeof sub.latest_invoice==='string'?sub.latest_invoice:sub.latest_invoice.id;
+     await observeInvoiceRecovery(await stripe.invoices.retrieve(invoiceId),sub,db);
+    }
     const paid=await stripe.invoices.list({subscription:sub.id,status:'paid',limit:1});
     if(paid.data[0])await settleMembershipInvoice(paid.data[0].id);
    }
