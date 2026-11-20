@@ -90,6 +90,16 @@ turns=[...ownerOnly,a('What repairs are needed?'),u('The roof needs replacement.
 const repair=await call('update_repairs',{sellerStatement:'The roof needs replacement.'});
 assert.equal(repair.quoteAllowed,false);assert.equal(repair.factsSaved,true);assert.equal(context.offerState.sellerStatement,'The roof needs replacement.');
 assert.equal(repair.priceCents,null,'recording repairs cannot skip the remaining conversation');
+const beforeTiming=qualifiedSellerTurns.filter((_,i)=>i!==12&&i!==13);
+turns=beforeTiming;
+assert.equal((await call('get_offer')).quoteAllowed,false);
+for(const request of ['How much is the offer?','Could you tell me the offer?']){
+ turns=[...beforeTiming,u(request)];
+ const requested=await call('get_offer');
+ assert.equal(requested.quoteAllowed,true);assert.equal(requested.priceCents,6000000);assert.equal(requested.contractAllowed,false);
+ turns=[...turns,a('We can offer $60,000 cash. Does that work?'),u('Yes.')];
+ assert.equal((await call('accept_offer',{priceCents:requested.priceCents,quoteRevision:requested.quoteRevision})).quoteAllowed,false);
+}
 turns=qualifiedSellerTurns;const quote=await call('get_offer');assert.equal(quote.quoteAllowed,true);assert.equal(quote.priceCents,6000000);
 turns=[...turns,a('We can offer $60,000 cash. Does that work?'),u('Yes.')];
 assert.equal((await call('accept_offer',{priceCents:quote.priceCents,quoteRevision:quote.quoteRevision})).status,'verbally_accepted');

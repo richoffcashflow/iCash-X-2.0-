@@ -11,6 +11,7 @@ export function sellerRequestsPrice(message:string):boolean{
  // clauses without treating another person's quoted question as seller intent.
  const clauses=text.split(/(?<=[.!?;])\s+|,\s*(?=(?:how much|what|can you|could you|would you|will you)\b)/i);
  if(clauses.length>1)return clauses.some(sellerRequestsPrice);
+ if(/^(?:how much is (?:the|your) (?:cash )?offer|(?:can|could|would|will) you (?:please )?tell (?:me|us) (?:the|your) (?:cash )?offer)[?!. ]*$/i.test(text))return true;
  if(/^(?:(?:okay|ok|yeah|yes|sure|well|so|then|but)[,.!? ]+)*(?:how much(?: for (?:it|the (?:house|property)))?|what(?:'s| is) the (?:cash )?offer)[?!. ]*$/i.test(text))return true;
  return /^(?:(?:okay|ok|yeah|yes|sure|well|so|then|but)[,.!? ]+)*(?:(?:how much|what) (?:would|will|can|could|do|are) (?:you|you'll|you all) (?:give|pay|offer)(?:ing)?(?: me| us)?\b|(?:how much|what) (?:you'll|you) (?:give|pay|offer)(?: me| us)?\b|what(?:'s| is) your (?:cash )?offer\b|(?:can|could|would|will) you (?:make|give|send)(?: me| us)? (?:a |an |your )?(?:cash )?offer\b)/i.test(text);
 }

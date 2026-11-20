@@ -155,7 +155,11 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(context.party!=='seller'||context.sellerContractSigned===true)return calculateAutomaticCallOffer(context,{},(d.now??Date.now)());
  const state:AutomaticOfferState={...context.offerState},snapshotHash=sha(JSON.stringify(canonical(context.snapshot))),now=(d.now??Date.now)();
  const observedQualification=d.verifyQualification?await d.verifyQualification(i,context):sellerOfferQualification(null);
- const qualification=(context.pendingAgreement||state.acceptedPriceCents)&&!(!observedQualification.ready&&observedQualification.stop)?{ready:true as const}:observedQualification;
+ // Timing can wait until after an explicitly requested price. Acceptance still
+ // needs the full qualification. All property, listing and quote checks run below.
+ const priceBeforeTiming=i.action==='get_offer'&&!observedQualification.ready&&!observedQualification.stop
+  &&observedQualification.priceRequested===true&&observedQualification.missing.length===1&&observedQualification.missing[0]==='timing';
+ const qualification=(context.pendingAgreement||state.acceptedPriceCents||priceBeforeTiming)&&!(!observedQualification.ready&&observedQualification.stop)?{ready:true as const}:observedQualification;
  if(qualification&&!qualification.ready&&(i.action==='get_offer'||i.action==='accept_offer'))return sellerQualificationHold(qualification);
  const originalRevision=state.quoteRevision;
  let recoveredPayoff=false;
@@ -255,5 +259,6 @@ export async function automaticCallOffer(token:string,input:unknown,d:Dependenci
  if(saved!==true)return blockedOffer('quote_changed','The property record changed while I checked. Let me get the current calculation.');
  // Recording condition/listing/debt answers must not reveal a premature price.
  if(offer.quoteAllowed&&qualification&&!qualification.ready)return {...sellerQualificationHold(qualification),factsSaved:true};
+ if(priceBeforeTiming&&offer.quoteAllowed)return {...offer,contractAllowed:false,quoteRevision:revision,instruction:`Present the exact authorized cash offer and all its conditions now. ${offer.instruction} Ask about closing timing after answering the price request. No agreement is authorized by this response.`};
  return {...offer,quoteRevision:revision,...(state.acceptanceEvidenceQuoteRevision?{acceptanceEvidenceQuoteRevision:state.acceptanceEvidenceQuoteRevision}:{}),...(i.action==='accept_offer'?(contractBlocked?{status:'conditional_accepted',...(state.payoffReport?{instruction:offer.instruction}:conditionalInstruction(i.priceCents,!!state.payoffStatement,true))}:{status:'verbally_accepted',instruction:'Verbal acceptance saved at this exact price. Continue closing date, legal name, owners, inspection preference and prepared terms, then confirm_and_send. This is not a signature.'}):{})};
 }
