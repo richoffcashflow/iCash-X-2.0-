@@ -134,3 +134,7 @@ Explicit questions about getting the bot to run or turning it on receive the exi
 Requests to refund and repurchase because a checkout email is inaccessible receive an ownership-review explanation instead of another purchase or generic refund guidance. A purchase contact-email correction is separate from changing the email-provider address, and neither a refund nor access recovery is implied. Fictional account/guest replays in `tests/support-email-repurchase.test.mjs` preserve denials, hypothetical requests, later operator findings and topic changes. No financial or identity action is performed.
 
 Explicit waiting-for-a-deal questions distinguish the automatic process from actual work. Current account Pause and blocked readiness remain visible, guest answers do not assert account state, and neither waiting nor Run guarantees a deal or recovery. Fictional regression coverage includes acknowledgment, mixed payment and topic boundaries.
+
+## Current property-search questions
+
+Geography questions can refer to property searches instead of leads. Answer the current city/state-selection question even when the customer says their voice is already working or asks to leave it unchanged. Those scoped statements are context, not voice-setup requests or confirmation that an earlier account problem is resolved. Preserve independent voice questions, upload failures, payment complaints and later topic changes. Fictional account/guest replays in `tests/support-property-search-question.test.mjs` cover these boundaries without paid model calls.
