@@ -58,7 +58,7 @@ export async function seedHandlerOriginal(db,n,{size=3,siblingTickets=false,comp
  // The immutable original order intentionally differs from UUID ordering.
  // A batch implementation that silently sorts the siblings must fail rehearsal.
  if(items.length>2)items.splice(1,items.length-1,...items.slice(1).reverse());
- const request=activeOwnerExportRequest(items.flatMap(x=>x.ids),false,true);
+ const request=activeOwnerExportRequest(items.flatMap(x=>x.ids),false,true,true);
  await db.exec('alter table icash_research_private.owner_export_preflights disable trigger owner_preflight_immutable');
  await db.query(`update icash_research_private.owner_export_preflights set items=$2,request=$3,fingerprint=md5(jsonb_build_array($2::jsonb,$3::jsonb)::text),
  receipts=jsonb_build_object('create',jsonb_build_object('httpStatus',200,'raw',jsonb_set(receipts->'create'->'raw','{data,total_count}',to_jsonb($4::integer)),

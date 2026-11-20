@@ -93,6 +93,10 @@ assert.equal(repair.priceCents,null,'recording repairs cannot skip the remaining
 const beforeTiming=qualifiedSellerTurns.filter((_,i)=>i!==12&&i!==13);
 turns=beforeTiming;
 assert.equal((await call('get_offer')).quoteAllowed,false);
+turns=[...beforeTiming,u('I want $80,000 for the property.')];
+assert.equal((await call('get_offer')).quoteAllowed,false,'a seller asking price is not a request for our quote');
+const historical=sellerOfferQualification({transcript:beforeTiming},[{transcript:[u('How much is the offer?')]}]);
+assert.equal(historical.priceRequested,undefined,'an earlier call cannot request a quote on behalf of the current speaker');
 for(const request of ['How much is the offer?','Could you tell me the offer?']){
  turns=[...beforeTiming,u(request)];
  const requested=await call('get_offer');
