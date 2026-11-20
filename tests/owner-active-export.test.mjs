@@ -18,7 +18,7 @@ const csvOf=rows=>[activeOwnerColumns,...rows.map(r=>activeOwnerColumns.map(k=>r
 const csv=csvOf([row(ids[0]),row(ids[1],'2145550101')]);
 const receipt=()=>({httpStatus:200,raw:{export_id:'export-fixture',record_count:2,file_count:1,credits:{used:1,people:2}},rawText:'{}'});
 const base={id:'00000000-0000-4000-8000-000000000009',createdAt:now,request:activeOwnerExportRequest(ids),receipt:receipt()};
-const modernRequest=activeOwnerExportRequest(ids,false,true,true);
+const modernRequest=activeOwnerExportRequest(ids,false,false,'default');
 const modernCsv=(phone)=>['dm_person_id,person_full_name,phones,has_active_phone_number',...ids.slice(0,2).map((id,i)=>[id,'Owner',JSON.stringify([{number:'+1214555010'+i,type:'wireless',...phone}]),'1'].map(v=>'"'+v.replaceAll('"','""')+'"').join(','))].join('\n');
 const modernResults=allocateActiveOwnerExport({...base,request:modernRequest},modernCsv({do_not_call:false}),audience);
 assert.equal(modernResults[0].result.contacts[0].phones[0].number,'2145550100');
@@ -80,7 +80,7 @@ const db=async(path,method,p)=>{
  if(path==='rpc/icash_finish_dealmachine_request')return true;
  if(path==='rpc/icash_admit_owner_active_export'){
   if(busy)return 'export_busy';if(claimed)return 'held';claimed=true;
-  assert.deepEqual(p.p_request,activeOwnerExportRequest(ids,false,true,true));
+  assert.deepEqual(p.p_request,activeOwnerExportRequest(ids,false,false,'default'));
   saved={id:p.p_batch,accountId:account,createdAt:now,items:p.p_items,preview:p.p_preview,request:p.p_request,csv:null,lease:'fixture-lease'};return 'claimed';
  }
  if(path==='rpc/icash_record_owner_export_receipt'){saved.receipt=p.p_receipt;assert.equal(paid,1);return true;}
