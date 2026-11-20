@@ -42,7 +42,7 @@ function latestQualificationQuestion(message:string):string{
  * Historical conversations must already be bound to this account/deal/contact.
  * An explicit unknown/refusal answers a personal question; do not interrogate. */
 export function sellerDialogueState(current:unknown,history:unknown[]=[],channel:'voice'|'sms'='voice'):SellerDialogueState{
- const facts:Partial<Record<Fact,boolean>>={};let listed:boolean|null=null,priceRequested=false;
+ const facts:Partial<Record<Fact,boolean>>={};let listed:boolean|null=null,priceRequested=false,explicitVoiceRequest=false;
  const evidence:Partial<Record<Fact,SellerFactEvidence>>={};
  const result=(qualification:SellerQualification):SellerDialogueState=>({qualification,facts:evidence,priceRequested});
  const currentRows=object(current).transcript;
@@ -82,7 +82,9 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
     delete facts.ownership;delete evidence.ownership;delete facts.interest;delete evidence.interest;
    }
    const intent=sellerConversionIntent(text);
-   if(sellerRequestsPrice(text)||intent==='price'||intent==='identity_price'||intent==='listed_terms'||callSellerPriceEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text})!==null){
+   const asksForOurPrice=sellerRequestsPrice(text);
+   if(asksForOurPrice&&conversation===current&&String(row.channel??object(conversation).channel??channel)==='voice')explicitVoiceRequest=true;
+   if(asksForOurPrice||intent==='price'||intent==='identity_price'||intent==='listed_terms'||callSellerPriceEvidence({transcript:rows.slice(0,index+1)},{action:'report_change',sellerStatement:text})!==null){
     remember('availability',true,true);remember('interest',true,true);
     priceRequested=true;
     // An offer question is not an answer to a pending repairs/occupancy question.
@@ -114,7 +116,7 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
  if(disposition)return result({ready:false,missing:[],stop:true,nextQuestion:'The seller has stopped this discussion or requested review. Honor the request; do not continue qualification.'});
  const missing=(Object.keys(questions) as Fact[]).filter(key=>facts[key]!==true&&(channel!=='sms'||key!=='availability')&&(!priceRequested||key!=='situation'));
  if(facts.ownership===false||facts.interest===false||facts.availability===false||listed===true)return result({ready:false,missing,stop:true,nextQuestion:listed?'This property is listed with an agent. Do not quote an offer; follow the listing policy and end politely.':'The caller has declined this property discussion. Acknowledge and stop the pitch.'});
- return result(missing.length?{ready:false,missing,nextQuestion:questions[priceRequested&&missing[0]==='timing'&&missing.includes('listing')?'listing':missing[0]],...(priceRequested&&channel==='voice'?{priceRequested:true as const}:{})}:{ready:true});
+ return result(missing.length?{ready:false,missing,nextQuestion:questions[priceRequested&&missing[0]==='timing'&&missing.includes('listing')?'listing':missing[0]],...(explicitVoiceRequest&&channel==='voice'?{priceRequested:true as const}:{})}:{ready:true});
 }
 
 export function sellerOfferQualification(current:unknown,history:unknown[]=[],channel:'voice'|'sms'='voice'):SellerQualification{

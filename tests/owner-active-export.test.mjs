@@ -190,6 +190,18 @@ try{
  reset();preflightStatus='ready';
  assert.equal((await enrichActiveOwners(resumeDb,account,candidates[0],config,250000,transport)).status,'contacts_saved');
  assert.equal(previews,1,'A positive resumed check still refreshes owner identity before final admission');assert.equal(paid,1);assert.equal(pendingReads,5);
+ // A stored pre-change list is resumed exactly. New phone output requires its
+ // own free preflight and must not reuse the old fingerprint to buy an export.
+ reset();const legacyRequest=activeOwnerExportRequest(ids,false,true),seenRequests=[];
+ const migratedDb=async(path,method,p)=>{
+  if(path==='rpc/icash_pending_owner_preflight')return {items:pendingItems,request:legacyRequest};
+  if(path==='rpc/icash_claim_owner_preflight'){
+   seenRequests.push(p.p_request);return {status:seenRequests.length===1?'ready':'pending'};
+  }
+  return db(path,method,p);
+ };
+ await assert.rejects(enrichActiveOwners(migratedDb,account,candidates[0],config,250000,transport),OwnerExportPreflightPendingError);
+ assert.deepEqual(seenRequests,[legacyRequest,modernRequest]);assert.equal(paid,0);
  for(const status of ['pending','ready']){
   reset();capacity='quota_wait';preflightStatus=status;
   const stageDb=async(path,...args)=>path==='rpc/icash_owner_preflight_step_capacity'?true:resumeDb(path,...args);
