@@ -16,9 +16,15 @@ export function UsageLoopReport({includeOwner,refresh=0}:{includeOwner:boolean;r
   return()=>{active=false;controller.abort();};
  },[includeOwner,refresh]);
  const count=(n:number|undefined)=>n===undefined?'—':n.toLocaleString('en-US');
+ const dollars=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
  const rate=(n:number,d:number)=>d?`${Math.round(n/d*100)}%`:'—';
  return <section className={styles.leads} aria-labelledby="usage-loop-title">
   <div className={styles.leadHeading}><div><h2 id="usage-loop-title">Funding & progress</h2><p>What happens after customers add work credits.</p></div></div>
+  {report?.dailyUsage&&<div className={styles.metrics} aria-label="Settled usage over the past 24 hours">
+   <article><h3>Settled usage · last 24 hours</h3><strong>{dollars(report.dailyUsage.settledCents)}</strong>
+    <p>Daily minimum {dollars(report.dailyUsage.minimumCents)} · target {dollars(report.dailyUsage.targetCents)}</p>
+   </article>
+  </div>}
   <WeeklyWorkValue includeOwner={includeOwner} refresh={refresh}/>
   {failed&&<p role="status">{report?'Refresh unavailable. Showing the last report.':'Progress measurement is temporarily unavailable.'}</p>}
   <div className={styles.metrics} aria-label="First seven days after funding">
