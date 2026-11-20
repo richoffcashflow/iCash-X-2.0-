@@ -22,7 +22,8 @@ export function UsageLoopReport({includeOwner,refresh=0}:{includeOwner:boolean;r
   <div className={styles.leadHeading}><div><h2 id="usage-loop-title">Funding & progress</h2><p>What happens after customers add work credits.</p></div></div>
   {report?.dailyUsage&&<div className={styles.metrics} aria-label="Settled usage over the past 24 hours">
    <article><h3>Settled usage · last 24 hours</h3><strong>{dollars(report.dailyUsage.settledCents)}</strong>
-    <p>Daily minimum {dollars(report.dailyUsage.minimumCents)} · target {dollars(report.dailyUsage.targetCents)}</p>
+    <p>Operating target {dollars(report.dailyUsage.targetCents)} · daily minimum {dollars(report.dailyUsage.minimumCents)}</p>
+    {report.dailyUsage.stretchCents!==undefined&&<p>{report.dailyUsage.fundedAccounts} funded accounts · {report.dailyUsage.runwayDays}-day pacing · stretch {dollars(report.dailyUsage.stretchCents)}</p>}
    </article>
   </div>}
   <WeeklyWorkValue includeOwner={includeOwner} refresh={refresh}/>
