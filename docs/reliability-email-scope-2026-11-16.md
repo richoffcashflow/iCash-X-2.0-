@@ -44,3 +44,21 @@ recipient, preview, privacy and hourly payload invariants without live sends.
 Release through the existing exact-head and exact-main Reliability checks and
 verify the web, worker and independent monitor versions; no migration or provider
 configuration change is required. Production success requires its own receipts.
+
+## November 20 follow-up
+
+Owner notices use a compact, single-column HTML layout with a matching short
+text version. The subject identifies a status update; the headline, next action
+and verified impact are prominent. Check timestamps and the incident reference
+are at the bottom. Stale snapshot counts and old activity are not presented as
+current impact. Independently current component checks stay visible. Fresh
+account counts subtract the explicit stalled/pending overlap when validating
+the total and disclose that overlap in the message.
+
+This is a presentation change only. The existing observer already keeps raw
+count movement within the same incident and does not page immediately for it.
+It still pages on new failures or higher severity, sends the existing bounded
+hourly reminder, and records sustained recovery before sending a recovery
+notice. The local database regression tests exercise stale count jitter and the
+hourly reminder together. No change to claims, recipient, receipts, baseline,
+workflow state, or release configuration is needed.

@@ -39,6 +39,15 @@ try{
  await refresh();const changed=await claim();assert(changed,'A different affected account invalidates the baseline even if totals match');await finish(changed);
  await refresh({...report,components:{...report.components,worker:{status:'unavailable'}}});const outage=await claim();assert(outage,'New service outage alerts immediately');await finish(outage);
  await v('select icash_finish_reliability_notification($1,$2)',[outage.id,account]);
+ // A genuinely stale monitor pages once, then remains the same incident.
+ const stale=count=>({...report,fresh:false,components:{...report.components,worker:{status:'unavailable'}},
+  snapshot:{...report.snapshot,issueCount:count,checkedAt:'2020-01-01T00:00:00Z',accountProgress:{...report.snapshot.accountProgress,checkedAt:'2020-01-01T00:00:00Z'}}});
+ await refresh(stale(1038));const staleNotice=await claim();assert(staleNotice,'New stale monitoring condition alerts');await finish(staleNotice);
+ for(const count of [1041,1039,1041]){
+  await refresh(stale(count));assert.equal(await claim(),null,'Stale count jitter does not page immediately');
+ }
+ await age();await refresh(stale(1041));const reminder=await claim();
+ assert.equal(reminder.incidentId,first.incidentId,'Hourly reminder continues the same incident');await finish(reminder);
  // Recovery keeps the existing observed 15-minute window.
  const healthy={...report,status:'ok',snapshot:{...report.snapshot,issueCount:0,accountProgress:{...report.snapshot.accountProgress,affectedAccounts:0,stalledAccounts:0}}};
  await refresh(healthy);assert.equal(await claim(),null);
