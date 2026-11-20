@@ -430,3 +430,18 @@
  .workspace.workspace.workspace :global(.attention-heading-copy){flex:1 1 180px}
  .workspace.workspace.workspace :global(.property-milestones){flex-wrap:wrap;gap:8px 12px}
 }
+
+.rechargePrompt {
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:16px;
+ padding:14px 18px;
+ border:1px solid var(--bot-color, currentColor);
+ border-radius:12px;
+}
+.rechargePrompt p {margin:4px 0 0;font-size:.875rem;line-height:1.45}
+.rechargePrompt button {flex-shrink:0}
+@media (max-width:600px) {
+ .rechargePrompt {align-items:stretch;flex-direction:column;gap:10px}
+}
