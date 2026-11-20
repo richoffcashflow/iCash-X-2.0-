@@ -19,6 +19,19 @@ const csv=csvOf([row(ids[0]),row(ids[1],'2145550101')]);
 const receipt=()=>({httpStatus:200,raw:{export_id:'export-fixture',record_count:2,file_count:1,credits:{used:1,people:2}},rawText:'{}'});
 const base={id:'00000000-0000-4000-8000-000000000009',createdAt:now,request:activeOwnerExportRequest(ids),receipt:receipt()};
 const modernRequest=activeOwnerExportRequest(ids,false,false,'default');
+const defaultColumns=activeOwnerColumns.filter(key=>key!=='has_active_phone_number').map(key=>key==='internal_person_id'?'dm_person_id':key);
+function defaultCsv(dnc='0'){
+ return [defaultColumns.join(','),...ids.slice(0,2).map(id=>{
+  const data={...row(id),dm_person_id:id,is_phone_1_dnc:dnc,person_full_name:'Fixture Owner'};
+  return defaultColumns.map(key=>'"'+(data[key]??'').replaceAll('"','""')+'"').join(',');
+ })].join('\n');
+}
+const defaultResults=allocateActiveOwnerExport({...base,request:modernRequest},defaultCsv(),audience);
+assert.equal(defaultResults[0].result.contacts[0].phones[0].activityBasis,'provider_export_filter');
+assert.equal(defaultResults[0].result.contacts[0].outreachAuthorized,false);
+for(const dnc of ['','1','unknown'])assert.throws(()=>allocateActiveOwnerExport({...base,request:modernRequest},defaultCsv(dnc),audience));
+assert.throws(()=>parseOwnerExportCsv(defaultCsv()));
+assert.throws(()=>parseOwnerExportCsv(defaultCsv(),{...modernRequest,active_phones_only:false}));
 const modernCsv=(phone)=>['dm_person_id,person_full_name,phones,has_active_phone_number',...ids.slice(0,2).map((id,i)=>[id,'Owner',JSON.stringify([{number:'+1214555010'+i,type:'wireless',...phone}]),'1'].map(v=>'"'+v.replaceAll('"','""')+'"').join(','))].join('\n');
 const modernResults=allocateActiveOwnerExport({...base,request:modernRequest},modernCsv({do_not_call:false}),audience);
 assert.equal(modernResults[0].result.contacts[0].phones[0].number,'2145550100');

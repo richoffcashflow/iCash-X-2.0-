@@ -33,7 +33,7 @@ export function activeOwnerExportRequest(ids:string[],mobileOnly=false,includeUs
  return {people_ids:ids,fields:phoneFields==='default'?[]:['person_full_name','has_active_phone_number',...(phoneFields?['phones']:[]),...(includeUsage?ownerUsageColumns:[])],property_match:'owner',anchor:'person',limit:ids.length,require_phone:true,scrub_dnc:true,active_phones_only:true,...(mobileOnly?{mobile_only:true}: {})};
 }
 /** Bounded RFC4180 reader. IDs stay text, including values above MAX_SAFE_INTEGER. */
-export function parseOwnerExportCsv(text:string){
+export function parseOwnerExportCsv(text:string,request?:ReturnType<typeof activeOwnerExportRequest>){
  if(typeof text!=='string'||Buffer.byteLength(text)>1048576)return invalid();
  const rows:string[][]=[];let row:string[]=[],cell='',quoted=false,closed=false;
  for(let i=0;i<text.length;i++){
@@ -52,6 +52,22 @@ export function parseOwnerExportCsv(text:string){
  if(!header||new Set(header).size!==header.length||rows.some(r=>r.length!==header.length)||rows.length>125)return invalid();
  const mapped=rows.map(r=>Object.fromEntries(header.map((h,i)=>[h,r[i]])));
  if(activeOwnerColumns.every(h=>header.includes(h))&&header.every(h=>activeOwnerColumns.includes(h)||ownerUsageColumns.includes(h)))return mapped;
+ const defaultColumns=activeOwnerColumns.filter(column=>column!=='has_active_phone_number')
+  .map(column=>column==='internal_person_id'?'dm_person_id':column);
+ if(header.length===defaultColumns.length&&defaultColumns.every(column=>header.includes(column))){
+  if(request?.fields.length!==0||request.active_phones_only!==true||request.require_phone!==true||request.scrub_dnc!==true)return invalid();
+  return mapped.map(row=>{
+   if(!/^per_[0-9]{1,100}$/.test(row.dm_person_id)||![1,2,3].some(slot=>/^\d{10}$/.test(row['phone_'+slot])))return invalid();
+   // Activity in the default file is evidenced by a returned number under the
+   // immutable active-only filter. Keep that provenance with the normalized row.
+   const normalized={...row,internal_person_id:row.dm_person_id.slice(4),has_active_phone_number:'true',activity_basis:'provider_export_filter'} as Record<string,string>;
+   for(const slot of [1,2,3]){
+    const key='is_phone_'+slot+'_dnc';
+    if(row[key]==='0')normalized[key]='false';
+   }
+   return normalized;
+  });
+ }
  const modern=['dm_person_id','person_full_name','has_active_phone_number'];
  const slots=[1,2,3].flatMap(i=>['phone_'+i,'is_phone_'+i+'_dnc','people_phone_'+i+'_type_id']);
  const nested=header.includes('phones');
@@ -92,7 +108,7 @@ export function validateOwnerExportReceipt(receipt:Receipt,request:ReturnType<ty
 /** Raw provider totals are preserved. Allocation fields are explicitly ours;
  * missing deduplication/licensing fields are never synthesized. */
 export function allocateActiveOwnerExport(saved:Pick<SavedExport,'id'|'createdAt'|'request'|'receipt'>,csv:string,audience:Audience){
- const receipt=validateOwnerExportReceipt(saved.receipt,saved.request),rows=parseOwnerExportCsv(csv);
+ const receipt=validateOwnerExportReceipt(saved.receipt,saved.request),rows=parseOwnerExportCsv(csv,saved.request);
  const ids=[...new Set(audience.flatMap(a=>[...a.ids]))];
  if(!isDeepStrictEqual(saved.request,activeOwnerExportRequest(ids,saved.request.mobile_only===true,saved.request.fields.includes(ownerUsageColumns[0]),saved.request.fields.length===0?'default':saved.request.fields.includes('phones')))||rows.length!==receipt.rows)return invalid();
  const byId=new Map<string,typeof rows[number]>();
@@ -226,7 +242,7 @@ async function recoverClaimedExport(db:ResearchDb,saved:SavedExport,transport:ty
   return {...item,propertyId,...parsed,ids:bound};
  });
  const results=allocateActiveOwnerExport(saved,csv,audience);
- if(await saveRecoveryEvidence(db,'rpc/icash_save_owner_active_export',{p_batch:saved.id,p_lease:saved.lease,p_results:results,p_rows:parseOwnerExportCsv(csv)})!==true)return invalid();
+ if(await saveRecoveryEvidence(db,'rpc/icash_save_owner_active_export',{p_batch:saved.id,p_lease:saved.lease,p_results:results,p_rows:parseOwnerExportCsv(csv,saved.request)})!==true)return invalid();
  return {status:'contacts_saved',batchProperties:results.length};
 }
 /** Maintenance only resumes original GET/download/persistence. Never a POST. */
