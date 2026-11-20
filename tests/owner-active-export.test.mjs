@@ -19,7 +19,7 @@ const csv=csvOf([row(ids[0]),row(ids[1],'2145550101')]);
 const receipt=()=>({httpStatus:200,raw:{export_id:'export-fixture',record_count:2,file_count:1,credits:{used:1,people:2}},rawText:'{}'});
 const base={id:'00000000-0000-4000-8000-000000000009',createdAt:now,request:activeOwnerExportRequest(ids),receipt:receipt()};
 const modernRequest=activeOwnerExportRequest(ids,false,true,true);
-const modernCsv=(phone)=>['dm_person_id,person_full_name,phones,has_active_phone_number',...ids.slice(0,2).map((id,i)=>[id,'Owner',JSON.stringify([{number:'+1214555010'+i,type:'wireless',...phone}]),'true'].map(v=>'"'+v.replaceAll('"','""')+'"').join(','))].join('\n');
+const modernCsv=(phone)=>['dm_person_id,person_full_name,phones,has_active_phone_number',...ids.slice(0,2).map((id,i)=>[id,'Owner',JSON.stringify([{number:'+1214555010'+i,type:'wireless',...phone}]),'1'].map(v=>'"'+v.replaceAll('"','""')+'"').join(','))].join('\n');
 const modernResults=allocateActiveOwnerExport({...base,request:modernRequest},modernCsv({do_not_call:false}),audience);
 assert.equal(modernResults[0].result.contacts[0].phones[0].number,'2145550100');
 assert.equal(modernResults[0].result.contacts[0].phones[0].permission,'unverified');

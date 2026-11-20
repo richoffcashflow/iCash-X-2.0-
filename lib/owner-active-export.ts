@@ -52,13 +52,18 @@ export function parseOwnerExportCsv(text:string){
  if(!header||new Set(header).size!==header.length||rows.some(r=>r.length!==header.length)||rows.length>125)return invalid();
  const mapped=rows.map(r=>Object.fromEntries(header.map((h,i)=>[h,r[i]])));
  if(activeOwnerColumns.every(h=>header.includes(h))&&header.every(h=>activeOwnerColumns.includes(h)||ownerUsageColumns.includes(h)))return mapped;
- const modern=['dm_person_id','person_full_name','phones','has_active_phone_number'];
- if(!modern.every(h=>header.includes(h))||!header.every(h=>modern.includes(h)||ownerUsageColumns.includes(h)))return invalid();
+ const modern=['dm_person_id','person_full_name','has_active_phone_number'];
+ const slots=[1,2,3].flatMap(i=>['phone_'+i,'is_phone_'+i+'_dnc','people_phone_'+i+'_type_id']);
+ const nested=header.includes('phones');
+ if(!modern.every(h=>header.includes(h))||!nested&&!header.includes('phone_1')
+  ||!header.every(h=>modern.includes(h)||ownerUsageColumns.includes(h)||(nested?h==='phones':slots.includes(h))))return invalid();
  return mapped.map(row=>{
   if(!/^per_[0-9]{1,100}$/.test(row.dm_person_id))return invalid();
+  // The current provider serializes its affirmative active flag as CSV 1.
+  const normalized:Record<string,string>={internal_person_id:row.dm_person_id.slice(4),person_full_name:row.person_full_name,has_active_phone_number:row.has_active_phone_number==='1'?'true':row.has_active_phone_number};
+  if(!nested)return {...row,...normalized};
   const phones:unknown=JSON.parse(row.phones);
   if(!Array.isArray(phones)||!phones.length||phones.length>3)return invalid();
-  const normalized:Record<string,string>={internal_person_id:row.dm_person_id.slice(4),person_full_name:row.person_full_name,has_active_phone_number:row.has_active_phone_number};
   for(const [index,value] of phones.entries()){
    const phone=object(value),slot=index+1;
    if(typeof phone.number!=='string'||!/^(?:\+?1)?\d{10}$/.test(phone.number)||typeof phone.type!=='string'||!phone.type.trim()||phone.do_not_call!==false)return invalid();
