@@ -22,7 +22,7 @@ export type SellerFact=keyof typeof questions;
 type Fact=SellerFact;
 export type SellerFactEvidence={value:boolean;status:'answered'|'unknown'|'declined';quote:string;question:string;sourceId:string;at:string|null;channel:string};
 export type SellerDialogueState={qualification:SellerQualification;facts:Partial<Record<Fact,SellerFactEvidence>>;priceRequested:boolean};
-export type SellerQualification={ready:true}|{ready:false;nextQuestion:string;missing:Fact[];stop?:boolean};
+export type SellerQualification={ready:true}|{ready:false;nextQuestion:string;missing:Fact[];stop?:boolean;priceRequested?:true};
 const yes={test:sellerAffirmation};
 const differentSeller=/\b(?:i(?:'m| am) (?:his|her|their|the owner's) (?:wife|husband|son|daughter|tenant)|this is (?:his|her|their) (?:wife|husband|son|daughter)|i(?:'m| am) (?:just )?(?:the |a )?tenant)\b/i;
 const no=/^(?:(?:um|uh|well)[, .]+)*(?:no|nope|not really|not interested)\b/i;
@@ -114,7 +114,7 @@ export function sellerDialogueState(current:unknown,history:unknown[]=[],channel
  if(disposition)return result({ready:false,missing:[],stop:true,nextQuestion:'The seller has stopped this discussion or requested review. Honor the request; do not continue qualification.'});
  const missing=(Object.keys(questions) as Fact[]).filter(key=>facts[key]!==true&&(channel!=='sms'||key!=='availability')&&(!priceRequested||key!=='situation'));
  if(facts.ownership===false||facts.interest===false||facts.availability===false||listed===true)return result({ready:false,missing,stop:true,nextQuestion:listed?'This property is listed with an agent. Do not quote an offer; follow the listing policy and end politely.':'The caller has declined this property discussion. Acknowledge and stop the pitch.'});
- return result(missing.length?{ready:false,missing,nextQuestion:questions[missing[0]]}:{ready:true});
+ return result(missing.length?{ready:false,missing,nextQuestion:questions[priceRequested&&missing[0]==='timing'&&missing.includes('listing')?'listing':missing[0]],...(priceRequested&&channel==='voice'?{priceRequested:true as const}:{})}:{ready:true});
 }
 
 export function sellerOfferQualification(current:unknown,history:unknown[]=[],channel:'voice'|'sms'='voice'):SellerQualification{
@@ -123,7 +123,7 @@ export function sellerOfferQualification(current:unknown,history:unknown[]=[],ch
 
 export function sellerQualificationHold(result:Exclude<SellerQualification,{ready:true}>){
  return {quoteAllowed:false as const,priceCents:null,contractAllowed:false,sent:false,status:'qualification',reason:'seller_qualification_required',nextQuestion:result.nextQuestion,
-  instruction:result.stop?result.nextQuestion:`This is a normal conversation step, not a failed calculation. No numerical offer is authorized yet. Introduce the saved company/principal only if still missing. Ask the next question directly, without a routine thank-you or repeating their answer: "${result.nextQuestion}" Then listen. Do not retry the tool until they answer; do not invent facts or repeat completed questions.`,missing:result.missing};
+  instruction:result.stop?result.nextQuestion:`This is a normal conversation step, not a failed calculation. No numerical offer is authorized yet. Introduce the saved company/principal only if still missing. Ask the next question directly, without a routine thank-you or repeating their answer: "${result.nextQuestion}" If ownership was already asked and the caller asks for price again without confirming, explain the privacy requirement once and stop qualification. Then listen. Do not retry the tool until they answer; do not invent facts or repeat completed questions.`,missing:result.missing};
 }
 
 type Db=<T>(path:string,method?:string,body?:unknown)=>Promise<T>;

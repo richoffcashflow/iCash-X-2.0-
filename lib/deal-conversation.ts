@@ -3,6 +3,7 @@ import {isContactOptOut} from './contact-intent.ts';
 import {sellerCallDisposition} from './seller-response-policy.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
 import {callContactEvidence,hasHumanCallWords,automatedAnswerInstructions} from './call-contact-evidence.ts';
+import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {sellerInterestQuote} from './seller-interest-evidence.ts';
 
 /** Stable variants are assigned before contact; never rotate an opener mid-conversation. */
@@ -56,6 +57,8 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  const responseDisposition=expected.party==='seller'?sellerCallDisposition(r.transcript):null;
  const optedOut=expected.party==='seller'?responseDisposition==='opt_out':fields.opted_out?.value===true||r.transcript.some(t=>t.role==='user'&&isContactOptOut(t.message));
  const followupHeld=expected.party==='seller'&&responseDisposition!==null;
+ const offerRequestQuote=expected.party==='seller'&&humanResponse&&!followupHeld
+  ?r.transcript.find(t=>t.role==='user'&&hasHumanCallWords(t.message)&&sellerRequestsPrice(t.message))?.message??null:null;
  const sourceInterest=expected.party==='seller'&&humanResponse?sellerInterestQuote(r.transcript):null;
  const providerInterest=fields.interested?.value===true?quote('interest_quote'):null;
  // A verbatim provider quote can answer ownership or permission, not selling.
@@ -65,10 +68,10 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  const start=c.metadata?.start_time_unix_secs;
  const startedAt=typeof start==='number'&&Number.isFinite(start)&&start>0&&start*1000<=now?new Date(start*1000).toISOString():null;
  return {summary:humanResponse?r.summary:contactEvidence==='automated_answer'?'Automated answering or call-screening audio; no verified seller response.':'No intelligible caller response was captured.',transcript:r.transcript,startedAt,durationSeconds:r.durationSeconds,providerCostUsd:r.providerCostUsd,contactEvidence,
-  humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote,party:expected.party,
+  humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote,offerRequestQuote,party:expected.party,
   callbackStatus:optedOut?'blocked_opt_out':!humanResponse?'not_requested':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
   callbackDueAt:optedOut||followupHeld||!humanResponse?null:r.dueAt,callbackTimezone:optedOut||followupHeld||!humanResponse?null:r.timezone,callbackQuote:humanResponse?r.callbackQuote:null,callbackEvidence:humanResponse?r.callbackEvidence:null,
-  nextAction:optedOut?'Do not contact again.':expected.party==='seller'&&!humanResponse?'No seller response. Continue only through the existing eligible unanswered-contact workflow.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
+  nextAction:optedOut?'Do not contact again.':expected.party==='seller'&&!humanResponse?'No seller response. Continue only through the existing eligible unanswered-contact workflow.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:offerRequestQuote?'Review the requested cash offer and any price already presented. Verify ownership and current quote authority before following up.':interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
   // Provider/model analysis is not signature, escrow, title, or payoff evidence.
   underContract:false as const,
  };
