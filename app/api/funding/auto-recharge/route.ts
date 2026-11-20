@@ -2,6 +2,19 @@ import {NextResponse} from 'next/server';
 import {currentUser} from '@/lib/account-auth';
 import {db} from '@/lib/stripe-test';
 import {allowedOrigin,fundingMode} from '@/lib/funding-policy';
+export async function GET(req:Request){
+ const headers={'Cache-Control':'private, no-store'};
+ try{
+  const mode=fundingMode(),user=await currentUser(true,req.signal);
+  if(!user)return NextResponse.json({error:'Sign in to continue.'},{status:401,headers});
+  if(!mode)return NextResponse.json({error:'Funding is unavailable.'},{status:503,headers});
+  const [account]=await db<{id:string}[]>(`icash_accounts?owner_user_id=eq.${user.id}&select=id&limit=1`,'GET',undefined,req.signal);
+  if(!account)return NextResponse.json({error:'Account not found.'},{status:404,headers});
+  const [setting]=await db<{enabled:boolean}[]>(`icash_auto_recharges?account_id=eq.${account.id}&mode=eq.${mode}&select=enabled&limit=1`,'GET',undefined,req.signal);
+  return NextResponse.json({enabled:setting?.enabled??false},{headers});
+ }catch{return NextResponse.json({error:'Could not check auto recharge.'},{status:503,headers});}
+}
+
 export async function POST(req:Request){
  if(!allowedOrigin(req))return NextResponse.json({error:'Open iCash X directly.'},{status:403});
  try{
