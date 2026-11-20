@@ -1,11 +1,12 @@
 'use client';
 import './legacy-offer.css';
 import {AccountAccess} from '@/components/account-access';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {legacyTrialVersion,legacyTrialTerms} from '@/lib/legacy-trial-policy';
 export default function LegacyOffer(){
  const [email,setEmail]=useState(''),[accepted,setAccepted]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [recover,setRecover]=useState(false);
+ const checkoutInFlight=useRef(false);
  const [purchase,setPurchase]=useState(''),[confirming,setConfirming]=useState(false);
  async function confirm(){
   const query=new URLSearchParams(window.location.search),session=query.get('session_id'),id=query.get('purchase');
@@ -13,8 +14,14 @@ export default function LegacyOffer(){
   setPurchase(id);setConfirming(true);setError('');
   try{const response=await fetch('/api/billing/membership?session_id='+encodeURIComponent(session),{cache:'no-store'}),data=await response.json();if(!response.ok)throw Error(data.error??'Please retry confirmation.');if(data.membership?.accessible){window.location.assign('/access?purchase='+id);return;}setError('Your checkout is being confirmed. Check again in a moment; do not start another subscription.');}catch(e){setError(e instanceof Error?e.message:'Please retry confirmation.');}finally{setConfirming(false);}
  }
- useEffect(()=>{void confirm();},[]);
- async function checkout(event:React.FormEvent){event.preventDefault();if(busy)return;setBusy(true);setError('');try{const r=await fetch('/api/billing/legacy-trial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,accepted,version:legacyTrialVersion})});const data=await r.json();if(!r.ok||!data.url){if(data.recover===true)setRecover(true);throw Error(data.error??'Checkout could not open.');}window.location.assign(data.url);}catch(e){setError(e instanceof Error?e.message:'Please retry.');setBusy(false);}}
+ useEffect(()=>{
+  void confirm();
+  // Returning from Stripe via the back/forward cache restores the old busy state.
+  const restore=(event:PageTransitionEvent)=>{if(event.persisted){checkoutInFlight.current=false;setBusy(false);}};
+  window.addEventListener('pageshow',restore);
+  return()=>window.removeEventListener('pageshow',restore);
+ },[]);
+ async function checkout(event:React.FormEvent){event.preventDefault();if(checkoutInFlight.current)return;checkoutInFlight.current=true;setBusy(true);setRecover(false);setError('');try{const r=await fetch('/api/billing/legacy-trial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,accepted,version:legacyTrialVersion})});const data=await r.json();if(!r.ok||!data.url){throw Error(data.error??'Checkout could not open.');}window.location.assign(data.url);}catch(e){setError(e instanceof Error?e.message:'Checkout could not be confirmed. Try Continue to secure checkout again in this browser, or contact support. Do not start a separate paid checkout.');checkoutInFlight.current=false;setBusy(false);}}
  if(purchase)return <main className="returning-offer returning-confirm"><a className="returning-brand" href="/legacy-offer"><img src="/favicon.svg?v=chrome-x" alt="" width={40} height={40}/><span>iCash X <span>2.0</span></span></a><section className="returning-card"><p className="returning-eyebrow">WELCOME BACK</p><h1>Opening your software access</h1><p role="status">{confirming?'Confirming your free introductory period…':error}</p><button className="returning-primary" disabled={confirming} onClick={()=>void confirm()}>Check again</button><p><a href={'/access?purchase='+purchase}>Sign in with your checkout email</a></p><a href="/support">Get help</a></section></main>;
  return <div className="returning-offer">
   <header className="returning-header"><a className="returning-brand" href="/legacy-offer"><img src="/favicon.svg?v=chrome-x" alt="" width={40} height={40}/><span>iCash X <span>2.0</span></span></a><a className="returning-help" href="/support">Need help?</a></header>
@@ -40,7 +47,7 @@ export default function LegacyOffer(){
      <p className="returning-secure">Checkout securely with Stripe</p>
      {error&&<p className="returning-alert" role="alert">{error}</p>}
     </form>
-    <div className="returning-recovery"><button type="button" onClick={()=>setRecover(!recover)}>{recover?'Close email verification':'Resume a checkout from another device'}</button>{recover&&<section><AccountAccess trialRecovery initialEmail={email} onSignedIn={()=>{setRecover(false);setError('Email verified. Continue to secure checkout above to resume your offer.');}}/></section>}</div>
+    <div className="returning-recovery"><button type="button" disabled={busy} onClick={()=>setRecover(!recover)}>{recover?'Close email verification':'Resume a checkout from another device'}</button>{recover&&<section><AccountAccess trialRecovery initialEmail={email} onSignedIn={()=>{setRecover(false);setError('Email verified. Continue to secure checkout above to resume your offer.');}}/></section>}</div>
    </section>
   </main>
   <footer className="returning-footer"><span>Already completed checkout? <a href="/access">Restore access</a></span><a href="/support">Get help</a></footer>

@@ -32,7 +32,7 @@ export function AccountAccess({initialEmail='',onSignedIn,ready=true,trialRecove
   </>}
   <button className="fund-button full" disabled={busy||!sent&&cooldown>0||!ready}>{busy?'One moment…':sent?'Sign in':'Email me a code'}</button>
   {sent?<>
-   <p className="sign-in-help">{trialRecovery?'No code? Check the email used for your unfinished checkout and your spam folder.':'No code? Check that the email above matches your payment receipt and check Junk/Spam. If the receipt email is wrong or inaccessible, contact support for purchase verification.'}</p>
+   <p className="sign-in-help">{trialRecovery?'No code? Recovery is only available for an existing account or eligible unfinished checkout. If checkout never opened, return to Continue to secure checkout on the offer. If you already tried that, contact support below; do not start a separate paid checkout.':'No code? Check that the email above matches your payment receipt and check Junk/Spam. If the receipt email is wrong or inaccessible, contact support for purchase verification.'}</p>
    <button type="button" className="demo-button" disabled={busy||cooldown>0} onClick={()=>void perform('send')}>{cooldown>0?`Resend in ${Math.floor(cooldown/60)}:${String(cooldown%60).padStart(2,'0')}`:'Send a new code'}</button>
    <button type="button" className="demo-button" disabled={busy} onClick={changeEmail}>Use another email or resend</button>
   </>:<button type="button" className="demo-button" disabled={busy} onClick={()=>setSent(true)}>I already have a code</button>}
