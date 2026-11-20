@@ -7,6 +7,17 @@ export async function inspectOwnerCapabilities(env=process.env,transport=fetch){
  // The one-time phone preview owns this branch's tightly bounded API reads.
  if(env.VERCEL_ENV==='preview'&&env.VERCEL_GIT_COMMIT_REF==='codex/dealmachine-active-phone-contract-20261027')return {status:'covered_by_scoped_preview',paidRequests:0};
  if(!env.DEALMACHINE_API_KEY)return {status:'unconfigured',paidRequests:0};
+ // Inspect the authenticated output catalog once on the incident branch.
+ // Only public schema labels are logged. This call cannot create an export.
+ if(env.VERCEL_ENV==='preview'&&env.VERCEL_GIT_COMMIT_REF==='codex/daily-seller-coverage-1120'){
+  const response=await transport('https://api.v2.dealmachine.com/v1/fields?source_type=people&per_page=250&page=1',{
+   method:'GET',headers:{Authorization:`Bearer ${env.DEALMACHINE_API_KEY}`},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)});
+  if(!response.ok)return {status:'field_catalog_unavailable',http:response.status,paidRequests:0};
+  const raw=await response.json();
+  if(!Array.isArray(raw?.data)||raw.data.length>250||typeof raw.pagination?.has_next_page!=='boolean')return {status:'field_catalog_shape_unavailable',paidRequests:0};
+  const ids=raw.data.map(row=>row?.field_id).filter(id=>typeof id==='string'&&/^[a-z_0-9]{1,100}$/i.test(id)&&/phone|dnc/i.test(id));
+  return {status:'owner_phone_field_catalog',complete:raw.pagination.has_next_page===false,fields:ids,paidRequests:0};
+ }
  const matches=[];
  for(let page=1;page<=4;page++){
   const response=await transport(`https://api.v2.dealmachine.com/v1/filters?source_type=people&per_page=250&page=${page}`,{
