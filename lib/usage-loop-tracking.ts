@@ -27,6 +27,7 @@ export async function pruneUsageLoopObservations(database:Database):Promise<void
 const count=z.number().int().nonnegative();
 export const usageLoopReportSchema=z.object({
  checkedAt:z.string(),cohortStart:z.string(),cohortEnd:z.string(),observationDays:z.literal(7),retentionDays:z.literal(30),includeOwner:z.boolean(),
+ dailyUsage:z.object({settledCents:count,minimumCents:count,targetCents:count,windowHours:z.literal(24)}).optional(),
  cohort:z.object({firstFunded:count,firstResult:count,secondManualRefill:count,repeatUsage:count}),
  recent:z.object({shownAccounts:count,clickedAccounts:count,dismissedAccounts:count}),
  variants:z.array(z.object({variant:z.enum(['control','progress']),observedAccounts:count,clickedAccounts:count,fundedAccounts:count})).length(2),
