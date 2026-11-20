@@ -26,6 +26,7 @@ export async function verifyWalkthrough(browser,base,options,name){
   }
   if(!['GET','HEAD'].includes(req.method())){writes.push({path,body:req.postDataJSON()});return route.fulfill({status:403,json:{error:'No live actions in this fixture'}});}
   if(path==='/api/account')return route.fulfill({json:{...fixtureAccount,email:account+'@example.invalid',balanceCents:0,workspaceAcknowledged:acknowledged,mode:'live',billingModel:'membership_credits',membershipActive:!locked}});
+  if(path==='/api/funding/auto-recharge')return route.fulfill({json:{enabled:true}});
   if(path==='/api/work/activity')return route.fulfill({json:makeWorkspaceFixture({count:0})});
   if(path==='/api/work/next-action')return route.fulfill({json:{card:null,balanceCents:0,paused:true,checkedAt:new Date().toISOString()}});
   if(path==='/api/work/report')return route.fulfill({json:{days:7,timezone:'America/Chicago',startAt:new Date().toISOString(),endAt:new Date().toISOString(),leads:0,calls:0,texts:0,contracts:0}});
