@@ -235,6 +235,18 @@ function recordingConfigHashSearch(configHash:string,snapshot:Record<string,unkn
  if(oldest!==snapshot&&recordingEmptyAgentHashMatches(configHash,oldest))return true;
  return !edgesOnly&&snapshots.some(value=>recordingEmptyAgentHashMatches(configHash,value));
 }
+/** A disabled pause flag is the only accepted difference from the pinned
+ * November snapshot. Recompute the complete prior fingerprint at runtime. */
+export function matchesReviewedFillerSetting(snapshot:Record<string,unknown>,approvedHash:string):boolean{
+ const fingerprint=(value:unknown)=>sha(JSON.stringify(canonical(value)));
+ if(fingerprint(snapshot)===approvedHash)return true;
+ const config=object(snapshot.conversation_config),turn=object(config.turn);
+ const timeout=object(turn.soft_timeout_config);
+ if(timeout.pause_after_filler!==false)return false;
+ const previousTimeout={...timeout};
+ delete previousTimeout.pause_after_filler;
+ return fingerprint({...snapshot,conversation_config:{...config,turn:{...turn,soft_timeout_config:previousTimeout}}})===approvedHash;
+}
 export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  const a=object(raw),config=object(a.conversation_config),platform=object(a.platform_settings),prompt=object(object(config.agent).prompt),overrides=object(object(platform.overrides).conversation_config_override);
  const snapshot={conversation_config:a.conversation_config,platform_settings:a.platform_settings,workflow:a.workflow??null,procedures:a.procedures??null};
@@ -275,7 +287,7 @@ export function recordingAgentMatches(review:RecordingReview,raw:unknown){
  // to both fingerprints so a subsequent provider change requires review.
  const reviewedNovemberSnapshot=review.agentId===full.agentId&&review.branchId===full.branchId&&review.versionId===full.versionId
   &&review.configHash==='15dcf34a00b61d1a4b44e69ef5a6aeeb338e7191bfde171a63345f5b8030a771'
-  &&sha(JSON.stringify(canonical(snapshot)))==='4dfc5f49d4bdba298d15310f3d828335641d07744121c9f3506c45ef63503793';
+  &&matchesReviewedFillerSetting(snapshot,'4dfc5f49d4bdba298d15310f3d828335641d07744121c9f3506c45ef63503793');
  const matches=(edgesOnly:boolean)=>reviewedNovemberSnapshot||recordingConfigHashSearch(review.configHash,snapshot,edgesOnly)||approvedCapacity(edgesOnly)||approvedProCapacity(edgesOnly)||approvedEightyPercentCapacity(edgesOnly)||approvedFullBusinessCapacity(edgesOnly);
  return a.agent_id===review.agentId&&a.branch_id===review.branchId&&typeof a.main_branch_id==='string'&&/^agtbrch_[A-Za-z0-9]+$/.test(a.main_branch_id)&&a.main_branch_id!==review.branchId&&a.version_id===review.versionId&&object(platform.privacy).record_voice===false&&object(platform.auth).enable_auth===true&&object(config.asr).user_input_audio_format==='ulaw_8000'&&object(config.tts).agent_output_audio_format==='ulaw_8000'&&object(config.conversation).max_duration_seconds===600&&limits.bursting_enabled===false&&object(platform.queueing_config).enabled===false&&object(overrides.conversation).max_duration_seconds===true&&object(overrides.agent).first_message===true&&object(object(overrides.agent).prompt).prompt===true&&object(overrides.tts).voice_id===true&&Array.isArray(prompt.tool_ids)&&prompt.tool_ids.length===review.toolIds.length&&review.toolIds.every(id=>(prompt.tool_ids as unknown[]).includes(id))&&(matches(true)||matches(false));
 }
