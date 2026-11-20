@@ -26,7 +26,8 @@ export async function installContinuedHandlerFixture(db){
  // Exact production final batch/active-export guards and preflight recorders.
  // The shared handler rehearsal separately installs their real financial
  // dependencies; migration-only tests can use this smaller source fixture.
- await db.exec(`create table icash_research_private.owner_batches(id uuid primary key,account_id uuid,primary_screening uuid,items jsonb,preview_receipt jsonb);
+ await db.exec(`alter table icash_research_private.owner_exports add column if not exists receipt jsonb;
+ create table icash_research_private.owner_batches(id uuid primary key,account_id uuid,primary_screening uuid,items jsonb,preview_receipt jsonb);
  create table icash_research_private.owner_batch_items(screening_id uuid primary key,batch_id uuid,operation_key text);`);
  for(const entry of JSON.parse(read('tests/fixtures/continued-owner-handler-final.json'))){
   await db.exec(entry.definition);
@@ -58,7 +59,7 @@ export async function seedHandlerOriginal(db,n,{size=3,siblingTickets=false,comp
  // The immutable original order intentionally differs from UUID ordering.
  // A batch implementation that silently sorts the siblings must fail rehearsal.
  if(items.length>2)items.splice(1,items.length-1,...items.slice(1).reverse());
- const request=activeOwnerExportRequest(items.flatMap(x=>x.ids),false,true,true);
+ const request=activeOwnerExportRequest(items.flatMap(x=>x.ids),false,false,'default');
  await db.exec('alter table icash_research_private.owner_export_preflights disable trigger owner_preflight_immutable');
  await db.query(`update icash_research_private.owner_export_preflights set items=$2,request=$3,fingerprint=md5(jsonb_build_array($2::jsonb,$3::jsonb)::text),
  receipts=jsonb_build_object('create',jsonb_build_object('httpStatus',200,'raw',jsonb_set(receipts->'create'->'raw','{data,total_count}',to_jsonb($4::integer)),
