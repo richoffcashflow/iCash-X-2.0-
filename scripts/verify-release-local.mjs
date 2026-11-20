@@ -30,7 +30,7 @@ const suites = [
  'seller-price-first', 'seller-voicemail-no-review', 'automated-menu-request-evidence', 'seller-information-reply-liveness', 'seller-information-source-recovery',
  'support-specific-property', 'support-seller-capability', 'support-empty-review', 'support-current-intent-regressions', 'support-sale-workflow-boundaries',
  'support-contact-privacy',
- 'automatic-outreach-bottlenecks', 'work-cohort', 'work-cohort-query',
+ 'automatic-outreach-bottlenecks', 'work-cohort', 'work-cohort-query', 'work-cohort-transport',
  'outbound-continuation', 'inbound-lead-failure-isolation', 'buyer-discovery-receipts', 'signing-pdf-bounds',
  'requested-seller-followthrough', 'limited-seller-ownership-reply',
  'funded-stall-recovery', 'reviewed-planning-relief-20261116', 'reviewed-planning-relief-source-20261116', 'reviewed-owner-preview-source-20261116', 'recording-admission-abort',

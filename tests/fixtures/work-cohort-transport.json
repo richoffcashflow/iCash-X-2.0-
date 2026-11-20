@@ -1,0 +1,46 @@
+{
+  "provenance": {
+    "description": "Public synthetic fixture only. All account IDs, original operation and provider IDs, timestamps, evidence and the key were invented for offline transport verification. No production data or credentials.",
+    "postgres_version": "17.6",
+    "gpg_version": "gpg (GnuPG) 2.4.7",
+    "encryption_options": "compress-algo=2,compress-level=6,cipher-algo=aes256",
+    "verification": "PostgreSQL and GnuPG decrypt byte-for-byte to plaintext; SHA256 matches; GnuPG packet inspection confirms AES256 and ZLIB compression (algorithm 2).",
+    "reproduction": {
+      "prerequisites": "Use an isolated local PostgreSQL fixture database with pgcrypto in schema extensions. No production access or additional extensions are required.",
+      "parameters": {
+        "$1": "fixture.plaintext (synthetic rows JSON)",
+        "$2": "fixture.key (public synthetic 64-hex passphrase)",
+        "$3": "SHA256(renderCohortQuery(fixture.baseline))",
+        "$4": "SHA256(JSON.stringify(fixture.baseline.accounts.map(account => account.id).sort()))"
+      },
+      "sql": "with rows as (\n select observed_at,evidence from jsonb_to_recordset($1::jsonb) as source(observed_at text,evidence jsonb)\n), packed as (\n select json_agg(rows order by evidence->>'id')::text as payload,\n count(*)::integer as row_count,count(distinct evidence->>'id')::integer as distinct_member_count,\n min(observed_at) as original_observed_at_min,max(observed_at) as original_observed_at_max\n from rows\n), encrypted as (\n select packed.*,extensions.pgp_sym_encrypt_bytea(convert_to(payload,'UTF8'),$2::text,\n  'compress-algo=2,compress-level=6,cipher-algo=aes256') as ciphertext from packed\n)\nselect payload as plaintext,jsonb_build_object(\n 'format','work-cohort-pgp-json-v1',\n 'query_sha256',$3::text,'membership_sha256',$4::text,\n 'row_count',row_count,'distinct_member_count',distinct_member_count,\n 'original_observed_at_min',original_observed_at_min,'original_observed_at_max',original_observed_at_max,\n 'raw_bytes',octet_length(convert_to(payload,'UTF8')),\n 'plaintext_sha256',encode(extensions.digest(convert_to(payload,'UTF8'),'sha256'),'hex'),\n 'encrypted_bytes',octet_length(ciphertext),\n 'encrypted_base64',replace(encode(ciphertext,'base64'),E'\\n','')\n) as envelope from encrypted;",
+      "notes": "PostgreSQL json_agg preserves the captured row text, including six fractional timestamp digits. PGP encryption uses randomized salt and therefore ciphertext changes on regeneration; plaintext, hashes, counts, timestamps and successful decryption must match."
+    }
+  },
+  "baseline": {
+    "cohortId": "synthetic-cohort-transport",
+    "accounts": [
+      {
+        "id": "a1000000-0000-4000-8000-000000000002"
+      },
+      {
+        "id": "a1000000-0000-4000-8000-000000000001"
+      }
+    ]
+  },
+  "key": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+  "plaintext": "[{\"observed_at\":\"2026-11-15 20:01:02.123456+00\",\"evidence\":{\"id\": \"a1000000-0000-4000-8000-000000000001\", \"enabled\": true, \"bot_paused\": false, \"created_at\": \"2026-11-01T00:00:00.000001+00:00\", \"operations\": {\"pending\": 2, \"oldest_pending\": \"2026-11-14T18:00:00.123456+00:00\", \"last_settlement\": null}, \"acknowledged\": true, \"auto_enabled\": true, \"call_receipts\": [{\"id\": \"d1000000-0000-4000-8000-000000000001\", \"state\": \"complete\", \"outcome\": \"unanswered\", \"createdAt\": \"2026-11-15T18:00:00.123456+00:00\", \"updatedAt\": \"2026-11-15T18:01:00.123456+00:00\", \"providerId\": \"synthetic-original-call-provider\", \"operationKey\": \"synthetic-original-call-operation\", \"dialClaimedAt\": null, \"providerStartedAt\": null}], \"text_receipts\": [{\"id\": \"b1000000-0000-4000-8000-000000000001\", \"state\": \"accepted\", \"eventId\": \"synthetic-original-message-event\", \"threadId\": \"c1000000-0000-4000-8000-000000000001\", \"createdAt\": \"2026-11-15T19:00:00.654321+00:00\", \"requestId\": \"synthetic-original-message-request\", \"updatedAt\": \"2026-11-15T19:00:01.654321+00:00\", \"deliveryAt\": null, \"providerId\": \"synthetic-original-message-provider\", \"contentHash\": \"synthetic-content-hash\"}], \"search_enabled\": true, \"search_expires\": \"2026-12-01T00:00:00+00:00\", \"search_minimum\": 300, \"contact_enabled\": true, \"contact_expires\": \"2026-12-01T00:00:00+00:00\", \"contact_minimum\": 100, \"contacts_enabled\": true, \"data_rights_until\": \"2026-12-01T00:00:00+00:00\", \"research_receipts\": [], \"membership_allowed\": true, \"original_operations\": [{\"id\": \"synthetic-original-reserved-operation\", \"cap\": 100, \"state\": \"reserved\", \"evidence\": null, \"createdAt\": \"2026-11-14T18:00:00.123456+00:00\", \"settledAt\": null, \"actualMicros\": null, \"chargedCents\": null, \"dispatchedAt\": null}, {\"id\": \"synthetic-original-dispatched-operation\", \"cap\": 100, \"state\": \"dispatched\", \"evidence\": null, \"createdAt\": \"2026-11-14T18:01:00.123456+00:00\", \"settledAt\": null, \"actualMicros\": null, \"chargedCents\": null, \"dispatchedAt\": \"2026-11-14T18:01:01.123456+00:00\"}], \"prospecting_available_cents\": 210}}, \n {\"observed_at\":\"2026-11-15 20:01:02.123456+00\",\"evidence\":{\"id\": \"a1000000-0000-4000-8000-000000000002\", \"unknown\": \"synthetic_observation_incomplete\", \"created_at\": null, \"operations\": {\"pending\": null}, \"acknowledged\": null, \"call_receipts\": [], \"text_receipts\": [], \"diagnostic_text\": \"Café 雪\\r\\nsecond\\nline\", \"research_receipts\": [], \"membership_allowed\": null, \"original_operations\": []}}]",
+  "envelope": {
+    "format": "work-cohort-pgp-json-v1",
+    "raw_bytes": 2446,
+    "row_count": 2,
+    "query_sha256": "f3653d1af3092f1e4e0445789eb4d3dc6e7d2d118e0577fc75063c0752b2f808",
+    "encrypted_bytes": 815,
+    "encrypted_base64": "ww0ECQMCsI8zF+5qpU930sJdAU/Zpo2cH+WwiNJ0V79u8sB7kMZ+NKVU/UWqEJQCFEQEjNgenrJzXc+IU5dgVe/ACgdIMKOZNJ4vt0ZJRG7NIFZUoXfzeGNnphnB/sxsoJr1q1AQsqeY6d4xMYaz+1TUyqY20VQYOG3D7glUJjlcCmj4/bl+10iueo8hvNxssjqhXSIk7Bvloerb/o4SwH2uxf7pzpDGrc0c3hv0kFafQRv8Sc96uM1l3w7sg1CURyDvIYVG7OEhQhJDjU3Nu0TtZ9Z0TypE8pXLmLhTV/joLYITpGYyFzPrcMF7RxrynriuV4aydqGXw7sXjTr9nnBFC6EifAwjGTDGHoPL+AwjozDIQByaSHkEd7HNYsdcdRXo9TK8afR5yFUpByFNp8SX6D5pL3H0AR+4oFBg5oxQrIiTvUNgIXROGjhYilBDPW5TTkeKlHXguR4gACluSThUKCJA/J2+mLVhanqybbrP+Vddjesu5T1zBaU4oQS36z9X5ZaIm4ONGPvKU+A3hcAfg9kQj0wu617d/gaNuIuXJY8Fn9ZZCuCa5uSBaJ0Ifropa3kmEZk0akoAwN2irHcr7jR1nbK7VEoJv0NFtz5Xz6T6mICYm4mVqxZoLnkBg+lQLQpmz4tbGcsxJ5+KKk/m+aGO8in1Fu2+ph/P4o1Pjsy6sT9L2MyjKo7wL0Og6UIFdPHHlInaSdyLFFYZ8TIuBYVGTn4ArxuPZrH2LRItoM70NSgdJc5YUqTYHJ3dQ9YDLrQa2OIOGjlT6HE7El8CRcpw4495yXSbLrYRsWO2TwBSgmsz+xLKHEwcgmgYf3kwos0qyOGMglpJDvxC/Bk560mtnPKoxzaZMR0L8WR87eeykeco9ImK0YXlHOZrBLidhlWOGTpp8GTsheBMsW9UWyyHlDDUDTd/3EYdh5OoeR/5hFgs2Ih+amMU7YhPJtIMPDns8/s7N7xZBINY8yF3x9ngz8qpySMdkUTtOxwydSv5d6r772MQ4IeconbINZfME6ylN6DCURAaksuqlrztcj33589q07gL05jt9tgeWtUdN3MrG1Fc/gMfL34=",
+    "plaintext_sha256": "5898d0857e53a8c4c503df4b3f9464d1eaad30b05d888f57325777e11499a41e",
+    "membership_sha256": "163eb9ed58db29c883b215b9961b630854166b3b32fe1fc956866214a4995f1c",
+    "distinct_member_count": 2,
+    "original_observed_at_max": "2026-11-15 20:01:02.123456+00",
+    "original_observed_at_min": "2026-11-15 20:01:02.123456+00"
+  }
+}

@@ -32,6 +32,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Verify optional cohort transport against synthetic pgcrypto ciphertext
+        run: node scripts/test-work-cohort-transport-gpg.mjs
       - name: Verify learning refresh under real concurrent transactions
         run: python3 scripts/test-learning-refresh-postgres.py
       - name: Install isolated learning contention driver
