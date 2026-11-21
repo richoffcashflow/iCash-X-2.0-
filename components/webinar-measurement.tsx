@@ -37,12 +37,6 @@ export function WebinarMeasurement(){
   if(event.eventName==='PageView'&&(window as PixelWindow).icashWebinarPixel?.sentPageView===event.eventId)return;
   if(initialized.current!==c.pixelId){pixel(c.pixelId);initialized.current=c.pixelId;}
   const f=(window as PixelWindow).fbq;if(!f)return;f('consent','grant');
-  const boot=(window as PixelWindow).icashWebinarPixel;
-  const extra=boot?.adPixel?.(location.pathname);
-  if(boot&&extra&&extra!==c.pixelId){
-   if(boot.secondaryPixelId!==extra){f('set','autoConfig',false,extra);f('init',extra);boot.secondaryPixelId=extra;}
-   f(event.eventName==='WebinarOfferOpened'?'trackSingleCustom':'trackSingle',extra,event.eventName,event.data,{eventID:event.eventId});
-  }
   f(event.eventName==='WebinarOfferOpened'?'trackSingleCustom':'trackSingle',c.pixelId,event.eventName,event.data,{eventID:event.eventId});sent.current.add(event.eventId);storage.set('wb-meta:'+event.eventId,'1');
   if(event.eventName==='PageView'){const boot=(window as PixelWindow).icashWebinarPixel;if(boot)boot.sentPageView=event.eventId;}
  }
