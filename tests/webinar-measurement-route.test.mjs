@@ -22,6 +22,7 @@ const deps={...policy,...measurementPolicy,z,isIP,browserPaymentInfo,browserPurc
   return [];
  }};
 async function load(file,key){globalThis[key]=deps;const code=ts.transpileModule(readFileSync(new URL('../'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import .*;\s*$/gm,'');return import('data:text/javascript;base64,'+Buffer.from(`const {${Object.keys(deps).join(',')}}=globalThis.${key};\n`+code).toString('base64'));}
+Object.assign(deps,await load('lib/webinar-ad-pixel.ts','__adPixelFixture'));
 const measurement=await load('app/api/webinar/measurement/route.ts','__measurementFixture');
 const pixel=await load('app/api/webinar/pixel/route.ts','__pixelFixture');
 const studio=await load('app/api/webinar/studio/route.ts','__measurementStudioFixture');
@@ -41,6 +42,11 @@ try{
  await post(false);assert.equal(lastAccess().p_action,'deny','Private campaign retains explicit opt-out');writes=[];privateCampaign=false;
  visitorMissing=true;
  let pageResult=await(await pagePixel({'x-vercel-ip-country':'US'})).json();assert.equal(pageResult.pixelId,pixelId);assert.equal(pageResult.trackingAllowed,true);assert.equal(writes.length,0,'Page bootstrap never creates consent or purchase receipts');
+ for(const [code,expected] of [['100000',pixelId],['100007','1189620056677378'],['100008','1189620056677378']]){
+  const url=new URL('https://example.test/api/webinar/pixel');
+  url.searchParams.set('page','/live/'+code);
+  assert.equal((await(await pixel.GET(new Request(url,{headers:{'x-vercel-ip-country':'US'}}))).json()).pixelId,expected);
+ }
  for(const headers of [{},{'x-vercel-ip-country':'GB'},{'x-vercel-ip-country':'US','sec-gpc':'1'}])assert.equal((await(await pagePixel(headers)).json()).trackingAllowed,false);
  visitorMissing=false;identity={email:null,marketing_consent_at:null,measurement:{opt_out_at:new Date().toISOString()}};
  assert.equal((await(await pagePixel({'x-vercel-ip-country':'US'})).json()).trackingAllowed,false,'Saved opt-out applies before a session');
@@ -71,4 +77,4 @@ try{
  const save=()=>studio.POST(new Request('https://example.test/api/webinar/studio',{method:'POST',body:JSON.stringify({action:'settings',settings})}));
  assert.equal((await save()).status,400);settings.meta.pixelId=pixelId;assert.equal((await save()).status,200);assert.equal(writes.at(-1).body.config.meta.pixelId,pixelId);
  console.log('PASS automatic Meta route: trusted US eligibility, no false consent, click matching, verified purchase receipts, saved/browser opt-outs, explicit privacy controls and preview exclusion.');
-}finally{if(original===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=original;if(originalVercel===undefined)delete process.env.VERCEL;else process.env.VERCEL=originalVercel;delete globalThis.__measurementFixture;delete globalThis.__measurementStudioFixture;delete globalThis.__pixelFixture;}
+}finally{if(original===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=original;if(originalVercel===undefined)delete process.env.VERCEL;else process.env.VERCEL=originalVercel;delete globalThis.__measurementFixture;delete globalThis.__measurementStudioFixture;delete globalThis.__pixelFixture;delete globalThis.__adPixelFixture;}
