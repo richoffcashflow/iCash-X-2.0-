@@ -14,7 +14,7 @@ button:disabled{opacity:.55;cursor:default}#result{min-height:2rem}
 <body><main>
 <h1>iCash X pixel test</h1>
 <p>Test browser events on dataset <strong>1189620056677378</strong>. Open this page from Meta Test Events, then choose an event.</p>
-<p>The Purchase button sends a $0 Purchase to this dataset. Meta may count it as a purchase. No payment is taken.</p>
+<p>The Purchase button sends a $50 Purchase to this dataset. Meta may count it as a $50 sale in this dataset. No payment is taken.</p>
 <div id="buttons"></div>
 <p id="result" role="status"></p>
 </main>
@@ -56,7 +56,7 @@ const events = ['PageView','ViewContent','Lead','WebinarOfferOpened','AddToCart'
 for (const name of events) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.textContent = name === 'Purchase' ? 'Send $0 Purchase' : 'Send ' + name;
+  button.textContent = name === 'Purchase' ? 'Send $50 Purchase' : 'Send ' + name;
   button.onclick = async () => {
     button.disabled = true;
     statusLine.textContent = 'Checking tracking permission…';
@@ -69,7 +69,7 @@ for (const name of events) {
       const pixel = await loadPixel();
       if (privacyBlocked()) throw Error('Tracking is disabled by your privacy settings.');
       const data = {content_name:'iCash X webinar tracking test'};
-      if (name === 'Purchase') Object.assign(data, {value:0,currency:'USD'});
+      if (name === 'Purchase') Object.assign(data, {value:50,currency:'USD'});
       const eventID = 'webinar-test-' + name + '-' + crypto.randomUUID();
       pixel(name === 'WebinarOfferOpened' ? 'trackSingleCustom' : 'trackSingle', pixelId, name, data, {eventID});
       statusLine.textContent = name + ' submitted by this browser. Check Meta Test Events for receipt.';
