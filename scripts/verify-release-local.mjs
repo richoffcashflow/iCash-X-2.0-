@@ -14,6 +14,7 @@ const suites = [
  'owner-batch-pool-selection',
  'research-priority-cost-isolation',
  'seller-call-learning-planning',
+ 'support-unsent-context',
  'learning-completion-lock-isolation',
  'learning-estimate-bookkeeping',
  'missing-receipt-settlement-yield',
