@@ -100,6 +100,13 @@ assert.equal(cross.plan.state.closing.legalName,'Robin Fixture');
 cross=await run(returned,'Yes, send the agreement');assert.equal(cross.result.status,'seller_agreement_sent');assert.equal(sends,beforeSends+1);
 assert.equal(await rpc('icash_claim_seller_text_agreement',[returned.a,cross.j.id]),null);
 
+const openingPrice=await seed({qualified:false});
+await q("insert into icash_text_messages(account_id,thread_id,direction,body,state,provider_id,created_at) values($1,$2,'outgoing',$3,'delivered','fixture-opening-cash',$4)",[openingPrice.a,openingPrice.t,'Would you consider selling 45 Oak Road for all cash?',at()]);
+const cashReply=await run(openingPrice,'Yes 500,000 cash.');
+assert.equal(cashReply.plan.action,'qualify_ownership');
+assert.equal(cashReply.plan.state.proposedPriceCents,50000000);
+assert.equal(cashReply.plan.state.acceptedPriceCents,null);
+assert.match(cashReply.plan.body,/asking \$500,000.*owner/i);
 const ownerUnknown=await seed({qualified:false});r=await run(ownerUnknown,'How much');assert.equal(r.plan.action,'qualify_ownership');assert.equal(r.plan.state.acceptedPriceCents,null);
 // Continue a call's pending repair-budget question by SMS. A plainly stated
 // zero is a seller estimate; it does not erase the larger research allowance.

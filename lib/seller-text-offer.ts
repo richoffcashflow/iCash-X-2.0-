@@ -255,11 +255,12 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
  }
  if(!qualification.ready){
   if(qualification.stop)return review('seller_qualification_stopped','Preserve the actual seller refusal, listing or ownership restriction.');
-  if(c.callInvitationAllowed===true&&intent!=='price'&&!sellerRequestsPrice(source.body)&&!source.body.includes('?')&&!qualification.missing.includes('ownership')&&!qualification.missing.includes('interest')
+  if(sellerPrice===null&&c.callInvitationAllowed===true&&intent!=='price'&&!sellerRequestsPrice(source.body)&&!source.body.includes('?')&&!qualification.missing.includes('ownership')&&!qualification.missing.includes('interest')
    &&!priorCallPreference(c.messages)&&!state.quotedPriceCents&&!state.acceptedPriceCents)
    return ask('invite_call',sellerCallInvitation);
   const priceQuestion=sellerRequestsPrice(source.body)||intent==='price';
-  return ask('qualify_'+qualification.missing[0],(priceQuestion?'An offer depends on the property details. ':'')+qualification.nextQuestion);
+  const intro=sellerPrice!==null?`Got it, you’re asking ${priceText(sellerPrice)}. `:priceQuestion?'An offer depends on the property details. ':'';
+  return ask('qualify_'+qualification.missing[0],intro+qualification.nextQuestion);
  }
  const offer=calculateAutomaticCallOffer({party:'seller',address:c.address,snapshot:c.snapshot},state,now);
  if(!offer.quoteAllowed){

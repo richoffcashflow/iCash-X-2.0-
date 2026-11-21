@@ -2,7 +2,7 @@ import {voiceResult,emptyQuotaRejection,type VoiceConversation} from './voice-re
 import {isContactOptOut} from './contact-intent.ts';
 import {sellerCallDisposition} from './seller-response-policy.ts';
 import {conversationTrustInstructions} from './conversation-trust.ts';
-import {callContactEvidence,hasHumanCallWords,automatedAnswerInstructions} from './call-contact-evidence.ts';
+import {callContactEvidence,hasHumanCallWords,automatedAnswerInstructions,disconnectedAnnouncement} from './call-contact-evidence.ts';
 import {sellerRequestsPrice} from './seller-conversation-efficiency.ts';
 import {sellerInterestQuote} from './seller-interest-evidence.ts';
 
@@ -46,6 +46,7 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
  const source=expected.party==='seller'&&c.analysis?{...c,analysis:{...c.analysis,data_collection_results:{...c.analysis.data_collection_results,opted_out:{value:false}}}}:c;
  const r=voiceResult(source,expected,now);if(!r)return null;
  const contactEvidence=callContactEvidence(r.transcript),humanResponse=contactEvidence==='human_response';
+ const disconnected=contactEvidence==='automated_answer'&&r.transcript.some(t=>t.role==='user'&&new RegExp(disconnectedAnnouncement,'i').test(t.message));
  const fields=c.analysis?.data_collection_results??{};
  const quote=(name:string)=>{
   const v=fields[name]?.value;
@@ -71,7 +72,7 @@ export function liveConversationResult(c:VoiceConversation,expected:{conversatio
   humanRequested,humanQuote,optedOut,interested,responseDisposition,interestQuote,offerRequestQuote,party:expected.party,
   callbackStatus:optedOut?'blocked_opt_out':!humanResponse?'not_requested':followupHeld?'held_for_seller_response':humanRequested?'held_for_human':r.callbackStatus==='scheduled_test'?'pending_dispatch_review':r.callbackStatus,
   callbackDueAt:optedOut||followupHeld||!humanResponse?null:r.dueAt,callbackTimezone:optedOut||followupHeld||!humanResponse?null:r.timezone,callbackQuote:humanResponse?r.callbackQuote:null,callbackEvidence:humanResponse?r.callbackEvidence:null,
-  nextAction:optedOut?'Do not contact again.':expected.party==='seller'&&!humanResponse?'No seller response. Continue only through the existing eligible unanswered-contact workflow.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:offerRequestQuote?'Review the requested cash offer and any price already presented. Verify ownership and current quote authority before following up.':interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
+  nextAction:optedOut?'Do not contact again.':expected.party==='seller'&&disconnected?'Carrier reported this number out of service. Hold automatic calls to this number.':expected.party==='seller'&&!humanResponse?'No seller response. Continue only through the existing eligible unanswered-contact workflow.':followupHeld?'Automatic follow-up stopped after the seller response; review the original conversation.':humanRequested?`Review the ${expected.party} conversation and contact them personally.`:offerRequestQuote?'Review the requested cash offer and any price already presented. Verify ownership and current quote authority before following up.':interested?'Confirm condition, timing, price and all owners before negotiating.':'Review the conversation before the next contact.',
   // Provider/model analysis is not signature, escrow, title, or payoff evidence.
   underContract:false as const,
  };
