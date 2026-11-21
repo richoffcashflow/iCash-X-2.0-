@@ -169,6 +169,12 @@ export function callSellerPriceEvidence(value:unknown,input:Record<string,unknow
  const previous=String(turns.slice(0,index).findLast(t=>t.role==='agent')?.message??'');
  const question=previous.match(/[^.!?]+\?/g)?.at(-1)??previous;
  if(/\b(?:repairs?|mortgage|payoff|liens?|tax|deposit)\b/i.test(question)&&! /\basking(?: price)?\b/i.test(text))return null;
+ // A seller can name their own cash price in reply to an unpriced opener.
+ // A priced offer, repair question or payoff amount has a different meaning.
+ const cashAnswer=/^(?:yes|yeah|yep|sure)[, ]+\$?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:k| thousand| million)?\s+cash[.! ]*$/i.test(text);
+ const opener=/\b(?:would you consider selling\b.*\bfor (?:all[ -])?cash|(?:would|are) you (?:be )?open to (?:an? (?:all[ -])?cash offer|(?:selling|a cash sale)\b.*))\s*[^?]*\?\s*$/i.test(question);
+ const priced=/\$|\b(?:offer (?:of|at)|cash for|for|at)\s+\d[\d,.]*\s*(?:k\b|dollars?\b|cash\b|[?!.]|$)|\b(?:hundred|thousand|million|dollars?)\b/i.test(question);
+ if(cashAnswer&&opener&&!priced)return amounts[0];
  const askedPrice=/\b(?:asking price|what price|how much.*(?:want|asking|sell)|price.*(?:mind|looking))\b/i.test(question);
  const works=/\s+(?:works for me|is my (?:asking )?price)[.!]*$/i.test(text);
  if(!prefix&&!askedPrice&&!works)return null;

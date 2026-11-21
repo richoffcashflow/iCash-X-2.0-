@@ -6,16 +6,19 @@ import {isAutomatedCallMenu} from './automated-call-menu.ts';
  * original transcript, or suppress a real stop-contact request. */
 export const clippedMailboxPattern=String.raw`^\s*[. ]*been set up yet[.! ]+goodbye[.! ]*$|^\s*try your call again later[.! ]+goodbye[.! ]*$|^\s*you can modify it by pressing pound[.! ]*$|^\s*i am a virtual assistant that helps people with their calls when they['’]re busy[.! ]+they wanted me to check the reason for the call before connecting you to them[.! ]*$|^\s*(?:please )?leave (?:your|a) name (?:and|&) (?:number|message)(?:[, .]+(?:and )?i['’]ll (?:call you back|get back to you)(?: as soon as possible)?)?[.! ]*$|^\s*[. ]*(?:google )?voice will try to connect you[.! ]*$|^\s*(?:one|two|1|2)[, ]+to connect your call[.! ]*$|^\s*(?:gracias[.! ]+)?permane(?:ce|zca) en la l[ií]nea[.! ]*$|^\s*(?:lo siento[.,! ]+)?esta persona no est[aá] disponible[.! ]*$`;
 export const automatedCallPattern=`leave (a |an |your )?((additional|brief|short) )?message|record (a |your )?message|(at|after) the (sound of the )?(beep|tone)|mailbox (is|has)|voicemail (for|system)|has been disconnected|number you (have )?dialed|press any key to continue|^\\s*(?:an? )?ai assistant recording this call for the person|^\\s*please try your call again later[.! ]+(?:goodbye[.! ]*)?$|press (one|two|three|four|five|six|seven|eight|nine|zero|pound|star|[0-9#*])|automated (voice|system)|please (stay|hold|remain) on the line|please (say|state) your name|screening (this|your) call|call has been forwarded|cannot take your call|can.t take your call|when you( have|[’']ve|ve) finished recording|^\\s*(stay|hold|remain) on the line[.! ]*$|this person is not available|press the (pound|star|[0-9#*]) key|^\\s*[. ]*(?:(?:when (?:that.s|you.ve|you have)|have) )?finish(?:ed)? recording[,. ]+you may hang up|^\\s*[. ]*recording[, ]+you may hang up|^\\s*to end recording[.! ]*$|^\\s*this is a recorded message[.! ]|^\\s*[¿]?(?:puedes|puede|pueden) colgar cuando hayas? terminado de grabar(?:lo)?|(?:graba|grabe|deja|deje) (?:tu|su|un) mensaje despu[eé]s (?:del tono|de la se[ñn]al)|^\\s*deje despu[eé]s del tono|^\\s*nothing has been recorded[.! ]*$|^\\s*no se ha grabado nada[.! ]|^\\s*[0-9 -]{4,16} is not available[.! ]*$`;
+export const disconnectedAnnouncement=String.raw`^\s*[. ]*(?:[0-9][0-9 -]{3,17}|the number you (?:have )?dialed) is not in service at this time[.! ]+please check the number and dial again(?:,? or call your operator for assistance)?[.! ]*$`;
+const screeningAnnouncement=String.raw`^\s*(?:see if this person is available|revisar[eé] si esta persona est[aá] disponible)[.! ]*$`;
+const carrierPrompt=new RegExp(disconnectedAnnouncement+'|'+screeningAnnouncement,'i');
 const audioMarker=/^\s*[\[(*]?\s*(?:music(?: playing)?|silence|noise|background noise|inaudible|unintelligible|no speech|no audio)\s*[\])*]?\s*[.!]*\s*$/i;
 const fragmentedBeepGreeting=/^\s*(?:at the (?:beep|beach)[.! ,]*thank you|[. ]*(?:(?:(?:i['’]ll )?(?:see|check)) if )?(?:this )?person is available|[¿]?esta persona est[aá] disponible[?]?)[.! ,]*$/i;
 export function hasHumanCallWords(message:string){
- if(isAutomatedCallMenu(message))return false;
+ if(isAutomatedCallMenu(message)||carrierPrompt.test(message))return false;
  if(sellerResponseDisposition(message)==='opt_out')return true;
  return /\p{L}/u.test(message)&&!audioMarker.test(message)&&!new RegExp(automatedCallPattern+'|'+clippedMailboxPattern,'i').test(message);
 }
 export function callContactEvidence(transcript:{role:string;message?:string|null}[]){
  const words=transcript.filter(t=>t.role==='user'&&typeof t.message==='string').map(t=>t.message!);
- const automated=words.some(t=>isAutomatedCallMenu(t)||new RegExp(automatedCallPattern+'|'+clippedMailboxPattern,'i').test(t));
+ const automated=words.some(t=>carrierPrompt.test(t)||isAutomatedCallMenu(t)||new RegExp(automatedCallPattern+'|'+clippedMailboxPattern,'i').test(t));
  // A fragmented/transcribed beep greeting needs a separate canonical machine
  // prompt before it can be excluded. Standalone speech and later owners survive.
  if(words.some(t=>hasHumanCallWords(t)&&!(automated&&fragmentedBeepGreeting.test(t))))return 'human_response' as const;

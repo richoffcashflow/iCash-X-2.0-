@@ -22,6 +22,7 @@ export function sellerCallAnswerDisposition(question:string,answer:string):'decl
  }
  // Rejecting an actual amount does not reject selling in general.
  if(new RegExp(sellerCallAnswerPatterns.specificPrice).test(last)||new RegExp(sellerCallAnswerPatterns.unmarkedPrice).test(last))return null;
- if(new RegExp(sellerCallAnswerPatterns.interest).test(last)&&new RegExp(sellerCallAnswerPatterns.negative).test(a))return 'declined';
+ const saleQuestion=new RegExp(sellerCallAnswerPatterns.interest).test(last)||/\bare you (?:currently )?looking to sell(?: (?:the|this|your) (?:property|house|home))?\s*$/.test(last);
+ if(saleQuestion&&new RegExp(sellerCallAnswerPatterns.negative).test(a))return 'declined';
  return null;
 }
