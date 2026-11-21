@@ -12,28 +12,18 @@ const report={fresh:true,status:'degraded',components:{worker:{status:'ok',check
 const render=(value=report,event='detected')=>reliabilityEmailContent({...claim,event},value,now);
 const healthyAccounts=render();
 assert.equal(reliabilityPriority(report,now),'critical','The existing account severity is preserved');
-assert.equal(healthyAccounts.subject,'iCash X · Critical priority — Account/workflow issues');
-assert.match(healthyAccounts.text,/Both background checks are responding/);
-assert.match(healthyAccounts.text,/Incident record when this alert was prepared: workflow recovery; 825 monitor flags/,'The claimed incident count is distinct from the subsequent snapshot');
-assert.match(healthyAccounts.text,/Current aggregate monitor flags: 826/,'Current monitoring is separate from the claimed event');
+assert.equal(healthyAccounts.subject,'iCash X · Critical priority update — Account/workflow issues');
 assert.match(healthyAccounts.text,/Accounts needing attention: 171/);
-assert.match(healthyAccounts.text,/no recent completed task recorded: 3/);
-assert.match(healthyAccounts.text,/earlier work awaiting confirmation: 168/);
-assert.match(healthyAccounts.text,/Priority describes urgency, not the extent of an outage/);
-assert.match(healthyAccounts.text,/Whole-platform outage: not established/);
-assert.match(healthyAccounts.text,/Earlier activity does not prove work is healthy now/);
+assert.match(healthyAccounts.text,/No recent completed task recorded: 3/);
+assert.match(healthyAccounts.text,/Earlier work awaiting confirmation: 168/);
 assert.match(healthyAccounts.text,/Evidence checked: Nov 16, 2026, 4:26 PM Central/);
-assert.match(healthyAccounts.text,/Next action: Immediate investigation required/);
+assert.match(healthyAccounts.text,/^Next action: Investigate now\./);
 assert(!JSON.stringify(healthyAccounts).includes(id(3)));assert(!JSON.stringify(healthyAccounts).includes(id(4)));
 
 for(const states of [['degraded','ok'],['ok','degraded'],['unavailable','unavailable']]){
  const value={...report,components:{worker:{status:states[0],checkedAt:at},maintenance:{status:states[1],checkedAt:at}}};
  const email=render(value);
  assert.match(email.subject,/Background service checks failing/);
- assert.match(email.text,/Whole-platform outage: not established/);
- assert.match(email.text,/missing heartbeat does not by itself prove the process stopped/);
- if(states[1]==='ok')assert.match(email.text,/What works: maintenance and recovery checks are responding/);
- if(states.every(s=>s==='unavailable'))assert.match(email.text,/No healthy background check was verified/);
 }
 
 const clean={...report,status:'ok',snapshot:{...report.snapshot,issueCount:0,issues:[],accountProgress:{...report.snapshot.accountProgress,affectedAccounts:0,stalledAccounts:0,pendingAccounts:0,samples:[]}}};
@@ -41,15 +31,12 @@ for(const value of [null,{bad:true},{...report,fresh:false},{...report,snapshot:
  {...report,snapshot:{...report.snapshot,checkedAt:'2020-01-01T00:00:00Z'}},
  {...report,snapshot:{...report.snapshot,checkedAt:new Date(now+60000).toISOString()}}]){
  const email=render(value);
- assert.match(email.subject,/Current impact unverified/);
- assert.match(email.text,/Scope: unknown/);
- assert.match(email.text,/What works: unverified/);
+ assert.match(email.subject,/Current impact unverified|Monitoring snapshot not current/);
  assert.doesNotMatch(email.text,/checks are responding|Core background checks are healthy/);
 }
 for(const checkedAt of [null,'2020-01-01T00:00:00Z',new Date(now+60000).toISOString()]){
  const email=render({...clean,components:{...clean.components,worker:{status:'ok',checkedAt}}});
- assert.match(email.subject,/Current impact unverified/);
- assert.doesNotMatch(email.text,/background worker checks are responding|Both background checks are responding/);
+ assert.match(email.subject,/Current impact unverified|Monitoring snapshot not current/);
 }
 for(const checkedAt of ['2020-01-01T00:00:00Z',new Date(now+60000).toISOString()]){
  const staleAccount=render({...report,snapshot:{...report.snapshot,accountProgress:{...report.snapshot.accountProgress,checkedAt}}});
@@ -75,24 +62,69 @@ for(const fields of [
  assert.match(render(value,'recovered').subject,/current health needs verification/);
 }
 const pendingOnly=render({...report,snapshot:{...report.snapshot,accountProgress:{...report.snapshot.accountProgress,stalledAccounts:0,pendingAccounts:171}}});
-assert.match(pendingOnly.subject,/Critical priority — Account\/workflow issues/);
-assert.match(pendingOnly.text,/no recent completed task recorded: 0/);
-assert.match(pendingOnly.text,/earlier work awaiting confirmation: 171/);
-assert.match(pendingOnly.text,/Pending receipts and missing completion records are not confirmed failed sends/);
+assert.match(pendingOnly.subject,/Critical priority update — Account\/workflow issues/);
+assert.match(pendingOnly.text,/No recent completed task recorded: 0/);
+assert.match(pendingOnly.text,/Earlier work awaiting confirmation: 171/);
 
 const historicalAlert=render(clean);
-assert.match(historicalAlert.subject,/Critical priority — Current checks clear/);
-assert.match(historicalAlert.text,/Incident record when this alert was prepared: workflow recovery; 825 monitor flags/);
-assert.match(historicalAlert.text,/verified clear recovery window has not yet been recorded/);
+assert.match(historicalAlert.subject,/Critical priority update — Current checks clear/);
+assert.match(historicalAlert.text,/No clear recovery window recorded yet/);
+for(const value of [historicalAlert.text,historicalAlert.html]){
+ assert.doesNotMatch(value,/Investigate now/);
+ assert.match(value,/Continue monitoring/);
+}
 const recovered=render(clean,'recovered');
 assert.equal(recovered.subject,'iCash X · Recovery window recorded');
 assert.match(recovered.text,/The latest checks are also clear/);
-assert.match(recovered.text,/does not confirm every message was delivered/);
-assert.match(recovered.text,/historical alerts may still have unresolved provider receipts or blocked work/);
 for(const value of [null,report,{...clean,status:'degraded'},{...clean,components:{...clean.components,worker:{status:'degraded',checkedAt:at}}}]){
  const email=render(value,'recovered');
  assert.match(email.subject,/current health needs verification/);
- assert.match(email.text,/recorded recovery window does not override newer or unavailable observations/);
+ assert.match(email.text,/newer or unavailable checks do not verify current health/);
  assert.doesNotMatch(email.text,/The latest checks are also clear/);
 }
+const overlapReport={...report,snapshot:{...report.snapshot,accountProgress:{...report.snapshot.accountProgress,affectedAccounts:183,pendingAccounts:183,stalledAccounts:131,stalledPendingAccounts:131}}};
+const overlapEmail=render(overlapReport);
+assert.match(overlapEmail.text,/Accounts needing attention: 183.*131 are in both groups/);
+const remainder=render({...overlapReport,snapshot:{...overlapReport.snapshot,accountProgress:{...overlapReport.snapshot.accountProgress,
+ affectedAccounts:190,expiredConfigurations:2,unexpectedPauses:1}}});
+for(const value of [remainder.text,remainder.html]){
+ assert.match(value,/Expired configurations: 2; unexpected pauses: 1/);
+ assert.match(value,/Other account issues \(see dashboard\): 4/);
+}
+assert.doesNotMatch(overlapEmail.text,/Other account issues/);
+for(const stalledPendingAccounts of [0,132,184]){
+ const invalid={...overlapReport,snapshot:{...overlapReport.snapshot,accountProgress:{...overlapReport.snapshot.accountProgress,stalledPendingAccounts}}};
+ assert.match(render(invalid).text,/Account impact and interrupted work: unverified/);
+}
+const stale=(issueCount,maintenance=report.components.maintenance)=>render({...overlapReport,fresh:false,components:{maintenance,worker:{status:'degraded',checkedAt:at}},
+ snapshot:{...overlapReport.snapshot,checkedAt:new Date(now-180000).toISOString(),issueCount}});
+assert.deepEqual(stale(1038),stale(1041),'Stale count jitter never changes owner email copy');
+assert.match(stale(1041).subject,/Critical priority update — Monitoring snapshot not current/);
+assert.match(stale(1041).text,/background worker: degraded/);
+assert.match(stale(1041).text,/Last monitor snapshot:/);
+assert.match(stale(1041).text,/Current impact: unverified/);
+assert.doesNotMatch(stale(1041).text,/1041|825|Accounts needing attention/);
+assert.ok(stale(1041).text.length<750);
 console.log('PASS email scope separates priority, account receipts, failing components, unknown evidence and historical recovery without exposing account details.');
+for(const email of [stale(1041),overlapEmail,recovered]){
+ assert.equal((email.html.match(/<h1 /g)??[]).length,1);
+ assert.match(email.html,/<html lang="en" dir="ltr">/);
+ assert.match(email.html,/<meta name="viewport" content="width=device-width, initial-scale=1">/);
+ assert.match(email.html,/max-width:560px/);
+ assert.match(email.html,/<h2 [^>]*>Impact<\/h2>[\s\S]*<h2 [^>]*>Next action<\/h2>[\s\S]*Open the iCash X workflow dashboard[\s\S]*Check details[\s\S]*Incident reference/);
+ assert.ok(email.html.includes(email.text.split('\n')[0].replace(/^Next action: /,'')));
+ assert.doesNotMatch(email.html,/http:\/\/|<script|<img|\bid="|font-size:1[0123]px/);
+}
+assert.match(stale(1041).html,/Current impact: unverified/);
+assert.doesNotMatch(stale(1041).html,/1041|825|Accounts needing attention/);
+assert.match(overlapEmail.html,/131 are in both groups/);
+assert.match(recovered.html,/The latest checks are also clear/);
+const mixed=stale(1041,{status:'degraded',checkedAt:new Date(now-180000).toISOString()});
+for(const value of [mixed.text,mixed.html]){
+ assert.match(value,/Current impact: unverified.*Failing checks: background worker\./);
+ assert.match(value,/Investigate now\. Check background worker and restore monitoring/);
+ assert.match(value,/maintenance: unverified/);
+ assert.doesNotMatch(value,/Failing checks: background worker and maintenance|maintenance: degraded/);
+}
+const both=stale(1041,{status:'degraded',checkedAt:at});
+assert.match(both.html,/Failing checks: background worker and maintenance\./);

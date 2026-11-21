@@ -17,9 +17,9 @@ const transport=async(url,options)=>{
  if(String(url).includes('/auth/v1/admin/users/')){assert.equal(new URL(url).pathname,'/auth/v1/admin/users/'+ownerInboundTarget.ownerUserId);return Response.json(ownerValue);}
  assert.equal(url,'https://api.resend.com/emails');providerCalls++;
  const payload=JSON.parse(options.body);assert.deepEqual(payload.to,[owner.email]);assert.equal(options.headers['Idempotency-Key'],'reliability-'+claim.id);
- assert(payload.text.includes(`Incident started: ${reliabilityEmailTime(claim.openedAt)}`));assert.match(payload.text,/Current impact: unverified/);
- if(event==='detected'){assert.equal(payload.subject,'iCash X · Minor priority — Current impact unverified');assert.match(payload.text,/Minor priority/);assert.doesNotMatch(payload.text,/Core background checks are healthy/);}
- else{assert.match(payload.text,/Reviewed historical alerts may still have unresolved provider receipts or blocked work/);assert.match(payload.text,/does not confirm every message was delivered/);}
+ assert(payload.text.includes(`Incident started: ${reliabilityEmailTime(claim.openedAt)}`));assert.match(payload.text,/Current impact: unverified/);assert.match(payload.html,/Current impact: unverified/);
+ if(event==='detected'){assert.equal(payload.subject,'iCash X · Minor priority update — Current impact unverified');assert.match(payload.text,/Incident status update/);assert.doesNotMatch(payload.text,/Core background checks are healthy/);}
+ else{assert.match(payload.text,/A clear recovery window was recorded/);assert.match(payload.text,/Check original provider receipts/);}
  assert(!JSON.stringify(payload).includes('customer'));assert(!JSON.stringify(payload).includes('server-account'));assert(payload.text.includes('https://www.geticashx.com/admin'));
  if(failProvider)throw Error('fixture ambiguous provider timeout');
  return Response.json({id:id(3)});
@@ -43,9 +43,9 @@ assert.match(reliabilityEmailTime('2026-07-13T19:00:00Z'),/2:00 PM Central/);
 assert.equal(reliabilityEmailTime('invalid'),'unverified');
 const quotaContext=reliabilityNotificationContext({...report,snapshot:{...report.snapshot,researchQuota:{checkedAt:at,fresh:true,status:'paced_wait',warningCount:0,nextAvailableAt:'2026-11-13T19:00:00Z'}}},now);
 assert.match(quotaContext,/Contact research capacity: paced wait/);assert.match(quotaContext,/Next capacity check:.*1:00 PM Central/);
-assert.match(context,/Accounts needing attention: 5/);assert.match(context,/Accounts with no recent completed task recorded: 2/);assert.match(context,/Accounts with earlier work awaiting confirmation: 3/);assert.match(context,/not a count of confirmed outages/);
+assert.match(context,/Accounts needing attention: 5/);assert.match(context,/No recent completed task recorded: 2/);assert.match(context,/Earlier work awaiting confirmation: 3/);assert.match(context,/do not establish a full outage/);
 assert.doesNotMatch(context,/stalled accounts|work delayed/i,'Pending originals and missing completion evidence retain distinct counts without asserting an account-wide stoppage');
-assert.match(context,/background worker: ok/);assert.match(context,/maintenance and recovery: degraded/);assert.match(context,/7 texts accepted by the provider, 4 delivered/);
+assert.match(context,/background worker: ok/);assert.match(context,/maintenance: degraded/);assert.doesNotMatch(context,/7 texts accepted by the provider/);
 for(const invalid of [null,{...report,fresh:false},{...report,snapshot:{...report.snapshot,checkedAt:'2020-01-01T00:00:00Z'}},{...report,snapshot:{...report.snapshot,checkedAt:new Date(now+60000).toISOString()}}])assert.match(reliabilityNotificationContext(invalid,now),/unverified/);
 assert.match(reliabilityNotificationContext({...report,snapshot:{...report.snapshot,accountProgress:{...report.snapshot.accountProgress,checkedAt:'2020-01-01T00:00:00Z'}}},now),/Account impact and interrupted work: unverified/);
 claimed=false;failProvider=false;event='detected';assert.equal(await run({db:async(...args)=>{if(args[0].endsWith('icash_reliability_status'))throw Error('unavailable');return db(...args);}}),'accepted','Unavailable context cannot suppress incident delivery');
