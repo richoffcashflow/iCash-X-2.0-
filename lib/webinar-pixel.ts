@@ -1,5 +1,5 @@
 export type WebinarPixelConfig={enabled:boolean;pixelId?:string;trackingAllowed?:boolean;consent?:boolean};
-export type WebinarPixelRuntime={path:string;pageViewId:string;sentPageView:string;pixelId:string;ready:Promise<WebinarPixelConfig|null>|null;start:(force?:boolean)=>Promise<WebinarPixelConfig|null>};
+export type WebinarPixelRuntime={path:string;secondaryPixelId?:string;adPixel:(path:string)=>string;pageViewId:string;sentPageView:string;pixelId:string;ready:Promise<WebinarPixelConfig|null>|null;start:(force?:boolean)=>Promise<WebinarPixelConfig|null>};
 const measurementPaths=['/','/join','/webinar','/webinar/checkout','/webinar/upgrade'];
 export function webinarMeasurementPath(path:string){return measurementPaths.includes(path)||/^\/live\/\d{6,12}\/?$/.test(path);}
 
@@ -11,7 +11,12 @@ export const webinarPixelBootstrap=String.raw`(function(w,d){
  function page(){var path=w.location.pathname;return (/^\/live\/\d{6,12}\/?$/.test(path)||${JSON.stringify(measurementPaths)}.indexOf(path)!==-1)&&!new URLSearchParams(w.location.search).has('preview')&&(path!=='/'||!!d.querySelector('[data-public-checkout="true"]'));}
  function get(key){try{return w.localStorage.getItem(key);}catch(e){return null;}}
  function blocked(){return !!w.navigator.globalPrivacyControl||get('wb-meta-choice')==='deny';}
- var state=w.icashWebinarPixel={path:'',pageViewId:'',sentPageView:'',pixelId:'',ready:null,start:function(force){
+ 
+ function adPixel(path){
+  var entry=/^\/live\/100000\/?$/.test(path);
+  try{if(entry)w.sessionStorage.setItem('icash-100000-pixel','1');return entry||w.sessionStorage.getItem('icash-100000-pixel')==='1'?'1189620056677378':'';}catch(e){return entry?'1189620056677378':'';}
+ }
+ var state=w.icashWebinarPixel={adPixel:adPixel,path:'',pageViewId:'',sentPageView:'',pixelId:'',ready:null,start:function(force){
   if(!page())return Promise.resolve(null);
   var path=w.location.pathname;
   if(state.path===path&&state.ready&&!force)return state.ready;
@@ -26,8 +31,10 @@ export const webinarPixelBootstrap=String.raw`(function(w,d){
     !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(w,d,'script','https://connect.facebook.net/en_US/fbevents.js');
    }
    if(state.pixelId!==config.pixelId){w.fbq('set','autoConfig',false,config.pixelId);w.fbq('init',config.pixelId);state.pixelId=config.pixelId;}
+   var extra=adPixel(path);
+   if(extra&&extra!==config.pixelId&&state.secondaryPixelId!==extra){w.fbq('set','autoConfig',false,extra);w.fbq('init',extra);state.secondaryPixelId=extra;}
    w.fbq('consent','grant');
-   if(state.sentPageView!==id&&get('wb-meta:'+id)!=='1'){w.fbq('trackSingle',config.pixelId,'PageView',{}, {eventID:id});state.sentPageView=id;try{w.localStorage.setItem('wb-meta:'+id,'1');}catch(e){}}
+   if(state.sentPageView!==id&&get('wb-meta:'+id)!=='1'){w.fbq('trackSingle',config.pixelId,'PageView',{}, {eventID:id});if(extra&&extra!==config.pixelId)w.fbq('trackSingle',extra,'PageView',{}, {eventID:id});state.sentPageView=id;try{w.localStorage.setItem('wb-meta:'+id,'1');}catch(e){}}
    return config;
   }).catch(function(){return null;});
   return state.ready;
