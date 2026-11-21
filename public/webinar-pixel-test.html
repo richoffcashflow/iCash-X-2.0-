@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>iCash X · Pixel test</title>
+<style>
+body{font:1rem/1.55 system-ui,sans-serif;color:#18232e;background:#fafafa;margin:0}
+main{max-width:38rem;margin:8vh auto;padding:1.5rem} h1{margin:0}button{font:inherit;cursor:pointer;padding:.65rem 1rem;border:1px solid #526370;border-radius:.5rem;background:white;color:inherit;margin:.25rem .25rem .25rem 0}
+button:disabled{opacity:.55;cursor:default}#result{min-height:2rem}
+</style>
+</head>
+<body><main>
+<h1>iCash X pixel test</h1>
+<p>Test browser events on dataset <strong>1189620056677378</strong>. Open this page from Meta Test Events, then choose an event.</p>
+<p>The Purchase button sends a $0 Purchase to this dataset. Meta may count it as a purchase. No payment is taken.</p>
+<div id="buttons"></div>
+<p id="result" role="status"></p>
+</main>
+<script>
+'use strict';
+const pixelId = '1189620056677378';
+const statusLine = document.getElementById('result');
+let loading;
+function privacyBlocked() {
+  return navigator.globalPrivacyControl === true || localStorage.getItem('wb-meta-choice') === 'deny';
+}
+function loadPixel() {
+  if (loading) return loading;
+  loading = new Promise((resolve, reject) => {
+    const pixel = function() {
+      if (pixel.callMethod) pixel.callMethod.apply(pixel, arguments);
+      else pixel.queue.push(arguments);
+    };
+    pixel.queue = [];
+    pixel.push = pixel;
+    pixel.loaded = true;
+    pixel.version = '2.0';
+    window.fbq = window._fbq = pixel;
+    const script = document.createElement('script');
+    script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+    script.async = true;
+    script.onload = () => {
+      if (!pixel.callMethod) { reject(Error('Meta Pixel could not start.')); return; }
+      pixel('set', 'autoConfig', false, pixelId);
+      pixel('init', pixelId);
+      resolve(pixel);
+    };
+    script.onerror = () => reject(Error('Meta Pixel could not load. Check your browser settings and reload.'));
+    document.head.appendChild(script);
+  });
+  return loading;
+}
+const events = ['PageView','ViewContent','Lead','WebinarOfferOpened','AddToCart','InitiateCheckout','Purchase'];
+for (const name of events) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = name === 'Purchase' ? 'Send $0 Purchase' : 'Send ' + name;
+  button.onclick = async () => {
+    button.disabled = true;
+    statusLine.textContent = 'Checking tracking permission…';
+    try {
+      if (privacyBlocked()) throw Error('Tracking is disabled by your privacy settings.');
+      const response = await fetch('/api/webinar/pixel?page=' + encodeURIComponent(location.pathname + location.search), {cache:'no-store',signal:AbortSignal.timeout(8000)});
+      if (!response.ok) throw Error('Tracking settings are unavailable. Try again.');
+      const settings = await response.json();
+      if (!settings.enabled || !settings.trackingAllowed) throw Error('Tracking is disabled for this visit.');
+      const pixel = await loadPixel();
+      if (privacyBlocked()) throw Error('Tracking is disabled by your privacy settings.');
+      const data = {content_name:'iCash X webinar tracking test'};
+      if (name === 'Purchase') Object.assign(data, {value:0,currency:'USD'});
+      const eventID = 'webinar-test-' + name + '-' + crypto.randomUUID();
+      pixel(name === 'WebinarOfferOpened' ? 'trackSingleCustom' : 'trackSingle', pixelId, name, data, {eventID});
+      statusLine.textContent = name + ' submitted by this browser. Check Meta Test Events for receipt.';
+    } catch (error) {
+      statusLine.textContent = error.message || 'Could not send the event.';
+      button.disabled = false;
+    }
+  };
+  document.getElementById('buttons').appendChild(button);
+}
+</script></body></html>
