@@ -10,11 +10,19 @@ export type InstantLead={lead_id:string;account_id:string|null;screening_id:stri
 export const instantLeadsEnabled=(env:NodeJS.ProcessEnv)=>env.META_INSTANT_LEADS_ENABLED==='true'&&(!env.VERCEL_ENV||env.VERCEL_ENV==='production');
 async function readLeadReceipt(response:Response){
  const limit=64000,length=response.headers.get('content-length');
- if(length&&(!/^\d+$/.test(length)||Number(length)>limit)){await response.body?.cancel().catch(()=>undefined);throw Error('META_RECEIPT_TOO_LARGE');}
+ if(length&&(!/^\d+$/.test(length)||Number(length)>limit)){
+  try{void response.body?.cancel().catch(()=>{});}catch{/* Preserve the size rejection. */}
+  throw Error('META_RECEIPT_TOO_LARGE');
+ }
  if(!response.body)throw Error('META_RETRIEVAL_PENDING');
  const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
  try{while(true){const chunk=await reader.read();if(chunk.done)break;size+=chunk.value.byteLength;if(size>limit)throw Error('META_RECEIPT_TOO_LARGE');chunks.push(chunk.value);}}
- finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
+ finally{
+  // Original intake persistence must not wait for transport cleanup after a
+  // bounded read. Observe later cleanup errors without repeating this GET.
+  try{void reader.cancel().catch(()=>{});}catch{/* Preserve the original read outcome. */}
+  reader.releaseLock();
+ }
  return Buffer.concat(chunks).toString('utf8');
 }
 export async function getInstantLead(db:SellerDb,id:string){
@@ -75,7 +83,10 @@ export async function retrieveInstantLead(d:Deps){
   url.searchParams.set('fields','id,form_id,ad_id,adset_id,campaign_id,created_time,field_data,custom_disclaimer_responses');
   if(d.env.META_LEAD_APP_SECRET)url.searchParams.set('appsecret_proof',createHmac('sha256',d.env.META_LEAD_APP_SECRET).update(pageToken).digest('hex'));
   const response=await (d.fetch??fetch)(url,{headers:{Authorization:'Bearer '+pageToken},redirect:'error',cache:'no-store',signal:AbortSignal.timeout(10000)});
-  if(!response.ok){await response.body?.cancel().catch(()=>undefined);throw Error('META_RETRIEVAL_PENDING');}
+  if(!response.ok){
+   try{void response.body?.cancel().catch(()=>{});}catch{/* Preserve the original failed retrieval. */}
+   throw Error('META_RETRIEVAL_PENDING');
+  }
   const raw=await readLeadReceipt(response);
   stage='validate';const lead=parseMetaLead(JSON.parse(raw),claim.notice,source);
   const token=instantLeadToken(lead.metaId,lead.submittedAt,d.env.META_LEAD_LINK_SECRET);

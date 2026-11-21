@@ -54,6 +54,49 @@ assert.equal((await retrieveInstantLead({...retrievalDeps,env:{...retrievalDeps.
 assert.equal(retrievalFetches,1,'an unselected Page cannot send the shared token to Graph');
 assert.equal((await retrieveInstantLead({...retrievalDeps,env:{...retrievalDeps.env,VERCEL_ENV:'preview'}})).status,'disabled');
 assert.equal(retrievalFetches,1,'previews cannot retrieve live leads');
+// A known retrieval outcome must reach the original inbox even if canceling
+// its native response body never settles. No new claim or provider read runs.
+const flushCleanup=()=>new Promise(resolve=>setImmediate(resolve));
+for(const result of ['http','declared_size','chunked_size','complete'])for(const cleanup of ['pending','rejected','synchronous']){
+ let cancelCount=0,rejectCleanup,fetches=0,accepts=0,settled=false,outcome,error;
+ const writes=[],cleanupWait=new Promise((_,reject)=>{rejectCleanup=reject;});
+ const response=result==='complete'?new Response(JSON.stringify(receipt)):new Response(new ReadableStream({
+  start(controller){controller.enqueue(new Uint8Array(result==='chunked_size'?64001:1));},
+  cancel(){cancelCount++;return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;},
+ }),{status:result==='http'?503:200,headers:result==='declared_size'?{'Content-Length':'64001'}:{}});
+ if(result==='complete'||cleanup==='synchronous'){
+  const cancel=()=>{cancelCount++;if(cleanup==='synchronous')throw Error('private cleanup');return cleanup==='rejected'?Promise.reject(Error('private cleanup')):cleanupWait;};
+  if(['http','declared_size'].includes(result))response.body.cancel=cancel;
+  else{const getReader=response.body.getReader.bind(response.body);response.body.getReader=()=>{const reader=getReader();reader.cancel=cancel;return reader;};}
+ }
+ const db=async(path,method,body)=>{
+  if(path==='rpc/icash_meta_claim_notice')return {metaId:notice.leadgen_id,sourceId:source.id,notice,token:'original-claim'};
+  if(path.startsWith('icash_meta_lead_sources?'))return [source];
+  if(path==='rpc/icash_meta_accept_lead'){accepts++;assert.equal(body.p_payload.metaId,notice.leadgen_id);return {leadId:'saved-lead',accountId:null,duplicate:false};}
+  if(path==='rpc/icash_meta_assign_contact')return {status:'held'};
+  assert.equal(method,'PATCH');assert(path.includes('claim_token=eq.original-claim'));writes.push({path,body});return [];
+ };
+ const pending=retrieveInstantLead({...retrievalDeps,db,fetch:async(_url,options)=>{
+  fetches++;assert.equal(options.redirect,'error');assert(options.signal);return response;
+ }}).then(value=>{outcome=value;settled=true;},failure=>{error=failure;settled=true;});
+ try{
+  await flushCleanup();await flushCleanup();
+  assert.equal(settled,true,`${result}/${cleanup}: known receipt outcome cannot wait for cleanup`);
+  await pending;assert.equal(error,undefined);assert.equal(fetches,1);assert.equal(cancelCount,1);assert.equal(response.body.locked,false);
+  assert.equal(writes.length,1,'Only the original claim is finalized');
+  if(result==='complete'){
+   assert.deepEqual(outcome,{status:'accepted',work:'held'});assert.equal(accepts,1);assert.equal(writes[0].body.state,'accepted');
+  }else{
+   assert.deepEqual(outcome,{status:'retry_pending'});assert.equal(accepts,0);assert.equal(writes[0].body.state,'pending');
+   assert.equal(writes[0].body.reason,result==='http'?'META_RETRIEVAL_PENDING':'META_RECEIPT_TOO_LARGE');
+   assert(writes[0].path.includes('state=neq.accepted'),'Existing accepted intake remains protected');
+  }
+  assert(!JSON.stringify(writes).includes('private'),'Cleanup exceptions never replace source evidence');
+ }finally{
+  if(cleanup==='pending')rejectCleanup(Error('private late cleanup'));
+  await flushCleanup();await pending;
+ }
+}
 const address='123 Main St, Austin, TX 78701';
 const history={transcript:[{role:'user',message:'123 Main Street in Austin, Texas.'},{role:'agent',message:'123 Main Street, Austin, Texas. Is that correct?'},{role:'user',message:"Yes, that's correct."}]};
 assert.equal(confirmedCallAddress(address,history),address);
