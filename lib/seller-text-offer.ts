@@ -259,7 +259,7 @@ export function planSellerTextOffer(c:TextOfferContext,now=Date.now()):TextOffer
    &&!priorCallPreference(c.messages)&&!state.quotedPriceCents&&!state.acceptedPriceCents)
    return ask('invite_call',sellerCallInvitation);
   const priceQuestion=sellerRequestsPrice(source.body)||intent==='price';
-  const intro=sellerPrice!==null?`Got it, you’re asking ${priceText(sellerPrice)}. `:priceQuestion?'An offer depends on the property details. ':'';
+  const intro=sellerPrice!==null?`Got it, you are asking ${priceText(sellerPrice)}. `:priceQuestion?'An offer depends on the property details. ':'';
   return ask('qualify_'+qualification.missing[0],intro+qualification.nextQuestion);
  }
  const offer=calculateAutomaticCallOffer({party:'seller',address:c.address,snapshot:c.snapshot},state,now);
