@@ -1,3 +1,4 @@
+import {secondPixelSessions,secondWebinarPixel} from '@/lib/webinar-ad-pixel';
 import {db} from '@/lib/stripe-test';
 import {settingsSchema,type WebinarSettings} from '@/lib/webinar-policy';
 import {metaPurchasePayload,type MetaIdentity,type MetaPurchase} from '@/lib/webinar-meta-policy';
@@ -20,7 +21,9 @@ export async function processWebinarMeta(){
    }
    const payload=job.payload??metaPurchasePayload(job,v,process.env.ICASH_APP_ORIGIN!);
    if(!job.payload)await db(filter,'PATCH',{payload});
-   const res=await fetch(`https://graph.facebook.com/${process.env.ICASH_META_GRAPH_VERSION}/${latest.meta.pixelId}/events`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(8000),headers:{Authorization:`Bearer ${process.env.ICASH_META_ACCESS_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify({data:[payload]})});
+   const second=job.session_id && (await secondPixelSessions([job.session_id])).has(job.session_id);
+   const pixelId=second?secondWebinarPixel:latest.meta.pixelId;
+   const res=await fetch(`https://graph.facebook.com/${process.env.ICASH_META_GRAPH_VERSION}/${pixelId}/events`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(8000),headers:{Authorization:`Bearer ${process.env.ICASH_META_ACCESS_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify({data:[payload]})});
    const result=await res.json().catch(()=>null);
    if(!res.ok||result?.events_received!==1){
     await db(filter,'PATCH',{state:job.attempts>=5||res.status===400||res.status===401||res.status===403?'failed':'pending',due_at:new Date(Date.now()+60000*2**job.attempts).toISOString(),last_status:res.status});failed++;continue;

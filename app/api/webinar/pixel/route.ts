@@ -1,3 +1,4 @@
+import {webinarRequestPixel} from '@/lib/webinar-ad-pixel';
 import {webinarSettings} from '@/lib/webinar-meta';
 import {legacyAdMeasurementExcluded} from '@/lib/legacy-launch-measurement';
 import {pageMeasurementAllowed} from '@/lib/webinar-measurement-policy';
@@ -12,5 +13,5 @@ export async function GET(req:Request){try{
  let identity=null;
  try{const visitor=await webinarVisitor();if(await legacyAdMeasurementExcluded(req,visitor.id))return Response.json({enabled:false,trackingAllowed:false},{headers:webinarHeaders});identity={marketing_consent_at:visitor.marketing_consent_at??null,measurement:visitor.measurement??{}};}
  catch(error){if(!(error instanceof WebinarError)||error.status!==401)throw error;}
- return Response.json({enabled,pixelId:settings.meta.pixelId,trackingAllowed:pageMeasurementAllowed(identity,req.headers)},{headers:webinarHeaders});
+ return Response.json({enabled,pixelId:await webinarRequestPixel(req,settings.meta.pixelId!),trackingAllowed:pageMeasurementAllowed(identity,req.headers)},{headers:webinarHeaders});
  }catch(error){return webinarError(error);}}

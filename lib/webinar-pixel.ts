@@ -1,5 +1,5 @@
 export type WebinarPixelConfig={enabled:boolean;pixelId?:string;trackingAllowed?:boolean;consent?:boolean};
-export type WebinarPixelRuntime={path:string;pageViewId:string;sentPageView:string;pixelId:string;ready:Promise<WebinarPixelConfig|null>|null;start:(force?:boolean)=>Promise<WebinarPixelConfig|null>};
+export type WebinarPixelRuntime={entryCode?:()=>string;path:string;pageViewId:string;sentPageView:string;pixelId:string;ready:Promise<WebinarPixelConfig|null>|null;start:(force?:boolean)=>Promise<WebinarPixelConfig|null>};
 const measurementPaths=['/','/join','/webinar','/webinar/checkout','/webinar/upgrade'];
 export function webinarMeasurementPath(path:string){return measurementPaths.includes(path)||/^\/live\/\d{6,12}\/?$/.test(path);}
 
@@ -11,14 +11,19 @@ export const webinarPixelBootstrap=String.raw`(function(w,d){
  function page(){var path=w.location.pathname;return (/^\/live\/\d{6,12}\/?$/.test(path)||${JSON.stringify(measurementPaths)}.indexOf(path)!==-1)&&!new URLSearchParams(w.location.search).has('preview')&&(path!=='/'||!!d.querySelector('[data-public-checkout="true"]'));}
  function get(key){try{return w.localStorage.getItem(key);}catch(e){return null;}}
  function blocked(){return !!w.navigator.globalPrivacyControl||get('wb-meta-choice')==='deny';}
- var state=w.icashWebinarPixel={path:'',pageViewId:'',sentPageView:'',pixelId:'',ready:null,start:function(force){
+ function entryCode(){
+  var match=w.location.pathname.match(/^\/live\/(\d+)\/?$/);
+  var code=match?match[1]:w.location.pathname==='/webinar'?'default':'';
+  try{if(code)w.sessionStorage.setItem('icash-webinar-entry-code',code);return code||w.sessionStorage.getItem('icash-webinar-entry-code')||'';}catch(e){return code;}
+ }
+ var state=w.icashWebinarPixel={entryCode:entryCode,path:'',pageViewId:'',sentPageView:'',pixelId:'',ready:null,start:function(force){
   if(!page())return Promise.resolve(null);
   var path=w.location.pathname;
   if(state.path===path&&state.ready&&!force)return state.ready;
   if(state.path!==path){state.path=path;state.pageViewId='webinar:page:'+w.crypto.randomUUID();}
   var id=state.pageViewId;
   if(blocked()){if(w.fbq)w.fbq('consent','revoke');return state.ready=Promise.resolve({enabled:true,trackingAllowed:false});}
-  state.ready=w.fetch('/api/webinar/pixel?page='+encodeURIComponent(w.location.pathname+w.location.search),{cache:'no-store',signal:AbortSignal.timeout(8000)}).then(function(response){if(!response.ok)throw Error('Pixel configuration unavailable');return response.json();}).then(function(config){
+  state.ready=w.fetch('/api/webinar/pixel?page='+encodeURIComponent(w.location.pathname+w.location.search),{cache:'no-store',headers:{'x-icash-webinar-code':entryCode()},signal:AbortSignal.timeout(8000)}).then(function(response){if(!response.ok)throw Error('Pixel configuration unavailable');return response.json();}).then(function(config){
    if(!page()||state.path!==path)return null;
    if(blocked())return Object.assign({},config,{trackingAllowed:false});
    if(!config.enabled||!config.trackingAllowed||!/^\d{5,25}$/.test(config.pixelId||''))return config;

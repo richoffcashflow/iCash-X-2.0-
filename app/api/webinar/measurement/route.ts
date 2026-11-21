@@ -1,3 +1,4 @@
+import {webinarRequestPixel,secondPixelSessions,secondWebinarPixel} from '@/lib/webinar-ad-pixel';
 import {z} from 'zod';
 import {isIP} from 'node:net';
 import {db} from '@/lib/stripe-test';
@@ -28,7 +29,10 @@ async function measurementResponse(req:Request,action:'read'|'automatic'|'allow'
  if(trackingAllowed)await db('rpc/icash_webinar_sync_purchases','POST',{p_visitor:v.id});
  const cutoff=new Date(Math.max(Date.now()-48*3600000,Date.parse(since??'')||0)).toISOString();
  const events=trackingAllowed?await db<MetaPurchase[]>(`icash_webinar_meta_events?visitor_id=eq.${v.id}&state=neq.canceled&purchase_kind=in.(membership,vip_upgrade)&occurred_at=gte.${encodeURIComponent(cutoff)}&select=event_id,payment_id,session_id,visitor_id,value_cents,occurred_at,purchase_kind&order=occurred_at.desc&limit=20`):[];
- return Response.json({enabled,pixelId:settings.meta.pixelId,trackingAllowed,consent:!!identity.marketing_consent_at,events:events.flatMap(event=>[browserPaymentInfo(event),browserPurchase(event)])},{headers:webinarHeaders});
+ const pixelId=await webinarRequestPixel(req,settings.meta.pixelId!);
+ const secondSessions=await secondPixelSessions(events.map(event=>event.session_id));
+ const matchedEvents=events.filter(event=>(!!event.session_id&&secondSessions.has(event.session_id))===(pixelId===secondWebinarPixel));
+ return Response.json({enabled,pixelId,trackingAllowed,consent:!!identity.marketing_consent_at,events:matchedEvents.flatMap(event=>[browserPaymentInfo(event),browserPurchase(event)])},{headers:webinarHeaders});
 }
 export async function GET(req:Request){try{return await measurementResponse(req,'read');}catch(e){return webinarError(e);}}
 export async function POST(req:Request){try{
